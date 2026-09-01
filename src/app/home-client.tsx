@@ -9,22 +9,25 @@ import {
   putLocalLog,
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
-import {
-  aqiSeverity,
-  envStatusSeverity,
-  inversionSeverity,
-  severityStyle,
-  temperatureSeverity,
-  weatherAlertSeverity,
-  wildfireSeverity,
-  type Severity,
-} from "@/lib/env-colors";
+import { buildEnvBadges, severityStyle } from "@/lib/env-badges";
 
 const FEELINGS: Feeling[] = ["skip", "ok", "mild", "bad"];
-const DEMO_LAT = 39.7392;
-const DEMO_LON = -104.9903;
 
-type Badge = { key: string; label: string; severity: Severity };
+/** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
+const DEMO_LOCATIONS = {
+  denver: {
+    lat: 39.7392,
+    lon: -104.9903,
+    label: "Denver",
+    hint: "often has storm/heat alerts",
+  },
+  wildfire: {
+    lat: 41.7569,
+    lon: -120.1561,
+    label: "Northern CA",
+    hint: "Red Flag / fire-weather area",
+  },
+} as const;
 
 function formatTime(iso: string): string {
   try {
@@ -32,60 +35,6 @@ function formatTime(iso: string): string {
   } catch {
     return iso;
   }
-}
-
-function buildEnvBadges(log: AttackLogDTO): Badge[] {
-  const badges: Badge[] = [
-    {
-      key: "status",
-      label: `env:${log.envStatus}`,
-      severity: envStatusSeverity(log.envStatus),
-    },
-  ];
-
-  if (log.envStatus !== "ready") return badges;
-
-  if (log.temperatureF != null) {
-    badges.push({
-      key: "temp",
-      label: `${Math.round(log.temperatureF)}°F${log.isExtremeTemp ? " extreme" : ""}`,
-      severity: temperatureSeverity(log.temperatureF, log.isExtremeTemp),
-    });
-  }
-
-  if (log.aqi != null) {
-    badges.push({
-      key: "aqi",
-      label: `AQI ${log.aqi}${log.aqiCategory ? ` (${log.aqiCategory})` : ""}`,
-      severity: aqiSeverity(log.aqi),
-    });
-  }
-
-  if (log.hasStormAlert) {
-    badges.push({
-      key: "weather",
-      label: "weather alert",
-      severity: weatherAlertSeverity(log.stormSummary),
-    });
-  }
-
-  if (log.hasWildfireNearby) {
-    badges.push({
-      key: "wildfire",
-      label: "wildfire/smoke",
-      severity: wildfireSeverity(),
-    });
-  }
-
-  if (log.possibleInversion) {
-    badges.push({
-      key: "inversion",
-      label: "inversion?",
-      severity: inversionSeverity(),
-    });
-  }
-
-  return badges;
 }
 
 function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
@@ -118,14 +67,8 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
           );
         })}
       </span>
-      {log.envStatus === "ready" && log.stormSummary ? (
-        <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>Alert: {log.stormSummary}</div>
-      ) : null}
-      {log.envStatus === "ready" && log.wildfireSummary ? (
-        <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{log.wildfireSummary}</div>
-      ) : null}
       {log.envStatus === "ready" && log.inversionNote ? (
-        <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{log.inversionNote}</div>
+        <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>{log.inversionNote}</div>
       ) : null}
       {log.envStatus === "ready" && log.aqi == null && log.temperatureF != null ? (
         <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
@@ -260,8 +203,9 @@ export default function HomeClient() {
     );
   }
 
-  function handleDemoLog() {
-    logInhaler(DEMO_LAT, DEMO_LON);
+  function handleDemoLog(location: keyof typeof DEMO_LOCATIONS) {
+    const demo = DEMO_LOCATIONS[location];
+    logInhaler(demo.lat, demo.lon);
   }
 
   return (
@@ -310,23 +254,30 @@ export default function HomeClient() {
           Log inhaler use
         </button>
         {demoMode && (
-          <button
-            type="button"
-            onClick={handleDemoLog}
-            disabled={busy}
-            style={{
-              marginLeft: 8,
-              padding: "10px 16px",
-              fontSize: 14,
-              cursor: busy ? "default" : "pointer",
-              background: "#6b7280",
-              color: "#fff",
-              border: "none",
-              borderRadius: 4,
-            }}
-          >
-            Demo log (Denver coords)
-          </button>
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 12, color: "#666" }}>Demo locations (?demo=1):</span>
+            {(Object.entries(DEMO_LOCATIONS) as [keyof typeof DEMO_LOCATIONS, (typeof DEMO_LOCATIONS)[keyof typeof DEMO_LOCATIONS]][]).map(
+              ([key, demo]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleDemoLog(key)}
+                  disabled={busy}
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: 13,
+                    cursor: busy ? "default" : "pointer",
+                    background: key === "wildfire" ? "#fef2f2" : "#f3f4f6",
+                    color: "#111",
+                    border: key === "wildfire" ? "1px solid #fca5a5" : "1px solid #d1d5db",
+                    borderRadius: 4,
+                  }}
+                >
+                  Demo: {demo.label} — {demo.hint}
+                </button>
+              ),
+            )}
+          </div>
         )}
       </section>
 

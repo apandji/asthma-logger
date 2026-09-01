@@ -4,7 +4,7 @@ import { enrichEnvironment } from "@/lib/env-data";
 import type { AttackLogDTO, EnvStatus } from "@/lib/types";
 import type { AttackLog } from "@prisma/client";
 
-const feelingSchema = z.enum(["skip", "ok", "mild", "bad"]).nullable();
+const feelingSchema = z.enum(["ok", "mild", "bad"]).nullable();
 
 export const createLogSchema = z.object({
   id: z.string().uuid(),
@@ -40,7 +40,6 @@ export function toDTO(row: AttackLog): AttackLogDTO {
 
 export async function upsertAndEnrich(input: z.infer<typeof createLogSchema>) {
   const existing = await prisma.attackLog.findUnique({ where: { id: input.id } });
-  if (existing?.envStatus === "ready") return toDTO(existing);
 
   const base = {
     loggedAt: new Date(input.loggedAt),
@@ -49,6 +48,11 @@ export async function upsertAndEnrich(input: z.infer<typeof createLogSchema>) {
     feeling: input.feeling ?? null,
     deviceId: input.deviceId ?? null,
   };
+
+  if (existing?.envStatus === "ready") {
+    const row = await prisma.attackLog.update({ where: { id: input.id }, data: base });
+    return toDTO(row);
+  }
 
   let row = existing
     ? await prisma.attackLog.update({ where: { id: input.id }, data: base })

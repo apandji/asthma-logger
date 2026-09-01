@@ -1,4 +1,7 @@
-export type Feeling = "skip" | "ok" | "mild" | "bad";
+import type { Feeling } from "./feelings";
+
+export type { Feeling } from "./feelings";
+export { FEELING_OPTIONS, feelingDisplay } from "./feelings";
 export type EnvStatus = "pending" | "ready" | "failed" | "skipped";
 
 export type LocalLog = {

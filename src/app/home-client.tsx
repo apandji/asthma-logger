@@ -7,11 +7,11 @@ import {
   markLocalSynced,
   markLocalSyncError,
   putLocalLog,
+  updateLocalFeeling,
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
 import { buildEnvBadges, severityStyle } from "@/lib/env-badges";
-
-const FEELINGS: Feeling[] = ["skip", "ok", "mild", "bad"];
+import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
 
 /** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
 const DEMO_LOCATIONS = {
@@ -39,7 +39,7 @@ function formatTime(iso: string): string {
 
 function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
   if (!log) {
-    return <span style={{ color: "#888", fontSize: 12 }}>env: —</span>;
+    return <span style={{ color: "#888", fontSize: 12 }}>📡 env: —</span>;
   }
 
   const badges = buildEnvBadges(log);
@@ -52,6 +52,7 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
           return (
             <span
               key={b.key}
+              title={b.source}
               style={{
                 fontSize: 11,
                 padding: "2px 6px",
@@ -60,32 +61,77 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
                 borderRadius: 3,
                 border: `1px solid ${s.border}`,
                 fontWeight: b.severity === "red" || b.severity === "orange" ? 600 : 400,
+                cursor: "help",
               }}
             >
-              {b.label}
+              {b.emoji} {b.label}
             </span>
           );
         })}
       </span>
       {log.envStatus === "ready" && log.inversionNote ? (
-        <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>{log.inversionNote}</div>
+        <div style={{ fontSize: 11, color: "#555", marginTop: 4 }} title={log.inversionNote}>
+          🌫️ {log.inversionNote}
+        </div>
       ) : null}
       {log.envStatus === "ready" && log.aqi == null && log.temperatureF != null ? (
         <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
-          No AQI yet — add AIRNOW_API_KEY in Vercel for air quality.
+          💨 No AQI — add AIRNOW_API_KEY in Vercel for air quality.
         </div>
       ) : null}
     </div>
   );
 }
 
+function FeelingTags({
+  logId,
+  current,
+  onSelect,
+  highlight,
+}: {
+  logId: string;
+  current: Feeling | null;
+  onSelect: (id: string, feeling: Feeling | null) => void;
+  highlight?: boolean;
+}) {
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ fontSize: 11, color: highlight ? "#1d4ed8" : "#666", marginBottom: 4 }}>
+        {highlight ? "How do you feel? (optional)" : "Feeling (optional)"}
+      </div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {FEELING_OPTIONS.map((f) => {
+          const selected = current === f.value;
+          return (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => onSelect(logId, selected ? null : f.value)}
+              style={{
+                padding: "4px 8px",
+                fontSize: 12,
+                border: selected ? "2px solid #2563eb" : "1px solid #ccc",
+                background: selected ? "#eff6ff" : "#fff",
+                borderRadius: 12,
+                cursor: "pointer",
+              }}
+            >
+              {f.emoji} {f.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function HomeClient() {
-  const [feeling, setFeeling] = useState<Feeling>("ok");
   const [logs, setLogs] = useState<LocalLog[]>([]);
   const [enriched, setEnriched] = useState<Record<string, AttackLogDTO>>({});
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [highlightLogId, setHighlightLogId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const local = await getAllLocalLogs();
@@ -108,7 +154,7 @@ export default function HomeClient() {
   useEffect(() => {
     const t = setTimeout(() => {
       setDemoMode(new URLSearchParams(window.location.search).get("demo") === "1");
-      refresh();
+      void refresh();
     }, 0);
     return () => clearTimeout(t);
   }, [refresh]);
@@ -146,36 +192,65 @@ export default function HomeClient() {
       >;
     };
 
-    const nextEnriched = { ...enriched };
     for (const result of data.results) {
       if (result.ok) {
         await markLocalSynced(result.id, result.log);
-        nextEnriched[result.id] = result.log;
       } else {
         await markLocalSyncError(result.id, result.error);
       }
     }
-    setEnriched(nextEnriched);
-  }, [enriched]);
+  }, []);
+
+  const setFeeling = useCallback(
+    async (logId: string, feeling: Feeling | null) => {
+      await updateLocalFeeling(logId, feeling);
+      setLogs((prev) => prev.map((l) => (l.id === logId ? { ...l, feeling } : l)));
+      setEnriched((prev) => {
+        const row = prev[logId];
+        if (!row) return prev;
+        return { ...prev, [logId]: { ...row, feeling } };
+      });
+
+      try {
+        const res = await fetch(`/api/logs/${logId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ feeling }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { log: AttackLogDTO };
+          await updateLocalFeeling(logId, feeling);
+          setEnriched((prev) => ({ ...prev, [logId]: data.log }));
+        }
+      } catch {
+        // feeling saved locally; will sync on next full sync if needed
+      }
+      setHighlightLogId(null);
+      void refresh();
+    },
+    [refresh],
+  );
 
   const logInhaler = useCallback(
     async (latitude: number, longitude: number) => {
       setBusy(true);
-      setStatus("Saving…");
+      setStatus("📍 Getting location…");
       try {
+        const id = crypto.randomUUID();
         const entry: LocalLog = {
-          id: crypto.randomUUID(),
+          id,
           loggedAt: new Date().toISOString(),
           latitude,
           longitude,
-          feeling,
+          feeling: null,
           syncStatus: "pending",
         };
         await putLocalLog(entry);
-        setStatus("Saved locally, syncing…");
+        setStatus("💾 Saved — syncing env…");
         await syncPending();
         await refresh();
-        setStatus("Logged.");
+        setHighlightLogId(id);
+        setStatus("✅ Logged. Add how you feel below (optional).");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Log failed";
         setStatus(msg);
@@ -183,7 +258,7 @@ export default function HomeClient() {
         setBusy(false);
       }
     },
-    [feeling, refresh, syncPending],
+    [refresh, syncPending],
   );
 
   function handleGeoLog() {
@@ -191,10 +266,10 @@ export default function HomeClient() {
       setStatus("Geolocation not available.");
       return;
     }
-    setStatus("Getting location…");
+    setStatus("📍 Getting location…");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        logInhaler(pos.coords.latitude, pos.coords.longitude);
+        void logInhaler(pos.coords.latitude, pos.coords.longitude);
       },
       (err) => {
         setStatus(`Location error: ${err.message}`);
@@ -205,36 +280,15 @@ export default function HomeClient() {
 
   function handleDemoLog(location: keyof typeof DEMO_LOCATIONS) {
     const demo = DEMO_LOCATIONS[location];
-    logInhaler(demo.lat, demo.lon);
+    void logInhaler(demo.lat, demo.lon);
   }
 
   return (
     <main style={{ maxWidth: 520, margin: "0 auto", padding: 16, fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 20, marginBottom: 8 }}>Asthma trigger log</h1>
+      <h1 style={{ fontSize: 20, marginBottom: 8 }}>🫁 Asthma trigger log</h1>
       <p style={{ fontSize: 14, color: "#555", marginBottom: 16 }}>
-        Log inhaler use with location; env data syncs in the background.
+        Tap when you use your inhaler. Env data syncs in the background — hover tags for sources.
       </p>
-
-      <section style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13, marginBottom: 6 }}>How are you feeling?</div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {FEELINGS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setFeeling(f)}
-              style={{
-                padding: "6px 12px",
-                border: feeling === f ? "2px solid #333" : "1px solid #ccc",
-                background: feeling === f ? "#eee" : "#fff",
-                cursor: "pointer",
-              }}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-      </section>
 
       <section style={{ marginBottom: 16 }}>
         <button
@@ -242,20 +296,22 @@ export default function HomeClient() {
           onClick={handleGeoLog}
           disabled={busy}
           style={{
-            padding: "10px 16px",
-            fontSize: 15,
+            width: "100%",
+            padding: "14px 16px",
+            fontSize: 16,
+            fontWeight: 600,
             cursor: busy ? "default" : "pointer",
-            background: "#2563eb",
+            background: busy ? "#94a3b8" : "#2563eb",
             color: "#fff",
             border: "none",
-            borderRadius: 4,
+            borderRadius: 6,
           }}
         >
-          Log inhaler use
+          {busy ? "⏳ Logging…" : "💊 Log inhaler use"}
         </button>
         {demoMode && (
-          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
-            <span style={{ fontSize: 12, color: "#666" }}>Demo locations (?demo=1):</span>
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#666" }}>🧪 Demo locations (?demo=1):</span>
             {(Object.entries(DEMO_LOCATIONS) as [keyof typeof DEMO_LOCATIONS, (typeof DEMO_LOCATIONS)[keyof typeof DEMO_LOCATIONS]][]).map(
               ([key, demo]) => (
                 <button
@@ -266,6 +322,7 @@ export default function HomeClient() {
                   style={{
                     padding: "8px 12px",
                     fontSize: 13,
+                    textAlign: "left",
                     cursor: busy ? "default" : "pointer",
                     background: key === "wildfire" ? "#fef2f2" : "#f3f4f6",
                     color: "#111",
@@ -273,7 +330,7 @@ export default function HomeClient() {
                     borderRadius: 4,
                   }}
                 >
-                  Demo: {demo.label} — {demo.hint}
+                  {key === "wildfire" ? "🔥" : "⛈️"} Demo: {demo.label} — {demo.hint}
                 </button>
               ),
             )}
@@ -286,38 +343,56 @@ export default function HomeClient() {
       )}
 
       <section>
-        <h2 style={{ fontSize: 16, marginBottom: 8 }}>Recent logs</h2>
+        <h2 style={{ fontSize: 16, marginBottom: 8 }}>📋 Recent logs</h2>
         {logs.length === 0 ? (
           <p style={{ fontSize: 13, color: "#888" }}>No logs yet.</p>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {logs.slice(0, 20).map((log) => (
-              <li
-                key={log.id}
-                style={{
-                  borderBottom: "1px solid #ddd",
-                  padding: "8px 0",
-                  fontSize: 13,
-                }}
-              >
-                <div style={{ marginBottom: 4 }}>
-                  <strong>{formatTime(log.loggedAt)}</strong>
-                  {log.feeling && (
-                    <span style={{ marginLeft: 8, color: "#555" }}>feeling: {log.feeling}</span>
+            {logs.slice(0, 20).map((log) => {
+              const server = enriched[log.id] ?? log.serverLog;
+              const feeling =
+                (server?.feeling as Feeling | null | undefined) ?? log.feeling;
+              const feelingLabel = feelingDisplay(feeling);
+              return (
+                <li
+                  key={log.id}
+                  style={{
+                    borderBottom: "1px solid #ddd",
+                    padding: "10px 0",
+                    fontSize: 13,
+                    background: highlightLogId === log.id ? "#f8fafc" : "transparent",
+                    borderRadius: highlightLogId === log.id ? 4 : 0,
+                    paddingLeft: highlightLogId === log.id ? 6 : 0,
+                    paddingRight: highlightLogId === log.id ? 6 : 0,
+                  }}
+                >
+                  <div style={{ marginBottom: 4 }}>
+                    <strong>🕐 {formatTime(log.loggedAt)}</strong>
+                    {feelingLabel ? (
+                      <span style={{ marginLeft: 8, color: "#555" }}>{feelingLabel}</span>
+                    ) : null}
+                    <span style={{ marginLeft: 8, color: "#888", fontSize: 11 }}>
+                      {log.syncStatus === "synced" ? "☁️ synced" : `⏳ ${log.syncStatus}`}
+                    </span>
+                  </div>
+                  <div style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>
+                    📍 {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
+                  </div>
+                  <EnvBadges log={server} />
+                  <FeelingTags
+                    logId={log.id}
+                    current={feeling ?? null}
+                    onSelect={setFeeling}
+                    highlight={highlightLogId === log.id}
+                  />
+                  {log.lastError && (
+                    <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 4 }}>
+                      ❌ {log.lastError}
+                    </div>
                   )}
-                  <span style={{ marginLeft: 8, color: "#888", fontSize: 11 }}>
-                    sync:{log.syncStatus}
-                  </span>
-                </div>
-                <div style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>
-                  {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
-                </div>
-                <EnvBadges log={enriched[log.id] ?? log.serverLog} />
-                {log.lastError && (
-                  <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 4 }}>{log.lastError}</div>
-                )}
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

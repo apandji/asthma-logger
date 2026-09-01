@@ -69,3 +69,17 @@ export async function markLocalSyncError(id: string, error: string): Promise<voi
     lastError: error,
   });
 }
+
+export async function updateLocalFeeling(
+  id: string,
+  feeling: LocalLog["feeling"],
+): Promise<void> {
+  const db = await getDb();
+  const existing = await db.get("logs", id);
+  if (!existing) return;
+  const next: LocalLog = { ...existing, feeling };
+  if (existing.serverLog) {
+    next.serverLog = { ...existing.serverLog, feeling };
+  }
+  await db.put("logs", next);
+}

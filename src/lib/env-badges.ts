@@ -10,9 +10,26 @@ import {
 } from "./env-colors";
 import type { AttackLogDTO } from "./types";
 
-export type EnvBadge = { key: string; label: string; severity: Severity };
+export type EnvBadge = {
+  key: string;
+  label: string;
+  severity: Severity;
+  emoji: string;
+  /** Shown on hover / long-press */
+  source: string;
+};
 
 export { severityStyle };
+
+const SOURCES = {
+  status: "App — sync & enrichment status",
+  temp: "NWS forecast — api.weather.gov",
+  aqi: "EPA AirNow — airnowapi.org",
+  weather: "NWS active alerts — api.weather.gov",
+  wildfireNws: "NWS fire/smoke alerts — api.weather.gov",
+  wildfireFirms: "NASA FIRMS satellite hotspots — firms.modaps.eosdis.nasa.gov",
+  inversion: "Heuristic from NWS forecast (not a direct measurement)",
+} as const;
 
 function splitAlerts(summary: string | null): string[] {
   if (!summary) return [];
@@ -28,13 +45,16 @@ function parseWildfireLabels(summary: string | null): string[] {
   for (const chunk of summary.split("|")) {
     const part = chunk.trim();
     if (!part) continue;
-    if (/FIRMS hotspot/i.test(part)) {
-      labels.push(part);
-    } else {
-      labels.push(...splitAlerts(part));
-    }
+    labels.push(part);
   }
   return labels;
+}
+
+function statusEmoji(status: string): string {
+  if (status === "ready") return "✅";
+  if (status === "failed") return "❌";
+  if (status === "pending") return "⏳";
+  return "📡";
 }
 
 export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
@@ -43,6 +63,8 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
       key: "status",
       label: `env:${log.envStatus}`,
       severity: envStatusSeverity(log.envStatus),
+      emoji: statusEmoji(log.envStatus),
+      source: SOURCES.status,
     },
   ];
 
@@ -53,6 +75,8 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
       key: "temp",
       label: `${Math.round(log.temperatureF)}°F${log.isExtremeTemp ? " extreme" : ""}`,
       severity: temperatureSeverity(log.temperatureF, log.isExtremeTemp),
+      emoji: "🌡️",
+      source: SOURCES.temp,
     });
   }
 
@@ -61,6 +85,8 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
       key: "aqi",
       label: `AQI ${log.aqi}${log.aqiCategory ? ` (${log.aqiCategory})` : ""}`,
       severity: aqiSeverity(log.aqi),
+      emoji: "💨",
+      source: SOURCES.aqi,
     });
   }
 
@@ -71,6 +97,8 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
         key: "weather-0",
         label: "Weather alert",
         severity: weatherAlertSeverity(null),
+        emoji: "⚠️",
+        source: SOURCES.weather,
       });
     } else {
       alerts.forEach((name, i) => {
@@ -78,6 +106,8 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
           key: `weather-${i}-${name}`,
           label: name,
           severity: weatherAlertSeverity(name),
+          emoji: "⚠️",
+          source: SOURCES.weather,
         });
       });
     }
@@ -90,13 +120,18 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
         key: "wildfire-0",
         label: "Wildfire/smoke",
         severity: wildfireSeverity(),
+        emoji: "🔥",
+        source: SOURCES.wildfireNws,
       });
     } else {
       fireLabels.forEach((name, i) => {
+        const isFirms = /FIRMS hotspot/i.test(name);
         badges.push({
           key: `wildfire-${i}-${name}`,
           label: name,
           severity: wildfireSeverity(),
+          emoji: isFirms ? "🛰️" : "🔥",
+          source: isFirms ? SOURCES.wildfireFirms : SOURCES.wildfireNws,
         });
       });
     }
@@ -107,6 +142,8 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
       key: "inversion",
       label: "Inversion?",
       severity: inversionSeverity(),
+      emoji: "🌫️",
+      source: SOURCES.inversion,
     });
   }
 

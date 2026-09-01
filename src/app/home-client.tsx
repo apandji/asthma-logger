@@ -9,10 +9,22 @@ import {
   putLocalLog,
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
+import {
+  aqiSeverity,
+  envStatusSeverity,
+  inversionSeverity,
+  severityStyle,
+  temperatureSeverity,
+  weatherAlertSeverity,
+  wildfireSeverity,
+  type Severity,
+} from "@/lib/env-colors";
 
 const FEELINGS: Feeling[] = ["skip", "ok", "mild", "bad"];
 const DEMO_LAT = 39.7392;
 const DEMO_LON = -104.9903;
+
+type Badge = { key: string; label: string; severity: Severity };
 
 function formatTime(iso: string): string {
   try {
@@ -22,55 +34,89 @@ function formatTime(iso: string): string {
   }
 }
 
+function buildEnvBadges(log: AttackLogDTO): Badge[] {
+  const badges: Badge[] = [
+    {
+      key: "status",
+      label: `env:${log.envStatus}`,
+      severity: envStatusSeverity(log.envStatus),
+    },
+  ];
+
+  if (log.envStatus !== "ready") return badges;
+
+  if (log.temperatureF != null) {
+    badges.push({
+      key: "temp",
+      label: `${Math.round(log.temperatureF)}°F${log.isExtremeTemp ? " extreme" : ""}`,
+      severity: temperatureSeverity(log.temperatureF, log.isExtremeTemp),
+    });
+  }
+
+  if (log.aqi != null) {
+    badges.push({
+      key: "aqi",
+      label: `AQI ${log.aqi}${log.aqiCategory ? ` (${log.aqiCategory})` : ""}`,
+      severity: aqiSeverity(log.aqi),
+    });
+  }
+
+  if (log.hasStormAlert) {
+    badges.push({
+      key: "weather",
+      label: "weather alert",
+      severity: weatherAlertSeverity(log.stormSummary),
+    });
+  }
+
+  if (log.hasWildfireNearby) {
+    badges.push({
+      key: "wildfire",
+      label: "wildfire/smoke",
+      severity: wildfireSeverity(),
+    });
+  }
+
+  if (log.possibleInversion) {
+    badges.push({
+      key: "inversion",
+      label: "inversion?",
+      severity: inversionSeverity(),
+    });
+  }
+
+  return badges;
+}
+
 function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
   if (!log) {
     return <span style={{ color: "#888", fontSize: 12 }}>env: —</span>;
   }
-  const badges: { label: string; bg: string }[] = [];
-  badges.push({
-    label: `env:${log.envStatus}`,
-    bg: log.envStatus === "ready" ? "#d4edda" : log.envStatus === "failed" ? "#f8d7da" : "#e2e3e5",
-  });
-  if (log.envStatus === "ready") {
-    if (log.temperatureF != null) {
-      badges.push({
-        label: `${Math.round(log.temperatureF)}°F${log.isExtremeTemp ? " extreme" : ""}`,
-        bg: log.isExtremeTemp ? "#f8d7da" : "#e8f4fc",
-      });
-    }
-    if (log.aqi != null) {
-      badges.push({
-        label: `AQI ${log.aqi}${log.aqiCategory ? ` (${log.aqiCategory})` : ""}`,
-        bg: log.aqi >= 100 ? "#fff3cd" : "#d4edda",
-      });
-    }
-    if (log.hasStormAlert) {
-      badges.push({ label: "weather alert", bg: "#cce5ff" });
-    }
-    if (log.hasWildfireNearby) {
-      badges.push({ label: "wildfire/smoke", bg: "#f8d7da" });
-    }
-    if (log.possibleInversion) {
-      badges.push({ label: "inversion?", bg: "#fff3cd" });
-    }
-  }
+
+  const badges = buildEnvBadges(log);
+
   return (
     <div>
       <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-        {badges.map((b) => (
-          <span
-            key={b.label}
-            style={{
-              fontSize: 11,
-              padding: "2px 6px",
-              background: b.bg,
-              borderRadius: 3,
-              border: "1px solid #ccc",
-            }}
-          >
-            {b.label}
-          </span>
-        ))}
+        {badges.map((b) => {
+          const s = severityStyle(b.severity);
+          return (
+            <span
+              key={b.key}
+              style={{
+                fontSize: 11,
+                padding: "2px 6px",
+                background: s.bg,
+                color: s.color,
+                borderRadius: 3,
+                border: `1px solid ${s.border}`,
+                fontWeight: b.severity === "red" || b.severity === "orange" ? 600 : 400,
+              }}
+            >
+              {b.label}
+            </span>
+          );
+        })}
       </span>
       {log.envStatus === "ready" && log.stormSummary ? (
         <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>Alert: {log.stormSummary}</div>

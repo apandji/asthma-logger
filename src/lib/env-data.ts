@@ -102,9 +102,22 @@ function alertLooksLikeFire(event: string, headline: string): boolean {
 function alertLooksLikeStorm(event: string, headline: string): boolean {
   const hay = `${event} ${headline}`.toLowerCase();
   return (
-    hay.includes("thunder") || hay.includes("storm") || hay.includes("tornado") ||
-    hay.includes("severe") || hay.includes("hurricane") || hay.includes("tropical") ||
-    hay.includes("wind") || hay.includes("blizzard") || hay.includes("winter")
+    hay.includes("thunder") ||
+    hay.includes("storm") ||
+    hay.includes("tornado") ||
+    hay.includes("severe") ||
+    hay.includes("hurricane") ||
+    hay.includes("tropical") ||
+    hay.includes("wind") ||
+    hay.includes("blizzard") ||
+    hay.includes("winter") ||
+    hay.includes("heat") ||
+    hay.includes("cold") ||
+    hay.includes("freeze") ||
+    hay.includes("frost") ||
+    hay.includes("air quality") ||
+    hay.includes("smoke") ||
+    hay.includes("fog")
   );
 }
 

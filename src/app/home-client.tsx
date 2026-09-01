@@ -32,39 +32,61 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
     bg: log.envStatus === "ready" ? "#d4edda" : log.envStatus === "failed" ? "#f8d7da" : "#e2e3e5",
   });
   if (log.envStatus === "ready") {
-    if (log.aqi != null) {
-      badges.push({ label: `AQI ${log.aqi}`, bg: log.aqi >= 100 ? "#fff3cd" : "#d4edda" });
+    if (log.temperatureF != null) {
+      badges.push({
+        label: `${Math.round(log.temperatureF)}°F${log.isExtremeTemp ? " extreme" : ""}`,
+        bg: log.isExtremeTemp ? "#f8d7da" : "#e8f4fc",
+      });
     }
-    if (log.isExtremeTemp) {
-      badges.push({ label: `temp ${log.temperatureF?.toFixed(0) ?? "?"}°F`, bg: "#f8d7da" });
+    if (log.aqi != null) {
+      badges.push({
+        label: `AQI ${log.aqi}${log.aqiCategory ? ` (${log.aqiCategory})` : ""}`,
+        bg: log.aqi >= 100 ? "#fff3cd" : "#d4edda",
+      });
     }
     if (log.hasStormAlert) {
-      badges.push({ label: "storm", bg: "#cce5ff" });
+      badges.push({ label: "weather alert", bg: "#cce5ff" });
     }
     if (log.hasWildfireNearby) {
-      badges.push({ label: "wildfire", bg: "#f8d7da" });
+      badges.push({ label: "wildfire/smoke", bg: "#f8d7da" });
     }
     if (log.possibleInversion) {
       badges.push({ label: "inversion?", bg: "#fff3cd" });
     }
   }
   return (
-    <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-      {badges.map((b) => (
-        <span
-          key={b.label}
-          style={{
-            fontSize: 11,
-            padding: "2px 6px",
-            background: b.bg,
-            borderRadius: 3,
-            border: "1px solid #ccc",
-          }}
-        >
-          {b.label}
-        </span>
-      ))}
-    </span>
+    <div>
+      <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+        {badges.map((b) => (
+          <span
+            key={b.label}
+            style={{
+              fontSize: 11,
+              padding: "2px 6px",
+              background: b.bg,
+              borderRadius: 3,
+              border: "1px solid #ccc",
+            }}
+          >
+            {b.label}
+          </span>
+        ))}
+      </span>
+      {log.envStatus === "ready" && log.stormSummary ? (
+        <div style={{ fontSize: 11, color: "#555", marginTop: 4 }}>Alert: {log.stormSummary}</div>
+      ) : null}
+      {log.envStatus === "ready" && log.wildfireSummary ? (
+        <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{log.wildfireSummary}</div>
+      ) : null}
+      {log.envStatus === "ready" && log.inversionNote ? (
+        <div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>{log.inversionNote}</div>
+      ) : null}
+      {log.envStatus === "ready" && log.aqi == null && log.temperatureF != null ? (
+        <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+          No AQI yet — add AIRNOW_API_KEY in Vercel for air quality.
+        </div>
+      ) : null}
+    </div>
   );
 }
 

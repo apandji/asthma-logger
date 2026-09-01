@@ -23,13 +23,24 @@ postgresql://postgres.xxxxx:YOUR_PASSWORD@aws-0-us-west-1.pooler.supabase.com:65
 5. Vercel → your project → **Settings** → **Environment Variables**
 6. Name: `DATABASE_URL` → paste that string → Production + Preview → Save
 
-### Step 3: Redeploy
+### Optional: AQI (air quality index)
 
-Vercel → **Deployments** → **⋯** → **Redeploy**
+Free key from EPA AirNow: https://docs.airnowapi.org/account/request/
 
----
+1. Request an API key (usually emailed within a day)
+2. Vercel → **Settings** → **Environment Variables**
+3. Add `AIRNOW_API_KEY` = your key → Redeploy
 
-## Local dev
+New logs will show AQI. Old logs keep whatever was stored at sync time.
+
+### What env data you get without any extra keys
+
+| Source | Data |
+|--------|------|
+| NWS (free, no key) | Temperature, heat/cold/storm alerts, wildfire alerts via NWS |
+| AirNow (needs key) | AQI + category |
+| NASA FIRMS (optional key) | Satellite wildfire hotspots |
+
 
 ```bash
 cp .env.example .env

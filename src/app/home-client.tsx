@@ -10,7 +10,7 @@ import {
   updateLocalFeeling,
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
-import { buildEnvBadges, severityStyle } from "@/lib/env-badges";
+import { buildEnvBadges, severityStyle, type EnvBadge } from "@/lib/env-badges";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
 
 /** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
@@ -37,6 +37,42 @@ function formatTime(iso: string): string {
   }
 }
 
+function EnvBadgeTag({ badge }: { badge: EnvBadge }) {
+  const [showSource, setShowSource] = useState(false);
+  const s = severityStyle(badge.severity);
+
+  return (
+    <span className="env-badge-wrap">
+      <button
+        type="button"
+        className="env-badge"
+        onClick={() => setShowSource((v) => !v)}
+        aria-expanded={showSource}
+        aria-describedby={showSource ? `tip-${badge.key}` : undefined}
+        style={{
+          fontSize: 11,
+          padding: "2px 6px",
+          background: s.bg,
+          color: s.color,
+          borderRadius: 3,
+          border: `1px solid ${s.border}`,
+          fontWeight: badge.severity === "red" || badge.severity === "orange" ? 600 : 400,
+          cursor: "pointer",
+        }}
+      >
+        {badge.emoji} {badge.label}
+      </button>
+      <span
+        id={`tip-${badge.key}`}
+        role="tooltip"
+        className={`env-badge-tip${showSource ? " env-badge-tip--open" : ""}`}
+      >
+        {badge.source}
+      </span>
+    </span>
+  );
+}
+
 function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
   if (!log) {
     return <span style={{ color: "#888", fontSize: 12 }}>env: —</span>;
@@ -46,28 +82,10 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
 
   return (
     <div>
-      <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-        {badges.map((b) => {
-          const s = severityStyle(b.severity);
-          return (
-            <span
-              key={b.key}
-              title={b.source}
-              style={{
-                fontSize: 11,
-                padding: "2px 6px",
-                background: s.bg,
-                color: s.color,
-                borderRadius: 3,
-                border: `1px solid ${s.border}`,
-                fontWeight: b.severity === "red" || b.severity === "orange" ? 600 : 400,
-                cursor: "help",
-              }}
-            >
-              {b.emoji} {b.label}
-            </span>
-          );
-        })}
+      <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignItems: "flex-start" }}>
+        {badges.map((b) => (
+          <EnvBadgeTag key={b.key} badge={b} />
+        ))}
       </span>
       {log.envStatus === "ready" && log.inversionNote ? (
         <div style={{ fontSize: 11, color: "#555", marginTop: 4 }} title={log.inversionNote}>
@@ -287,7 +305,7 @@ export default function HomeClient() {
     <main style={{ maxWidth: 520, margin: "0 auto", padding: 16, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: 20, marginBottom: 8 }}>Asthma trigger log</h1>
       <p style={{ fontSize: 14, color: "#555", marginBottom: 16 }}>
-        Tap when you use your inhaler. Env data syncs in the background — hover tags for sources.
+        Tap when you use your inhaler. Hover or tap env tags for data sources.
       </p>
 
       <section style={{ marginBottom: 16 }}>

@@ -266,7 +266,7 @@ export default function HomeClient() {
       setStatus("Geolocation not available.");
       return;
     }
-    setStatus("📍 Getting location…");
+    setStatus("Getting location…");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         void logInhaler(pos.coords.latitude, pos.coords.longitude);

@@ -84,14 +84,28 @@ async function fetchAirNow(lat: number, lon: number) {
 }
 
 async function fetchFirmsHotspots(lat: number, lon: number) {
-  const mapKey = process.env.FIRMS_MAP_KEY;
-  if (!mapKey) return { count: 0, raw: null as unknown, source: "skipped" as const };
+  const mapKey = process.env.FIRMS_MAP_KEY?.trim();
+  if (!mapKey) return { count: 0, raw: null as unknown, source: "skipped" as const, error: null as string | null };
+
   const delta = 0.45;
-  const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${mapKey}/VIIRS_SNPP_NRT/${lon - delta},${lat - delta},${lon + delta},${lat + delta}/1`;
+  const west = lon - delta;
+  const south = lat - delta;
+  const east = lon + delta;
+  const north = lat + delta;
+  const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${mapKey}/VIIRS_SNPP_NRT/${west},${south},${east},${north}/1`;
+
   const res = await fetch(url, { next: { revalidate: 0 } });
-  if (!res.ok) throw new Error(`FIRMS ${res.status}`);
   const text = await res.text();
-  return { count: Math.max(0, text.trim().split("\n").length - 1), raw: text.slice(0, 2000), source: "firms" as const };
+  if (!res.ok) {
+    throw new Error(`FIRMS ${res.status}: ${text.slice(0, 120)}`);
+  }
+  if (/invalid map_key/i.test(text)) {
+    throw new Error("FIRMS Invalid MAP_KEY — check FIRMS_MAP_KEY on Vercel");
+  }
+
+  const lines = text.trim().split("\n").filter(Boolean);
+  const count = lines.length > 1 ? lines.length - 1 : 0; // subtract CSV header row
+  return { count, raw: text.slice(0, 2000), source: "firms" as const, error: null as string | null };
 }
 
 function alertLooksLikeFire(event: string, headline: string): boolean {

@@ -250,6 +250,8 @@ If the meeting is “what should we pilot,” **pollen + per-pollutant AQ + 48h 
 
 ## Suggested architecture (vendor-agnostic)
 
+Diagram, event/observation model, and today→target mapping: **[Information / data architecture](./data-architecture.md)**.
+
 ```
 Log tap
   → GPS + time + indoor/outdoor (ask the user; default unknown)

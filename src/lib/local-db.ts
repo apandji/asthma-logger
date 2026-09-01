@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { LocalLog } from "./types";
+import type { AttackLogDTO, LocalLog } from "./types";
 
 interface AsthmaDB extends DBSchema {
   logs: {
@@ -46,10 +46,7 @@ export async function getPendingLocalLogs(): Promise<LocalLog[]> {
   return db.getAllFromIndex("logs", "by-sync", "pending");
 }
 
-export async function markLocalSynced(
-  id: string,
-  serverEnvStatus: LocalLog["serverEnvStatus"],
-): Promise<void> {
+export async function markLocalSynced(id: string, serverLog: AttackLogDTO): Promise<void> {
   const db = await getDb();
   const existing = await db.get("logs", id);
   if (!existing) return;
@@ -57,7 +54,8 @@ export async function markLocalSynced(
     ...existing,
     syncStatus: "synced",
     lastError: undefined,
-    serverEnvStatus,
+    serverEnvStatus: serverLog.envStatus,
+    serverLog,
   });
 }
 

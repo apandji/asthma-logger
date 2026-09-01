@@ -91,7 +91,7 @@ export default function HomeClient() {
     const local = await getAllLocalLogs();
     setLogs(local);
     try {
-      const res = await fetch("/api/logs");
+      const res = await fetch("/api/logs", { cache: "no-store" });
       if (res.ok) {
         const data = (await res.json()) as { logs: AttackLogDTO[] };
         const map: Record<string, AttackLogDTO> = {};
@@ -101,7 +101,7 @@ export default function HomeClient() {
         setEnriched(map);
       }
     } catch {
-      // server logs optional for display
+      // fall back to serverLog stored on each local row
     }
   }, []);
 
@@ -149,7 +149,7 @@ export default function HomeClient() {
     const nextEnriched = { ...enriched };
     for (const result of data.results) {
       if (result.ok) {
-        await markLocalSynced(result.id, result.log.envStatus);
+        await markLocalSynced(result.id, result.log);
         nextEnriched[result.id] = result.log;
       } else {
         await markLocalSyncError(result.id, result.error);
@@ -312,7 +312,7 @@ export default function HomeClient() {
                 <div style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>
                   {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
                 </div>
-                <EnvBadges log={enriched[log.id]} />
+                <EnvBadges log={enriched[log.id] ?? log.serverLog} />
                 {log.lastError && (
                   <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 4 }}>{log.lastError}</div>
                 )}

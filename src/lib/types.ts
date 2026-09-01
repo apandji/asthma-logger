@@ -10,6 +10,8 @@ export type LocalLog = {
   syncStatus: "pending" | "synced" | "error";
   lastError?: string;
   serverEnvStatus?: EnvStatus;
+  /** Full server row after sync — used for badges if live fetch is stale */
+  serverLog?: AttackLogDTO;
 };
 
 export type AttackLogDTO = {

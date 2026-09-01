@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AttackLog {
+  id        String   @id
+  createdAt DateTime @default(now())
+  loggedAt  DateTime
+  latitude  Float
+  longitude Float
+  feeling   String?
+
+  envStatus    String    @default("pending")
+  envFetchedAt DateTime?
+  envError     String?
+
+  aqi         Int?
+  aqiCategory String?
+
+  temperatureF  Float?
+  isExtremeTemp Boolean @default(false)
+
+  hasStormAlert Boolean @default(false)
+  stormSummary  String?
+
+  hasWildfireNearby Boolean @default(false)
+  wildfireSummary   String?
+
+  possibleInversion Boolean @default(false)
+  inversionNote     String?
+
+  envRawJson String?
+  deviceId   String?
+}

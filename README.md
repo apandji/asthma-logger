@@ -1,23 +1,41 @@
 # Asthma trigger log
 
-Prototype: tap when you use your inhaler → save lat/long + time locally → sync environmental context when online.
+## Deploy (Vercel + Supabase) — do these in order
+
+### Step 1: Create the database table (one time)
+
+1. [supabase.com/dashboard](https://supabase.com/dashboard) → your project
+2. **SQL Editor** → **New query**
+3. Paste everything from `prisma/supabase-init.sql` → **Run**
+
+### Step 2: Add env var on Vercel
+
+1. Supabase → **Project Settings** → **Database** → **Connection string** → **URI**
+2. Use **Transaction pooler** (port 6543)
+3. Replace `[YOUR-PASSWORD]` with your real password
+4. Add `?pgbouncer=true` at the end if it's not already there
+
+Example:
+```
+postgresql://postgres.xxxxx:YOUR_PASSWORD@aws-0-us-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+```
+
+5. Vercel → your project → **Settings** → **Environment Variables**
+6. Name: `DATABASE_URL` → paste that string → Production + Preview → Save
+
+### Step 3: Redeploy
+
+Vercel → **Deployments** → **⋯** → **Redeploy**
+
+---
 
 ## Local dev
 
 ```bash
-cp .env.example .env   # set DATABASE_URL to a Neon Postgres URL
+cp .env.example .env
+# set DATABASE_URL to the same Supabase URI
 npm install
-npx prisma db push
 npm run dev
 ```
 
 Use `http://localhost:3000/?demo=1` for Denver demo coords without GPS.
-
-## Deploy to Vercel
-
-1. Push to GitHub
-2. Create Postgres at [neon.tech](https://neon.tech)
-3. Import repo on [vercel.com/new](https://vercel.com/new)
-4. Set `DATABASE_URL` env var
-
-Build runs `prisma db push` to create tables on first deploy.

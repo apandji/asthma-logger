@@ -39,7 +39,7 @@ function formatTime(iso: string): string {
 
 function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
   if (!log) {
-    return <span style={{ color: "#888", fontSize: 12 }}>📡 env: —</span>;
+    return <span style={{ color: "#888", fontSize: 12 }}>env: —</span>;
   }
 
   const badges = buildEnvBadges(log);
@@ -71,12 +71,12 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
       </span>
       {log.envStatus === "ready" && log.inversionNote ? (
         <div style={{ fontSize: 11, color: "#555", marginTop: 4 }} title={log.inversionNote}>
-          🌫️ {log.inversionNote}
+          {log.inversionNote}
         </div>
       ) : null}
       {log.envStatus === "ready" && log.aqi == null && log.temperatureF != null ? (
         <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
-          💨 No AQI — add AIRNOW_API_KEY in Vercel for air quality.
+          No AQI — add AIRNOW_API_KEY in Vercel for air quality.
         </div>
       ) : null}
     </div>
@@ -234,7 +234,7 @@ export default function HomeClient() {
   const logInhaler = useCallback(
     async (latitude: number, longitude: number) => {
       setBusy(true);
-      setStatus("📍 Getting location…");
+      setStatus("Getting location…");
       try {
         const id = crypto.randomUUID();
         const entry: LocalLog = {
@@ -246,11 +246,11 @@ export default function HomeClient() {
           syncStatus: "pending",
         };
         await putLocalLog(entry);
-        setStatus("💾 Saved — syncing env…");
+        setStatus("Saved — syncing env…");
         await syncPending();
         await refresh();
         setHighlightLogId(id);
-        setStatus("✅ Logged. Add how you feel below (optional).");
+        setStatus("Logged. Add how you feel below (optional).");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Log failed";
         setStatus(msg);
@@ -285,7 +285,7 @@ export default function HomeClient() {
 
   return (
     <main style={{ maxWidth: 520, margin: "0 auto", padding: 16, fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 20, marginBottom: 8 }}>🫁 Asthma trigger log</h1>
+      <h1 style={{ fontSize: 20, marginBottom: 8 }}>Asthma trigger log</h1>
       <p style={{ fontSize: 14, color: "#555", marginBottom: 16 }}>
         Tap when you use your inhaler. Env data syncs in the background — hover tags for sources.
       </p>
@@ -307,11 +307,11 @@ export default function HomeClient() {
             borderRadius: 6,
           }}
         >
-          {busy ? "⏳ Logging…" : "💊 Log inhaler use"}
+          {busy ? "Logging…" : "Log inhaler use"}
         </button>
         {demoMode && (
           <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontSize: 12, color: "#666" }}>🧪 Demo locations (?demo=1):</span>
+            <span style={{ fontSize: 12, color: "#666" }}>Demo locations (?demo=1):</span>
             {(Object.entries(DEMO_LOCATIONS) as [keyof typeof DEMO_LOCATIONS, (typeof DEMO_LOCATIONS)[keyof typeof DEMO_LOCATIONS]][]).map(
               ([key, demo]) => (
                 <button
@@ -330,7 +330,7 @@ export default function HomeClient() {
                     borderRadius: 4,
                   }}
                 >
-                  {key === "wildfire" ? "🔥" : "⛈️"} Demo: {demo.label} — {demo.hint}
+                  Demo: {demo.label} — {demo.hint}
                 </button>
               ),
             )}
@@ -343,7 +343,7 @@ export default function HomeClient() {
       )}
 
       <section>
-        <h2 style={{ fontSize: 16, marginBottom: 8 }}>📋 Recent logs</h2>
+        <h2 style={{ fontSize: 16, marginBottom: 8 }}>Recent logs</h2>
         {logs.length === 0 ? (
           <p style={{ fontSize: 13, color: "#888" }}>No logs yet.</p>
         ) : (
@@ -367,16 +367,16 @@ export default function HomeClient() {
                   }}
                 >
                   <div style={{ marginBottom: 4 }}>
-                    <strong>🕐 {formatTime(log.loggedAt)}</strong>
+                    <strong>{formatTime(log.loggedAt)}</strong>
                     {feelingLabel ? (
                       <span style={{ marginLeft: 8, color: "#555" }}>{feelingLabel}</span>
                     ) : null}
                     <span style={{ marginLeft: 8, color: "#888", fontSize: 11 }}>
-                      {log.syncStatus === "synced" ? "☁️ synced" : `⏳ ${log.syncStatus}`}
+                      sync:{log.syncStatus}
                     </span>
                   </div>
                   <div style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>
-                    📍 {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
+                    {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
                   </div>
                   <EnvBadges log={server} />
                   <FeelingTags
@@ -387,7 +387,7 @@ export default function HomeClient() {
                   />
                   {log.lastError && (
                     <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 4 }}>
-                      ❌ {log.lastError}
+                      {log.lastError}
                     </div>
                   )}
                 </li>

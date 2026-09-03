@@ -23,7 +23,17 @@ postgresql://postgres.xxxxx:YOUR_PASSWORD@aws-0-us-west-1.pooler.supabase.com:65
 5. Vercel → your project → **Settings** → **Environment Variables**
 6. Name: `DATABASE_URL` → paste that string → Production + Preview → Save
 
-### Optional: AQI (air quality index)
+### Optional: nearest air monitors (OpenAQ)
+
+Free key from [OpenAQ Explorer](https://explore.openaq.org/register). Docs: https://docs.openaq.org
+
+1. Create an account → copy the API key from settings
+2. Vercel → **Settings** → **Environment Variables**
+3. Add `OPENAQ_API_KEY` = your key → Redeploy
+
+New logs show **nearest PM2.5 and nearest ozone** within 25 km, with station name and distance. That is a ground reading at that site — not the air at the pin, and not official NowCast AQI. If the key is missing, we fall back to AirNow’s 25-mile max AQI.
+
+### Optional: AQI fallback (AirNow)
 
 Free key from EPA AirNow: https://docs.airnowapi.org/account/request/
 
@@ -31,7 +41,7 @@ Free key from EPA AirNow: https://docs.airnowapi.org/account/request/
 2. Vercel → **Settings** → **Environment Variables**
 3. Add `AIRNOW_API_KEY` = your key → Redeploy
 
-New logs will show AQI. Old logs keep whatever was stored at sync time.
+Used only when OpenAQ is unset or finds no fresh station. Old logs keep whatever was stored at sync time.
 
 ### Optional: Ambee (pollen, PM2.5/ozone, humidity, nearby fire)
 
@@ -49,7 +59,8 @@ See `docs/ambee-trigger-datasets.md` for what we use vs skip.
 | Source | Data |
 |--------|------|
 | NWS (free, no key) | Temperature, heat/cold/storm alerts, wildfire alerts via NWS |
-| AirNow (needs key) | Official US AQI + category |
+| OpenAQ (needs key) | Nearest PM2.5 + ozone station within 25 km (name + km) |
+| AirNow (needs key) | Official US AQI + category — fallback if OpenAQ is missing |
 | NASA FIRMS (optional key) | Satellite wildfire hotspots |
 | Ambee (optional trial key) | Pollen risk, PM2.5/O₃, humidity, nearest fire km |
 

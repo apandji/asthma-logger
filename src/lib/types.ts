@@ -41,6 +41,15 @@ export type EnvDisasterHit = {
   lng?: number | null;
 };
 
+/** Named ground station behind a PM2.5 or ozone reading. */
+export type EnvAirStation = {
+  name: string | null;
+  km: number | null;
+  asOf: string | null;
+  isMonitor: boolean | null;
+  provider: string | null;
+};
+
 /** Per-source values for side-by-side comparison (v2). */
 export type EnvSourceValues = {
   temperatureF: number | null;
@@ -51,6 +60,10 @@ export type EnvSourceValues = {
   aqiPollutant: string | null;
   pm25: number | null;
   ozonePpb: number | null;
+  /** Nearest PM2.5 station when the value is a ground reading (OpenAQ). */
+  pm25Station?: EnvAirStation | null;
+  /** Nearest ozone station when the value is a ground reading (OpenAQ). */
+  ozoneStation?: EnvAirStation | null;
   pollen: EnvPollenSnapshot | null;
   /** Short wildfire label for the comparison row */
   wildfire: string | null;
@@ -83,10 +96,12 @@ export type EnvSnapshot = {
   free: EnvSourceValues;
   ambee: EnvSourceValues;
   /** Which source won for the primary log fields (legacy columns) */
-  aqiSource: "airnow" | "ambee" | null;
+  aqiSource: "openaq" | "airnow" | "ambee" | null;
   tempSource: "nws_forecast" | "ambee_weather" | null;
   /** Fail-open Ambee errors (e.g. weather not on trial) */
   ambeeErrors?: string[];
+  /** Fail-open OpenAQ error (missing key is not an error) */
+  openaqError?: string;
   /** Nearest named place (NWS relative location), e.g. "St. Louis, MO" */
   placeName?: string | null;
 };

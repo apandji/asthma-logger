@@ -17,6 +17,29 @@ export type LocalLog = {
   serverLog?: AttackLogDTO;
 };
 
+export type EnvSnapshot = {
+  v: 1;
+  humidityPct: number | null;
+  dewpointF: number | null;
+  pm25: number | null;
+  ozonePpb: number | null;
+  aqiSource: "airnow" | "ambee" | null;
+  tempSource: "nws_forecast" | "ambee_weather" | null;
+  aqiPollutant: string | null;
+  pollen: {
+    treeRisk: string | null;
+    grassRisk: string | null;
+    weedRisk: string | null;
+    treeCount: number | null;
+    grassCount: number | null;
+    weedCount: number | null;
+    topSpecies: string | null;
+    asOf: string | null;
+  } | null;
+  nearestFireKm: number | null;
+  nearestFireSummary: string | null;
+};
+
 export type AttackLogDTO = {
   id: string;
   loggedAt: string;
@@ -36,6 +59,7 @@ export type AttackLogDTO = {
   wildfireSummary: string | null;
   possibleInversion: boolean;
   inversionNote: string | null;
+  snapshot?: EnvSnapshot | null;
 };
 
 export type EnvEnrichment = {
@@ -49,5 +73,6 @@ export type EnvEnrichment = {
   wildfireSummary: string | null;
   possibleInversion: boolean;
   inversionNote: string | null;
+  snapshot: EnvSnapshot | null;
   raw: Record<string, unknown>;
 };

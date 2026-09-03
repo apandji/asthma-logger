@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS "AttackLog" (
   "possibleInversion" BOOLEAN NOT NULL DEFAULT false,
   "inversionNote" TEXT,
   "envRawJson" TEXT,
+  "envSnapshotJson" TEXT,
   "deviceId" TEXT,
   CONSTRAINT "AttackLog_pkey" PRIMARY KEY ("id")
 );

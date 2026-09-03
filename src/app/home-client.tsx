@@ -92,9 +92,9 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
           {log.inversionNote}
         </div>
       ) : null}
-      {log.envStatus === "ready" && log.aqi == null && log.temperatureF != null ? (
+      {log.envStatus === "ready" && log.aqi == null && log.snapshot?.pm25 == null && log.temperatureF != null ? (
         <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
-          No AQI — add AIRNOW_API_KEY in Vercel for air quality.
+          No AQI — add AIRNOW_API_KEY or AMBEE_API_KEY in Vercel for air quality.
         </div>
       ) : null}
     </div>

@@ -1,8 +1,18 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { enrichEnvironment } from "@/lib/env-data";
-import type { AttackLogDTO, EnvStatus } from "@/lib/types";
+import type { AttackLogDTO, EnvSnapshot, EnvStatus } from "@/lib/types";
 import type { AttackLog } from "@prisma/client";
+
+function parseSnapshot(raw: string | null | undefined): EnvSnapshot | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as EnvSnapshot;
+    return parsed?.v === 1 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 const feelingSchema = z.enum(["ok", "mild", "bad"]).nullable();
 
@@ -35,6 +45,7 @@ export function toDTO(row: AttackLog): AttackLogDTO {
     wildfireSummary: row.wildfireSummary,
     possibleInversion: row.possibleInversion,
     inversionNote: row.inversionNote,
+    snapshot: parseSnapshot(row.envSnapshotJson),
   };
 }
 
@@ -77,6 +88,7 @@ export async function upsertAndEnrich(input: z.infer<typeof createLogSchema>) {
         possibleInversion: env.possibleInversion,
         inversionNote: env.inversionNote,
         envRawJson: JSON.stringify(env.raw),
+        envSnapshotJson: env.snapshot ? JSON.stringify(env.snapshot) : null,
       },
     });
   } catch (err) {

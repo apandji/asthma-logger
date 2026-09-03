@@ -34,6 +34,7 @@ model AttackLog {
   possibleInversion Boolean @default(false)
   inversionNote     String?
 
-  envRawJson String?
-  deviceId   String?
+  envRawJson      String?
+  envSnapshotJson String?
+  deviceId        String?
 }

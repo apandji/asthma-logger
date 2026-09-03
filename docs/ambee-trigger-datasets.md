@@ -2,6 +2,21 @@
 
 Reviewed against [docs.ambeedata.com](https://docs.ambeedata.com) (2026-09-03). For a **15-day trial**: pull the “use” rows, skip the rest.
 
+## Implemented in the app
+
+When `AMBEE_API_KEY` is set, each **new** log (after sync) calls four Ambee endpoints in parallel, fail-open:
+
+| Call | Stored / shown |
+|------|----------------|
+| `/latest/by-lat-lng` | `PM2.5`, ground-level `O₃`; AQI if AirNow missing |
+| `/v3/pollen/latest` | Tree / grass / weed risk (+ top species in tooltip) |
+| `/weather/latest/by-lat-lng` | Outdoor temp (preferred over NWS forecast), humidity, dewpoint |
+| `/fire/latest/by-lat-lng` | Nearest fire km if ≤ 50 km |
+
+Snapshot JSON lives in `AttackLog.envSnapshotJson`. Badges say **outdoor / modeled**. Existing Supabase DBs need `prisma/supabase-add-env-snapshot.sql` once.
+
+NWS alerts, AirNow (when keyed), and FIRMS still run. We do **not** call fire-risk, disasters, ILI, or weather.`ozone`.
+
 This is **outdoor ambient context**, not a diagnosis. Common inhaler-use triggers Ambee can help *associate* with a log: pollen, particles, ozone, heat/cold/humidity, and (weakly) nearby fire. It cannot see indoor mold, perfume, exercise, illness in *this* person, or a true inversion.
 
 ---

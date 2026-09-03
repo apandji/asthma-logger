@@ -1,4 +1,5 @@
-import type { EnvEnrichment } from "./types";
+import { fetchAmbeeBundle } from "./ambee";
+import type { EnvEnrichment, EnvSnapshot } from "./types";
 
 const NWS_USER_AGENT =
   process.env.NWS_USER_AGENT ?? "(asthma-log-prototype, local-dev@example.com)";
@@ -164,7 +165,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const forecastUrl = point.properties?.forecast;
   const alertsUrl = `https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`;
 
-  const [forecast, alerts, airNow, firms] = await Promise.all([
+  const [forecast, alerts, airNow, firms, ambee] = await Promise.all([
     forecastUrl ? nwsFetch<{ properties?: { periods?: NwsPeriod[] } }>(forecastUrl) : Promise.resolve(null),
     nwsFetch<{ features?: NwsAlert[] }>(alertsUrl).catch((err: Error) => {
       raw.alertsError = err.message;
@@ -178,16 +179,34 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
       raw.firmsError = err.message;
       return { count: 0, raw: null, source: "error" as const };
     }),
+    fetchAmbeeBundle(lat, lon),
   ]);
 
   const periods = forecast?.properties?.periods ?? [];
   raw.forecastPeriods = periods.slice(0, 4);
   raw.airNow = airNow.raw;
   raw.firms = firms;
+  raw.ambee = {
+    configured: ambee.configured,
+    errors: ambee.errors,
+    aq: ambee.aq?.raw ?? null,
+    pollen: ambee.pollen?.raw ?? null,
+    weather: ambee.weather?.raw ?? null,
+    fire: ambee.fire?.raw ?? null,
+  };
 
   const current = periods[0];
-  const temperatureF = current?.temperature != null ? toFahrenheit(current.temperature, current.temperatureUnit) : null;
+  const nwsTempF = current?.temperature != null ? toFahrenheit(current.temperature, current.temperatureUnit) : null;
+  const ambeeTempF = ambee.weather?.temperatureF ?? null;
+  const temperatureF = ambeeTempF ?? nwsTempF;
+  const tempSource: EnvSnapshot["tempSource"] = ambeeTempF != null ? "ambee_weather" : nwsTempF != null ? "nws_forecast" : null;
   const isExtremeTemp = temperatureF != null && (temperatureF <= EXTREME_COLD_F || temperatureF >= EXTREME_HOT_F);
+
+  const ambeeAqi = ambee.aq?.aqi ?? null;
+  const aqi = airNow.aqi ?? ambeeAqi;
+  const aqiCategory = airNow.aqiCategory ?? ambee.aq?.aqiCategory ?? null;
+  const aqiSource: EnvSnapshot["aqiSource"] =
+    airNow.aqi != null ? "airnow" : ambeeAqi != null ? "ambee" : null;
 
   const alertFeatures = alerts.features ?? [];
   raw.alerts = alertFeatures.map((a) => ({
@@ -202,16 +221,45 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const stormSummary = hasStormAlert
     ? stormAlerts.slice(0, 3).map((a) => a.properties?.event ?? a.properties?.headline ?? "Storm alert").join("; ")
     : null;
-  const hasWildfireNearby = fireAlerts.length > 0 || firms.count > 0;
+  const ambeeFireNearby = ambee.fire?.nearestKm != null && ambee.fire.nearestKm <= 50;
+  const hasWildfireNearby = fireAlerts.length > 0 || firms.count > 0 || ambeeFireNearby;
   const wildfireParts: string[] = [];
   if (fireAlerts.length) wildfireParts.push(fireAlerts.slice(0, 2).map((a) => a.properties?.event ?? "Fire/smoke alert").join("; "));
   if (firms.count > 0) wildfireParts.push(`${firms.count} FIRMS hotspot(s) within ~50km (24h)`);
+  if (ambeeFireNearby && ambee.fire?.summary) wildfireParts.push(`Ambee ${ambee.fire.summary}`);
   const wildfireSummary = hasWildfireNearby ? wildfireParts.join(" | ") : null;
   const inversion = inversionHeuristic(periods);
 
+  const pollen = ambee.pollen
+    ? {
+        treeRisk: ambee.pollen.treeRisk,
+        grassRisk: ambee.pollen.grassRisk,
+        weedRisk: ambee.pollen.weedRisk,
+        treeCount: ambee.pollen.treeCount,
+        grassCount: ambee.pollen.grassCount,
+        weedCount: ambee.pollen.weedCount,
+        topSpecies: ambee.pollen.topSpecies,
+        asOf: ambee.pollen.asOf,
+      }
+    : null;
+
+  const snapshot: EnvSnapshot = {
+    v: 1,
+    humidityPct: ambee.weather?.humidityPct ?? null,
+    dewpointF: ambee.weather?.dewpointF ?? null,
+    pm25: ambee.aq?.pm25 ?? null,
+    ozonePpb: ambee.aq?.ozonePpb ?? null,
+    aqiSource,
+    tempSource,
+    aqiPollutant: ambee.aq?.aqiPollutant ?? null,
+    pollen,
+    nearestFireKm: ambee.fire?.nearestKm ?? null,
+    nearestFireSummary: ambee.fire?.summary ?? null,
+  };
+
   return {
-    aqi: airNow.aqi,
-    aqiCategory: airNow.aqiCategory,
+    aqi,
+    aqiCategory,
     temperatureF,
     isExtremeTemp,
     hasStormAlert,
@@ -220,6 +268,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     wildfireSummary,
     possibleInversion: inversion.possible,
     inversionNote: inversion.note,
+    snapshot,
     raw,
   };
 }

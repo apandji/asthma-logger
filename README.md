@@ -33,13 +33,25 @@ Free key from EPA AirNow: https://docs.airnowapi.org/account/request/
 
 New logs will show AQI. Old logs keep whatever was stored at sync time.
 
+### Optional: Ambee (pollen, PM2.5/ozone, humidity, nearby fire)
+
+If you have a trial key from [Ambee](https://docs.ambeedata.com):
+
+1. Existing database: run `prisma/supabase-add-env-snapshot.sql` in the Supabase SQL Editor (adds `envSnapshotJson`).
+2. Vercel → **Settings** → **Environment Variables** → `AMBEE_API_KEY` → Redeploy.
+3. New logs call Ambee once (4 endpoints: AQ, pollen, weather, fire). Missing key is fine — NWS/AirNow/FIRMS still run.
+4. Hover/tap badges: they say **outdoor modeled**, not indoor air.
+
+See `docs/ambee-trigger-datasets.md` for what we use vs skip.
+
 ### What env data you get without any extra keys
 
 | Source | Data |
 |--------|------|
 | NWS (free, no key) | Temperature, heat/cold/storm alerts, wildfire alerts via NWS |
-| AirNow (needs key) | AQI + category |
+| AirNow (needs key) | Official US AQI + category |
 | NASA FIRMS (optional key) | Satellite wildfire hotspots |
+| Ambee (optional trial key) | Pollen risk, PM2.5/O₃, humidity, nearest fire km |
 
 
 ```bash

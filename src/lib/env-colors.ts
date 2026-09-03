@@ -71,3 +71,34 @@ export function wildfireSeverity(): Severity {
 export function inversionSeverity(): Severity {
   return "yellow";
 }
+
+export function pollenRiskSeverity(risk: string | null | undefined): Severity {
+  const r = (risk ?? "").toLowerCase();
+  if (r.includes("very")) return "red";
+  if (r === "high") return "orange";
+  if (r === "moderate") return "yellow";
+  if (r === "low") return "green";
+  return "neutral";
+}
+
+/** EPA-style 24h PM2.5 breakpoints (µg/m³) */
+export function pm25Severity(ug: number): Severity {
+  if (ug <= 12) return "green";
+  if (ug <= 35.4) return "yellow";
+  if (ug <= 55.4) return "orange";
+  return "red";
+}
+
+/** EPA-style 8h ozone breakpoints (ppb) */
+export function ozoneSeverity(ppb: number): Severity {
+  if (ppb <= 54) return "green";
+  if (ppb <= 70) return "yellow";
+  if (ppb <= 85) return "orange";
+  return "red";
+}
+
+export function humiditySeverity(pct: number): Severity {
+  if (pct <= 15 || pct >= 90) return "orange";
+  if (pct <= 20 || pct >= 80) return "yellow";
+  return "green";
+}

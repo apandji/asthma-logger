@@ -114,25 +114,35 @@ function alertLooksLikeFire(event: string, headline: string): boolean {
   return hay.includes("fire") || hay.includes("smoke") || hay.includes("red flag") || hay.includes("burn");
 }
 
-function alertLooksLikeStorm(event: string, headline: string): boolean {
-  const hay = `${event} ${headline}`.toLowerCase();
+function alertHay(event: string, headline: string): string {
+  return `${event} ${headline}`.toLowerCase();
+}
+
+/** Heat / cold / freeze — not a storm. Shown on the Temp row. */
+function alertLooksLikeExtremeTemp(event: string, headline: string): boolean {
+  const hay = alertHay(event, headline);
   return (
-    hay.includes("thunder") ||
-    hay.includes("storm") ||
-    hay.includes("tornado") ||
-    hay.includes("severe") ||
-    hay.includes("hurricane") ||
-    hay.includes("tropical") ||
-    hay.includes("wind") ||
-    hay.includes("blizzard") ||
-    hay.includes("winter") ||
     hay.includes("heat") ||
     hay.includes("cold") ||
     hay.includes("freeze") ||
     hay.includes("frost") ||
-    hay.includes("air quality") ||
-    hay.includes("smoke") ||
-    hay.includes("fog")
+    hay.includes("wind chill") ||
+    hay.includes("hard freeze")
+  );
+}
+
+/** Convective / winter storms only. Extreme heat, AQ, and wind advisories are not storms. */
+function alertLooksLikeStorm(event: string, headline: string): boolean {
+  if (alertLooksLikeExtremeTemp(event, headline)) return false;
+  const hay = alertHay(event, headline);
+  return (
+    hay.includes("thunder") ||
+    hay.includes("tornado") ||
+    hay.includes("hurricane") ||
+    hay.includes("tropical") ||
+    hay.includes("blizzard") ||
+    hay.includes("hail") ||
+    /\bstorm\b/.test(hay)
   );
 }
 
@@ -205,10 +215,19 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   }));
 
   const stormAlerts = alertFeatures.filter((a) => alertLooksLikeStorm(a.properties?.event ?? "", a.properties?.headline ?? ""));
+  const extremeTempAlerts = alertFeatures.filter((a) =>
+    alertLooksLikeExtremeTemp(a.properties?.event ?? "", a.properties?.headline ?? ""),
+  );
   const fireAlerts = alertFeatures.filter((a) => alertLooksLikeFire(a.properties?.event ?? "", a.properties?.headline ?? ""));
   const hasStormAlert = stormAlerts.length > 0;
   const stormSummary = hasStormAlert
     ? stormAlerts.slice(0, 3).map((a) => a.properties?.event ?? a.properties?.headline ?? "Storm alert").join("; ")
+    : null;
+  const nwsExtremeTemp = extremeTempAlerts.length
+    ? extremeTempAlerts
+        .slice(0, 2)
+        .map((a) => a.properties?.event ?? a.properties?.headline ?? "Extreme temperature")
+        .join("; ")
     : null;
   const ambeeFireNearby = ambee.fire?.nearestKm != null && ambee.fire.nearestKm <= 50;
   const hasWildfireNearby = fireAlerts.length > 0 || firms.count > 0 || ambeeFireNearby;
@@ -242,9 +261,6 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     place: e.place,
   }));
 
-  const nwsStormLabel = stormSummary;
-  const nwsHeat = stormAlerts.find((a) => /heat|cold|freeze|frost/i.test(`${a.properties?.event ?? ""} ${a.properties?.headline ?? ""}`));
-
   const free: EnvSourceValues = {
     temperatureF: nwsTempF,
     humidityPct: null,
@@ -256,8 +272,8 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     ozonePpb: airNow.ozonePpb,
     pollen: null,
     wildfire: freeWildfireParts.length ? freeWildfireParts.join(" · ") : null,
-    storms: nwsStormLabel,
-    extremeTempEvent: nwsHeat ? (nwsHeat.properties?.event ?? "Extreme temperature") : null,
+    storms: stormSummary,
+    extremeTempEvent: nwsExtremeTemp,
     volcano: null,
     disasters: null,
   };

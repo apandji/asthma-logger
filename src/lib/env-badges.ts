@@ -77,6 +77,18 @@ function splitAlerts(summary: string | null): string[] {
     .filter(Boolean);
 }
 
+/** NWS heat/cold/freeze — belongs on Temp, not Storms. */
+function isExtremeWeatherAlert(name: string): boolean {
+  const hay = name.toLowerCase();
+  return (
+    hay.includes("heat") ||
+    hay.includes("cold") ||
+    hay.includes("freeze") ||
+    hay.includes("frost") ||
+    hay.includes("wind chill")
+  );
+}
+
 function statusEmoji(status: string): string {
   if (status === "ready") return "✅";
   if (status === "failed") return "❌";
@@ -327,7 +339,7 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
 
   // Free-only extras (alerts, inversion) — not part of the comparison grid
   if (log.hasStormAlert) {
-    const alerts = splitAlerts(log.stormSummary);
+    const alerts = splitAlerts(log.stormSummary).filter((name) => !isExtremeWeatherAlert(name));
     if (alerts.length === 0) {
       badges.push({
         key: "extra-weather-0",
@@ -428,8 +440,9 @@ export function buildEnvSignals(log: AttackLogDTO): {
   const ambeeAir = airText(ambee);
   const freePollen = pollenSummary(free.pollen);
   const ambeePollen = pollenSummary(ambee.pollen);
-  const storms = splitAlerts(log.stormSummary);
-  const stormLabel = storms.length ? storms.join(", ") : log.hasStormAlert ? "Weather alert" : null;
+  const stormsFromSnap = free.storms;
+  const storms = splitAlerts(stormsFromSnap ?? log.stormSummary).filter((name) => !isExtremeWeatherAlert(name));
+  const stormLabel = storms.length ? storms.join(", ") : null;
 
   const rows: EnvSignalRow[] = [
     {

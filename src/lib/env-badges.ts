@@ -14,6 +14,8 @@ import {
 } from "./env-colors";
 import type { AttackLogDTO } from "./types";
 
+export type EnvBadgeGroup = "free" | "ambee" | "meta";
+
 export type EnvBadge = {
   key: string;
   label: string;
@@ -21,6 +23,7 @@ export type EnvBadge = {
   emoji: string;
   /** Shown on hover / long-press */
   source: string;
+  group: EnvBadgeGroup;
 };
 
 export { severityStyle };
@@ -76,6 +79,7 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
       severity: envStatusSeverity(log.envStatus),
       emoji: statusEmoji(log.envStatus),
       source: SOURCES.status,
+      group: "meta",
     },
   ];
 
@@ -83,55 +87,140 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
 
   const snap = log.snapshot;
 
-  if (log.temperatureF != null) {
+  // --- Free API badges (NWS / AirNow) ---
+
+  if (log.temperatureF != null && snap?.tempSource !== "ambee_weather") {
     badges.push({
       key: "temp",
       label: `${Math.round(log.temperatureF)}°F${log.isExtremeTemp ? " extreme" : ""}`,
       severity: temperatureSeverity(log.temperatureF, log.isExtremeTemp),
       emoji: "🌡️",
-      source: snap?.tempSource === "ambee_weather" ? SOURCES.tempAmbee : SOURCES.tempNws,
+      source: SOURCES.tempNws,
+      group: "free",
+    });
+  }
+
+  if (log.aqi != null && snap?.aqiSource !== "ambee") {
+    badges.push({
+      key: "aqi",
+      label: `AQI ${log.aqi}${log.aqiCategory ? ` (${log.aqiCategory})` : ""}`,
+      severity: aqiSeverity(log.aqi),
+      emoji: "💨",
+      source: SOURCES.aqiAirnow,
+      group: "free",
+    });
+  }
+
+  if (log.hasStormAlert) {
+    const alerts = splitAlerts(log.stormSummary);
+    if (alerts.length === 0) {
+      badges.push({
+        key: "weather-0",
+        label: "Weather alert",
+        severity: weatherAlertSeverity(null),
+        emoji: "⚠️",
+        source: SOURCES.weather,
+        group: "free",
+      });
+    } else {
+      alerts.forEach((name, i) => {
+        badges.push({
+          key: `weather-${i}-${name}`,
+          label: name,
+          severity: weatherAlertSeverity(name),
+          emoji: "⚠️",
+          source: SOURCES.weather,
+          group: "free",
+        });
+      });
+    }
+  }
+
+  {
+    const fireLabels = parseWildfireLabels(log.wildfireSummary);
+    fireLabels.forEach((name, i) => {
+      const isFirms = /FIRMS hotspot/i.test(name);
+      const isAmbee = /^Ambee /i.test(name);
+      if (!isAmbee) {
+        badges.push({
+          key: `wildfire-${i}-${name}`,
+          label: name,
+          severity: wildfireSeverity(),
+          emoji: isFirms ? "🛰️" : "🔥",
+          source: isFirms ? SOURCES.wildfireFirms : SOURCES.wildfireNws,
+          group: "free",
+        });
+      }
+    });
+  }
+
+  if (log.possibleInversion) {
+    badges.push({
+      key: "inversion",
+      label: "Inversion?",
+      severity: inversionSeverity(),
+      emoji: "🌫️",
+      source: SOURCES.inversion,
+      group: "free",
+    });
+  }
+
+  // --- Ambee badges (trial) ---
+
+  if (log.temperatureF != null && snap?.tempSource === "ambee_weather") {
+    badges.push({
+      key: "ambee-temp",
+      label: `${Math.round(log.temperatureF)}°F${log.isExtremeTemp ? " extreme" : ""}`,
+      severity: temperatureSeverity(log.temperatureF, log.isExtremeTemp),
+      emoji: "🌡️",
+      source: SOURCES.tempAmbee,
+      group: "ambee",
     });
   }
 
   if (snap?.humidityPct != null) {
     const dew = snap.dewpointF != null ? ` · dew ${Math.round(snap.dewpointF)}°F` : "";
     badges.push({
-      key: "humidity",
+      key: "ambee-humidity",
       label: `${Math.round(snap.humidityPct)}% humidity${dew}`,
       severity: humiditySeverity(snap.humidityPct),
       emoji: "💧",
       source: SOURCES.humidity,
+      group: "ambee",
     });
   }
 
-  if (log.aqi != null) {
-    const driver = snap?.aqiPollutant && snap.aqiSource === "ambee" ? ` ${snap.aqiPollutant}` : "";
+  if (log.aqi != null && snap?.aqiSource === "ambee") {
+    const driver = snap.aqiPollutant ? ` ${snap.aqiPollutant}` : "";
     badges.push({
-      key: "aqi",
+      key: "ambee-aqi",
       label: `AQI ${log.aqi}${log.aqiCategory ? ` (${log.aqiCategory})` : ""}${driver}`,
       severity: aqiSeverity(log.aqi),
       emoji: "💨",
-      source: snap?.aqiSource === "ambee" ? SOURCES.aqiAmbee : SOURCES.aqiAirnow,
+      source: SOURCES.aqiAmbee,
+      group: "ambee",
     });
   }
 
   if (snap?.pm25 != null) {
     badges.push({
-      key: "pm25",
+      key: "ambee-pm25",
       label: `PM2.5 ${Math.round(snap.pm25)}`,
       severity: pm25Severity(snap.pm25),
       emoji: "🌫️",
       source: SOURCES.pm25,
+      group: "ambee",
     });
   }
 
   if (snap?.ozonePpb != null) {
     badges.push({
-      key: "ozone",
+      key: "ambee-ozone",
       label: `O₃ ${Math.round(snap.ozonePpb)} ppb`,
       severity: ozoneSeverity(snap.ozonePpb),
       emoji: "☀️",
       source: SOURCES.ozone,
+      group: "ambee",
     });
   }
 
@@ -154,72 +243,32 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
     toShow.forEach((r) => {
       const count = r.count != null ? ` ${r.count}` : "";
       badges.push({
-        key: `pollen-${r.key}`,
+        key: `ambee-pollen-${r.key}`,
         label: `${r.label} pollen ${r.risk ?? ""}${count}`.trim(),
         severity: pollenRiskSeverity(r.risk),
         emoji: "🌿",
         source: snap.pollen?.topSpecies
           ? `${SOURCES.pollen} Top species: ${snap.pollen.topSpecies}.`
           : SOURCES.pollen,
+        group: "ambee",
       });
     });
   }
 
-  if (log.hasStormAlert) {
-    const alerts = splitAlerts(log.stormSummary);
-    if (alerts.length === 0) {
-      badges.push({
-        key: "weather-0",
-        label: "Weather alert",
-        severity: weatherAlertSeverity(null),
-        emoji: "⚠️",
-        source: SOURCES.weather,
-      });
-    } else {
-      alerts.forEach((name, i) => {
-        badges.push({
-          key: `weather-${i}-${name}`,
-          label: name,
-          severity: weatherAlertSeverity(name),
-          emoji: "⚠️",
-          source: SOURCES.weather,
-        });
-      });
-    }
-  }
-
-  if (log.hasWildfireNearby) {
+  {
     const fireLabels = parseWildfireLabels(log.wildfireSummary);
-    if (fireLabels.length === 0) {
-      badges.push({
-        key: "wildfire-0",
-        label: "Wildfire/smoke",
-        severity: wildfireSeverity(),
-        emoji: "🔥",
-        source: SOURCES.wildfireNws,
-      });
-    } else {
-      fireLabels.forEach((name, i) => {
-        const isFirms = /FIRMS hotspot/i.test(name);
-        const isAmbee = /^Ambee /i.test(name);
+    fireLabels.forEach((name, i) => {
+      const isAmbee = /^Ambee /i.test(name);
+      if (isAmbee) {
         badges.push({
-          key: `wildfire-${i}-${name}`,
+          key: `ambee-wildfire-${i}-${name}`,
           label: name,
           severity: wildfireSeverity(),
-          emoji: isFirms ? "🛰️" : isAmbee ? "📍" : "🔥",
-          source: isFirms ? SOURCES.wildfireFirms : isAmbee ? SOURCES.wildfireAmbee : SOURCES.wildfireNws,
+          emoji: "📍",
+          source: SOURCES.wildfireAmbee,
+          group: "ambee",
         });
-      });
-    }
-  }
-
-  if (log.possibleInversion) {
-    badges.push({
-      key: "inversion",
-      label: "Inversion?",
-      severity: inversionSeverity(),
-      emoji: "🌫️",
-      source: SOURCES.inversion,
+      }
     });
   }
 

@@ -10,7 +10,7 @@ import {
   updateLocalFeeling,
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
-import { buildEnvBadges, severityStyle, type EnvBadge } from "@/lib/env-badges";
+import { buildEnvBadges, severityStyle, type EnvBadge, type EnvBadgeGroup } from "@/lib/env-badges";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
 
 /** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
@@ -73,20 +73,46 @@ function EnvBadgeTag({ badge }: { badge: EnvBadge }) {
   );
 }
 
+function BadgeRow({ badges, label }: { badges: EnvBadge[]; label?: string }) {
+  if (!badges.length) return null;
+  return (
+    <div style={{ marginBottom: 4 }}>
+      {label && (
+        <div style={{ fontSize: 10, color: "#999", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>
+          {label}
+        </div>
+      )}
+      <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignItems: "flex-start" }}>
+        {badges.map((b) => (
+          <EnvBadgeTag key={b.key} badge={b} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
 function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
   if (!log) {
     return <span style={{ color: "#888", fontSize: 12 }}>env: —</span>;
   }
 
   const badges = buildEnvBadges(log);
+  const groups: Record<EnvBadgeGroup, EnvBadge[]> = { meta: [], free: [], ambee: [] };
+  for (const b of badges) {
+    groups[b.group].push(b);
+  }
+
+  const hasAmbee = groups.ambee.length > 0;
+  const hasFree = groups.free.length > 0;
 
   return (
     <div>
-      <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignItems: "flex-start" }}>
-        {badges.map((b) => (
-          <EnvBadgeTag key={b.key} badge={b} />
-        ))}
-      </span>
+      <BadgeRow badges={groups.meta} />
+      {hasFree && <BadgeRow badges={groups.free} label={hasAmbee ? "Free APIs (NWS · AirNow · FIRMS)" : undefined} />}
+      {hasAmbee && hasFree && (
+        <hr style={{ border: "none", borderTop: "1px dashed #d1d5db", margin: "6px 0" }} />
+      )}
+      {hasAmbee && <BadgeRow badges={groups.ambee} label="Ambee (trial)" />}
       {log.envStatus === "ready" && log.inversionNote ? (
         <div style={{ fontSize: 11, color: "#555", marginTop: 4 }} title={log.inversionNote}>
           {log.inversionNote}

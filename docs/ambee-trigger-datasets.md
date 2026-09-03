@@ -153,7 +153,7 @@ Optional once: AQ forecast, pollen 48h forecast, disasters, ILI `details=false`.
 
 **Compare on the same pin, same hour:**
 
-- Ambee `PM25` / `OZONE` / AQI vs our AirNow row
+- Ambee `PM25` / `OZONE` / AQI vs our OpenAQ nearest-station row (AirNow is fallback only)
 - Ambee temp/humidity vs NWS forecast period
 - Ambee fire list vs FIRMS box + NWS Red Flag
 - Pollen: anything vs nothing (we have no baseline)

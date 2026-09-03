@@ -160,8 +160,8 @@ erDiagram
 |--------|------|----------------|-------------------------------|
 | `temperature` | °F | METAR / Open-Meteo / Ambee weather | station or model_grid |
 | `humidity` / `dewpoint` | % / °F | same as temperature | same |
-| `pm25` | µg/m³ | AirNow, PurpleAir+EPA, Ambee | station / neighborhood / model_grid |
-| `ozone` | ppb | AirNow / Ambee | station or model_grid |
+| `pm25` | µg/m³ | OpenAQ nearest station, AirNow fallback, Ambee model | station / neighborhood / model_grid |
+| `ozone` | ppb | OpenAQ nearest station, AirNow fallback, Ambee model | station or model_grid |
 | `aqi_us` | index | derived from pollutants | inherits driver pollutant |
 | `pollen_tree` / `_grass` / `_weed` | count or risk | Ambee (gap today) | model_grid |
 | `mixing_height` | m | HRRR / Open-Meteo | model_grid |

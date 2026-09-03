@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { isAmbeeConfigured, parseAmbeeAq, parseAmbeeWeather } from "@/lib/ambee";
+import { isOpenAqConfigured } from "@/lib/openaq";
 
 export const dynamic = "force-dynamic";
 
 /** Quick check that optional env API keys are configured and reachable (no secrets returned). */
 export async function GET() {
   const airnowConfigured = Boolean(process.env.AIRNOW_API_KEY?.trim());
+  const openaqConfigured = isOpenAqConfigured();
   const firmsConfigured = Boolean(process.env.FIRMS_MAP_KEY?.trim());
   const ambeeConfigured = isAmbeeConfigured();
 
@@ -163,10 +165,72 @@ export async function GET() {
     }
   }
 
+  let openaqProbe: {
+    configured: boolean;
+    ok: boolean;
+    error: string | null;
+    note: string;
+    locationCount: number;
+  } = {
+    configured: openaqConfigured,
+    ok: false,
+    error: null,
+    note: "Not configured",
+    locationCount: 0,
+  };
+
+  if (openaqConfigured) {
+    try {
+      const url = new URL("https://api.openaq.org/v3/locations");
+      url.searchParams.set("coordinates", "38.6500,-90.3000");
+      url.searchParams.set("radius", "25000");
+      url.searchParams.set("limit", "20");
+      url.searchParams.set("monitor", "true");
+      url.searchParams.set("mobile", "false");
+      const res = await fetch(url.toString(), {
+        headers: { "X-API-Key": process.env.OPENAQ_API_KEY!.trim(), Accept: "application/json" },
+        cache: "no-store",
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        openaqProbe = {
+          configured: true,
+          ok: false,
+          error: `HTTP ${res.status}`,
+          note: "OpenAQ request failed — check OPENAQ_API_KEY / quota",
+          locationCount: 0,
+        };
+      } else {
+        const body = JSON.parse(text) as { results?: unknown[]; meta?: { found?: number } };
+        const count = Array.isArray(body.results) ? body.results.length : 0;
+        openaqProbe = {
+          configured: true,
+          ok: true,
+          error: null,
+          note:
+            count > 0
+              ? "OpenAQ key accepted — monitors found near St. Louis probe point"
+              : "OpenAQ key accepted; no monitors in 25 km of probe point",
+          locationCount: count,
+        };
+      }
+    } catch (err) {
+      openaqProbe = {
+        configured: true,
+        ok: false,
+        error: err instanceof Error ? err.message : "fetch failed",
+        note: "OpenAQ request error",
+        locationCount: 0,
+      };
+    }
+  }
+
   return NextResponse.json({
     airnowConfigured,
+    openaqConfigured,
     firmsConfigured,
     ambeeConfigured,
+    openaqProbe,
     firmsProbe,
     ambeeProbe,
   });

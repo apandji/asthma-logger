@@ -290,6 +290,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     ambee: ambeeValues,
     aqiSource,
     tempSource,
+    ambeeErrors: ambee.errors.length ? ambee.errors : undefined,
   };
 
   return {

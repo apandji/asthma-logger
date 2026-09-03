@@ -300,11 +300,20 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
   const free = snap?.v === 2 ? snap.free : EMPTY_SOURCES;
   const ambee = snap?.v === 2 ? snap.ambee : EMPTY_SOURCES;
   const hasAmbee = hasAnyValue(ambee);
+  const weatherError = snap?.v === 2 ? snap.ambeeErrors?.find((e) => /^weather:/i.test(e)) : undefined;
 
   badges.push(...buildSourceBadges(free, "free", log.isExtremeTemp));
 
   if (hasAmbee) {
-    badges.push(...buildSourceBadges(ambee, "ambee", log.isExtremeTemp));
+    const ambeeBadges = buildSourceBadges(ambee, "ambee", log.isExtremeTemp);
+    if (weatherError) {
+      for (const b of ambeeBadges) {
+        if (b.key === "ambee-temp" || b.key === "ambee-humidity") {
+          b.source = `${b.source} Fetch error: ${weatherError}`;
+        }
+      }
+    }
+    badges.push(...ambeeBadges);
   }
 
   // Free-only extras (alerts, inversion) — not part of the comparison grid

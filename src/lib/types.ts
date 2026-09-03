@@ -65,6 +65,8 @@ export type EnvSnapshot = {
   /** Which source won for the primary log fields (legacy columns) */
   aqiSource: "airnow" | "ambee" | null;
   tempSource: "nws_forecast" | "ambee_weather" | null;
+  /** Fail-open Ambee errors (e.g. weather not on trial) */
+  ambeeErrors?: string[];
 };
 
 export type AttackLogDTO = {

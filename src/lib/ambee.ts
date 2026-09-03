@@ -96,7 +96,30 @@ function firstRow(payload: unknown): Record<string, unknown> | null {
   if (!root) return null;
   const list = root.data ?? root.stations;
   if (Array.isArray(list) && list.length > 0) return asRecord(list[0]);
+  // Weather latest sometimes returns `data` as a single object, not an array
+  const obj = asRecord(list);
+  if (obj) {
+    const history = obj.history;
+    if (Array.isArray(history) && history.length > 0) {
+      return asRecord(history[history.length - 1]);
+    }
+    return obj;
+  }
   return null;
+}
+
+function humidityPct(value: unknown): number | null {
+  const n = num(value);
+  if (n == null) return null;
+  // Ambee sometimes returns 0–1 (0.81) and sometimes 0–100 (81)
+  if (n >= 0 && n <= 1) return n * 100;
+  return n;
+}
+
+function temperatureF(value: unknown): number | null {
+  const n = num(value);
+  if (n == null) return null;
+  return n;
 }
 
 function num(value: unknown): number | null {
@@ -184,12 +207,12 @@ export function parseAmbeePollen(payload: unknown): AmbeePollenReading {
 export function parseAmbeeWeather(payload: unknown): AmbeeWeatherReading {
   const row = firstRow(payload);
   return {
-    temperatureF: num(row?.temperature),
-    humidityPct: num(row?.humidity),
-    dewpointF: num(row?.dewPoint ?? row?.dewpoint),
-    apparentTemperatureF: num(row?.apparentTemperature),
-    windSpeed: num(row?.windSpeed),
-    asOf: str(row?.timestamp),
+    temperatureF: temperatureF(row?.temperature ?? row?.temp ?? row?.Temperature),
+    humidityPct: humidityPct(row?.humidity ?? row?.relativeHumidity ?? row?.Humidity),
+    dewpointF: num(row?.dewPoint ?? row?.dewpoint ?? row?.dew_point),
+    apparentTemperatureF: num(row?.apparentTemperature ?? row?.feelsLike ?? row?.apparent_temperature),
+    windSpeed: num(row?.windSpeed ?? row?.wind_speed),
+    asOf: str(row?.timestamp ?? row?.time ?? row?.updatedAt),
     raw: payload,
   };
 }

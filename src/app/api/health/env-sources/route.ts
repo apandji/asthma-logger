@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAmbeeConfigured, parseAmbeeAq } from "@/lib/ambee";
+import { isAmbeeConfigured, parseAmbeeAq, parseAmbeeWeather } from "@/lib/ambee";
 
 export const dynamic = "force-dynamic";
 
@@ -80,50 +80,86 @@ export async function GET() {
     error: string | null;
     note: string;
     pm25: number | null;
+    weatherOk: boolean | null;
+    weatherError: string | null;
+    temperatureF: number | null;
+    humidityPct: number | null;
   } = {
     configured: ambeeConfigured,
     ok: false,
     error: null,
     note: "Not configured",
     pm25: null,
+    weatherOk: null,
+    weatherError: null,
+    temperatureF: null,
+    humidityPct: null,
   };
 
   if (ambeeConfigured) {
+    const headers = {
+      "x-api-key": process.env.AMBEE_API_KEY!.trim(),
+      "Content-type": "application/json",
+    };
     try {
       const res = await fetch("https://api.ambeedata.com/latest/by-lat-lng?lat=39.7392&lng=-104.9903", {
-        headers: {
-          "x-api-key": process.env.AMBEE_API_KEY!.trim(),
-          "Content-type": "application/json",
-        },
+        headers,
         cache: "no-store",
       });
       const text = await res.text();
       if (!res.ok && res.status !== 206) {
         ambeeProbe = {
+          ...ambeeProbe,
           configured: true,
           ok: false,
           error: `HTTP ${res.status}`,
           note: "Ambee AQ request failed — check AMBEE_API_KEY / quota",
-          pm25: null,
         };
       } else {
         const aq = parseAmbeeAq(JSON.parse(text) as unknown);
         ambeeProbe = {
+          ...ambeeProbe,
           configured: true,
           ok: true,
           error: null,
-          note: "Ambee key accepted (1 AQ probe, Denver). Pollen/weather/fire run on each new log.",
+          note: "Ambee key accepted (AQ + weather probe, Denver).",
           pm25: aq.pm25,
         };
       }
     } catch (err) {
       ambeeProbe = {
+        ...ambeeProbe,
         configured: true,
         ok: false,
         error: err instanceof Error ? err.message : "fetch failed",
-        note: "Ambee request error",
-        pm25: null,
+        note: "Ambee AQ request error",
       };
+    }
+
+    try {
+      const wxRes = await fetch("https://api.ambeedata.com/weather/latest/by-lat-lng?lat=39.7392&lng=-104.9903", {
+        headers,
+        cache: "no-store",
+      });
+      const wxText = await wxRes.text();
+      if (!wxRes.ok && wxRes.status !== 206) {
+        ambeeProbe.weatherOk = false;
+        ambeeProbe.weatherError = `HTTP ${wxRes.status}: ${wxText.slice(0, 120)}`;
+      } else {
+        const wxBody = JSON.parse(wxText) as unknown;
+        const wx = parseAmbeeWeather(wxBody);
+        ambeeProbe.weatherOk = wx.temperatureF != null || wx.humidityPct != null;
+        ambeeProbe.temperatureF = wx.temperatureF;
+        ambeeProbe.humidityPct = wx.humidityPct;
+        if (!ambeeProbe.weatherOk) {
+          const root = wxBody && typeof wxBody === "object" ? (wxBody as { data?: unknown }).data : null;
+          const keys = root && typeof root === "object" ? Object.keys(root as object) : [];
+          ambeeProbe.weatherError = `Parsed but no temp/humidity. data keys: ${keys.join(",") || "none"}`;
+        }
+      }
+    } catch (err) {
+      ambeeProbe.weatherOk = false;
+      ambeeProbe.weatherError = err instanceof Error ? err.message : "weather fetch failed";
     }
   }
 

@@ -37,6 +37,8 @@ export type EnvDisasterHit = {
   name: string;
   km: number | null;
   place: string | null;
+  lat?: number | null;
+  lng?: number | null;
 };
 
 /** Per-source values for side-by-side comparison (v2). */

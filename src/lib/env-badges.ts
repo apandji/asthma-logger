@@ -393,11 +393,10 @@ function missing(source: string): EnvSignalValue {
 }
 
 function shortenFire(label: string, group: "free" | "ambee"): string {
-  const firms = label.match(/(\d+)\s+FIRMS hotspot/i);
-  if (firms) return `${firms[1]} nearby (~50 km)`;
-  const km = label.match(/(\d+(?:\.\d+)?)\s*km/i);
-  if (group === "ambee" && km) return `${km[1]} km away`;
-  return label.replace(/^Ambee\s+/i, "").replace(/^detected\s+/i, "");
+  if (group === "ambee") {
+    return label.replace(/^Ambee\s+/i, "").replace(/^detected\s+/i, "Hotspot ");
+  }
+  return label.replace(/^Ambee\s+/i, "");
 }
 
 function airText(src: EnvSourceValues): { text: string; detail?: string } | null {

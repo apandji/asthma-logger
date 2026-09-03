@@ -46,6 +46,8 @@ export type AmbeeWeatherReading = {
 
 export type AmbeeFireReading = {
   nearestKm: number | null;
+  nearestLat: number | null;
+  nearestLng: number | null;
   summary: string | null;
   count: number;
   raw: unknown;
@@ -59,6 +61,8 @@ export type AmbeeDisasterEvent = {
   km: number | null;
   place: string | null;
   eventId: string | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 export type AmbeeDisasterReading = {
@@ -237,6 +241,8 @@ export function parseAmbeeFire(payload: unknown, originLat: number, originLon: n
   const root = asRecord(payload);
   const list = Array.isArray(root?.data) ? root.data : [];
   let nearestKm: number | null = null;
+  let nearestLat: number | null = null;
+  let nearestLng: number | null = null;
   let summary: string | null = null;
   let counted = 0;
 
@@ -250,6 +256,8 @@ export function parseAmbeeFire(payload: unknown, originLat: number, originLon: n
     const km = haversineKm(originLat, originLon, lat, lng);
     if (nearestKm == null || km < nearestKm) {
       nearestKm = km;
+      nearestLat = lat;
+      nearestLng = lng;
       const name = str(rec.fireName) ?? str(rec.fireType) ?? "fire";
       const frp = num(rec.frp);
       const conf = rec.confidence != null ? String(rec.confidence) : null;
@@ -260,7 +268,7 @@ export function parseAmbeeFire(payload: unknown, originLat: number, originLon: n
     }
   }
 
-  return { nearestKm, summary, count: counted, raw: payload };
+  return { nearestKm, nearestLat, nearestLng, summary, count: counted, raw: payload };
 }
 
 const BREATHING_DISASTER_TYPES = new Set<AmbeeDisasterType>(["SW", "ET", "WF", "TC", "VO"]);
@@ -295,9 +303,23 @@ export function formatDisaster(event: Pick<AmbeeDisasterEvent, "type" | "km" | "
   const km =
     event.km == null ? null : event.km < 10 ? `${event.km.toFixed(1)} km` : `${Math.round(event.km)} km`;
   const parts = [kind];
-  if (km) parts.push(km);
   if (event.place) parts.push(event.place);
+  if (km) parts.push(km);
   return parts.join(" · ");
+}
+
+/** "Extreme Heat Warning in Madison; St. Louis; Jefferson" → "St. Louis" when possible. */
+export function placeFromEventName(name: string | null): string | null {
+  if (!name) return null;
+  const m = name.match(/\bin\s+(.+)$/i);
+  if (!m) return null;
+  const parts = m[1]
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!parts.length) return null;
+  const prefer = parts.find((p) => /st\.?\s*louis/i.test(p)) ?? parts.find((p) => /city/i.test(p));
+  return prefer ?? parts[0];
 }
 
 export function parseAmbeeDisasters(
@@ -322,10 +344,19 @@ export function parseAmbeeDisasters(
     const lat = num(rec.lat);
     const lng = num(rec.lng ?? rec.lon);
     const km = lat != null && lng != null ? haversineKm(originLat, originLon, lat, lng) : null;
-    const place = str(rec.city) ?? str(rec.state) ?? str(rec.country_code ?? rec.countryCode);
     const name = str(rec.event_name ?? rec.eventName) ?? DISASTER_LABEL[type];
+    const city = str(rec.city);
+    const state = str(rec.state);
+    const place =
+      (city && state ? `${city}, ${state}` : city ?? state) ??
+      placeFromEventName(name) ??
+      str(rec.country_code ?? rec.countryCode);
 
-    events.push({ type, name, km, place, eventId });
+    // Ambee tags some heat watches as SW; treat those as ET
+    const typeFixed: AmbeeDisasterType =
+      type === "SW" && /heat|cold|freeze|frost/i.test(name) ? "ET" : type;
+
+    events.push({ type: typeFixed, name, km, place, eventId, lat, lng });
   }
 
   events.sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9));

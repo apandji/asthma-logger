@@ -1,5 +1,5 @@
 import { fetchAmbeeBundle, formatDisaster } from "./ambee";
-import { formatPlaceName } from "./place";
+import { formatPlaceName, lookupPlaceName } from "./place";
 import type { EnvDisasterHit, EnvEnrichment, EnvSnapshot, EnvSourceValues } from "./types";
 
 const NWS_USER_AGENT =
@@ -85,9 +85,28 @@ async function fetchAirNow(lat: number, lon: number) {
   };
 }
 
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const r = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
 async function fetchFirmsHotspots(lat: number, lon: number) {
+  const empty = {
+    count: 0,
+    nearestKm: null as number | null,
+    nearestLat: null as number | null,
+    nearestLng: null as number | null,
+    raw: null as unknown,
+    source: "skipped" as const,
+    error: null as string | null,
+  };
   const mapKey = process.env.FIRMS_MAP_KEY?.trim();
-  if (!mapKey) return { count: 0, raw: null as unknown, source: "skipped" as const, error: null as string | null };
+  if (!mapKey) return empty;
 
   const delta = 0.45;
   const west = lon - delta;
@@ -106,8 +125,30 @@ async function fetchFirmsHotspots(lat: number, lon: number) {
   }
 
   const lines = text.trim().split("\n").filter(Boolean);
-  const count = lines.length > 1 ? lines.length - 1 : 0; // subtract CSV header row
-  return { count, raw: text.slice(0, 2000), source: "firms" as const, error: null as string | null };
+  const count = lines.length > 1 ? lines.length - 1 : 0;
+  let nearestKm: number | null = null;
+  let nearestLat: number | null = null;
+  let nearestLng: number | null = null;
+  if (count > 0) {
+    const header = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    const latIdx = header.indexOf("latitude");
+    const lonIdx = header.indexOf("longitude");
+    if (latIdx >= 0 && lonIdx >= 0) {
+      for (const line of lines.slice(1)) {
+        const cols = line.split(",");
+        const hLat = Number(cols[latIdx]);
+        const hLon = Number(cols[lonIdx]);
+        if (!Number.isFinite(hLat) || !Number.isFinite(hLon)) continue;
+        const km = haversineKm(lat, lon, hLat, hLon);
+        if (nearestKm == null || km < nearestKm) {
+          nearestKm = km;
+          nearestLat = hLat;
+          nearestLng = hLon;
+        }
+      }
+    }
+  }
+  return { count, nearestKm, nearestLat, nearestLng, raw: text.slice(0, 2000), source: "firms" as const, error: null as string | null };
 }
 
 function alertLooksLikeFire(event: string, headline: string): boolean {
@@ -178,7 +219,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     }),
     fetchFirmsHotspots(lat, lon).catch((err: Error) => {
       raw.firmsError = err.message;
-      return { count: 0, raw: null, source: "error" as const };
+      return { count: 0, nearestKm: null, nearestLat: null, nearestLng: null, raw: null, source: "error" as const };
     }),
     fetchAmbeeBundle(lat, lon),
   ]);
@@ -253,16 +294,46 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
       }
     : null;
 
-  const freeWildfireParts: string[] = [];
-  if (fireAlerts.length) freeWildfireParts.push(fireAlerts.slice(0, 2).map((a) => a.properties?.event ?? "Fire/smoke alert").join("; "));
-  if (firms.count > 0) freeWildfireParts.push(`${firms.count} FIRMS hotspot(s) within ~50km`);
-
   const disasterHits: EnvDisasterHit[] = (ambee.disasters?.events ?? []).map((e) => ({
     type: e.type,
     name: e.name,
     km: e.km,
     place: e.place,
+    lat: e.lat,
+    lng: e.lng,
   }));
+
+  const needPlace = (hit: EnvDisasterHit | undefined) =>
+    Boolean(hit && !hit.place && hit.lat != null && hit.lng != null);
+
+  const nearestStorm = disasterHits.find((h) => h.type === "SW" || h.type === "TC");
+  const nearestWf = disasterHits.find((h) => h.type === "WF");
+  const nearestEt = disasterHits.find((h) => h.type === "ET");
+
+  const [firePlace, firmsPlace, stormPlace, wfPlace, etPlace] = await Promise.all([
+    ambee.fire?.nearestLat != null && ambee.fire.nearestLng != null
+      ? lookupPlaceName(ambee.fire.nearestLat, ambee.fire.nearestLng).catch(() => null)
+      : Promise.resolve(null),
+    firms.nearestLat != null && firms.nearestLng != null
+      ? lookupPlaceName(firms.nearestLat, firms.nearestLng).catch(() => null)
+      : Promise.resolve(null),
+    needPlace(nearestStorm) ? lookupPlaceName(nearestStorm!.lat!, nearestStorm!.lng!).catch(() => null) : Promise.resolve(nearestStorm?.place ?? null),
+    needPlace(nearestWf) ? lookupPlaceName(nearestWf!.lat!, nearestWf!.lng!).catch(() => null) : Promise.resolve(nearestWf?.place ?? null),
+    needPlace(nearestEt) ? lookupPlaceName(nearestEt!.lat!, nearestEt!.lng!).catch(() => null) : Promise.resolve(nearestEt?.place ?? null),
+  ]);
+
+  if (nearestStorm && stormPlace) nearestStorm.place = stormPlace;
+  if (nearestWf && wfPlace) nearestWf.place = wfPlace;
+  if (nearestEt && etPlace) nearestEt.place = etPlace;
+
+  const freeWildfireParts: string[] = [];
+  if (fireAlerts.length) freeWildfireParts.push(fireAlerts.slice(0, 2).map((a) => a.properties?.event ?? "Fire/smoke alert").join("; "));
+  if (firms.count > 0) {
+    const km = firms.nearestKm != null ? (firms.nearestKm < 10 ? firms.nearestKm.toFixed(1) : String(Math.round(firms.nearestKm))) : null;
+    const loc = firmsPlace ? ` near ${firmsPlace}` : "";
+    const dist = km ? ` · closest ${km} km` : " within ~50km";
+    freeWildfireParts.push(`${firms.count} FIRMS hotspot(s)${loc}${dist}`);
+  }
 
   const free: EnvSourceValues = {
     temperatureF: nwsTempF,
@@ -287,7 +358,9 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const ambeeVo = summarizeDisasters(disasterHits, ["VO"], 1);
   const ambeeLocalFire =
     ambee.fire?.nearestKm != null && ambee.fire.nearestKm <= 50 && ambee.fire.summary
-      ? ambee.fire.summary
+      ? firePlace
+        ? `${ambee.fire.summary} · near ${firePlace}`
+        : ambee.fire.summary
       : null;
   const ambeeWildfire = [ambeeLocalFire, ambeeWfDisaster].filter(Boolean).join(" · ") || null;
 

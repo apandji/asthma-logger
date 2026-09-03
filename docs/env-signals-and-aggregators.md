@@ -246,6 +246,8 @@ Ask:
 
 If the meeting is “what should we pilot,” **pollen + per-pollutant AQ + 48h history** beats a nicer temperature integer.
 
+Trial field map (what to call vs skip): **[Ambee datasets vs breathing triggers](./ambee-trigger-datasets.md)**.
+
 ---
 
 ## Suggested architecture (vendor-agnostic)

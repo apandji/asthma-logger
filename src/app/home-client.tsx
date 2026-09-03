@@ -29,6 +29,24 @@ const DEMO_LOCATIONS = {
   },
 } as const;
 
+/** Render PM2.5 with a subscript 2.5 so it doesn't read as "PM 25". */
+function EnvText({ children }: { children: string }) {
+  const parts = children.split(/(PM2\.5)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part === "PM2.5" ? (
+          <span key={i}>
+            PM<sub>2.5</sub>
+          </span>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 function formatTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString();
@@ -61,15 +79,15 @@ function SignalValue({ value, id }: { value: EnvSignalValue; id: string }) {
           cursor: "pointer",
         }}
       >
-        {value.text}
+        <EnvText>{value.text}</EnvText>
         {value.detail ? (
           <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: value.unavailable ? "#9ca3af" : "#6b7280" }}>
-            {value.detail}
+            <EnvText>{value.detail}</EnvText>
           </span>
         ) : null}
       </button>
       <span id={`tip-${id}`} role="tooltip" className={`env-badge-tip${open ? " env-badge-tip--open" : ""}`}>
-        {value.source}
+        <EnvText>{value.source}</EnvText>
       </span>
     </span>
   );

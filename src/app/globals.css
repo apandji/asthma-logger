@@ -91,3 +91,42 @@ body {
 .env-signal-v {
   width: 36%;
 }
+
+.log-row-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.log-row-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.log-row-chevron {
+  flex: none;
+  width: 1.1em;
+  margin-top: 2px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.log-row-summary {
+  color: #6b7280;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.log-row-details {
+  margin-top: 8px;
+}

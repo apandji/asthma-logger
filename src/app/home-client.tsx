@@ -75,6 +75,20 @@ function SignalValue({ value, id }: { value: EnvSignalValue; id: string }) {
   );
 }
 
+function collapsedEnvLine(log: AttackLogDTO | undefined): string {
+  if (!log) return "env: —";
+  if (log.envStatus !== "ready") return `env:${log.envStatus}`;
+  const parts: string[] = [];
+  if (log.temperatureF != null) parts.push(`${Math.round(log.temperatureF)}°F`);
+  if (log.aqi != null) parts.push(`AQI ${log.aqi}${log.aqiCategory ? ` ${log.aqiCategory}` : ""}`);
+  if (log.hasStormAlert && log.stormSummary) {
+    const first = log.stormSummary.split(";")[0]?.trim();
+    if (first && !/heat|cold|freeze|frost|wind chill/i.test(first)) parts.push(first);
+  }
+  if (log.hasWildfireNearby) parts.push("Wildfire nearby");
+  return parts.join(" · ") || "Outdoor context saved";
+}
+
 function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
   if (!log) {
     return <span style={{ color: "#888", fontSize: 12 }}>env: —</span>;
@@ -175,6 +189,7 @@ export default function HomeClient() {
   const [busy, setBusy] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [highlightLogId, setHighlightLogId] = useState<string | null>(null);
+  const [openLogIds, setOpenLogIds] = useState<Record<string, boolean>>({});
 
   const refresh = useCallback(async () => {
     const local = await getAllLocalLogs();
@@ -306,6 +321,7 @@ export default function HomeClient() {
         await syncPending();
         await refresh();
         setHighlightLogId(id);
+        setOpenLogIds((prev) => ({ ...prev, [id]: true }));
         setStatus(
           placeName
             ? `Logged in ${placeName}. Add how you feel below (optional).`
@@ -347,7 +363,7 @@ export default function HomeClient() {
     <main style={{ maxWidth: 520, margin: "0 auto", padding: 16, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: 20, marginBottom: 8 }}>Asthma trigger log</h1>
       <p style={{ fontSize: 14, color: "#555", marginBottom: 16 }}>
-        Tap when you use your inhaler. Tap a value to see where it came from.
+        Tap when you use your inhaler. Open a log for outdoor details; tap a value for its source.
       </p>
 
       <section style={{ marginBottom: 16 }}>
@@ -413,6 +429,8 @@ export default function HomeClient() {
               const feeling =
                 (server?.feeling as Feeling | null | undefined) ?? log.feeling;
               const feelingLabel = feelingDisplay(feeling);
+              const open = openLogIds[log.id] === true;
+              const detailsId = `log-details-${log.id}`;
               return (
                 <li
                   key={log.id}
@@ -426,35 +444,57 @@ export default function HomeClient() {
                     paddingRight: highlightLogId === log.id ? 6 : 0,
                   }}
                 >
-                  <div style={{ marginBottom: 4 }}>
-                    <strong>{formatTime(log.loggedAt)}</strong>
-                    {feelingLabel ? (
-                      <span style={{ marginLeft: 8, color: "#555" }}>{feelingLabel}</span>
-                    ) : null}
-                    <span style={{ marginLeft: 8, color: "#888", fontSize: 11 }}>
-                      sync:{log.syncStatus}
+                  <button
+                    type="button"
+                    className="log-row-toggle"
+                    aria-expanded={open}
+                    aria-controls={detailsId}
+                    onClick={() => setOpenLogIds((prev) => ({ ...prev, [log.id]: !prev[log.id] }))}
+                  >
+                    <span className="log-row-chevron" aria-hidden>
+                      {open ? "▼" : "▶"}
                     </span>
-                  </div>
-                  <div style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>
-                    {server?.placeName ?? log.placeName ?? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}`}
-                    {server?.placeName || log.placeName ? (
-                      <span style={{ color: "#9ca3af", marginLeft: 8 }}>
-                        {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "block", marginBottom: 2 }}>
+                        <strong>{formatTime(log.loggedAt)}</strong>
+                        {feelingLabel ? (
+                          <span style={{ marginLeft: 8, color: "#555" }}>{feelingLabel}</span>
+                        ) : null}
+                        <span style={{ marginLeft: 8, color: "#888", fontSize: 11 }}>
+                          sync:{log.syncStatus}
+                        </span>
                       </span>
-                    ) : null}
-                  </div>
-                  <EnvBadges log={server} />
-                  <FeelingTags
-                    logId={log.id}
-                    current={feeling ?? null}
-                    onSelect={setFeeling}
-                    highlight={highlightLogId === log.id}
-                  />
-                  {log.lastError && (
-                    <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 4 }}>
+                      <span style={{ display: "block", color: "#666", fontSize: 12 }}>
+                        {server?.placeName ?? log.placeName ?? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}`}
+                        {server?.placeName || log.placeName ? (
+                          <span style={{ color: "#9ca3af", marginLeft: 8 }}>
+                            {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
+                          </span>
+                        ) : null}
+                      </span>
+                      {!open ? <span className="log-row-summary">{collapsedEnvLine(server)}</span> : null}
+                    </span>
+                  </button>
+                  {open ? (
+                    <div id={detailsId} className="log-row-details">
+                      <EnvBadges log={server} />
+                      <FeelingTags
+                        logId={log.id}
+                        current={feeling ?? null}
+                        onSelect={setFeeling}
+                        highlight={highlightLogId === log.id}
+                      />
+                      {log.lastError && (
+                        <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 4 }}>
+                          {log.lastError}
+                        </div>
+                      )}
+                    </div>
+                  ) : log.lastError ? (
+                    <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 4, marginLeft: 22 }}>
                       {log.lastError}
                     </div>
-                  )}
+                  ) : null}
                 </li>
               );
             })}

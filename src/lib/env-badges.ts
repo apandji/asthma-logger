@@ -20,6 +20,7 @@ import {
   type HazardCopy,
 } from "./hazard-copy";
 import type { AttackLogDTO, EnvAirStation, EnvPollenSnapshot, EnvSnapshot, EnvSourceValues } from "./types";
+import { formatMiles } from "./units";
 
 export type EnvBadgeGroup = "free" | "ambee" | "meta" | "extra";
 
@@ -417,15 +418,11 @@ function toSignal(
   };
 }
 
-function formatKm(km: number | null | undefined): string | null {
-  if (km == null || !Number.isFinite(km)) return null;
-  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
-}
-
 function formatStation(station: EnvAirStation | null | undefined): string | null {
   if (!station) return null;
   const kind = station.isMonitor === false ? "sensor" : null;
-  const parts = [station.name, formatKm(station.km), kind].filter(Boolean);
+  const dist = station.km != null && Number.isFinite(station.km) ? formatMiles(station.km) : null;
+  const parts = [station.name, dist, kind].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }
 

@@ -210,7 +210,7 @@ export async function GET() {
           note:
             count > 0
               ? "OpenAQ key accepted — monitors found near St. Louis probe point"
-              : "OpenAQ key accepted; no monitors in 25 km of probe point",
+              : "OpenAQ key accepted; no monitors within ~16 mi of probe point",
           locationCount: count,
         };
       }

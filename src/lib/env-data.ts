@@ -293,7 +293,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const hasWildfireNearby = fireAlerts.length > 0 || firms.count > 0 || ambeeFireNearby;
   const wildfireParts: string[] = [];
   if (fireAlerts.length) wildfireParts.push(fireAlerts.slice(0, 2).map((a) => a.properties?.event ?? "Fire/smoke alert").join("; "));
-  if (firms.count > 0) wildfireParts.push(`${firms.count} FIRMS hotspot(s) within ~50km (24h)`);
+  if (firms.count > 0) wildfireParts.push(`${firms.count} FIRMS hotspot(s) within ~31 mi (24h)`);
   if (ambeeFireNearby && ambee.fire?.summary) wildfireParts.push(`Ambee ${ambee.fire.summary}`);
   const wildfireSummary = hasWildfireNearby ? wildfireParts.join(" | ") : null;
 

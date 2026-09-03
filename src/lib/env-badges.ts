@@ -11,6 +11,14 @@ import {
   wildfireSeverity,
   type Severity,
 } from "./env-colors";
+import {
+  hazardSeverity,
+  mergeFireCopy,
+  rewriteFireLabel,
+  rewriteStormLabel,
+  summarizeHazards,
+  type HazardCopy,
+} from "./hazard-copy";
 import type { AttackLogDTO, EnvAirStation, EnvPollenSnapshot, EnvSnapshot, EnvSourceValues } from "./types";
 
 export type EnvBadgeGroup = "free" | "ambee" | "meta" | "extra";
@@ -48,8 +56,10 @@ const SOURCES = {
   wildfireFirms: "NASA FIRMS satellite hotspots — firms.modaps.eosdis.nasa.gov",
   wildfireAmbee: "Ambee fire detection — nearest hotspot distance, not smoke at this pin. Smoke ≈ PM2.5.",
   weather: "NWS active alerts — api.weather.gov",
-  stormsAmbee: "Ambee natural disasters (SW severe storm, TC cyclone) — includes distant events. Distance is from this pin.",
-  wildfireDisaster: "Ambee disasters WF. Distant wildfires can move smoke; pair with PM2.5. Not a volcano.",
+  stormsAmbee:
+    "Ambee storm reports anywhere in the wider region. Far events are labeled “none nearby” — they are not the weather at this pin.",
+  wildfireDisaster:
+    "Ambee wildfire reports plus the nearest satellite hotspot. Distance is from this pin. Smoke at the pin shows up as PM2.5, not this row.",
   volcanoAmbee: "Ambee disasters VO — volcanic ash can travel far. This is an air-quality signal, not a wildfire.",
   extremeTempAmbee: "Ambee disasters ET — heat/cold wave, not a thermometer reading.",
 } as const;
@@ -394,11 +404,17 @@ function missing(source: string): EnvSignalValue {
   return { text: "—", severity: "neutral", source, unavailable: true };
 }
 
-function shortenFire(label: string, group: "free" | "ambee"): string {
-  if (group === "ambee") {
-    return label.replace(/^Ambee\s+/i, "").replace(/^detected\s+/i, "Hotspot ");
-  }
-  return label.replace(/^Ambee\s+/i, "");
+function toSignal(
+  copy: HazardCopy,
+  kind: "storm" | "wildfire",
+  source: string,
+): EnvSignalValue {
+  return {
+    text: copy.text,
+    detail: copy.detail,
+    severity: hazardSeverity(copy, kind),
+    source,
+  };
 }
 
 function formatKm(km: number | null | undefined): string | null {
@@ -489,6 +505,12 @@ export function buildEnvSignals(log: AttackLogDTO): {
   const stormsFromSnap = free.storms;
   const storms = splitAlerts(stormsFromSnap ?? log.stormSummary).filter((name) => !isExtremeWeatherAlert(name));
   const stormLabel = storms.length ? storms.join(", ") : null;
+  const ambeeStormCopy =
+    summarizeHazards(ambee.disasters, ["SW", "TC"], "storm") ?? rewriteStormLabel(ambee.storms);
+  const freeFireCopy = rewriteFireLabel(free.wildfire);
+  const ambeeHotspotCopy = rewriteFireLabel(ambee.wildfire);
+  const ambeeWfCopy = summarizeHazards(ambee.disasters, ["WF"], "wildfire");
+  const ambeeFireCopy = mergeFireCopy(ambeeHotspotCopy, ambeeWfCopy);
 
   const rows: EnvSignalRow[] = [
     {
@@ -586,29 +608,25 @@ export function buildEnvSignals(log: AttackLogDTO): {
       emoji: "⚠️",
       free: stormLabel
         ? { text: stormLabel, severity: weatherAlertSeverity(stormLabel), source: SOURCES.weather }
-        : { text: "None", severity: "green", source: SOURCES.weather },
-      ambee: ambee.storms
-        ? { text: ambee.storms, severity: weatherAlertSeverity(ambee.storms), source: SOURCES.stormsAmbee }
-        : { text: "None in region", severity: "green", source: SOURCES.stormsAmbee },
+        : { text: "None nearby", severity: "green", source: SOURCES.weather },
+      ambee: ambeeStormCopy
+        ? toSignal(ambeeStormCopy, "storm", SOURCES.stormsAmbee)
+        : { text: "None nearby", severity: "green", source: SOURCES.stormsAmbee },
     },
     {
       key: "wildfire",
       question: "Wildfires?",
       emoji: "🔥",
-      free: free.wildfire
-        ? {
-            text: shortenFire(free.wildfire, "free"),
-            severity: wildfireSeverity(),
-            source: /FIRMS/i.test(free.wildfire) ? SOURCES.wildfireFirms : SOURCES.wildfireNws,
-          }
+      free: freeFireCopy
+        ? toSignal(
+            freeFireCopy,
+            "wildfire",
+            /FIRMS|satellite/i.test(free.wildfire ?? "") ? SOURCES.wildfireFirms : SOURCES.wildfireNws,
+          )
         : { text: "None nearby", severity: "green", source: SOURCES.wildfireFirms },
-      ambee: ambee.wildfire
-        ? {
-            text: shortenFire(ambee.wildfire, "ambee"),
-            severity: wildfireSeverity(),
-            source: `${SOURCES.wildfireAmbee} ${SOURCES.wildfireDisaster}`,
-          }
-        : { text: "None in region", severity: "green", source: SOURCES.wildfireDisaster },
+      ambee: ambeeFireCopy
+        ? toSignal(ambeeFireCopy, "wildfire", `${SOURCES.wildfireAmbee} ${SOURCES.wildfireDisaster}`)
+        : { text: "None nearby", severity: "green", source: SOURCES.wildfireDisaster },
     },
   ];
 

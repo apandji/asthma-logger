@@ -9,5 +9,5 @@ export type Feeling = (typeof FEELING_OPTIONS)[number]["value"];
 export function feelingDisplay(feeling: string | null | undefined): string | null {
   if (!feeling || feeling === "skip") return null;
   const opt = FEELING_OPTIONS.find((f) => f.value === feeling);
-  return opt ? `${opt.emoji} ${opt.label}` : feeling;
+  return opt ? `${opt.emoji} ${opt.label}` : feeling.replace(/_/g, " ");
 }

@@ -119,7 +119,7 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
       (log.snapshot?.v !== 2 || (!log.snapshot.free.aqi && !log.snapshot.ambee.pm25)) &&
       log.temperatureF != null ? (
         <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
-          No AQI — add AIRNOW_API_KEY or AMBEE_API_KEY in Vercel for air quality.
+          No air reading — add OPENAQ_API_KEY (nearest station) or AIRNOW_API_KEY / AMBEE_API_KEY in Vercel.
         </div>
       ) : null}
     </div>

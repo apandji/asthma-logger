@@ -11,7 +11,7 @@ import {
   wildfireSeverity,
   type Severity,
 } from "./env-colors";
-import type { AttackLogDTO, EnvPollenSnapshot, EnvSnapshot, EnvSourceValues } from "./types";
+import type { AttackLogDTO, EnvAirStation, EnvPollenSnapshot, EnvSnapshot, EnvSourceValues } from "./types";
 
 export type EnvBadgeGroup = "free" | "ambee" | "meta" | "extra";
 
@@ -34,7 +34,9 @@ const SOURCES = {
   tempAmbee: "Ambee weather — outdoor model/obs blend (~hourly). Not indoor air.",
   humidityNone: "No free humidity API — NWS forecast does not include relative humidity at this endpoint.",
   humidityAmbee: "Ambee weather humidity / dewpoint — outdoor.",
-  aqiAirnow: "EPA AirNow official monitor — regional, often 5–25+ miles away",
+  aqiAirnow: "EPA AirNow official monitor — max AQI within 25 miles. Regional, not the air at this pin.",
+  aqiOpenaq:
+    "OpenAQ nearest ground station (often an EPA/AirNow monitor). Hourly concentration at that site — not NowCast AQI, not indoor, not this street.",
   aqiAmbee: "Ambee outdoor AQ model (~500 m claimed). Not indoor air.",
   pm25Airnow: "AirNow PM2.5 monitor reading — regional station, not hyperlocal.",
   pm25Ambee: "Ambee PM2.5 — outdoor ambient, modeled. Not the air indoors.",
@@ -196,12 +198,12 @@ function buildSourceBadges(
       label: `AQI ${src.aqi}${src.aqiCategory ? ` (${src.aqiCategory})` : ""}${driver}`,
       severity: aqiSeverity(src.aqi),
       emoji: "💨",
-      source: group === "free" ? SOURCES.aqiAirnow : SOURCES.aqiAmbee,
+      source: group === "free" ? freeAirSource(src) : SOURCES.aqiAmbee,
       group,
     });
   } else {
     badges.push(
-      unavailableBadge(`${prefix}-aqi`, "💨", "AQI", group === "free" ? SOURCES.aqiAirnow : SOURCES.aqiAmbee, group),
+      unavailableBadge(`${prefix}-aqi`, "💨", "AQI", group === "free" ? SOURCES.aqiOpenaq : SOURCES.aqiAmbee, group),
     );
   }
 
@@ -399,16 +401,61 @@ function shortenFire(label: string, group: "free" | "ambee"): string {
   return label.replace(/^Ambee\s+/i, "");
 }
 
+function formatKm(km: number | null | undefined): string | null {
+  if (km == null || !Number.isFinite(km)) return null;
+  return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
+}
+
+function formatStation(station: EnvAirStation | null | undefined): string | null {
+  if (!station) return null;
+  const kind = station.isMonitor === false ? "sensor" : null;
+  const parts = [station.name, formatKm(station.km), kind].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function airLine(label: string, station: EnvAirStation | null | undefined): string {
+  const loc = formatStation(station);
+  return loc ? `${label} · ${loc}` : label;
+}
+
+function worseSeverity(a: Severity, b: Severity): Severity {
+  const rank: Record<Severity, number> = { neutral: 0, info: 1, green: 2, yellow: 3, orange: 4, red: 5 };
+  return rank[a] >= rank[b] ? a : b;
+}
+
+function airSeverity(src: EnvSourceValues): Severity {
+  let sev: Severity = "neutral";
+  if (src.pm25 != null) sev = worseSeverity(sev, pm25Severity(src.pm25));
+  if (src.ozonePpb != null) sev = worseSeverity(sev, ozoneSeverity(src.ozonePpb));
+  if (src.aqi != null && sev === "neutral") sev = aqiSeverity(src.aqi);
+  return sev;
+}
+
+function freeAirSource(src: EnvSourceValues): string {
+  if (src.pm25Station || src.ozoneStation) {
+    const bits: string[] = [SOURCES.aqiOpenaq];
+    const asOf = src.pm25Station?.asOf ?? src.ozoneStation?.asOf;
+    if (asOf) bits.push(`Latest ${asOf}.`);
+    if (src.pm25Station?.provider) bits.push(`PM provider: ${src.pm25Station.provider}.`);
+    if (src.ozoneStation?.provider && src.ozoneStation.provider !== src.pm25Station?.provider) {
+      bits.push(`O₃ provider: ${src.ozoneStation.provider}.`);
+    }
+    return bits.join(" ");
+  }
+  return SOURCES.aqiAirnow;
+}
+
 function airText(src: EnvSourceValues): { text: string; detail?: string } | null {
   if (src.aqi == null && src.pm25 == null && src.ozonePpb == null) return null;
-  const parts: string[] = [];
-  if (src.aqi != null) {
-    parts.push(`AQI ${src.aqi}${src.aqiCategory ? ` ${src.aqiCategory}` : ""}`);
+  const pm = src.pm25 != null ? airLine(`PM2.5 ${Math.round(src.pm25)} µg`, src.pm25Station) : null;
+  const o3 = src.ozonePpb != null ? airLine(`O₃ ${Math.round(src.ozonePpb)} ppb`, src.ozoneStation) : null;
+  if (pm || o3) {
+    return { text: pm ?? o3!, detail: pm && o3 ? o3 : undefined };
   }
-  const extras: string[] = [];
-  if (src.pm25 != null) extras.push(`PM2.5 ${Math.round(src.pm25)}`);
-  if (src.ozonePpb != null) extras.push(`O₃ ${Math.round(src.ozonePpb)}`);
-  return { text: parts.join(" · ") || extras.join(" · "), detail: parts.length ? extras.join(" · ") || undefined : undefined };
+  return {
+    text: `AQI ${src.aqi}${src.aqiCategory ? ` ${src.aqiCategory}` : ""}`,
+    detail: src.aqiPollutant ? src.aqiPollutant : undefined,
+  };
 }
 
 /** User-facing questions, with Free vs Ambee answers side by side. */
@@ -502,10 +549,10 @@ export function buildEnvSignals(log: AttackLogDTO): {
         ? {
             text: freeAir.text,
             detail: freeAir.detail,
-            severity: free.aqi != null ? aqiSeverity(free.aqi) : free.pm25 != null ? pm25Severity(free.pm25) : "neutral",
-            source: SOURCES.aqiAirnow,
+            severity: airSeverity(free),
+            source: freeAirSource(free),
           }
-        : missing(SOURCES.aqiAirnow),
+        : missing(SOURCES.aqiOpenaq),
       ambee: ambeeAir || ambee.volcano
         ? {
             text: ambeeAir?.text ?? "—",

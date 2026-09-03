@@ -1,4 +1,5 @@
 import { fetchAmbeeBundle, formatDisaster } from "./ambee";
+import { fetchOpenAq } from "./openaq";
 import { formatPlaceName, lookupPlaceName } from "./place";
 import type { EnvDisasterHit, EnvEnrichment, EnvSnapshot, EnvSourceValues } from "./types";
 
@@ -207,7 +208,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const forecastUrl = point.properties?.forecast;
   const alertsUrl = `https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`;
 
-  const [forecast, alerts, airNow, firms, ambee] = await Promise.all([
+  const [forecast, alerts, airNow, openaq, firms, ambee] = await Promise.all([
     forecastUrl ? nwsFetch<{ properties?: { periods?: NwsPeriod[] } }>(forecastUrl) : Promise.resolve(null),
     nwsFetch<{ features?: NwsAlert[] }>(alertsUrl).catch((err: Error) => {
       raw.alertsError = err.message;
@@ -217,6 +218,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
       raw.airNowError = err.message;
       return { aqi: null, aqiCategory: null, pm25: null, ozonePpb: null, raw: null };
     }),
+    fetchOpenAq(lat, lon),
     fetchFirmsHotspots(lat, lon).catch((err: Error) => {
       raw.firmsError = err.message;
       return { count: 0, nearestKm: null, nearestLat: null, nearestLng: null, raw: null, source: "error" as const };
@@ -227,6 +229,8 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const periods = forecast?.properties?.periods ?? [];
   raw.forecastPeriods = periods.slice(0, 4);
   raw.airNow = airNow.raw;
+  raw.openaq = openaq.raw;
+  if (openaq.error) raw.openaqError = openaq.error;
   raw.firms = firms;
   raw.ambee = {
     configured: ambee.configured,
@@ -246,10 +250,16 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const isExtremeTemp = temperatureF != null && (temperatureF <= EXTREME_COLD_F || temperatureF >= EXTREME_HOT_F);
 
   const ambeeAqi = ambee.aq?.aqi ?? null;
-  const aqi = airNow.aqi ?? ambeeAqi;
-  const aqiCategory = airNow.aqiCategory ?? ambee.aq?.aqiCategory ?? null;
-  const aqiSource: EnvSnapshot["aqiSource"] =
-    airNow.aqi != null ? "airnow" : ambeeAqi != null ? "ambee" : null;
+  const openaqHasAir = openaq.pm25 != null || openaq.ozonePpb != null;
+  const aqi = openaqHasAir ? openaq.aqi : airNow.aqi ?? ambeeAqi;
+  const aqiCategory = openaqHasAir ? openaq.aqiCategory : airNow.aqiCategory ?? ambee.aq?.aqiCategory ?? null;
+  const aqiSource: EnvSnapshot["aqiSource"] = openaqHasAir
+    ? "openaq"
+    : airNow.aqi != null
+      ? "airnow"
+      : ambeeAqi != null
+        ? "ambee"
+        : null;
 
   const alertFeatures = alerts.features ?? [];
   raw.alerts = alertFeatures.map((a) => ({
@@ -339,11 +349,13 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     temperatureF: nwsTempF,
     humidityPct: null,
     dewpointF: null,
-    aqi: airNow.aqi,
-    aqiCategory: airNow.aqiCategory,
-    aqiPollutant: null,
-    pm25: airNow.pm25,
-    ozonePpb: airNow.ozonePpb,
+    aqi: openaqHasAir ? openaq.aqi : airNow.aqi,
+    aqiCategory: openaqHasAir ? openaq.aqiCategory : airNow.aqiCategory,
+    aqiPollutant: openaqHasAir ? openaq.aqiPollutant : null,
+    pm25: openaqHasAir ? openaq.pm25 : airNow.pm25,
+    ozonePpb: openaqHasAir ? openaq.ozonePpb : airNow.ozonePpb,
+    pm25Station: openaqHasAir ? openaq.pm25Station : null,
+    ozoneStation: openaqHasAir ? openaq.ozoneStation : null,
     pollen: null,
     wildfire: freeWildfireParts.length ? freeWildfireParts.join(" · ") : null,
     storms: stormSummary,
@@ -388,6 +400,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     aqiSource,
     tempSource,
     ambeeErrors: ambee.errors.length ? ambee.errors : undefined,
+    openaqError: openaq.error ?? undefined,
     placeName,
   };
 

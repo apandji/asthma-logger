@@ -79,7 +79,7 @@ Copy pattern: **“Outdoor AQI 87 (PM2.5) · 11 mi from Denver-CAMP · 4:00p”*
 
 ## AQI — hyperlocal *or* clearly not
 
-**Today:** AirNow current obs, 25-mile search, prefers PM2.5, no monitor distance in the UI. Ozone is ignored unless it wins the max.
+**Today:** OpenAQ nearest PM2.5 and nearest ozone within 25 km (station name + km) when `OPENAQ_API_KEY` is set. AirNow current obs (25-mile **max** AQI, no distance) is the fallback only. Ozone and PM can come from different stations.
 
 This is the highest-stakes badge. Users treat AQI as “the air I am breathing.” It is not.
 
@@ -111,10 +111,11 @@ True hyperlocal for asthma is **indoor + breathing zone**. Outdoor grids will ne
 
 ### Practical stack (can mix)
 
-1. **AirNow** — keep as the official US number; always show distance + parameter.
-2. **PurpleAir outdoor, EPA-corrected** — optional “nearby sensors” row when one exists within ~2–5 km. Fast, local, noisier.
-3. **Aggregator grid (Ambee)** — fill gaps, ozone + PM2.5 + history, non-US later.
-4. **Later:** user-owned sensor or “I’m indoors / outdoors” toggle on the log.
+1. **OpenAQ** — nearest reference monitor (and, if none, nearest low-cost sensor) per pollutant, with name + km. This is the honesty layer for “what instrument, how far.”
+2. **AirNow** — official US NowCast AQI; keep as fallback. Do **not** use max-within-25-miles as the primary number when OpenAQ has a nearer station.
+3. **PurpleAir outdoor, EPA-corrected** — optional “nearby sensors” row when one exists within ~2–5 km. Fast, local, noisier. OpenAQ may already include some of these (`isMonitor: false`).
+4. **Aggregator grid (Ambee)** — fill gaps, ozone + PM2.5 + history, non-US later. Label as a **model**.
+5. **Later:** user-owned sensor or “I’m indoors / outdoors” toggle on the log.
 
 ### Ask Ambee (AQI)
 
@@ -259,7 +260,7 @@ Log tap
   → GPS + time + indoor/outdoor (ask the user; default unknown)
   → Enrichment providers (parallel, independently fail):
         weather obs     (METAR / Open-Meteo / Ambee weather)
-        air quality     (AirNow + optional PurpleAir + optional Ambee AQ)
+        air quality     (OpenAQ nearest station + AirNow fallback + optional Ambee AQ)
         pollen          (Ambee or tomorrow.io / others)
         alerts          (NWS US; later per-country)
         fire/smoke      (FIRMS + PM2.5; optional vendor plume)
@@ -289,7 +290,7 @@ Same two demo points we already have. Side-by-side:
 | Field | Our stack today | Ambee |
 |-------|-----------------|-------|
 | Temp / humidity | NWS forecast | `/weather/latest/by-lat-lng` |
-| AQI / PM2.5 / O3 | AirNow 25 mi | `/latest/by-lat-lng` |
+| AQI / PM2.5 / O3 | OpenAQ nearest station + km (AirNow 25 mi fallback) | `/latest/by-lat-lng` model |
 | Pollen | none | `/v3/pollen/latest` |
 | Fires | FIRMS box + NWS keywords | `/fire/latest/by-lat-lng` |
 | Alerts | NWS | (keep NWS) |

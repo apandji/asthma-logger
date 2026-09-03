@@ -10,7 +10,7 @@ import {
   updateLocalFeeling,
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
-import { buildEnvSignals, severityStyle, type EnvSignalValue } from "@/lib/env-badges";
+import { buildEnvSignals, type EnvSignalValue } from "@/lib/env-badges";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
 
 /** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
@@ -29,55 +29,88 @@ const DEMO_LOCATIONS = {
   },
 } as const;
 
-function formatTime(iso: string): string {
+/** Render PM2.5 with a subscript 2.5 so it doesn't read as "PM 25". */
+function EnvText({ children }: { children: string }) {
+  const parts = children.split(/(PM2\.5)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part === "PM2.5" ? (
+          <span key={i}>
+            PM<sub>2.5</sub>
+          </span>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+function formatWhen(iso: string): { date: string; time: string } {
   try {
-    return new Date(iso).toLocaleString();
+    const d = new Date(iso);
+    const now = new Date();
+    const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const delta = (startOfDay(now) - startOfDay(d)) / 86400000;
+    if (delta === 0) return { date: "Today", time };
+    if (delta === 1) return { date: "Yesterday", time };
+    return {
+      date: d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
+      time,
+    };
   } catch {
-    return iso;
+    return { date: iso, time: "" };
   }
+}
+
+function syncLabel(status: LocalLog["syncStatus"]): { text: string; kind: "busy" | "err" } | null {
+  if (status === "pending") return { text: "Saving…", kind: "busy" };
+  if (status === "error") return { text: "Couldn’t save", kind: "err" };
+  return null;
+}
+
+function envStatusCopy(status: string): string | null {
+  if (status === "pending") return "Fetching outdoor air…";
+  if (status === "failed") return "Couldn’t fetch outdoor air";
+  if (status === "skipped") return "Outdoor air skipped";
+  return null;
 }
 
 function SignalValue({ value, id }: { value: EnvSignalValue; id: string }) {
   const [open, setOpen] = useState(false);
-  const s = severityStyle(value.unavailable ? "neutral" : value.severity);
+  const sev = value.unavailable ? "neutral" : value.severity;
+  const alert = !value.unavailable && (value.severity === "red" || value.severity === "orange");
 
   return (
     <span className="env-badge-wrap">
       <button
         type="button"
-        className="env-badge"
+        className={`env-badge sev-${sev}${value.unavailable ? " env-badge--muted" : ""}${alert ? " env-badge--alert" : ""}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-describedby={open ? `tip-${id}` : undefined}
-        style={{
-          display: "block",
-          width: "100%",
-          textAlign: "left",
-          padding: 0,
-          background: "transparent",
-          border: "none",
-          color: value.unavailable ? "#9ca3af" : s.color,
-          fontWeight: !value.unavailable && (value.severity === "red" || value.severity === "orange") ? 600 : 500,
-          cursor: "pointer",
-        }}
+        aria-controls={`src-${id}`}
       >
-        {value.text}
+        <EnvText>{value.text}</EnvText>
         {value.detail ? (
-          <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: value.unavailable ? "#9ca3af" : "#6b7280" }}>
-            {value.detail}
+          <span className={`env-badge-detail${value.unavailable ? " env-badge-detail--muted" : ""}`}>
+            <EnvText>{value.detail}</EnvText>
           </span>
         ) : null}
       </button>
-      <span id={`tip-${id}`} role="tooltip" className={`env-badge-tip${open ? " env-badge-tip--open" : ""}`}>
-        {value.source}
-      </span>
+      {open ? (
+        <span id={`src-${id}`} className="env-source-note">
+          <EnvText>{value.source}</EnvText>
+        </span>
+      ) : null}
     </span>
   );
 }
 
 function collapsedEnvLine(log: AttackLogDTO | undefined): string {
-  if (!log) return "env: —";
-  if (log.envStatus !== "ready") return `env:${log.envStatus}`;
+  if (!log) return "Outdoor air not saved yet";
+  if (log.envStatus !== "ready") return envStatusCopy(log.envStatus) ?? "Outdoor air pending";
   const parts: string[] = [];
   if (log.temperatureF != null) parts.push(`${Math.round(log.temperatureF)}°F`);
   if (log.aqi != null) parts.push(`AQI ${log.aqi}${log.aqiCategory ? ` ${log.aqiCategory}` : ""}`);
@@ -91,21 +124,23 @@ function collapsedEnvLine(log: AttackLogDTO | undefined): string {
 
 function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
   if (!log) {
-    return <span style={{ color: "#888", fontSize: 12 }}>env: —</span>;
+    return <p className="env-status env-status--info">Outdoor air will appear after this log syncs.</p>;
   }
 
   const { status, rows, compare } = buildEnvSignals(log);
-  const statusStyle = severityStyle(status.severity);
+  const statusCopy = envStatusCopy(log.envStatus);
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: statusStyle.color, marginBottom: 6 }}>{status.text}</div>
+      {statusCopy ? (
+        <div className={`env-status env-status--${status.severity}`}>{statusCopy}</div>
+      ) : null}
       {rows.length > 0 && (
         <table className="env-signal-table">
           <thead>
             <tr>
               <th></th>
-              <th>{compare ? "Free APIs" : "Outdoor"}</th>
+              <th>{compare ? "Free" : "Outdoor"}</th>
               {compare ? <th>Ambee</th> : null}
             </tr>
           </thead>
@@ -132,9 +167,7 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
       log.aqi == null &&
       (log.snapshot?.v !== 2 || (!log.snapshot.free.aqi && !log.snapshot.ambee.pm25)) &&
       log.temperatureF != null ? (
-        <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
-          No air reading — add OPENAQ_API_KEY (nearest station) or AIRNOW_API_KEY / AMBEE_API_KEY in Vercel.
-        </div>
+        <p className="env-hint">No air reading yet — add an OpenAQ or AirNow key on Vercel.</p>
       ) : null}
     </div>
   );
@@ -152,26 +185,20 @@ function FeelingTags({
   highlight?: boolean;
 }) {
   return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ fontSize: 11, color: highlight ? "#1d4ed8" : "#666", marginBottom: 4 }}>
-        {highlight ? "How do you feel? (optional)" : "Feeling (optional)"}
-      </div>
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+    <div className="feeling">
+      <p className={`feeling-label${highlight ? " feeling-label--ask" : ""}`}>
+        {highlight ? "How do you feel?" : "Feeling"}
+        <span className="feeling-optional"> · optional</span>
+      </p>
+      <div className="feeling-row">
         {FEELING_OPTIONS.map((f) => {
           const selected = current === f.value;
           return (
             <button
               key={f.value}
               type="button"
+              className={`feeling-btn${selected ? " feeling-btn--on" : ""}`}
               onClick={() => onSelect(logId, selected ? null : f.value)}
-              style={{
-                padding: "4px 8px",
-                fontSize: 12,
-                border: selected ? "2px solid #2563eb" : "1px solid #ccc",
-                background: selected ? "#eff6ff" : "#fff",
-                borderRadius: 12,
-                cursor: "pointer",
-              }}
             >
               {f.emoji} {f.label}
             </button>
@@ -359,71 +386,57 @@ export default function HomeClient() {
     void logInhaler(demo.lat, demo.lon);
   }
 
-  return (
-    <main style={{ maxWidth: 520, margin: "0 auto", padding: 16, fontFamily: "system-ui, sans-serif" }}>
-      <h1 style={{ fontSize: 20, marginBottom: 8 }}>Asthma trigger log</h1>
-      <p style={{ fontSize: 14, color: "#555", marginBottom: 16 }}>
-        Tap when you use your inhaler. Open a log for outdoor details; tap a value for its source.
-      </p>
+  const bannerKind = /error|fail|denied|not available/i.test(status)
+    ? "err"
+    : busy
+      ? "busy"
+      : status
+        ? "ok"
+        : null;
 
-      <section style={{ marginBottom: 16 }}>
-        <button
-          type="button"
-          onClick={handleGeoLog}
-          disabled={busy}
-          style={{
-            width: "100%",
-            padding: "14px 16px",
-            fontSize: 16,
-            fontWeight: 600,
-            cursor: busy ? "default" : "pointer",
-            background: busy ? "#94a3b8" : "#2563eb",
-            color: "#fff",
-            border: "none",
-            borderRadius: 6,
-          }}
-        >
+  return (
+    <main className="app">
+      <header className="app-header">
+        <h1>Asthma trigger log</h1>
+        <p className="app-lede">
+          Tap when you use your inhaler. Open a log for outdoor air; tap a number to see where it came from.
+        </p>
+      </header>
+
+      <section>
+        <button type="button" className="log-cta" onClick={handleGeoLog} disabled={busy}>
           {busy ? "Logging…" : "Log inhaler use"}
         </button>
         {demoMode && (
-          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontSize: 12, color: "#666" }}>Demo locations (?demo=1):</span>
+          <div className="demo-stack">
+            <span className="demo-label">Demo locations</span>
             {(Object.entries(DEMO_LOCATIONS) as [keyof typeof DEMO_LOCATIONS, (typeof DEMO_LOCATIONS)[keyof typeof DEMO_LOCATIONS]][]).map(
               ([key, demo]) => (
                 <button
                   key={key}
                   type="button"
+                  className={`demo-btn${key === "wildfire" ? " demo-btn--alert" : ""}`}
                   onClick={() => handleDemoLog(key)}
                   disabled={busy}
-                  style={{
-                    padding: "8px 12px",
-                    fontSize: 13,
-                    textAlign: "left",
-                    cursor: busy ? "default" : "pointer",
-                    background: key === "wildfire" ? "#fef2f2" : "#f3f4f6",
-                    color: "#111",
-                    border: key === "wildfire" ? "1px solid #fca5a5" : "1px solid #d1d5db",
-                    borderRadius: 4,
-                  }}
                 >
-                  Demo: {demo.label} — {demo.hint}
+                  {demo.label} — {demo.hint}
                 </button>
               ),
             )}
           </div>
         )}
+        {status && bannerKind ? <p className={`banner banner--${bannerKind}`}>{status}</p> : null}
       </section>
 
-      {status && (
-        <p style={{ fontSize: 13, color: "#444", marginBottom: 16 }}>{status}</p>
-      )}
-
       <section>
-        <h2 style={{ fontSize: 16, marginBottom: 8 }}>Recent logs</h2>
+        <div className="logs-head">
+          <h2>Recent</h2>
+          {logs.length > 0 ? <span className="logs-count">{Math.min(logs.length, 20)}</span> : null}
+        </div>
         {logs.length === 0 ? (
-          <p style={{ fontSize: 13, color: "#888" }}>No logs yet.</p>
+          <p className="empty-card">No logs yet. The first tap is enough — you can add how you felt afterward.</p>
         ) : (
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          <ul className="log-list">
             {logs.slice(0, 20).map((log) => {
               const server = enriched[log.id] ?? log.serverLog;
               const feeling =
@@ -431,19 +444,12 @@ export default function HomeClient() {
               const feelingLabel = feelingDisplay(feeling);
               const open = openLogIds[log.id] === true;
               const detailsId = `log-details-${log.id}`;
+              const when = formatWhen(log.loggedAt);
+              const sync = syncLabel(log.syncStatus);
+              const place =
+                server?.placeName ?? log.placeName ?? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}`;
               return (
-                <li
-                  key={log.id}
-                  style={{
-                    borderBottom: "1px solid #ddd",
-                    padding: "10px 0",
-                    fontSize: 13,
-                    background: highlightLogId === log.id ? "#f8fafc" : "transparent",
-                    borderRadius: highlightLogId === log.id ? 4 : 0,
-                    paddingLeft: highlightLogId === log.id ? 6 : 0,
-                    paddingRight: highlightLogId === log.id ? 6 : 0,
-                  }}
-                >
+                <li key={log.id} className={`log-card${highlightLogId === log.id ? " log-card--fresh" : ""}`}>
                   <button
                     type="button"
                     className="log-row-toggle"
@@ -451,32 +457,34 @@ export default function HomeClient() {
                     aria-controls={detailsId}
                     onClick={() => setOpenLogIds((prev) => ({ ...prev, [log.id]: !prev[log.id] }))}
                   >
-                    <span className="log-row-chevron" aria-hidden>
-                      {open ? "▼" : "▶"}
-                    </span>
-                    <span style={{ minWidth: 0, flex: 1 }}>
-                      <span style={{ display: "block", marginBottom: 2 }}>
-                        <strong>{formatTime(log.loggedAt)}</strong>
-                        {feelingLabel ? (
-                          <span style={{ marginLeft: 8, color: "#555" }}>{feelingLabel}</span>
-                        ) : null}
-                        <span style={{ marginLeft: 8, color: "#888", fontSize: 11 }}>
-                          sync:{log.syncStatus}
+                    <svg
+                      className={`log-row-chevron${open ? " log-row-chevron--open" : ""}`}
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      aria-hidden
+                    >
+                      <path d="M7.3 4.7a1 1 0 0 1 1.4 0l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 1 1-1.4-1.4L11.58 10 7.3 5.7a1 1 0 0 1 0-1z" />
+                    </svg>
+                    <span className="log-row-main">
+                      <span className="log-row-top">
+                        <span className="log-when">
+                          <span className="log-when-date">{when.date}</span>
+                          {when.time ? <span className="log-when-time">{when.time}</span> : null}
                         </span>
+                        {feelingLabel ? <span className="log-feeling-chip">{feelingLabel}</span> : null}
                       </span>
-                      <span style={{ display: "block", color: "#666", fontSize: 12 }}>
-                        {server?.placeName ?? log.placeName ?? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}`}
-                        {server?.placeName || log.placeName ? (
-                          <span style={{ color: "#9ca3af", marginLeft: 8 }}>
-                            {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
-                          </span>
-                        ) : null}
-                      </span>
+                      <span className="log-place">{place}</span>
                       {!open ? <span className="log-row-summary">{collapsedEnvLine(server)}</span> : null}
+                      {sync ? <span className="log-meta"><span className={`pill pill--${sync.kind}`}>{sync.text}</span></span> : null}
                     </span>
                   </button>
                   {open ? (
                     <div id={detailsId} className="log-row-details">
+                      {(server?.placeName || log.placeName) ? (
+                        <p className="log-coords">
+                          {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
+                        </p>
+                      ) : null}
                       <EnvBadges log={server} />
                       <FeelingTags
                         logId={log.id}
@@ -484,16 +492,10 @@ export default function HomeClient() {
                         onSelect={setFeeling}
                         highlight={highlightLogId === log.id}
                       />
-                      {log.lastError && (
-                        <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 4 }}>
-                          {log.lastError}
-                        </div>
-                      )}
+                      {log.lastError ? <p className="log-error">{log.lastError}</p> : null}
                     </div>
                   ) : log.lastError ? (
-                    <div style={{ color: "#b91c1c", fontSize: 11, marginTop: 4, marginLeft: 22 }}>
-                      {log.lastError}
-                    </div>
+                    <p className="log-error log-error--collapsed">{log.lastError}</p>
                   ) : null}
                 </li>
               );

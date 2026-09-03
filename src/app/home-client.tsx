@@ -10,7 +10,7 @@ import {
   updateLocalFeeling,
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
-import { buildEnvBadges, hasAmbeeComparison, severityStyle, type EnvBadge, type EnvBadgeGroup } from "@/lib/env-badges";
+import { buildEnvSignals, severityStyle, type EnvSignalValue } from "@/lib/env-badges";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
 
 /** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
@@ -37,58 +37,41 @@ function formatTime(iso: string): string {
   }
 }
 
-function EnvBadgeTag({ badge }: { badge: EnvBadge }) {
-  const [showSource, setShowSource] = useState(false);
-  const s = severityStyle(badge.unavailable ? "neutral" : badge.severity);
+function SignalValue({ value, id }: { value: EnvSignalValue; id: string }) {
+  const [open, setOpen] = useState(false);
+  const s = severityStyle(value.unavailable ? "neutral" : value.severity);
 
   return (
     <span className="env-badge-wrap">
       <button
         type="button"
         className="env-badge"
-        onClick={() => setShowSource((v) => !v)}
-        aria-expanded={showSource}
-        aria-describedby={showSource ? `tip-${badge.key}` : undefined}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-describedby={open ? `tip-${id}` : undefined}
         style={{
-          fontSize: 11,
-          padding: "2px 6px",
-          background: s.bg,
-          color: badge.unavailable ? "#9ca3af" : s.color,
-          borderRadius: 3,
-          border: `1px solid ${s.border}`,
-          fontWeight: !badge.unavailable && (badge.severity === "red" || badge.severity === "orange") ? 600 : 400,
+          display: "block",
+          width: "100%",
+          textAlign: "left",
+          padding: 0,
+          background: "transparent",
+          border: "none",
+          color: value.unavailable ? "#9ca3af" : s.color,
+          fontWeight: !value.unavailable && (value.severity === "red" || value.severity === "orange") ? 600 : 500,
           cursor: "pointer",
-          opacity: badge.unavailable ? 0.7 : 1,
         }}
       >
-        {badge.emoji} {badge.label}
+        {value.text}
+        {value.detail ? (
+          <span style={{ display: "block", fontSize: 11, fontWeight: 400, color: value.unavailable ? "#9ca3af" : "#6b7280" }}>
+            {value.detail}
+          </span>
+        ) : null}
       </button>
-      <span
-        id={`tip-${badge.key}`}
-        role="tooltip"
-        className={`env-badge-tip${showSource ? " env-badge-tip--open" : ""}`}
-      >
-        {badge.source}
+      <span id={`tip-${id}`} role="tooltip" className={`env-badge-tip${open ? " env-badge-tip--open" : ""}`}>
+        {value.source}
       </span>
     </span>
-  );
-}
-
-function ComparisonSection({ badges, label }: { badges: EnvBadge[]; label: string }) {
-  if (!badges.length) return null;
-  return (
-    <div style={{ marginBottom: label ? 6 : 0 }}>
-      {label ? (
-        <div style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, fontWeight: 600 }}>
-          {label}
-        </div>
-      ) : null}
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "flex-start" }}>
-        {badges.map((b) => (
-          <EnvBadgeTag key={b.key} badge={b} />
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -97,36 +80,39 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
     return <span style={{ color: "#888", fontSize: 12 }}>env: —</span>;
   }
 
-  const badges = buildEnvBadges(log);
-  const groups: Record<EnvBadgeGroup, EnvBadge[]> = { meta: [], free: [], ambee: [], extra: [] };
-  for (const b of badges) {
-    groups[b.group].push(b);
-  }
-
-  const showAmbee = hasAmbeeComparison(log.snapshot);
+  const { status, rows, compare } = buildEnvSignals(log);
+  const statusStyle = severityStyle(status.severity);
 
   return (
     <div>
-      <ComparisonSection badges={groups.meta} label="" />
-      {groups.meta.length > 0 && (groups.free.length > 0 || showAmbee) && (
-        <div style={{ marginBottom: 6 }} />
-      )}
-      <ComparisonSection badges={groups.free} label={showAmbee ? "Free APIs (NWS · AirNow · FIRMS)" : "Environmental data"} />
-      {showAmbee && (
-        <>
-          <hr style={{ border: "none", borderTop: "1px dashed #d1d5db", margin: "8px 0" }} />
-          <ComparisonSection badges={groups.ambee} label="Ambee (trial)" />
-        </>
-      )}
-      {groups.extra.length > 0 && (
-        <div style={{ marginTop: 6 }}>
-          <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2 }}>Also from free APIs</div>
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {groups.extra.map((b) => (
-              <EnvBadgeTag key={b.key} badge={b} />
+      <div style={{ fontSize: 11, color: statusStyle.color, marginBottom: 6 }}>{status.text}</div>
+      {rows.length > 0 && (
+        <table className="env-signal-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>{compare ? "Free APIs" : "Outdoor"}</th>
+              {compare ? <th>Ambee</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.key}>
+                <td className="env-signal-q">
+                  {row.emoji} {row.question}
+                </td>
+                <td className="env-signal-v">
+                  <SignalValue value={row.free} id={`${log.id}-${row.key}-free`} />
+                </td>
+                {compare ? (
+                  <td className="env-signal-v">
+                    <SignalValue value={row.ambee} id={`${log.id}-${row.key}-ambee`} />
+                  </td>
+                ) : null}
+              </tr>
             ))}
-          </div>
-        </div>
+          </tbody>
+        </table>
       )}
       {log.envStatus === "ready" && log.inversionNote ? (
         <div style={{ fontSize: 11, color: "#555", marginTop: 4 }} title={log.inversionNote}>
@@ -349,7 +335,7 @@ export default function HomeClient() {
     <main style={{ maxWidth: 520, margin: "0 auto", padding: 16, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: 20, marginBottom: 8 }}>Asthma trigger log</h1>
       <p style={{ fontSize: 14, color: "#555", marginBottom: 16 }}>
-        Tap when you use your inhaler. Hover or tap env tags for data sources.
+        Tap when you use your inhaler. Tap a value to see where it came from.
       </p>
 
       <section style={{ marginBottom: 16 }}>

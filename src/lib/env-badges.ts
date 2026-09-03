@@ -361,3 +361,206 @@ export function hasAmbeeComparison(snap: EnvSnapshot | null | undefined): boolea
   if (!snap || snap.v !== 2) return false;
   return hasAnyValue(snap.ambee);
 }
+
+export type EnvSignalValue = {
+  text: string;
+  detail?: string;
+  severity: Severity;
+  source: string;
+  unavailable?: boolean;
+};
+
+export type EnvSignalRow = {
+  key: string;
+  question: string;
+  emoji: string;
+  free: EnvSignalValue;
+  ambee: EnvSignalValue;
+};
+
+function missing(source: string): EnvSignalValue {
+  return { text: "—", severity: "neutral", source, unavailable: true };
+}
+
+function shortenFire(label: string, group: "free" | "ambee"): string {
+  const firms = label.match(/(\d+)\s+FIRMS hotspot/i);
+  if (firms) return `${firms[1]} nearby (~50 km)`;
+  const km = label.match(/(\d+(?:\.\d+)?)\s*km/i);
+  if (group === "ambee" && km) return `${km[1]} km away`;
+  return label.replace(/^Ambee\s+/i, "").replace(/^detected\s+/i, "");
+}
+
+function airText(src: EnvSourceValues): { text: string; detail?: string } | null {
+  if (src.aqi == null && src.pm25 == null && src.ozonePpb == null) return null;
+  const parts: string[] = [];
+  if (src.aqi != null) {
+    parts.push(`AQI ${src.aqi}${src.aqiCategory ? ` ${src.aqiCategory}` : ""}`);
+  }
+  const extras: string[] = [];
+  if (src.pm25 != null) extras.push(`PM2.5 ${Math.round(src.pm25)}`);
+  if (src.ozonePpb != null) extras.push(`O₃ ${Math.round(src.ozonePpb)}`);
+  return { text: parts.join(" · ") || extras.join(" · "), detail: parts.length ? extras.join(" · ") || undefined : undefined };
+}
+
+/** User-facing questions, with Free vs Ambee answers side by side. */
+export function buildEnvSignals(log: AttackLogDTO): {
+  status: EnvSignalValue;
+  rows: EnvSignalRow[];
+  compare: boolean;
+  inversionNote: string | null;
+} {
+  const snap = log.snapshot;
+  const free = snap?.v === 2 ? snap.free : EMPTY_SOURCES;
+  const ambee = snap?.v === 2 ? snap.ambee : EMPTY_SOURCES;
+  const compare = hasAnyValue(ambee);
+  const weatherError = snap?.v === 2 ? snap.ambeeErrors?.find((e) => /^weather:/i.test(e)) : undefined;
+
+  const status: EnvSignalValue = {
+    text: `env:${log.envStatus}`,
+    severity: envStatusSeverity(log.envStatus),
+    source: SOURCES.status,
+  };
+
+  if (log.envStatus !== "ready") {
+    return { status, rows: [], compare: false, inversionNote: null };
+  }
+
+  const freeTemp = free.temperatureF ?? (snap?.v === 2 ? null : log.temperatureF);
+  const ambeeTemp = ambee.temperatureF;
+  const freeAir = airText(free);
+  const ambeeAir = airText(ambee);
+  const freePollen = pollenSummary(free.pollen);
+  const ambeePollen = pollenSummary(ambee.pollen);
+  const storms = splitAlerts(log.stormSummary);
+  const stormLabel = storms.length ? storms.join(", ") : log.hasStormAlert ? "Weather alert" : null;
+
+  const rows: EnvSignalRow[] = [
+    {
+      key: "temp",
+      question: "Temp",
+      emoji: "🌡️",
+      free:
+        freeTemp != null
+          ? {
+              text: `${Math.round(freeTemp)}°F`,
+              severity: temperatureSeverity(freeTemp, log.isExtremeTemp),
+              source: SOURCES.tempNws,
+            }
+          : missing(SOURCES.tempNws),
+      ambee:
+        ambeeTemp != null
+          ? {
+              text: `${Math.round(ambeeTemp)}°F`,
+              severity: temperatureSeverity(ambeeTemp, log.isExtremeTemp),
+              source: SOURCES.tempAmbee,
+            }
+          : missing(weatherError ? `${SOURCES.tempAmbee} ${weatherError}` : SOURCES.tempAmbee),
+    },
+    {
+      key: "humidity",
+      question: "Humidity",
+      emoji: "💧",
+      free:
+        free.humidityPct != null
+          ? {
+              text: `${Math.round(free.humidityPct)}%`,
+              severity: humiditySeverity(free.humidityPct),
+              source: SOURCES.humidityNone,
+            }
+          : missing(SOURCES.humidityNone),
+      ambee:
+        ambee.humidityPct != null
+          ? {
+              text: `${Math.round(ambee.humidityPct)}%`,
+              detail: ambee.dewpointF != null ? `dew ${Math.round(ambee.dewpointF)}°F` : undefined,
+              severity: humiditySeverity(ambee.humidityPct),
+              source: SOURCES.humidityAmbee,
+            }
+          : missing(weatherError ? `${SOURCES.humidityAmbee} ${weatherError}` : SOURCES.humidityAmbee),
+    },
+    {
+      key: "air",
+      question: "Air",
+      emoji: "💨",
+      free: freeAir
+        ? {
+            text: freeAir.text,
+            detail: freeAir.detail,
+            severity: free.aqi != null ? aqiSeverity(free.aqi) : free.pm25 != null ? pm25Severity(free.pm25) : "neutral",
+            source: SOURCES.aqiAirnow,
+          }
+        : missing(SOURCES.aqiAirnow),
+      ambee: ambeeAir
+        ? {
+            text: ambeeAir.text,
+            detail: ambeeAir.detail,
+            severity: ambee.aqi != null ? aqiSeverity(ambee.aqi) : ambee.pm25 != null ? pm25Severity(ambee.pm25) : "neutral",
+            source: SOURCES.aqiAmbee,
+          }
+        : missing(SOURCES.aqiAmbee),
+    },
+    {
+      key: "pollen",
+      question: "Pollen",
+      emoji: "🌿",
+      free: freePollen
+        ? { text: freePollen.label, severity: pollenRiskSeverity(freePollen.risk), source: SOURCES.pollenNone }
+        : missing(SOURCES.pollenNone),
+      ambee: ambeePollen
+        ? {
+            text: ambeePollen.label,
+            detail: ambee.pollen?.topSpecies ?? undefined,
+            severity: pollenRiskSeverity(ambeePollen.risk),
+            source: ambee.pollen?.topSpecies
+              ? `${SOURCES.pollenAmbee} Top species: ${ambee.pollen.topSpecies}.`
+              : SOURCES.pollenAmbee,
+          }
+        : missing(SOURCES.pollenAmbee),
+    },
+    {
+      key: "storms",
+      question: "Storms?",
+      emoji: "⚠️",
+      free: stormLabel
+        ? { text: stormLabel, severity: weatherAlertSeverity(stormLabel), source: SOURCES.weather }
+        : { text: "None", severity: "green", source: SOURCES.weather },
+      ambee: missing("Ambee trial does not include named weather alerts. We use NWS for storms/heat."),
+    },
+    {
+      key: "wildfire",
+      question: "Wildfires?",
+      emoji: "🔥",
+      free: free.wildfire
+        ? {
+            text: shortenFire(free.wildfire, "free"),
+            severity: wildfireSeverity(),
+            source: /FIRMS/i.test(free.wildfire) ? SOURCES.wildfireFirms : SOURCES.wildfireNws,
+          }
+        : { text: "None nearby", severity: "green", source: SOURCES.wildfireFirms },
+      ambee: ambee.wildfire
+        ? {
+            text: shortenFire(ambee.wildfire, "ambee"),
+            severity: wildfireSeverity(),
+            source: SOURCES.wildfireAmbee,
+          }
+        : { text: "None nearby", severity: "green", source: SOURCES.wildfireAmbee },
+    },
+  ];
+
+  if (log.possibleInversion) {
+    rows.push({
+      key: "inversion",
+      question: "Inversion?",
+      emoji: "🌫️",
+      free: {
+        text: "Possible",
+        detail: log.inversionNote ?? undefined,
+        severity: inversionSeverity(),
+        source: SOURCES.inversion,
+      },
+      ambee: missing("No Ambee inversion product. This is an NWS-forecast heuristic."),
+    });
+  }
+
+  return { status, rows, compare, inversionNote: log.inversionNote };
+}

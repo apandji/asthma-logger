@@ -70,6 +70,7 @@ export const createLogSchema = z.object({
 });
 
 export function toDTO(row: AttackLog): AttackLogDTO {
+  const snapshot = parseSnapshot(row.envSnapshotJson);
   return {
     id: row.id,
     loggedAt: row.loggedAt.toISOString(),
@@ -89,7 +90,8 @@ export function toDTO(row: AttackLog): AttackLogDTO {
     wildfireSummary: row.wildfireSummary,
     possibleInversion: row.possibleInversion,
     inversionNote: row.inversionNote,
-    snapshot: parseSnapshot(row.envSnapshotJson),
+    snapshot,
+    placeName: snapshot?.placeName ?? null,
   };
 }
 

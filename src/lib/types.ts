@@ -15,6 +15,8 @@ export type LocalLog = {
   serverEnvStatus?: EnvStatus;
   /** Full server row after sync — used for badges if live fetch is stale */
   serverLog?: AttackLogDTO;
+  /** Named place from reverse geocode, e.g. "St. Louis, MO" */
+  placeName?: string | null;
 };
 
 export type EnvPollenSnapshot = {
@@ -83,6 +85,8 @@ export type EnvSnapshot = {
   tempSource: "nws_forecast" | "ambee_weather" | null;
   /** Fail-open Ambee errors (e.g. weather not on trial) */
   ambeeErrors?: string[];
+  /** Nearest named place (NWS relative location), e.g. "St. Louis, MO" */
+  placeName?: string | null;
 };
 
 export type AttackLogDTO = {
@@ -105,6 +109,7 @@ export type AttackLogDTO = {
   possibleInversion: boolean;
   inversionNote: string | null;
   snapshot?: EnvSnapshot | null;
+  placeName?: string | null;
 };
 
 export type EnvEnrichment = {

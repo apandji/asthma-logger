@@ -1,4 +1,5 @@
 import { fetchAmbeeBundle, formatDisaster } from "./ambee";
+import { formatPlaceName } from "./place";
 import type { EnvDisasterHit, EnvEnrichment, EnvSnapshot, EnvSourceValues } from "./types";
 
 const NWS_USER_AGENT =
@@ -159,7 +160,9 @@ function summarizeDisasters(
 export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEnrichment> {
   const raw: Record<string, unknown> = {};
   const point = await nwsFetch<NwsPoint>(`https://api.weather.gov/points/${lat.toFixed(4)},${lon.toFixed(4)}`);
-  raw.point = point.properties?.relativeLocation?.properties ?? null;
+  const nwsPlace = point.properties?.relativeLocation?.properties;
+  raw.point = nwsPlace ?? null;
+  const placeName = formatPlaceName(nwsPlace?.city, nwsPlace?.state);
   const forecastUrl = point.properties?.forecast;
   const alertsUrl = `https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`;
 
@@ -312,6 +315,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     aqiSource,
     tempSource,
     ambeeErrors: ambee.errors.length ? ambee.errors : undefined,
+    placeName,
   };
 
   return {

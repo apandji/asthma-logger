@@ -56,6 +56,7 @@ export async function markLocalSynced(id: string, serverLog: AttackLogDTO): Prom
     lastError: undefined,
     serverEnvStatus: serverLog.envStatus,
     serverLog,
+    placeName: serverLog.placeName ?? existing.placeName,
   });
 }
 

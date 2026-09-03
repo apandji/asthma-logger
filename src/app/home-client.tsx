@@ -277,9 +277,20 @@ export default function HomeClient() {
   const logInhaler = useCallback(
     async (latitude: number, longitude: number) => {
       setBusy(true);
-      setStatus("Getting location…");
+      setStatus("Finding your location…");
       try {
         const id = crypto.randomUUID();
+        let placeName: string | null = null;
+        try {
+          const placeRes = await fetch(`/api/place?lat=${latitude}&lon=${longitude}`, { cache: "no-store" });
+          if (placeRes.ok) {
+            const data = (await placeRes.json()) as { placeName?: string | null };
+            placeName = data.placeName ?? null;
+          }
+        } catch {
+          // coords still work if the name lookup fails
+        }
+
         const entry: LocalLog = {
           id,
           loggedAt: new Date().toISOString(),
@@ -287,13 +298,19 @@ export default function HomeClient() {
           longitude,
           feeling: null,
           syncStatus: "pending",
+          placeName,
         };
         await putLocalLog(entry);
-        setStatus("Saved — syncing env…");
+        setLogs((prev) => [entry, ...prev.filter((l) => l.id !== id)]);
+        setStatus(placeName ? `Logging in ${placeName}…` : "Saved — syncing env…");
         await syncPending();
         await refresh();
         setHighlightLogId(id);
-        setStatus("Logged. Add how you feel below (optional).");
+        setStatus(
+          placeName
+            ? `Logged in ${placeName}. Add how you feel below (optional).`
+            : "Logged. Add how you feel below (optional).",
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Log failed";
         setStatus(msg);
@@ -419,7 +436,12 @@ export default function HomeClient() {
                     </span>
                   </div>
                   <div style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>
-                    {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
+                    {server?.placeName ?? log.placeName ?? `${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)}`}
+                    {server?.placeName || log.placeName ? (
+                      <span style={{ color: "#9ca3af", marginLeft: 8 }}>
+                        {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}
+                      </span>
+                    ) : null}
                   </div>
                   <EnvBadges log={server} />
                   <FeelingTags

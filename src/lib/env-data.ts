@@ -1,4 +1,5 @@
 import { fetchAmbeeBundle, formatDisaster } from "./ambee";
+import { hotspotCopy, mergeFireCopy, summarizeHazards } from "./hazard-copy";
 import { fetchOpenAq } from "./openaq";
 import { formatPlaceName, lookupPlaceName } from "./place";
 import type { EnvDisasterHit, EnvEnrichment, EnvSnapshot, EnvSourceValues } from "./types";
@@ -192,9 +193,14 @@ function alertLooksLikeStorm(event: string, headline: string): boolean {
 function summarizeDisasters(
   hits: EnvDisasterHit[],
   types: EnvDisasterHit["type"][],
-  max = 2,
+  noun: "storm" | "wildfire" | "event" = "event",
 ): string | null {
-  const matched = hits.filter((h) => types.includes(h.type)).slice(0, max);
+  if (noun === "storm" || noun === "wildfire") {
+    const copy = summarizeHazards(hits, types, noun);
+    if (!copy) return null;
+    return copy.detail ? `${copy.text} · ${copy.detail}` : copy.text;
+  }
+  const matched = hits.filter((h) => types.includes(h.type)).slice(0, 2);
   if (!matched.length) return null;
   return matched.map((h) => formatDisaster(h)).join(" · ");
 }
@@ -339,10 +345,14 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const freeWildfireParts: string[] = [];
   if (fireAlerts.length) freeWildfireParts.push(fireAlerts.slice(0, 2).map((a) => a.properties?.event ?? "Fire/smoke alert").join("; "));
   if (firms.count > 0) {
-    const km = firms.nearestKm != null ? (firms.nearestKm < 10 ? firms.nearestKm.toFixed(1) : String(Math.round(firms.nearestKm))) : null;
-    const loc = firmsPlace ? ` near ${firmsPlace}` : "";
-    const dist = km ? ` · closest ${km} km` : " within ~50km";
-    freeWildfireParts.push(`${firms.count} FIRMS hotspot(s)${loc}${dist}`);
+    if (firms.nearestKm != null) {
+      const copy = hotspotCopy(firms.nearestKm, firmsPlace, firms.count);
+      freeWildfireParts.push(copy.detail ? `${copy.text} · ${copy.detail}` : copy.text);
+    } else {
+      freeWildfireParts.push(
+        firms.count === 1 ? "Satellite hotspot nearby" : `${firms.count} satellite hotspots nearby`,
+      );
+    }
   }
 
   const free: EnvSourceValues = {
@@ -364,17 +374,20 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     disasters: null,
   };
 
-  const ambeeWfDisaster = summarizeDisasters(disasterHits, ["WF"]);
-  const ambeeStorms = summarizeDisasters(disasterHits, ["SW", "TC"]);
-  const ambeeEt = summarizeDisasters(disasterHits, ["ET"], 1);
-  const ambeeVo = summarizeDisasters(disasterHits, ["VO"], 1);
-  const ambeeLocalFire =
-    ambee.fire?.nearestKm != null && ambee.fire.nearestKm <= 50 && ambee.fire.summary
-      ? firePlace
-        ? `${ambee.fire.summary} · near ${firePlace}`
-        : ambee.fire.summary
+  const ambeeStorms = summarizeDisasters(disasterHits, ["SW", "TC"], "storm");
+  const ambeeEt = summarizeDisasters(disasterHits, ["ET"]);
+  const ambeeVo = summarizeDisasters(disasterHits, ["VO"]);
+  const ambeeHotspot =
+    ambee.fire?.nearestKm != null && ambee.fire.nearestKm <= 50
+      ? hotspotCopy(ambee.fire.nearestKm, firePlace)
       : null;
-  const ambeeWildfire = [ambeeLocalFire, ambeeWfDisaster].filter(Boolean).join(" · ") || null;
+  const ambeeWf = summarizeHazards(disasterHits, ["WF"], "wildfire");
+  const ambeeFireMerged = mergeFireCopy(ambeeHotspot, ambeeWf);
+  const ambeeWildfire = ambeeFireMerged
+    ? ambeeFireMerged.detail
+      ? `${ambeeFireMerged.text} · ${ambeeFireMerged.detail}`
+      : ambeeFireMerged.text
+    : null;
 
   const ambeeValues: EnvSourceValues = {
     temperatureF: ambeeTempF,

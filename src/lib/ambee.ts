@@ -258,13 +258,8 @@ export function parseAmbeeFire(payload: unknown, originLat: number, originLon: n
       nearestKm = km;
       nearestLat = lat;
       nearestLng = lng;
-      const name = str(rec.fireName) ?? str(rec.fireType) ?? "fire";
-      const frp = num(rec.frp);
-      const conf = rec.confidence != null ? String(rec.confidence) : null;
-      const parts = [`${name} ${km < 10 ? km.toFixed(1) : Math.round(km)} km`];
-      if (frp != null) parts.push(`FRP ${Math.round(frp)}`);
-      if (conf) parts.push(conf);
-      summary = parts.join(" · ");
+      const kmLabel = km < 10 ? km.toFixed(1) : String(Math.round(km));
+      summary = `${kmLabel} km`;
     }
   }
 

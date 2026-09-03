@@ -19,6 +19,9 @@ function migrateV1(v1: EnvSnapshotV1): EnvSnapshot {
       ozonePpb: v1.ozonePpb,
       pollen: v1.pollen,
       wildfire: v1.nearestFireSummary,
+      storms: null,
+      extremeTempEvent: null,
+      disasters: null,
     },
     aqiSource: v1.aqiSource,
     tempSource: v1.tempSource,
@@ -36,6 +39,9 @@ const EMPTY_SOURCES = {
   ozonePpb: null,
   pollen: null,
   wildfire: null,
+  storms: null,
+  extremeTempEvent: null,
+  disasters: null,
 } as const;
 
 function parseSnapshot(raw: string | null | undefined): EnvSnapshot | null {

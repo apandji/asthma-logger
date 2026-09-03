@@ -51,12 +51,28 @@ export type AmbeeFireReading = {
   raw: unknown;
 };
 
+export type AmbeeDisasterType = "SW" | "ET" | "WF" | "TC" | "VO";
+
+export type AmbeeDisasterEvent = {
+  type: AmbeeDisasterType;
+  name: string;
+  km: number | null;
+  place: string | null;
+  eventId: string | null;
+};
+
+export type AmbeeDisasterReading = {
+  events: AmbeeDisasterEvent[];
+  raw: unknown;
+};
+
 export type AmbeeBundle = {
   configured: boolean;
   aq: AmbeeAqReading | null;
   pollen: AmbeePollenReading | null;
   weather: AmbeeWeatherReading | null;
   fire: AmbeeFireReading | null;
+  disasters: AmbeeDisasterReading | null;
   errors: string[];
 };
 
@@ -247,19 +263,107 @@ export function parseAmbeeFire(payload: unknown, originLat: number, originLon: n
   return { nearestKm, summary, count: counted, raw: payload };
 }
 
+const BREATHING_DISASTER_TYPES = new Set<AmbeeDisasterType>(["SW", "ET", "WF", "TC", "VO"]);
+
+const DISASTER_LABEL: Record<AmbeeDisasterType, string> = {
+  SW: "Storm",
+  ET: "Extreme temp",
+  WF: "Wildfire",
+  TC: "Cyclone",
+  VO: "Volcano",
+};
+
+function continentFor(lat: number, lon: number): string {
+  if (lat >= 7 && lon >= -170 && lon <= -20) return "NAR";
+  if (lat < 12 && lon >= -90 && lon <= -30) return "SAR";
+  if (lat >= 35 && lon >= -25 && lon <= 45) return "EUR";
+  if (lat >= -35 && lat <= 37 && lon >= -20 && lon <= 52) return "AFR";
+  if (lat >= -50 && lat <= -10 && lon >= 110 && lon <= 180) return "AUS";
+  return "ASIA";
+}
+
+function disasterList(payload: unknown): unknown[] {
+  const root = asRecord(payload);
+  if (!root) return [];
+  if (Array.isArray(root.result)) return root.result;
+  if (Array.isArray(root.data)) return root.data;
+  return [];
+}
+
+export function formatDisaster(event: Pick<AmbeeDisasterEvent, "type" | "km" | "place">): string {
+  const kind = DISASTER_LABEL[event.type];
+  const km =
+    event.km == null ? null : event.km < 10 ? `${event.km.toFixed(1)} km` : `${Math.round(event.km)} km`;
+  const parts = [kind];
+  if (km) parts.push(km);
+  if (event.place) parts.push(event.place);
+  return parts.join(" · ");
+}
+
+export function parseAmbeeDisasters(
+  payload: unknown,
+  originLat: number,
+  originLon: number,
+): AmbeeDisasterReading {
+  const events: AmbeeDisasterEvent[] = [];
+  const seen = new Set<string>();
+
+  for (const item of disasterList(payload)) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const rawType = (str(rec.event_type ?? rec.eventType) ?? "").toUpperCase();
+    if (!BREATHING_DISASTER_TYPES.has(rawType as AmbeeDisasterType)) continue;
+    const type = rawType as AmbeeDisasterType;
+    const eventId = str(rec.event_id ?? rec.eventId);
+    const key = eventId ?? `${type}:${rec.lat}:${rec.lng}:${rec.event_name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const lat = num(rec.lat);
+    const lng = num(rec.lng ?? rec.lon);
+    const km = lat != null && lng != null ? haversineKm(originLat, originLon, lat, lng) : null;
+    const place = str(rec.city) ?? str(rec.state) ?? str(rec.country_code ?? rec.countryCode);
+    const name = str(rec.event_name ?? rec.eventName) ?? DISASTER_LABEL[type];
+
+    events.push({ type, name, km, place, eventId });
+  }
+
+  events.sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9));
+  return { events, raw: payload };
+}
+
+export function mergeDisasterReadings(parts: Array<AmbeeDisasterReading | null>): AmbeeDisasterReading {
+  const events: AmbeeDisasterEvent[] = [];
+  const seen = new Set<string>();
+  for (const part of parts) {
+    if (!part) continue;
+    for (const event of part.events) {
+      const key = event.eventId ?? `${event.type}:${event.name}:${event.km}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      events.push(event);
+    }
+  }
+  events.sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9));
+  return { events, raw: parts.map((p) => p?.raw ?? null) };
+}
+
 export async function fetchAmbeeBundle(lat: number, lon: number): Promise<AmbeeBundle> {
   if (!isAmbeeConfigured()) {
-    return { configured: false, aq: null, pollen: null, weather: null, fire: null, errors: [] };
+    return { configured: false, aq: null, pollen: null, weather: null, fire: null, disasters: null, errors: [] };
   }
 
   const q = `lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lon))}`;
+  const continent = continentFor(lat, lon);
   const errors: string[] = [];
 
-  const [aqRes, pollenRes, weatherRes, fireRes] = await Promise.allSettled([
+  const [aqRes, pollenRes, weatherRes, fireRes, localDisasters, regionDisasters] = await Promise.allSettled([
     ambeeGet(`/latest/by-lat-lng?${q}`),
     ambeeGet(`/v3/pollen/latest?${q}`),
     ambeeGet(`/weather/latest/by-lat-lng?${q}`),
     ambeeGet(`/fire/latest/by-lat-lng?${q}`),
+    ambeeGet(`/disasters/latest/by-lat-lng?${q}&limit=25&page=1`),
+    ambeeGet(`/disasters/latest/by-continent?continent=${encodeURIComponent(continent)}&limit=25&page=1`),
   ]);
 
   const take = <T,>(result: PromiseSettledResult<unknown>, parse: (body: unknown) => T, label: string): T | null => {
@@ -275,12 +379,18 @@ export async function fetchAmbeeBundle(lat: number, lon: number): Promise<AmbeeB
     }
   };
 
+  const disasters = mergeDisasterReadings([
+    take(localDisasters, (body) => parseAmbeeDisasters(body, lat, lon), "disasters-local"),
+    take(regionDisasters, (body) => parseAmbeeDisasters(body, lat, lon), "disasters-region"),
+  ]);
+
   return {
     configured: true,
     aq: take(aqRes, parseAmbeeAq, "aq"),
     pollen: take(pollenRes, parseAmbeePollen, "pollen"),
     weather: take(weatherRes, parseAmbeeWeather, "weather"),
     fire: take(fireRes, (body) => parseAmbeeFire(body, lat, lon), "fire"),
+    disasters,
     errors,
   };
 }

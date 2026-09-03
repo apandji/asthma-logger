@@ -114,11 +114,6 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
           </tbody>
         </table>
       )}
-      {log.envStatus === "ready" && log.inversionNote ? (
-        <div style={{ fontSize: 11, color: "#555", marginTop: 4 }} title={log.inversionNote}>
-          {log.inversionNote}
-        </div>
-      ) : null}
       {log.envStatus === "ready" &&
       log.aqi == null &&
       (log.snapshot?.v !== 2 || (!log.snapshot.free.aqi && !log.snapshot.ambee.pm25)) &&

@@ -2,7 +2,6 @@ import {
   aqiSeverity,
   envStatusSeverity,
   humiditySeverity,
-  inversionSeverity,
   ozoneSeverity,
   pm25Severity,
   pollenRiskSeverity,
@@ -47,7 +46,9 @@ const SOURCES = {
   wildfireFirms: "NASA FIRMS satellite hotspots — firms.modaps.eosdis.nasa.gov",
   wildfireAmbee: "Ambee fire detection — nearest hotspot distance, not smoke at this pin. Smoke ≈ PM2.5.",
   weather: "NWS active alerts — api.weather.gov",
-  inversion: "Heuristic from NWS forecast (not a direct measurement)",
+  stormsAmbee: "Ambee natural disasters (SW severe storm, TC cyclone) — includes distant events. Distance is from this pin.",
+  wildfireDisaster: "Ambee disasters WF (and VO ash). Distant wildfires can move smoke; pair with PM2.5.",
+  extremeTempAmbee: "Ambee disasters ET — heat/cold wave, not a thermometer reading.",
 } as const;
 
 const EMPTY_SOURCES: EnvSourceValues = {
@@ -61,6 +62,9 @@ const EMPTY_SOURCES: EnvSourceValues = {
   ozonePpb: null,
   pollen: null,
   wildfire: null,
+  storms: null,
+  extremeTempEvent: null,
+  disasters: null,
 };
 
 function splitAlerts(summary: string | null): string[] {
@@ -108,7 +112,9 @@ function hasAnyValue(src: EnvSourceValues): boolean {
     src.pm25 != null ||
     src.ozonePpb != null ||
     src.pollen != null ||
-    src.wildfire != null
+    src.wildfire != null ||
+    src.storms != null ||
+    src.extremeTempEvent != null
   );
 }
 
@@ -342,17 +348,6 @@ export function buildEnvBadges(log: AttackLogDTO): EnvBadge[] {
     }
   }
 
-  if (log.possibleInversion) {
-    badges.push({
-      key: "extra-inversion",
-      label: "Inversion?",
-      severity: inversionSeverity(),
-      emoji: "🌫️",
-      source: SOURCES.inversion,
-      group: "extra",
-    });
-  }
-
   return badges;
 }
 
@@ -407,7 +402,6 @@ export function buildEnvSignals(log: AttackLogDTO): {
   status: EnvSignalValue;
   rows: EnvSignalRow[];
   compare: boolean;
-  inversionNote: string | null;
 } {
   const snap = log.snapshot;
   const free = snap?.v === 2 ? snap.free : EMPTY_SOURCES;
@@ -422,7 +416,7 @@ export function buildEnvSignals(log: AttackLogDTO): {
   };
 
   if (log.envStatus !== "ready") {
-    return { status, rows: [], compare: false, inversionNote: null };
+    return { status, rows: [], compare: false };
   }
 
   const freeTemp = free.temperatureF ?? (snap?.v === 2 ? null : log.temperatureF);
@@ -443,16 +437,23 @@ export function buildEnvSignals(log: AttackLogDTO): {
         freeTemp != null
           ? {
               text: `${Math.round(freeTemp)}°F`,
+              detail: free.extremeTempEvent ?? undefined,
               severity: temperatureSeverity(freeTemp, log.isExtremeTemp),
               source: SOURCES.tempNws,
             }
           : missing(SOURCES.tempNws),
       ambee:
-        ambeeTemp != null
+        ambeeTemp != null || ambee.extremeTempEvent
           ? {
-              text: `${Math.round(ambeeTemp)}°F`,
-              severity: temperatureSeverity(ambeeTemp, log.isExtremeTemp),
-              source: SOURCES.tempAmbee,
+              text: ambeeTemp != null ? `${Math.round(ambeeTemp)}°F` : "—",
+              detail: ambee.extremeTempEvent ?? undefined,
+              severity:
+                ambeeTemp != null
+                  ? temperatureSeverity(ambeeTemp, log.isExtremeTemp)
+                  : ambee.extremeTempEvent
+                    ? "orange"
+                    : "neutral",
+              source: ambee.extremeTempEvent ? `${SOURCES.tempAmbee} ${SOURCES.extremeTempAmbee}` : SOURCES.tempAmbee,
             }
           : missing(weatherError ? `${SOURCES.tempAmbee} ${weatherError}` : SOURCES.tempAmbee),
     },
@@ -524,7 +525,9 @@ export function buildEnvSignals(log: AttackLogDTO): {
       free: stormLabel
         ? { text: stormLabel, severity: weatherAlertSeverity(stormLabel), source: SOURCES.weather }
         : { text: "None", severity: "green", source: SOURCES.weather },
-      ambee: missing("Ambee trial does not include named weather alerts. We use NWS for storms/heat."),
+      ambee: ambee.storms
+        ? { text: ambee.storms, severity: weatherAlertSeverity(ambee.storms), source: SOURCES.stormsAmbee }
+        : { text: "None in region", severity: "green", source: SOURCES.stormsAmbee },
     },
     {
       key: "wildfire",
@@ -541,26 +544,11 @@ export function buildEnvSignals(log: AttackLogDTO): {
         ? {
             text: shortenFire(ambee.wildfire, "ambee"),
             severity: wildfireSeverity(),
-            source: SOURCES.wildfireAmbee,
+            source: `${SOURCES.wildfireAmbee} ${SOURCES.wildfireDisaster}`,
           }
-        : { text: "None nearby", severity: "green", source: SOURCES.wildfireAmbee },
+        : { text: "None in region", severity: "green", source: SOURCES.wildfireDisaster },
     },
   ];
 
-  if (log.possibleInversion) {
-    rows.push({
-      key: "inversion",
-      question: "Inversion?",
-      emoji: "🌫️",
-      free: {
-        text: "Possible",
-        detail: log.inversionNote ?? undefined,
-        severity: inversionSeverity(),
-        source: SOURCES.inversion,
-      },
-      ambee: missing("No Ambee inversion product. This is an NWS-forecast heuristic."),
-    });
-  }
-
-  return { status, rows, compare, inversionNote: log.inversionNote };
+  return { status, rows, compare };
 }

@@ -1,5 +1,5 @@
-import { fetchAmbeeBundle } from "./ambee";
-import type { EnvEnrichment, EnvSnapshot, EnvSourceValues } from "./types";
+import { fetchAmbeeBundle, formatDisaster } from "./ambee";
+import type { EnvDisasterHit, EnvEnrichment, EnvSnapshot, EnvSourceValues } from "./types";
 
 const NWS_USER_AGENT =
   process.env.NWS_USER_AGENT ?? "(asthma-log-prototype, local-dev@example.com)";
@@ -46,12 +46,6 @@ async function nwsFetch<T>(url: string): Promise<T> {
 function toFahrenheit(temp: number, unit?: string): number {
   if (!unit || unit.toUpperCase() === "F") return temp;
   return (temp * 9) / 5 + 32;
-}
-
-function parseWindMph(windSpeed?: string): number | null {
-  if (!windSpeed) return null;
-  const nums = [...windSpeed.matchAll(/(\d+)/g)].map((m) => Number(m[1]));
-  return nums.length ? Math.max(...nums) : null;
 }
 
 async function fetchAirNow(lat: number, lon: number) {
@@ -142,26 +136,14 @@ function alertLooksLikeStorm(event: string, headline: string): boolean {
   );
 }
 
-function inversionHeuristic(periods: NwsPeriod[]) {
-  if (periods.length < 2) return { possible: false, note: null };
-  const night = periods.find((p) => p.isDaytime === false);
-  const day = periods.find((p) => p.isDaytime === true);
-  if (!night || !day || night.temperature == null || day.temperature == null) {
-    return { possible: false, note: null };
-  }
-  const nightF = toFahrenheit(night.temperature, night.temperatureUnit);
-  const dayF = toFahrenheit(day.temperature, day.temperatureUnit);
-  const windMph = parseWindMph(night.windSpeed) ?? 99;
-  const forecast = `${night.shortForecast ?? ""} ${night.detailedForecast ?? ""}`.toLowerCase();
-  const clearCalm = windMph <= 6 && (forecast.includes("clear") || forecast.includes("fair") || forecast.includes("mostly clear"));
-  const spread = dayF - nightF;
-  if (clearCalm && spread >= 15) {
-    return {
-      possible: true,
-      note: `Heuristic: calm clear night, day/night spread ~${Math.round(spread)}°F. Not a measured inversion.`,
-    };
-  }
-  return { possible: false, note: null };
+function summarizeDisasters(
+  hits: EnvDisasterHit[],
+  types: EnvDisasterHit["type"][],
+  max = 2,
+): string | null {
+  const matched = hits.filter((h) => types.includes(h.type)).slice(0, max);
+  if (!matched.length) return null;
+  return matched.map((h) => formatDisaster(h)).join(" · ");
 }
 
 export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEnrichment> {
@@ -199,6 +181,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     pollen: ambee.pollen?.raw ?? null,
     weather: ambee.weather?.raw ?? null,
     fire: ambee.fire?.raw ?? null,
+    disasters: ambee.disasters?.raw ?? null,
   };
 
   const current = periods[0];
@@ -234,7 +217,6 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   if (firms.count > 0) wildfireParts.push(`${firms.count} FIRMS hotspot(s) within ~50km (24h)`);
   if (ambeeFireNearby && ambee.fire?.summary) wildfireParts.push(`Ambee ${ambee.fire.summary}`);
   const wildfireSummary = hasWildfireNearby ? wildfireParts.join(" | ") : null;
-  const inversion = inversionHeuristic(periods);
 
   const pollen = ambee.pollen
     ? {
@@ -253,6 +235,16 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   if (fireAlerts.length) freeWildfireParts.push(fireAlerts.slice(0, 2).map((a) => a.properties?.event ?? "Fire/smoke alert").join("; "));
   if (firms.count > 0) freeWildfireParts.push(`${firms.count} FIRMS hotspot(s) within ~50km`);
 
+  const disasterHits: EnvDisasterHit[] = (ambee.disasters?.events ?? []).map((e) => ({
+    type: e.type,
+    name: e.name,
+    km: e.km,
+    place: e.place,
+  }));
+
+  const nwsStormLabel = stormSummary;
+  const nwsHeat = stormAlerts.find((a) => /heat|cold|freeze|frost/i.test(`${a.properties?.event ?? ""} ${a.properties?.headline ?? ""}`));
+
   const free: EnvSourceValues = {
     temperatureF: nwsTempF,
     humidityPct: null,
@@ -264,12 +256,20 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     ozonePpb: airNow.ozonePpb,
     pollen: null,
     wildfire: freeWildfireParts.length ? freeWildfireParts.join(" · ") : null,
+    storms: nwsStormLabel,
+    extremeTempEvent: nwsHeat ? (nwsHeat.properties?.event ?? "Extreme temperature") : null,
+    disasters: null,
   };
 
-  const ambeeWildfire =
+  const ambeeWfDisaster = summarizeDisasters(disasterHits, ["WF"]);
+  const ambeeStorms = summarizeDisasters(disasterHits, ["SW", "TC"]);
+  const ambeeEt = summarizeDisasters(disasterHits, ["ET"], 1);
+  const ambeeVo = summarizeDisasters(disasterHits, ["VO"], 1);
+  const ambeeLocalFire =
     ambee.fire?.nearestKm != null && ambee.fire.nearestKm <= 50 && ambee.fire.summary
       ? ambee.fire.summary
       : null;
+  const ambeeWildfire = [ambeeLocalFire, ambeeWfDisaster, ambeeVo].filter(Boolean).join(" · ") || null;
 
   const ambeeValues: EnvSourceValues = {
     temperatureF: ambeeTempF,
@@ -282,6 +282,9 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     ozonePpb: ambee.aq?.ozonePpb ?? null,
     pollen,
     wildfire: ambeeWildfire,
+    storms: ambeeStorms,
+    extremeTempEvent: ambeeEt,
+    disasters: disasterHits.length ? disasterHits : null,
   };
 
   const snapshot: EnvSnapshot = {
@@ -302,8 +305,8 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     stormSummary,
     hasWildfireNearby,
     wildfireSummary,
-    possibleInversion: inversion.possible,
-    inversionNote: inversion.note,
+    possibleInversion: false,
+    inversionNote: null,
     snapshot,
     raw,
   };

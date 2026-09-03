@@ -4,7 +4,7 @@ Reviewed against [docs.ambeedata.com](https://docs.ambeedata.com) (2026-09-03). 
 
 ## Implemented in the app
 
-When `AMBEE_API_KEY` is set, each **new** log (after sync) calls four Ambee endpoints in parallel, fail-open:
+When `AMBEE_API_KEY` is set, each **new** log (after sync) calls Ambee endpoints in parallel, fail-open:
 
 | Call | Stored / shown |
 |------|----------------|
@@ -12,10 +12,11 @@ When `AMBEE_API_KEY` is set, each **new** log (after sync) calls four Ambee endp
 | `/v3/pollen/latest` | Tree / grass / weed risk (+ top species in tooltip) |
 | `/weather/latest/by-lat-lng` | Outdoor temp (preferred over NWS forecast), humidity, dewpoint |
 | `/fire/latest/by-lat-lng` | Nearest fire km if ≤ 50 km |
+| `/disasters/latest/by-lat-lng` + `/disasters/latest/by-continent` | Storms (SW), cyclones (TC), extreme temp (ET), wildfires (WF), volcanoes (VO) — **with distance**, including far-away events |
 
 Snapshot JSON lives in `AttackLog.envSnapshotJson`. Badges say **outdoor / modeled**. Existing Supabase DBs need `prisma/supabase-add-env-snapshot.sql` once.
 
-NWS alerts, AirNow (when keyed), and FIRMS still run. We do **not** call fire-risk, disasters, ILI, or weather.`ozone`.
+NWS alerts, AirNow (when keyed), and FIRMS still run. We do **not** call fire-risk, ILI, or weather.`ozone`. Inversion heuristic is dropped (not measurable here).
 
 This is **outdoor ambient context**, not a diagnosis. Common inhaler-use triggers Ambee can help *associate* with a log: pollen, particles, ozone, heat/cold/humidity, and (weakly) nearby fire. It cannot see indoor mold, perfume, exercise, illness in *this* person, or a true inversion.
 
@@ -91,9 +92,9 @@ Marketing weather page says **~5 km** native (sub-km on request); developer docs
 
 ### Extreme weather (named events)
 
-`/disasters/latest/by-lat-lng` includes **ET** (heat/cold waves), **SW** (severe storms), **WF**, **TC**, floods, etc., last **month**, ~**6 hour** refresh.
+`/disasters/latest/by-lat-lng` plus `/disasters/latest/by-continent` (NAR for US pins). We keep **SW, ET, WF, TC, VO** and compute **distance from the inhaler pin**. Distant wildfires and volcanoes are in-scope for the “far events affect local air” hypothesis; pair WF/VO with **PM2.5**. Skip EQ, drought, flood, sea ice for breathing.
 
-For a US diary, **keep NWS alerts**. Ambee disasters are a global/coarse overlay, not Heat Advisory / Red Flag text. One trial call is enough to see radius and junk (earthquakes, drought).
+NWS alerts stay as the free-API storms/heat column.
 
 ### Viral / “sick season” (contextual, not a personal trigger)
 

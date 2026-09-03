@@ -28,6 +28,15 @@ export type EnvPollenSnapshot = {
   asOf: string | null;
 };
 
+export type EnvDisasterType = "SW" | "ET" | "WF" | "TC" | "VO";
+
+export type EnvDisasterHit = {
+  type: EnvDisasterType;
+  name: string;
+  km: number | null;
+  place: string | null;
+};
+
 /** Per-source values for side-by-side comparison (v2). */
 export type EnvSourceValues = {
   temperatureF: number | null;
@@ -41,6 +50,11 @@ export type EnvSourceValues = {
   pollen: EnvPollenSnapshot | null;
   /** Short wildfire label for the comparison row */
   wildfire: string | null;
+  /** Severe storm / cyclone events (Ambee disasters SW+TC, or NWS alerts) */
+  storms: string | null;
+  /** Extreme temperature event from Ambee disasters (ET) */
+  extremeTempEvent: string | null;
+  disasters: EnvDisasterHit[] | null;
 };
 
 /** v1 snapshot — legacy, read-only */

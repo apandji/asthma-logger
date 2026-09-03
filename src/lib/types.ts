@@ -54,6 +54,8 @@ export type EnvSourceValues = {
   storms: string | null;
   /** Extreme temperature event from Ambee disasters (ET) */
   extremeTempEvent: string | null;
+  /** Volcanic ash event — air quality, not a wildfire */
+  volcano: string | null;
   disasters: EnvDisasterHit[] | null;
 };
 

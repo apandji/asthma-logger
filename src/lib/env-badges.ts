@@ -47,7 +47,8 @@ const SOURCES = {
   wildfireAmbee: "Ambee fire detection — nearest hotspot distance, not smoke at this pin. Smoke ≈ PM2.5.",
   weather: "NWS active alerts — api.weather.gov",
   stormsAmbee: "Ambee natural disasters (SW severe storm, TC cyclone) — includes distant events. Distance is from this pin.",
-  wildfireDisaster: "Ambee disasters WF (and VO ash). Distant wildfires can move smoke; pair with PM2.5.",
+  wildfireDisaster: "Ambee disasters WF. Distant wildfires can move smoke; pair with PM2.5. Not a volcano.",
+  volcanoAmbee: "Ambee disasters VO — volcanic ash can travel far. This is an air-quality signal, not a wildfire.",
   extremeTempAmbee: "Ambee disasters ET — heat/cold wave, not a thermometer reading.",
 } as const;
 
@@ -64,6 +65,7 @@ const EMPTY_SOURCES: EnvSourceValues = {
   wildfire: null,
   storms: null,
   extremeTempEvent: null,
+  volcano: null,
   disasters: null,
 };
 
@@ -114,7 +116,8 @@ function hasAnyValue(src: EnvSourceValues): boolean {
     src.pollen != null ||
     src.wildfire != null ||
     src.storms != null ||
-    src.extremeTempEvent != null
+    src.extremeTempEvent != null ||
+    src.volcano != null
   );
 }
 
@@ -491,12 +494,12 @@ export function buildEnvSignals(log: AttackLogDTO): {
             source: SOURCES.aqiAirnow,
           }
         : missing(SOURCES.aqiAirnow),
-      ambee: ambeeAir
+      ambee: ambeeAir || ambee.volcano
         ? {
-            text: ambeeAir.text,
-            detail: ambeeAir.detail,
-            severity: ambee.aqi != null ? aqiSeverity(ambee.aqi) : ambee.pm25 != null ? pm25Severity(ambee.pm25) : "neutral",
-            source: SOURCES.aqiAmbee,
+            text: ambeeAir?.text ?? "—",
+            detail: [ambeeAir?.detail, ambee.volcano].filter(Boolean).join(" · ") || undefined,
+            severity: ambee.aqi != null ? aqiSeverity(ambee.aqi) : ambee.pm25 != null ? pm25Severity(ambee.pm25) : ambee.volcano ? "yellow" : "neutral",
+            source: ambee.volcano ? `${SOURCES.aqiAmbee} ${SOURCES.volcanoAmbee}` : SOURCES.aqiAmbee,
           }
         : missing(SOURCES.aqiAmbee),
     },

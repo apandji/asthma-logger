@@ -12,7 +12,7 @@ When `AMBEE_API_KEY` is set, each **new** log (after sync) calls Ambee endpoints
 | `/v3/pollen/latest` | Tree / grass / weed risk (+ top species in tooltip) |
 | `/weather/latest/by-lat-lng` | Outdoor temp (preferred over NWS forecast), humidity, dewpoint |
 | `/fire/latest/by-lat-lng` | Nearest fire km if ≤ 50 km |
-| `/disasters/latest/by-lat-lng` + `/disasters/latest/by-continent` | Storms (SW), cyclones (TC), extreme temp (ET), wildfires (WF), volcanoes (VO) — **with distance**, including far-away events |
+| `/disasters/latest/by-lat-lng` + `/disasters/latest/by-continent` | Storms (SW), cyclones (TC), extreme temp (ET), wildfires (WF), volcanoes (VO, shown on **Air**, not Wildfires) — **with distance** |
 
 Snapshot JSON lives in `AttackLog.envSnapshotJson`. Badges say **outdoor / modeled**. Existing Supabase DBs need `prisma/supabase-add-env-snapshot.sql` once.
 
@@ -92,7 +92,7 @@ Marketing weather page says **~5 km** native (sub-km on request); developer docs
 
 ### Extreme weather (named events)
 
-`/disasters/latest/by-lat-lng` plus `/disasters/latest/by-continent` (NAR for US pins). We keep **SW, ET, WF, TC, VO** and compute **distance from the inhaler pin**. Distant wildfires and volcanoes are in-scope for the “far events affect local air” hypothesis; pair WF/VO with **PM2.5**. Skip EQ, drought, flood, sea ice for breathing.
+`/disasters/latest/by-lat-lng` plus `/disasters/latest/by-continent` (NAR for US pins). We keep **SW, ET, WF, TC, VO** and compute **distance from the inhaler pin**. Distant wildfires (Wildfires? row) and volcanoes (**Air** row — ash, not fire) are in-scope for the “far events affect local air” hypothesis; pair both with **PM2.5**. Skip EQ, drought, flood, sea ice for breathing.
 
 NWS alerts stay as the free-API storms/heat column.
 

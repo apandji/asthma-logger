@@ -21,6 +21,7 @@ function migrateV1(v1: EnvSnapshotV1): EnvSnapshot {
       wildfire: v1.nearestFireSummary,
       storms: null,
       extremeTempEvent: null,
+      volcano: null,
       disasters: null,
     },
     aqiSource: v1.aqiSource,
@@ -41,6 +42,7 @@ const EMPTY_SOURCES = {
   wildfire: null,
   storms: null,
   extremeTempEvent: null,
+  volcano: null,
   disasters: null,
 } as const;
 

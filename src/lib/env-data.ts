@@ -258,6 +258,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     wildfire: freeWildfireParts.length ? freeWildfireParts.join(" · ") : null,
     storms: nwsStormLabel,
     extremeTempEvent: nwsHeat ? (nwsHeat.properties?.event ?? "Extreme temperature") : null,
+    volcano: null,
     disasters: null,
   };
 
@@ -269,7 +270,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     ambee.fire?.nearestKm != null && ambee.fire.nearestKm <= 50 && ambee.fire.summary
       ? ambee.fire.summary
       : null;
-  const ambeeWildfire = [ambeeLocalFire, ambeeWfDisaster, ambeeVo].filter(Boolean).join(" · ") || null;
+  const ambeeWildfire = [ambeeLocalFire, ambeeWfDisaster].filter(Boolean).join(" · ") || null;
 
   const ambeeValues: EnvSourceValues = {
     temperatureF: ambeeTempF,
@@ -284,6 +285,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     wildfire: ambeeWildfire,
     storms: ambeeStorms,
     extremeTempEvent: ambeeEt,
+    volcano: ambeeVo,
     disasters: disasterHits.length ? disasterHits : null,
   };
 

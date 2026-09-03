@@ -1,5 +1,5 @@
 import { fetchAmbeeBundle } from "./ambee";
-import type { EnvEnrichment, EnvSnapshot } from "./types";
+import type { EnvEnrichment, EnvSnapshot, EnvSourceValues } from "./types";
 
 const NWS_USER_AGENT =
   process.env.NWS_USER_AGENT ?? "(asthma-log-prototype, local-dev@example.com)";
@@ -56,7 +56,9 @@ function parseWindMph(windSpeed?: string): number | null {
 
 async function fetchAirNow(lat: number, lon: number) {
   const key = process.env.AIRNOW_API_KEY;
-  if (!key) return { aqi: null, aqiCategory: null, raw: null as unknown };
+  if (!key) {
+    return { aqi: null, aqiCategory: null, pm25: null, ozonePpb: null, raw: null as unknown };
+  }
 
   const url = new URL("https://www.airnowapi.org/aq/observation/latLong/current/");
   url.searchParams.set("format", "application/json");
@@ -71,15 +73,19 @@ async function fetchAirNow(lat: number, lon: number) {
     AQI?: number;
     Category?: { Name?: string };
     ParameterName?: string;
+    Value?: number;
   }>;
   if (!Array.isArray(data) || data.length === 0) {
-    return { aqi: null, aqiCategory: null, raw: data };
+    return { aqi: null, aqiCategory: null, pm25: null, ozonePpb: null, raw: data };
   }
-  const pm = data.find((d) => /PM2\.5/i.test(d.ParameterName ?? ""));
-  const best = pm ?? data.reduce((a, b) => ((a.AQI ?? -1) >= (b.AQI ?? -1) ? a : b));
+  const pmRow = data.find((d) => /PM2\.5/i.test(d.ParameterName ?? ""));
+  const ozoneRow = data.find((d) => /OZONE/i.test(d.ParameterName ?? ""));
+  const best = data.reduce((a, b) => ((a.AQI ?? -1) >= (b.AQI ?? -1) ? a : b));
   return {
     aqi: best.AQI ?? null,
     aqiCategory: best.Category?.Name ?? null,
+    pm25: pmRow?.Value ?? null,
+    ozonePpb: ozoneRow?.Value ?? null,
     raw: data,
   };
 }
@@ -173,7 +179,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     }),
     fetchAirNow(lat, lon).catch((err: Error) => {
       raw.airNowError = err.message;
-      return { aqi: null, aqiCategory: null, raw: null };
+      return { aqi: null, aqiCategory: null, pm25: null, ozonePpb: null, raw: null };
     }),
     fetchFirmsHotspots(lat, lon).catch((err: Error) => {
       raw.firmsError = err.message;
@@ -243,18 +249,47 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
       }
     : null;
 
-  const snapshot: EnvSnapshot = {
-    v: 1,
+  const freeWildfireParts: string[] = [];
+  if (fireAlerts.length) freeWildfireParts.push(fireAlerts.slice(0, 2).map((a) => a.properties?.event ?? "Fire/smoke alert").join("; "));
+  if (firms.count > 0) freeWildfireParts.push(`${firms.count} FIRMS hotspot(s) within ~50km`);
+
+  const free: EnvSourceValues = {
+    temperatureF: nwsTempF,
+    humidityPct: null,
+    dewpointF: null,
+    aqi: airNow.aqi,
+    aqiCategory: airNow.aqiCategory,
+    aqiPollutant: null,
+    pm25: airNow.pm25,
+    ozonePpb: airNow.ozonePpb,
+    pollen: null,
+    wildfire: freeWildfireParts.length ? freeWildfireParts.join(" · ") : null,
+  };
+
+  const ambeeWildfire =
+    ambee.fire?.nearestKm != null && ambee.fire.nearestKm <= 50 && ambee.fire.summary
+      ? ambee.fire.summary
+      : null;
+
+  const ambeeValues: EnvSourceValues = {
+    temperatureF: ambeeTempF,
     humidityPct: ambee.weather?.humidityPct ?? null,
     dewpointF: ambee.weather?.dewpointF ?? null,
+    aqi: ambeeAqi,
+    aqiCategory: ambee.aq?.aqiCategory ?? null,
+    aqiPollutant: ambee.aq?.aqiPollutant ?? null,
     pm25: ambee.aq?.pm25 ?? null,
     ozonePpb: ambee.aq?.ozonePpb ?? null,
+    pollen,
+    wildfire: ambeeWildfire,
+  };
+
+  const snapshot: EnvSnapshot = {
+    v: 2,
+    free,
+    ambee: ambeeValues,
     aqiSource,
     tempSource,
-    aqiPollutant: ambee.aq?.aqiPollutant ?? null,
-    pollen,
-    nearestFireKm: ambee.fire?.nearestKm ?? null,
-    nearestFireSummary: ambee.fire?.summary ?? null,
   };
 
   return {

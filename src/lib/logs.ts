@@ -1,14 +1,50 @@
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { enrichEnvironment } from "@/lib/env-data";
-import type { AttackLogDTO, EnvSnapshot, EnvStatus } from "@/lib/types";
+import type { AttackLogDTO, EnvSnapshot, EnvSnapshotV1, EnvStatus } from "@/lib/types";
 import type { AttackLog } from "@prisma/client";
+
+function migrateV1(v1: EnvSnapshotV1): EnvSnapshot {
+  return {
+    v: 2,
+    free: { ...EMPTY_SOURCES },
+    ambee: {
+      temperatureF: null,
+      humidityPct: v1.humidityPct,
+      dewpointF: v1.dewpointF,
+      aqi: v1.aqiSource === "ambee" ? null : null,
+      aqiCategory: null,
+      aqiPollutant: v1.aqiPollutant,
+      pm25: v1.pm25,
+      ozonePpb: v1.ozonePpb,
+      pollen: v1.pollen,
+      wildfire: v1.nearestFireSummary,
+    },
+    aqiSource: v1.aqiSource,
+    tempSource: v1.tempSource,
+  };
+}
+
+const EMPTY_SOURCES = {
+  temperatureF: null,
+  humidityPct: null,
+  dewpointF: null,
+  aqi: null,
+  aqiCategory: null,
+  aqiPollutant: null,
+  pm25: null,
+  ozonePpb: null,
+  pollen: null,
+  wildfire: null,
+} as const;
 
 function parseSnapshot(raw: string | null | undefined): EnvSnapshot | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as EnvSnapshot;
-    return parsed?.v === 1 ? parsed : null;
+    const parsed = JSON.parse(raw) as EnvSnapshot | EnvSnapshotV1;
+    if (parsed?.v === 2) return parsed;
+    if (parsed?.v === 1) return migrateV1(parsed);
+    return null;
   } catch {
     return null;
   }

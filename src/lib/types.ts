@@ -17,7 +17,34 @@ export type LocalLog = {
   serverLog?: AttackLogDTO;
 };
 
-export type EnvSnapshot = {
+export type EnvPollenSnapshot = {
+  treeRisk: string | null;
+  grassRisk: string | null;
+  weedRisk: string | null;
+  treeCount: number | null;
+  grassCount: number | null;
+  weedCount: number | null;
+  topSpecies: string | null;
+  asOf: string | null;
+};
+
+/** Per-source values for side-by-side comparison (v2). */
+export type EnvSourceValues = {
+  temperatureF: number | null;
+  humidityPct: number | null;
+  dewpointF: number | null;
+  aqi: number | null;
+  aqiCategory: string | null;
+  aqiPollutant: string | null;
+  pm25: number | null;
+  ozonePpb: number | null;
+  pollen: EnvPollenSnapshot | null;
+  /** Short wildfire label for the comparison row */
+  wildfire: string | null;
+};
+
+/** v1 snapshot — legacy, read-only */
+export type EnvSnapshotV1 = {
   v: 1;
   humidityPct: number | null;
   dewpointF: number | null;
@@ -26,18 +53,18 @@ export type EnvSnapshot = {
   aqiSource: "airnow" | "ambee" | null;
   tempSource: "nws_forecast" | "ambee_weather" | null;
   aqiPollutant: string | null;
-  pollen: {
-    treeRisk: string | null;
-    grassRisk: string | null;
-    weedRisk: string | null;
-    treeCount: number | null;
-    grassCount: number | null;
-    weedCount: number | null;
-    topSpecies: string | null;
-    asOf: string | null;
-  } | null;
+  pollen: EnvPollenSnapshot | null;
   nearestFireKm: number | null;
   nearestFireSummary: string | null;
+};
+
+export type EnvSnapshot = {
+  v: 2;
+  free: EnvSourceValues;
+  ambee: EnvSourceValues;
+  /** Which source won for the primary log fields (legacy columns) */
+  aqiSource: "airnow" | "ambee" | null;
+  tempSource: "nws_forecast" | "ambee_weather" | null;
 };
 
 export type AttackLogDTO = {

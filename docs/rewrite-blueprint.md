@@ -156,10 +156,11 @@ The Pinewoods case becomes a plain row: `kind=reported_fire, burnedAreaAcres=0.1
 | `rulesetVersion` | semver string; bumped whenever `interpret()` changes behaviour |
 | `computedAt` | |
 | `smokeAtPoint` | `none` \| `possible` \| `likely` — from PM2.5 + smoke alerts + (later) HMS plume |
-| `smokeAttributedIncidentId` | nullable FK to `Incident` — only set when the gate in §2.4 passes |
+| `smokeAttributedIncidentId` | nullable FK to `Incident` — only set when the gate in §2.4 passes, including the upwind check |
 | `fireWeather` | boolean, from `Alert.class = fire_weather` |
 | `nearestCredibleFireId` | nullable FK; nearest `Incident` that passes the "landscape wildfire" filter |
-| `heatStress`, `coldStress` | `none` \| `elevated` \| `extreme` — from temp + dewpoint + heat alerts |
+| `heatStress`, `coldStress` | `none` \| `elevated` \| `extreme` — from heat index / wind chill + heat/cold alerts |
+| `humiditySwing` | boolean — dew point moved ≥ 10 °F in the prior 6 h (needs hourly history) |
 | `stagnantAir` | `unknown` \| `unlikely` \| `possible` — from mixing height |
 | `pollenRisk` | `unknown` \| `low` \| `moderate` \| `high` \| `very_high` |
 | `airQualityBand` | `good` \| `moderate` \| `usg` \| `unhealthy` \| `very_unhealthy` \| `hazardous` — with `drivingPollutant` |
@@ -200,6 +201,18 @@ Rules that already exist in scattered form, to be centralised in `thresholds.ts`
 | Extreme temp | ≤ 20 °F or ≥ 95 °F | `env-data.ts` |
 | Inversion heuristic | calm, clear, ≥ 15 °F diurnal spread | `env-data.ts` |
 
+Rules the rewrite adds, made possible by hourly model weather (§2.6.1):
+
+| Rule | Proposed value | Inputs |
+|------|----------------|--------|
+| Heat stress | `elevated` at heat index ≥ 90 °F; `extreme` ≥ 103 °F or NWS heat alert | `heat_index_f`, `Alert.class = heat` |
+| Cold stress | `elevated` ≤ 32 °F; `extreme` ≤ 20 °F wind chill or NWS cold alert | `temp_f`, `wind_mph`, `Alert.class = cold` |
+| Humidity swing | dew point change ≥ 10 °F in the prior 6 h | 24 h `dewpoint_f` history |
+| Upwind check for smoke attribution | fire bearing within ±60° of the upwind direction at the pin, or wind < 5 mph (calm; direction unreliable) | `Incident.bearingDeg`, `wind_dir_deg`, `wind_mph` |
+| Stagnant air | mixing height < 400 m **and** wind < 5 mph **and** PM2.5 ≥ 12 | `mixing_height_m`, `wind_mph`, `pm25` |
+
+Values are starting points to be tuned against fixtures, not medical thresholds.
+
 The interpreter also decides what is *not* claimed. If the only fire signal is a FIRMS pixel and PM2.5 is Good, `nearestCredibleFireId` may be set but `smokeAtPoint = none`, and the UI says "satellite heat nearby, air still clean."
 
 Testing: Vitest fixtures under `src/lib/interpret/__fixtures__/` — one JSON per real case (Madison IL industrial heat, Zoeller Farm RX, Pinewoods, a real June 2023 Canadian plume over the Midwest, a Denver ozone day, a clean control). CI runs them on every PR.
@@ -208,7 +221,9 @@ Testing: Vitest fixtures under `src/lib/interpret/__fixtures__/` — one JSON pe
 
 A single `metrics.ts` exports the canonical list with unit, display precision, and band edges. Anything not in the catalog is rejected at the adapter boundary. Initial set:
 
-`pm25 (µg/m³)`, `pm10`, `ozone (ppb)`, `no2 (ppb)`, `aqi_us`, `temp_f`, `dewpoint_f`, `humidity_pct`, `heat_index_f`, `wind_mph`, `wind_dir_deg`, `pressure_hpa`, `mixing_height_m`, `pollen_tree`, `pollen_grass`, `pollen_weed`, `pollen_risk_index`, `cloud_cover_pct`, `precip_in`.
+`pm25 (µg/m³)`, `pm10`, `ozone (ppb)`, `no2 (ppb)`, `aqi_us`, `temp_f`, `dewpoint_f`, `humidity_pct`, `heat_index_f`, `wet_bulb_f`, `wind_mph`, `wind_gust_mph`, `wind_dir_deg`, `pressure_hpa`, `mixing_height_m`, `pollen_tree`, `pollen_grass`, `pollen_weed`, `pollen_risk_index`, `cloud_cover_pct`, `precip_in`.
+
+Observations may carry an optional `spread` (e.g. ensemble p10/p90) when the provider supplies one; the interpreter maps it onto `confidence` instead of guessing.
 
 ### 2.6 Provider adapters
 
@@ -232,14 +247,46 @@ Planned adapters and what they are for:
 | Adapter | Emits | Priority |
 |---------|-------|----------|
 | `nws` | station obs (METAR), alerts | v1 |
+| `google_weather` | Maps Platform Weather API (WeatherNext 3 + NWP blend): current temp / dewpoint / RH / heat index / wet bulb / wind / pressure, plus 24 h hourly history for lag features | v1 (see §2.6.1) |
 | `openaq` | pm25 / ozone / no2 with station + km | v1 |
 | `airnow` | aqi_us fallback, smoke-corrected PM | v1 |
-| `open_meteo` | hourly temp / dewpoint / wind / `boundary_layer_height` | v1 (replaces inversion heuristic) |
+| `open_meteo` | hourly `boundary_layer_height` (mixing height); fallback temp / wind | v1 (replaces inversion heuristic) |
 | `firms` | satellite_heat incidents with FRP + confidence | v1 |
 | `ambee` | pollen; disaster WF incidents; model AQ as a labelled fallback | v1 for pollen, v2 for the rest |
+| `weathernext_bq` | WeatherNext 3 ensemble statistics from BigQuery for home-geocell baseline time series, with p10–p90 spread | v2 (see §2.6.1) |
 | `noaa_hms` | smoke plume polygons → `smokeAtPoint` evidence | v2 |
 | `purpleair` | nearby low-cost PM sensors, EPA-corrected | v2 |
 | `watchduty` / `nifc` | authoritative named fires with perimeter | v2 |
+
+#### 2.6.1 Weather model options (WeatherNext)
+
+Researched 2026-09-04. Google's [WeatherNext 3](https://developers.google.com/weathernext/guides/models) (Aug 2026) is a 64-member ensemble initialized hourly from live geostationary satellite mosaics + ECMWF analysis, ~50–90 min latency. Output: **0.05° (~5 km) 2 m temperature and dew point** from a head trained directly on ground-station observations; 0.1° (~10 km) wind, pressure, clouds, solar, hourly precipitation; 0.25° pressure levels. 48 h horizon for hourly runs, 15 days for 6-hourly runs. Historical forecasts back to 2024 are being backfilled.
+
+It is a *weather* model only. The [paper](https://storage.googleapis.com/deepmind-media/papers/weathernext_3.pdf) contains no aerosol, smoke, air-quality, pollen, fire, or boundary-layer output. It cannot replace OpenAQ / AirNow, HMS, Ambee pollen, FIRMS, or NWS alerts, and its terms say to defer to official alerts.
+
+Where it helps this app:
+
+| Gap today | WeatherNext-backed fix |
+|-----------|------------------------|
+| Temperature is an NWS *forecast period* (12 h bucket); no humidity stored | Hourly 5 km temp + dew point calibrated to station observations |
+| Extreme-temp rule is a bare 20 °F / 95 °F threshold | Heat index and wet-bulb bands from the same call |
+| No lag features without baseline infrastructure | `history.hours` gives the 24 h before the log in one request |
+| Inversion heuristic guesses from "calm and clear" | Hourly 10 m wind, low cloud, pressure trend as inputs; Open-Meteo PBLH remains the real signal |
+| Regional smoke attribution uses distance only | Wind direction at the pin lets the interpreter require the fire to be roughly upwind |
+| `confidence` is asserted, not measured | Ensemble p10–p90 spread (BigQuery route) maps directly onto `Observation.spread` |
+
+Access routes, ranked:
+
+| Route | What it gives | Cost / effort | Decision |
+|-------|---------------|---------------|----------|
+| [Maps Platform Weather API](https://mapsplatform.google.com/maps-products/weather/) | `currentConditions`, `forecast.hours`, `history.hours` (24 h), `publicAlerts`. Blend of WeatherNext 3 and NWP, refreshed every 15–30 min. | REST, API key, 10k requests/month free then $0.15 per 1,000 | **Adopt in v1** as `google_weather` |
+| [BigQuery / Earth Engine statistics tables](https://developers.google.com/weathernext/guides/access-forecast) | Pure WN3 ensemble mean + p10–p90, 0.05° station head and 0.1° surface, hourly, all inits | Free allowlist (5–7 business days), GCP project, scheduled job, BigQuery query cost | **Adopt in v2** as `weathernext_bq` for geocell baselines |
+| [Open-Meteo `google_weathernext2_ensemble`](https://open-meteo.com/en/docs/google-weathernext-api) | WeatherNext 2 only: 0.25°, 6-hourly, 00/12 UTC runs | Free non-commercial | Skip; Maps route is sharper and hourly |
+| Vertex AI deployment / open weights | Run WN2 yourself on A100/H100 | Early-access allowlist, GPU quota | Skip |
+
+Provenance rule: the Maps API is a blend, so values are labelled **"Google weather model · ~5–10 km"** with `provider = google_weather`, `spatialScale = model_grid`; never "WeatherNext 3" in the UI. Only the BigQuery route may be labelled WeatherNext 3 with a stated resolution. Real-time WeatherNext data is under experimental terms; data older than one hour is CC BY 4.0.
+
+NWS METAR stays as the `station`-scale observation beside it. Both rows are stored; the interpreter picks and the evidence drawer shows both.
 
 ### 2.7 Enrichment pipeline
 
@@ -450,6 +497,8 @@ Three depths, each one tap deeper:
 4. **Baseline sampling:** passive-on-open vs daily notification — which gets more consistent samples without feeling like surveillance?
 5. **How far back to re-interpret:** all history on every ruleset bump, or only entries the user has viewed?
 6. **Geocell resolution** for cache dedupe (res 8, ~0.7 km²) vs for aggregates (res 6–7). Two different constants, easy to conflate.
+7. **Google's other environment APIs:** Maps Platform also sells an Air Quality API ($5 per 1,000, 30-day history) and a Pollen API ($10 per 1,000, 5,000 free). Neither is WeatherNext-based. Worth a bake-off against OpenAQ/AirNow and Ambee pollen on the same demo pins before choosing.
+8. **Upwind tolerance:** ±60° is a guess. Validate against the Pinewoods and Canadian-plume fixtures once `wind_dir_deg` is stored.
 
 ---
 
@@ -460,8 +509,8 @@ Ordered by what unblocks the most, not by user-visible flash.
 1. `metrics.ts` catalog, `Observation` / `Alert` / `Incident` types, and the `interpret()` module with fixtures from the four real cases we have already debugged. Pure code, no schema, mergeable independently.
 2. New Prisma schema alongside `AttackLog`; dual-write from the current `enrichEnvironment`.
 3. Backfill from `envRawJson`; run the interpreter over history; review the diff.
-4. Provider adapters extracted one at a time (NWS → OpenAQ → AirNow → FIRMS → Ambee), each replacing a slice of `env-data.ts`.
+4. Provider adapters extracted one at a time (NWS → OpenAQ → AirNow → FIRMS → Ambee), each replacing a slice of `env-data.ts`. Add `google_weather` here; it is new code with no legacy slice to replace and immediately fixes the forecast-period temperature.
 5. Job-per-provider pipeline with the Postgres job table.
 6. UI on `Interpretation`: list chips → entry cards → evidence drawer. Delete the string rewrites.
-7. Auth + user scoping; passive baselines; Patterns screen.
-8. Cohort aggregates, HMS, PurpleAir, native shortcuts.
+7. Auth + user scoping; passive baselines; Patterns screen. Request the WeatherNext BigQuery allowlist at the start of this step so it is ready for geocell baselines.
+8. Cohort aggregates, HMS, PurpleAir, `weathernext_bq`, native shortcuts.

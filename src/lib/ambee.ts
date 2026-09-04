@@ -4,6 +4,8 @@
  * Docs: https://docs.ambeedata.com
  */
 
+import { formatMiles } from "./units";
+
 const AMBEE_BASE = "https://api.ambeedata.com";
 
 export function isAmbeeConfigured(): boolean {
@@ -258,8 +260,7 @@ export function parseAmbeeFire(payload: unknown, originLat: number, originLon: n
       nearestKm = km;
       nearestLat = lat;
       nearestLng = lng;
-      const kmLabel = km < 10 ? km.toFixed(1) : String(Math.round(km));
-      summary = `${kmLabel} km`;
+      summary = formatMiles(km);
     }
   }
 
@@ -295,11 +296,10 @@ function disasterList(payload: unknown): unknown[] {
 
 export function formatDisaster(event: Pick<AmbeeDisasterEvent, "type" | "km" | "place">): string {
   const kind = DISASTER_LABEL[event.type];
-  const km =
-    event.km == null ? null : event.km < 10 ? `${event.km.toFixed(1)} km` : `${Math.round(event.km)} km`;
+  const dist = event.km == null ? null : formatMiles(event.km);
   const parts = [kind];
   if (event.place) parts.push(event.place);
-  if (km) parts.push(km);
+  if (dist) parts.push(dist);
   return parts.join(" · ");
 }
 

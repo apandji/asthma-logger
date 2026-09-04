@@ -1,5 +1,6 @@
 import type { Severity } from "./env-colors";
 import type { EnvDisasterHit, EnvDisasterType } from "./types";
+import { formatMilesAway, milesToKm } from "./units";
 
 /** Within this, a storm or fire can reasonably affect this pin. */
 export const NEARBY_KM = 80;
@@ -13,9 +14,18 @@ export type HazardCopy = {
   km: number | null;
 };
 
+/** @deprecated Prefer formatMilesAway from units — kept for existing imports. */
 export function formatKmAway(km: number): string {
-  const rounded = km < 10 ? km.toFixed(1) : String(Math.round(km));
-  return `${rounded} km away`;
+  return formatMilesAway(km);
+}
+
+/** Parse a distance token that may be stored as km (legacy) or mi (current). */
+function parseDistanceToken(value: string, unit: string): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const u = unit.toLowerCase();
+  if (u.startsWith("mi")) return milesToKm(n);
+  return n;
 }
 
 function placePhrase(place: string | null | undefined): string | null {
@@ -49,7 +59,7 @@ export function summarizeHazards(
   if (km != null && km > DISTANT_KM) {
     return {
       text: "None nearby",
-      detail: place ? `Closest report: ${place} · ${formatKmAway(km)}` : `Closest report ${formatKmAway(km)}`,
+      detail: place ? `Closest report: ${place} · ${formatMilesAway(km)}` : `Closest report ${formatMilesAway(km)}`,
       nearby: false,
       km,
     };
@@ -58,17 +68,17 @@ export function summarizeHazards(
   const where = place ? `Near ${place}` : noun === "storm" ? "Storm reported" : "Wildfire reported";
   const alsoNear = matched.filter((h, i) => i > 0 && h.km != null && h.km <= NEARBY_KM);
   if (alsoNear.length === 0 || km == null) {
-    return { text: where, detail: km != null ? formatKmAway(km) : undefined, nearby, km };
+    return { text: where, detail: km != null ? formatMilesAway(km) : undefined, nearby, km };
   }
 
   const extra = alsoNear[0];
   const extraPlace = placePhrase(extra.place);
   const extraBit = extraPlace
-    ? `also ${extraPlace} · ${formatKmAway(extra.km!)}`
+    ? `also ${extraPlace} · ${formatMilesAway(extra.km!)}`
     : `+${alsoNear.length} more nearby`;
   return {
     text: where,
-    detail: [formatKmAway(km), extraBit].filter(Boolean).join(" · "),
+    detail: [formatMilesAway(km), extraBit].filter(Boolean).join(" · "),
     nearby,
     km,
   };
@@ -80,7 +90,7 @@ export function hotspotCopy(km: number, place: string | null | undefined, count 
   if (!nearby && km > DISTANT_KM) {
     return {
       text: "None nearby",
-      detail: loc ? `Closest hotspot: ${loc} · ${formatKmAway(km)}` : `Closest hotspot ${formatKmAway(km)}`,
+      detail: loc ? `Closest hotspot: ${loc} · ${formatMilesAway(km)}` : `Closest hotspot ${formatMilesAway(km)}`,
       nearby: false,
       km,
     };
@@ -89,27 +99,28 @@ export function hotspotCopy(km: number, place: string | null | undefined, count 
   const detail =
     count > 1
       ? loc
-        ? `Closest ${formatKmAway(km)} · ${loc}`
-        : `Closest ${formatKmAway(km)}`
-      : formatKmAway(km);
+        ? `Closest ${formatMilesAway(km)} · ${loc}`
+        : `Closest ${formatMilesAway(km)}`
+      : formatMilesAway(km);
   return { text, detail, nearby, km };
 }
 
-/** Rewrite stacked “Storm · place · km” strings from older logs. */
+/** Rewrite stacked “Storm · place · km|mi” strings from older logs. */
 export function rewriteStormLabel(raw: string | null | undefined): HazardCopy | null {
   if (!raw) return null;
   const hits: { place: string | null; km: number }[] = [];
-  const re = /(?:Storm|Cyclone)\s*·\s*([^·]+?)\s*·\s*([\d.]+)\s*km/gi;
+  const re = /(?:Storm|Cyclone)\s*·\s*([^·]+?)\s*·\s*([\d.]+)\s*(km|mi(?:les)?)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(raw))) {
-    const km = Number(m[2]);
-    if (!Number.isFinite(km)) continue;
+    const km = parseDistanceToken(m[2], m[3]);
+    if (km == null) continue;
     hits.push({ place: m[1].trim(), km });
   }
   if (!hits.length) {
-    const simple = raw.match(/([\d.]+)\s*km/i);
+    const simple = raw.match(/([\d.]+)\s*(km|mi(?:les)?)/i);
     if (!simple) return { text: raw.replace(/\s*·\s*/g, " · ").trim(), nearby: true, km: null };
-    const km = Number(simple[1]);
+    const km = parseDistanceToken(simple[1], simple[2]);
+    if (km == null) return { text: raw.replace(/\s*·\s*/g, " · ").trim(), nearby: true, km: null };
     return summarizeHazards([{ type: "SW", name: raw, km, place: null }], ["SW"], "storm");
   }
   hits.sort((a, b) => a.km - b.km);
@@ -127,11 +138,11 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
   const firmsCount = raw.match(/(\d+)\s+FIRMS hotspot/i);
   if (firmsCount) {
     const count = Number(firmsCount[1]);
-    const kmMatch = raw.match(/closest\s+([\d.]+)\s*km/i);
-    const km = kmMatch ? Number(kmMatch[1]) : null;
+    const kmMatch = raw.match(/closest\s+([\d.]+)\s*(km|mi(?:les)?)/i);
+    const km = kmMatch ? parseDistanceToken(kmMatch[1], kmMatch[2]) : null;
     const place = raw.match(/\bnear\s+([^·]+?)(?:\s*·|$)/i)?.[1]?.trim() ?? null;
     const hot =
-      km != null && Number.isFinite(km)
+      km != null
         ? hotspotCopy(km, place, count)
         : {
             text: count > 1 ? `${count} satellite hotspots` : "Satellite hotspot",
@@ -151,11 +162,21 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
   }
 
   const hot = raw.match(
-    /(?:hotspot|detected fire|fire)\s+([\d.]+)\s*km(?:[^·]*·\s*FRP[^·]+)?(?:[^·]*·\s*nominal)?(?:\s*·\s*near\s+([^·]+))?/i,
+    /(?:hotspot|detected fire|fire)\s+([\d.]+)\s*(km|mi(?:les)?)(?:[^·]*·\s*FRP[^·]+)?(?:[^·]*·\s*nominal)?(?:\s*·\s*near\s+([^·]+))?/i,
   );
   if (hot) {
-    const km = Number(hot[1]);
-    if (Number.isFinite(km)) return hotspotCopy(km, hot[2]?.trim() ?? null);
+    const km = parseDistanceToken(hot[1], hot[2]);
+    if (km != null) return hotspotCopy(km, hot[3]?.trim() ?? null);
+  }
+
+  const away = raw.match(/([\d.]+)\s*(km|mi(?:les)?)\s+away/i);
+  if (away) {
+    const km = parseDistanceToken(away[1], away[2]);
+    if (km != null) {
+      const place = raw.match(/\bNear\s+([^·]+)/i)?.[1]?.trim() ?? null;
+      const countMatch = raw.match(/(\d+)\s+satellite hotspots/i);
+      return hotspotCopy(km, place, countMatch ? Number(countMatch[1]) : 1);
+    }
   }
 
   const cleaned = raw
@@ -178,8 +199,8 @@ export function mergeFireCopy(hotspot: HazardCopy | null, reported: HazardCopy |
     if (other.km != null && other.km <= NEARBY_KM && other.km !== lead.km) {
       const otherPlace = other.text.replace(/^Near\s+/i, "").trim();
       const extra = otherPlace && !lead.text.includes(otherPlace)
-        ? `also ${otherPlace} · ${formatKmAway(other.km)}`
-        : formatKmAway(other.km);
+        ? `also ${otherPlace} · ${formatMilesAway(other.km)}`
+        : formatMilesAway(other.km);
       return {
         ...lead,
         detail: [lead.detail, extra].filter(Boolean).join(" · ") || lead.detail,

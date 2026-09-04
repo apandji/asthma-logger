@@ -31,7 +31,7 @@ Free key from [OpenAQ Explorer](https://explore.openaq.org/register). Docs: http
 2. Vercel → **Settings** → **Environment Variables**
 3. Add `OPENAQ_API_KEY` = your key → Redeploy
 
-New logs show **nearest PM2.5 and nearest ozone** within 25 km, with station name and distance. That is a ground reading at that site — not the air at the pin, and not official NowCast AQI. If the key is missing, we fall back to AirNow’s 25-mile max AQI.
+New logs show **nearest PM2.5 and nearest ozone** within ~16 mi (25 km search radius), with station name and distance in miles. That is a ground reading at that site — not the air at the pin, and not official NowCast AQI. If the key is missing, we fall back to AirNow’s 25-mile max AQI.
 
 ### Optional: AQI fallback (AirNow)
 
@@ -59,10 +59,10 @@ See `docs/ambee-trigger-datasets.md` for what we use vs skip.
 | Source | Data |
 |--------|------|
 | NWS (free, no key) | Temperature, heat/cold/storm alerts, wildfire alerts via NWS |
-| OpenAQ (needs key) | Nearest PM2.5 + ozone station within 25 km (name + km) |
+| OpenAQ (needs key) | Nearest PM2.5 + ozone station within ~16 mi (name + mi) |
 | AirNow (needs key) | Official US AQI + category — fallback if OpenAQ is missing |
 | NASA FIRMS (optional key) | Satellite wildfire hotspots |
-| Ambee (optional trial key) | Pollen risk, PM2.5/O₃, humidity, nearest fire km |
+| Ambee (optional trial key) | Pollen risk, PM2.5/O₃, humidity, nearest fire mi |
 
 
 ```bash

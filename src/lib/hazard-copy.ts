@@ -95,7 +95,14 @@ export function hotspotCopy(km: number, place: string | null | undefined, count 
       km,
     };
   }
-  const text = count > 1 ? `${count} satellite hotspots` : loc ? `Near ${loc}` : "Satellite hotspot";
+  // FIRMS/Ambee fire pixels are thermal anomalies — industrial heat, ag burns,
+  // campfires — not confirmed wildfires. Name the place; do not say "wildfire".
+  const text =
+    count > 1
+      ? `${count} satellite heat spots`
+      : loc
+        ? `Satellite heat near ${loc}`
+        : "Satellite heat nearby";
   const detail =
     count > 1
       ? loc
@@ -145,8 +152,8 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
       km != null
         ? hotspotCopy(km, place, count)
         : {
-            text: count > 1 ? `${count} satellite hotspots` : "Satellite hotspot",
-            detail: place ? `Near ${place}` : "Last 24 hours",
+            text: count > 1 ? `${count} satellite heat spots` : "Satellite heat nearby",
+            detail: place ? `Near ${place}` : "Thermal pixel · not a confirmed wildfire",
             nearby: true,
             km: null,
           };
@@ -173,8 +180,12 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
   if (away) {
     const km = parseDistanceToken(away[1], away[2]);
     if (km != null) {
-      const place = raw.match(/\bNear\s+([^·]+)/i)?.[1]?.trim() ?? null;
-      const countMatch = raw.match(/(\d+)\s+satellite hotspots/i);
+      const place =
+        raw.match(/satellite heat near\s+([^·]+)/i)?.[1]?.trim() ??
+        raw.match(/\bNear\s+([^·]+)/i)?.[1]?.trim() ??
+        null;
+      const countMatch =
+        raw.match(/(\d+)\s+satellite heat spots/i) ?? raw.match(/(\d+)\s+satellite hotspots/i);
       return hotspotCopy(km, place, countMatch ? Number(countMatch[1]) : 1);
     }
   }

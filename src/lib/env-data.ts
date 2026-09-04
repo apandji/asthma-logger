@@ -155,7 +155,15 @@ async function fetchFirmsHotspots(lat: number, lon: number) {
 
 function alertLooksLikeFire(event: string, headline: string): boolean {
   const hay = `${event} ${headline}`.toLowerCase();
-  return hay.includes("fire") || hay.includes("smoke") || hay.includes("red flag") || hay.includes("burn");
+  // "burn" alone catches burn bans; require fire/smoke/red-flag wording.
+  return (
+    hay.includes("red flag") ||
+    hay.includes("fire weather") ||
+    hay.includes("wildfire") ||
+    hay.includes("forest fire") ||
+    /\bsmoke\b/.test(hay) ||
+    (/\bfire\b/.test(hay) && !/\bburn ban\b/.test(hay))
+  );
 }
 
 function alertHay(event: string, headline: string): string {
@@ -350,7 +358,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
       freeWildfireParts.push(copy.detail ? `${copy.text} · ${copy.detail}` : copy.text);
     } else {
       freeWildfireParts.push(
-        firms.count === 1 ? "Satellite hotspot nearby" : `${firms.count} satellite hotspots nearby`,
+        firms.count === 1 ? "Satellite heat nearby" : `${firms.count} satellite heat spots nearby`,
       );
     }
   }

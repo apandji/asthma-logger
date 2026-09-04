@@ -54,13 +54,15 @@ const SOURCES = {
   pollenNone: "No free pollen API in this app.",
   pollenAmbee: "Ambee pollen model (NAB-style risk). Outdoor; not a backyard trap.",
   wildfireNws: "NWS fire/smoke alerts — api.weather.gov",
-  wildfireFirms: "NASA FIRMS satellite hotspots — firms.modaps.eosdis.nasa.gov",
-  wildfireAmbee: "Ambee fire detection — nearest hotspot distance, not smoke at this pin. Smoke ≈ PM2.5.",
+  wildfireFirms:
+    "NASA FIRMS VIIRS thermal pixels (last 24h). Heat can be industry, ag burns, or campfires — not a confirmed wildfire. Smoke at this pin shows up as PM2.5.",
+  wildfireAmbee:
+    "Ambee fire detection — nearest thermal hotspot distance, not smoke at this pin. Smoke ≈ PM2.5.",
   weather: "NWS active alerts — api.weather.gov",
   stormsAmbee:
     "Ambee storm reports anywhere in the wider region. Far events are labeled “none nearby” — they are not the weather at this pin.",
   wildfireDisaster:
-    "Ambee wildfire reports plus the nearest satellite hotspot. Distance is from this pin. Smoke at the pin shows up as PM2.5, not this row.",
+    "Ambee WF disaster reports and/or the nearest satellite heat pixel. Place names are reverse-geocoded from the pixel, not a named fire incident. Smoke at the pin shows up as PM2.5.",
   volcanoAmbee: "Ambee disasters VO — volcanic ash can travel far. This is an air-quality signal, not a wildfire.",
   extremeTempAmbee: "Ambee disasters ET — heat/cold wave, not a thermometer reading.",
 } as const;

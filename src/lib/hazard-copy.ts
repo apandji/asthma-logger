@@ -95,7 +95,14 @@ export function hotspotCopy(km: number, place: string | null | undefined, count 
       km,
     };
   }
-  const text = count > 1 ? `${count} satellite hotspots` : loc ? `Near ${loc}` : "Satellite hotspot";
+  // FIRMS/Ambee fire pixels are thermal anomalies — industrial heat, ag burns,
+  // campfires — not confirmed wildfires. Name the place; do not say "wildfire".
+  const text =
+    count > 1
+      ? `${count} satellite heat spots`
+      : loc
+        ? `Satellite heat near ${loc}`
+        : "Satellite heat nearby";
   const detail =
     count > 1
       ? loc
@@ -145,8 +152,8 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
       km != null
         ? hotspotCopy(km, place, count)
         : {
-            text: count > 1 ? `${count} satellite hotspots` : "Satellite hotspot",
-            detail: place ? `Near ${place}` : "Last 24 hours",
+            text: count > 1 ? `${count} satellite heat spots` : "Satellite heat nearby",
+            detail: place ? `Near ${place}` : "Thermal pixel · not a confirmed wildfire",
             nearby: true,
             km: null,
           };
@@ -173,8 +180,12 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
   if (away) {
     const km = parseDistanceToken(away[1], away[2]);
     if (km != null) {
-      const place = raw.match(/\bNear\s+([^·]+)/i)?.[1]?.trim() ?? null;
-      const countMatch = raw.match(/(\d+)\s+satellite hotspots/i);
+      const place =
+        raw.match(/satellite heat near\s+([^·]+)/i)?.[1]?.trim() ??
+        raw.match(/\bNear\s+([^·]+)/i)?.[1]?.trim() ??
+        null;
+      const countMatch =
+        raw.match(/(\d+)\s+satellite heat spots/i) ?? raw.match(/(\d+)\s+satellite hotspots/i);
       return hotspotCopy(km, place, countMatch ? Number(countMatch[1]) : 1);
     }
   }
@@ -190,25 +201,30 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
   return { text: cleaned, nearby: true, km: null };
 }
 
+/**
+ * Prefer Ambee WF / reported wildfire as the lead. Satellite heat (FIRMS / Ambee
+ * detected) is secondary detail only — not interchangeable with a wildfire claim.
+ */
 export function mergeFireCopy(hotspot: HazardCopy | null, reported: HazardCopy | null): HazardCopy | null {
-  if (hotspot && reported) {
-    const hotKm = hotspot.km ?? 1e9;
-    const repKm = reported.km ?? 1e9;
-    const lead = hotKm <= repKm ? hotspot : reported;
-    const other = lead === hotspot ? reported : hotspot;
-    if (other.km != null && other.km <= NEARBY_KM && other.km !== lead.km) {
-      const otherPlace = other.text.replace(/^Near\s+/i, "").trim();
-      const extra = otherPlace && !lead.text.includes(otherPlace)
-        ? `also ${otherPlace} · ${formatMilesAway(other.km)}`
-        : formatMilesAway(other.km);
+  if (reported && hotspot) {
+    if (!reported.nearby && hotspot.nearby) {
+      // Distant WF report + nearby heat: lead with heat honesty, keep WF as context.
+      const wfBit =
+        reported.text === "None nearby"
+          ? reported.detail
+          : [reported.text, reported.detail].filter(Boolean).join(" · ");
       return {
-        ...lead,
-        detail: [lead.detail, extra].filter(Boolean).join(" · ") || lead.detail,
+        ...hotspot,
+        detail: [hotspot.detail, wfBit ? `report: ${wfBit}` : null].filter(Boolean).join(" · ") || hotspot.detail,
       };
     }
-    return lead;
+    const heatBit = [hotspot.text, hotspot.detail].filter(Boolean).join(" · ");
+    return {
+      ...reported,
+      detail: [reported.detail, heatBit ? `also ${heatBit}` : null].filter(Boolean).join(" · ") || reported.detail,
+    };
   }
-  return hotspot ?? reported;
+  return reported ?? hotspot;
 }
 
 export function hazardSeverity(copy: HazardCopy | null, kind: "storm" | "wildfire"): Severity {

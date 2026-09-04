@@ -108,6 +108,27 @@ function SignalValue({ value, id }: { value: EnvSignalValue; id: string }) {
   );
 }
 
+/** Honest collapsed fire line — prefer Ambee WF / NWS; never lead with FIRMS heat. */
+function collapsedFireHint(log: AttackLogDTO): string | null {
+  if (!log.hasWildfireNearby) return null;
+  const summary = log.wildfireSummary ?? "";
+  const snapWild =
+    log.snapshot?.v === 2 ? (log.snapshot.free.wildfire ?? log.snapshot.ambee.wildfire ?? "") : "";
+  const hay = `${summary} | ${snapWild}`;
+
+  if (/Ambee WF|Wildfire reported/i.test(hay)) return "Wildfire reported";
+  if (/red flag|fire weather watch|fire weather warning/i.test(hay)) {
+    const named = hay.match(/(Red Flag Warning|Fire Weather Watch|Fire Weather Warning)/i)?.[1];
+    return named ?? "Fire weather";
+  }
+  if (/smoke/i.test(hay)) return "Smoke advisory";
+  // Named NWS fire event (not red-flag) — keep the event name when short.
+  const nws = summary.split(/[|;]/)[0]?.trim();
+  if (nws && !/FIRMS|Ambee detected|satellite heat/i.test(nws) && nws.length <= 42) return nws;
+  if (/Ambee reported/i.test(hay)) return "Wildfire reported";
+  return "Fire signal nearby";
+}
+
 function collapsedEnvLine(log: AttackLogDTO | undefined): string {
   if (!log) return "Outdoor air not saved yet";
   if (log.envStatus !== "ready") return envStatusCopy(log.envStatus) ?? "Outdoor air pending";
@@ -118,7 +139,8 @@ function collapsedEnvLine(log: AttackLogDTO | undefined): string {
     const first = log.stormSummary.split(";")[0]?.trim();
     if (first && !/heat|cold|freeze|frost|wind chill/i.test(first)) parts.push(first);
   }
-  if (log.hasWildfireNearby) parts.push("Wildfire nearby");
+  const fire = collapsedFireHint(log);
+  if (fire) parts.push(fire);
   return parts.join(" · ") || "Outdoor context saved";
 }
 

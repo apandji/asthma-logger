@@ -50,6 +50,9 @@ export type AmbeeFireReading = {
   nearestKm: number | null;
   nearestLat: number | null;
   nearestLng: number | null;
+  /** Ambee fireType: reported = named incident; detected = satellite heat. */
+  fireType: "reported" | "detected" | null;
+  fireName: string | null;
   summary: string | null;
   count: number;
   raw: unknown;
@@ -245,8 +248,19 @@ export function parseAmbeeFire(payload: unknown, originLat: number, originLon: n
   let nearestKm: number | null = null;
   let nearestLat: number | null = null;
   let nearestLng: number | null = null;
+  let fireType: AmbeeFireReading["fireType"] = null;
+  let fireName: string | null = null;
   let summary: string | null = null;
   let counted = 0;
+
+  type Cand = {
+    km: number;
+    lat: number;
+    lng: number;
+    fireType: "reported" | "detected" | null;
+    fireName: string | null;
+  };
+  const candidates: Cand[] = [];
 
   for (const item of list) {
     const rec = asRecord(item);
@@ -256,15 +270,38 @@ export function parseAmbeeFire(payload: unknown, originLat: number, originLon: n
     if (lat == null || lng == null) continue;
     counted += 1;
     const km = haversineKm(originLat, originLon, lat, lng);
-    if (nearestKm == null || km < nearestKm) {
-      nearestKm = km;
-      nearestLat = lat;
-      nearestLng = lng;
-      summary = formatMiles(km);
-    }
+    const rawType = (str(rec.fireType ?? rec.fire_type) ?? "").toLowerCase();
+    const type: Cand["fireType"] =
+      rawType === "reported" ? "reported" : rawType === "detected" ? "detected" : null;
+    candidates.push({
+      km,
+      lat,
+      lng,
+      fireType: type,
+      fireName: str(rec.fireName ?? rec.fire_name),
+    });
   }
 
-  return { nearestKm, nearestLat, nearestLng, summary, count: counted, raw: payload };
+  // Prefer reported (named) incidents over satellite-detected heat.
+  candidates.sort((a, b) => {
+    const rank = (t: Cand["fireType"]) => (t === "reported" ? 0 : t === "detected" ? 1 : 2);
+    const r = rank(a.fireType) - rank(b.fireType);
+    if (r !== 0) return r;
+    return a.km - b.km;
+  });
+
+  const best = candidates[0];
+  if (best) {
+    nearestKm = best.km;
+    nearestLat = best.lat;
+    nearestLng = best.lng;
+    fireType = best.fireType;
+    fireName = best.fireName;
+    const label = fireType === "reported" ? fireName ?? "Reported fire" : formatMiles(best.km);
+    summary = fireType === "reported" ? `${label} · ${formatMiles(best.km)}` : formatMiles(best.km);
+  }
+
+  return { nearestKm, nearestLat, nearestLng, fireType, fireName, summary, count: counted, raw: payload };
 }
 
 const BREATHING_DISASTER_TYPES = new Set<AmbeeDisasterType>(["SW", "ET", "WF", "TC", "VO"]);

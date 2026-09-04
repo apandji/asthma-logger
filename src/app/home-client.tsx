@@ -11,7 +11,7 @@ import {
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
 import { buildEnvSignals, type EnvSignalValue } from "@/lib/env-badges";
-import { wildfireDisasterHits } from "@/lib/ambee";
+import { canAttributeRegionalSmoke, wildfireDisasterHits } from "@/lib/ambee";
 import { formatWildfireLabel, isLocalAirSmoky } from "@/lib/hazard-copy";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
 
@@ -126,7 +126,20 @@ function collapsedFireHint(log: AttackLogDTO): string | null {
   });
   const hasRegional =
     /regional smoke/i.test(hay) ||
-    (airSmoky && credibleWf.some((h) => h.km != null && h.km > 80));
+    (() => {
+      if (!airSmoky && !/smoke/i.test(hay)) return false;
+      return credibleWf.some(
+        (h) =>
+          h.km != null &&
+          h.km > 80 &&
+          canAttributeRegionalSmoke(h, {
+            airSmoky,
+            nwsSmoke: /smoke/i.test(hay),
+            aqi: log.aqi,
+            pm25: log.snapshot?.v === 2 ? (log.snapshot.free.pm25 ?? log.snapshot.ambee.pm25) : null,
+          }),
+      );
+    })();
 
   if (!log.hasWildfireNearby && !hasCredibleLocalWf && !hasRegional) return null;
 

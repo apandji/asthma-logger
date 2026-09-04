@@ -39,6 +39,10 @@ export type EnvDisasterHit = {
   place: string | null;
   lat?: number | null;
   lng?: number | null;
+  eventAt?: string | null;
+  expiresAt?: string | null;
+  burnedArea?: number | null;
+  containedPct?: number | null;
 };
 
 /** Named ground station behind a PM2.5 or ozone reading. */

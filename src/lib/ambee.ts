@@ -68,6 +68,14 @@ export type AmbeeDisasterEvent = {
   eventId: string | null;
   lat: number | null;
   lng: number | null;
+  /** Event / detection time from Ambee `date` or `created_time`. */
+  eventAt: string | null;
+  /** Ambee `expiry_time` when the alert should drop. */
+  expiresAt: string | null;
+  /** `details.burned_area` — acres or hectares; treat small values as tiny. */
+  burnedArea: number | null;
+  /** `details.percentage_contained` 0–100. */
+  containedPct: number | null;
 };
 
 export type AmbeeDisasterReading = {
@@ -315,9 +323,9 @@ const DISASTER_LABEL: Record<AmbeeDisasterType, string> = {
 };
 
 /**
- * Ambee labels many non-wildfire events as WF. Prescribed burns (IL DNR "… RX"),
- * pile burns, and Red Flag / fire-weather watches are not Canadian-wildfire-scale
- * smoke events — exclude them from breathing-relevant wildfire claims.
+ * Ambee labels many non-wildfire events as WF (prescribed burns, structure fires,
+ * pre-fire alerts). Also drop stale / tiny incidents that cannot explain regional smoke
+ * (e.g. Pinewoods: 0.1 ac, contained same day, still in continent feed a week later).
  */
 export function isWildfireSmokeCandidate(name: string | null | undefined): boolean {
   if (!name) return true;
@@ -327,13 +335,89 @@ export function isWildfireSmokeCandidate(name: string | null | undefined): boole
   if (/pile\s*burn|broadcast\s*burn|controlled\s*burn/.test(n)) return false;
   if (/red flag/.test(n)) return false;
   if (/fire weather/.test(n)) return false;
+  if (/structure\s*fire|building\s*fire|house\s*fire/.test(n)) return false;
+  if (/pre[-\s]?fire\s*alert/.test(n)) return false;
+  if (/^satellite fire incident$/i.test(name.trim())) return false;
   return true;
 }
 
-export function wildfireDisasterHits<T extends { type: string; name: string | null }>(
-  hits: T[] | null | undefined,
-): T[] {
-  return (hits ?? []).filter((h) => h.type === "WF" && isWildfireSmokeCandidate(h.name));
+const MS_HOUR = 3600_000;
+/** Ignore WF alerts older than this for breathing claims. */
+export const WF_MAX_AGE_MS = 72 * MS_HOUR;
+/** Tiny burns cannot drive regional smoke (Watch Duty had Pinewoods at 0.1 ac). */
+export const WF_MIN_BURNED_AREA = 10;
+/** Fully contained fires drop quickly unless brand-new. */
+export const WF_CONTAINED_GRACE_MS = 12 * MS_HOUR;
+
+function parseAmbeeTime(value: unknown): string | null {
+  const s = str(value);
+  if (!s) return null;
+  const normalized = s.includes("T") ? s : s.replace(" ", "T") + (s.endsWith("Z") ? "" : "Z");
+  const t = Date.parse(normalized);
+  if (!Number.isFinite(t)) {
+    const t2 = Date.parse(s);
+    if (!Number.isFinite(t2)) return null;
+    return new Date(t2).toISOString();
+  }
+  return new Date(t).toISOString();
+}
+
+export type WildfireHitLike = {
+  type: string;
+  name: string | null;
+  eventAt?: string | null;
+  expiresAt?: string | null;
+  burnedArea?: number | null;
+  containedPct?: number | null;
+};
+
+/** Fresh enough + large enough to matter for outdoor air (not a day-old backyard fire). */
+export function isActiveLandscapeWildfire(hit: WildfireHitLike, nowMs = Date.now()): boolean {
+  if (hit.type !== "WF" || !isWildfireSmokeCandidate(hit.name)) return false;
+
+  if (hit.expiresAt) {
+    const exp = Date.parse(hit.expiresAt);
+    if (Number.isFinite(exp) && nowMs > exp) return false;
+  }
+
+  if (hit.eventAt) {
+    const at = Date.parse(hit.eventAt);
+    if (Number.isFinite(at) && nowMs - at > WF_MAX_AGE_MS) return false;
+  }
+
+  if (hit.burnedArea != null && Number.isFinite(hit.burnedArea) && hit.burnedArea < WF_MIN_BURNED_AREA) {
+    return false;
+  }
+
+  if (hit.containedPct != null && hit.containedPct >= 100) {
+    const at = hit.eventAt ? Date.parse(hit.eventAt) : NaN;
+    if (!Number.isFinite(at) || nowMs - at > WF_CONTAINED_GRACE_MS) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Distant WF as “regional smoke source” only when the fire could plausibly move smoke:
+ * NWS smoke advisory, or a large burn with elevated local PM — never Moderate PM + tiny/stale name.
+ */
+export function canAttributeRegionalSmoke(
+  hit: WildfireHitLike,
+  opts: { airSmoky: boolean; nwsSmoke: boolean; aqi?: number | null; pm25?: number | null },
+): boolean {
+  if (!isActiveLandscapeWildfire(hit)) return false;
+  if (opts.nwsSmoke) return true;
+  // Unknown size: require USG+ air (not mere Moderate) before naming a distant fire.
+  const strongAir =
+    (opts.pm25 != null && opts.pm25 >= 35.5) || (opts.aqi != null && opts.aqi >= 101);
+  if (hit.burnedArea == null) return strongAir;
+  if (hit.burnedArea >= 100) return opts.airSmoky || strongAir;
+  // 10–99 acres: only with stronger air signal
+  return strongAir;
+}
+
+export function wildfireDisasterHits<T extends WildfireHitLike>(hits: T[] | null | undefined): T[] {
+  return (hits ?? []).filter((h) => isActiveLandscapeWildfire(h));
 }
 
 function continentFor(lat: number, lon: number): string {
@@ -406,11 +490,33 @@ export function parseAmbeeDisasters(
       placeFromEventName(name) ??
       str(rec.country_code ?? rec.countryCode);
 
+    const details = asRecord(rec.details);
+    const eventAt =
+      parseAmbeeTime(rec.date ?? rec.event_date ?? rec.eventDate) ??
+      parseAmbeeTime(rec.created_time ?? rec.createdTime);
+    const expiresAt = parseAmbeeTime(rec.expiry_time ?? rec.expiryTime);
+    const burnedArea = num(details?.burned_area ?? details?.burnedArea ?? details?.areaBurnt);
+    const containedPct = num(
+      details?.percentage_contained ?? details?.percentageContained ?? details?.containment,
+    );
+
     // Ambee tags some heat watches as SW; treat those as ET
     const typeFixed: AmbeeDisasterType =
       type === "SW" && /heat|cold|freeze|frost/i.test(name) ? "ET" : type;
 
-    events.push({ type: typeFixed, name, km, place, eventId, lat, lng });
+    events.push({
+      type: typeFixed,
+      name,
+      km,
+      place,
+      eventId,
+      lat,
+      lng,
+      eventAt,
+      expiresAt,
+      burnedArea,
+      containedPct,
+    });
   }
 
   events.sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9));

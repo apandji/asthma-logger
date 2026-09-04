@@ -19,6 +19,7 @@ import {
   summarizeHazards,
   type HazardCopy,
 } from "./hazard-copy";
+import { wildfireDisasterHits } from "./ambee";
 import type { AttackLogDTO, EnvAirStation, EnvPollenSnapshot, EnvSnapshot, EnvSourceValues } from "./types";
 import { formatMiles } from "./units";
 
@@ -62,7 +63,7 @@ const SOURCES = {
   stormsAmbee:
     "Ambee storm reports anywhere in the wider region. Far events are labeled “none nearby” — they are not the weather at this pin.",
   wildfireDisaster:
-    "Primary: Ambee disasters event_type WF (wildfire tag). FIRMS / detected heat may appear as secondary “also …” detail. Smoke at the pin shows up as PM2.5.",
+    "Primary: Ambee disasters WF, excluding prescribed burns (RX) and Red Flag / fire-weather mis-tags. FIRMS / detected heat may appear as secondary “also …” detail. Smoke at the pin shows up as PM2.5.",
   volcanoAmbee: "Ambee disasters VO — volcanic ash can travel far. This is an air-quality signal, not a wildfire.",
   extremeTempAmbee: "Ambee disasters ET — heat/cold wave, not a thermometer reading.",
 } as const;
@@ -507,17 +508,17 @@ export function buildEnvSignals(log: AttackLogDTO): {
   const ambeeStormCopy =
     summarizeHazards(ambee.disasters, ["SW", "TC"], "storm") ?? rewriteStormLabel(ambee.storms);
   const freeFireCopy = rewriteFireLabel(free.wildfire);
-  const ambeeWfCopy = summarizeHazards(ambee.disasters, ["WF"], "wildfire");
+  const ambeeWfCopy = summarizeHazards(wildfireDisasterHits(ambee.disasters), ["WF"], "wildfire");
   // Prefer live Ambee WF tag; only pull satellite-heat fragments from the stored string as secondary.
   const ambeeHeatOnly = (() => {
     const raw = ambee.wildfire ?? "";
-    const heatChunk = raw.match(/(?:also\s+)?(satellite heat[\s\S]*)/i)?.[1] ?? (/satellite heat/i.test(raw) ? raw : null);
+    const heatChunk =
+      raw.match(/(?:also\s+)?(satellite heat[\s\S]*)/i)?.[1] ?? (/satellite heat/i.test(raw) ? raw : null);
     return heatChunk ? rewriteFireLabel(heatChunk) : null;
   })();
+  // Do not fall back to stored “Near …” copy when it was an RX/prescribed WF we now filter out.
   const ambeeFireCopy =
-    ambeeWfCopy != null
-      ? mergeFireCopy(ambeeHeatOnly, ambeeWfCopy)
-      : rewriteFireLabel(ambee.wildfire);
+    ambeeWfCopy != null ? mergeFireCopy(ambeeHeatOnly, ambeeWfCopy) : ambeeHeatOnly;
 
   const rows: EnvSignalRow[] = [
     {

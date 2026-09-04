@@ -11,6 +11,7 @@ import {
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
 import { buildEnvSignals, type EnvSignalValue } from "@/lib/env-badges";
+import { wildfireDisasterHits } from "@/lib/ambee";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
 
 /** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
@@ -110,23 +111,34 @@ function SignalValue({ value, id }: { value: EnvSignalValue; id: string }) {
 
 /** Honest collapsed fire line — prefer Ambee WF / NWS; never lead with FIRMS heat. */
 function collapsedFireHint(log: AttackLogDTO): string | null {
-  if (!log.hasWildfireNearby) return null;
   const summary = log.wildfireSummary ?? "";
   const snapWild =
     log.snapshot?.v === 2 ? (log.snapshot.free.wildfire ?? log.snapshot.ambee.wildfire ?? "") : "";
   const hay = `${summary} | ${snapWild}`;
+  const credibleWf =
+    log.snapshot?.v === 2 ? wildfireDisasterHits(log.snapshot.ambee.disasters) : [];
+  const hasCredibleWf = credibleWf.some((h) => h.km == null || h.km <= 80);
 
-  if (/Ambee WF|Wildfire reported/i.test(hay)) return "Wildfire reported";
+  if (!log.hasWildfireNearby && !hasCredibleWf) return null;
+
+  if (hasCredibleWf || (/Ambee WF|Wildfire reported/i.test(hay) && hasCredibleWf)) {
+    return "Wildfire reported";
+  }
+  // Stale Ambee WF that was a prescribed burn (… RX) — ignore.
+  if (/Ambee WF/i.test(hay) && !hasCredibleWf) {
+    // fall through to NWS / other signals only
+  }
   if (/red flag|fire weather watch|fire weather warning/i.test(hay)) {
     const named = hay.match(/(Red Flag Warning|Fire Weather Watch|Fire Weather Warning)/i)?.[1];
     return named ?? "Fire weather";
   }
-  if (/smoke/i.test(hay)) return "Smoke advisory";
+  if (/smoke/i.test(hay) && !/\bRX\b|prescribed/i.test(hay)) return "Smoke advisory";
   // Named NWS fire event (not red-flag) — keep the event name when short.
   const nws = summary.split(/[|;]/)[0]?.trim();
-  if (nws && !/FIRMS|Ambee detected|satellite heat/i.test(nws) && nws.length <= 42) return nws;
-  if (/Ambee reported/i.test(hay)) return "Wildfire reported";
-  return "Fire signal nearby";
+  if (nws && !/FIRMS|Ambee|satellite heat|\bRX\b/i.test(nws) && nws.length <= 42) return nws;
+  if (/Ambee reported/i.test(hay) && hasCredibleWf) return "Wildfire reported";
+  if (log.hasWildfireNearby && hasCredibleWf) return "Fire signal nearby";
+  return null;
 }
 
 function collapsedEnvLine(log: AttackLogDTO | undefined): string {

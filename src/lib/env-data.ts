@@ -1,4 +1,4 @@
-import { fetchAmbeeBundle, formatDisaster } from "./ambee";
+import { fetchAmbeeBundle, formatDisaster, isWildfireSmokeCandidate, wildfireDisasterHits } from "./ambee";
 import { hotspotCopy, mergeFireCopy, NEARBY_KM, summarizeHazards, type HazardCopy } from "./hazard-copy";
 import { fetchOpenAq } from "./openaq";
 import { formatPlaceName, lookupPlaceName } from "./place";
@@ -308,9 +308,13 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     lng: e.lng,
   }));
 
-  const ambeeWfNearby = disasterHits.some((h) => h.type === "WF" && (h.km == null || h.km <= NEARBY_KM));
+  const wfHits = wildfireDisasterHits(disasterHits);
+  const ambeeWfNearby = wfHits.some((h) => h.km == null || h.km <= NEARBY_KM);
   const ambeeReportedNearby =
-    ambee.fire?.fireType === "reported" && ambee.fire.nearestKm != null && ambee.fire.nearestKm <= 50;
+    ambee.fire?.fireType === "reported" &&
+    ambee.fire.nearestKm != null &&
+    ambee.fire.nearestKm <= 50 &&
+    isWildfireSmokeCandidate(ambee.fire.fireName ?? ambee.fire.summary);
   // FIRMS / Ambee "detected" heat alone does not claim a breathing-relevant wildfire.
   const hasWildfireNearby = fireAlerts.length > 0 || ambeeWfNearby || ambeeReportedNearby;
 
@@ -331,7 +335,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     Boolean(hit && !hit.place && hit.lat != null && hit.lng != null);
 
   const nearestStorm = disasterHits.find((h) => h.type === "SW" || h.type === "TC");
-  const nearestWf = disasterHits.find((h) => h.type === "WF");
+  const nearestWf = wfHits[0];
   const nearestEt = disasterHits.find((h) => h.type === "ET");
 
   const [firePlace, firmsPlace, stormPlace, wfPlace, etPlace] = await Promise.all([
@@ -350,7 +354,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   if (nearestWf && wfPlace) nearestWf.place = wfPlace;
   if (nearestEt && etPlace) nearestEt.place = etPlace;
 
-  const ambeeWfHit = disasterHits.find((h) => h.type === "WF" && (h.km == null || h.km <= NEARBY_KM));
+  const ambeeWfHit = wfHits.find((h) => h.km == null || h.km <= NEARBY_KM);
   const wildfireParts: string[] = [];
   if (ambeeWfHit) {
     const label = ambeeWfHit.place
@@ -422,10 +426,13 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const ambeeStorms = summarizeDisasters(disasterHits, ["SW", "TC"], "storm");
   const ambeeEt = summarizeDisasters(disasterHits, ["ET"]);
   const ambeeVo = summarizeDisasters(disasterHits, ["VO"]);
-  const ambeeWf = summarizeHazards(disasterHits, ["WF"], "wildfire");
+  const ambeeWf = summarizeHazards(wfHits, ["WF"], "wildfire");
 
   const ambeeReportedFire: HazardCopy | null =
-    ambee.fire?.fireType === "reported" && ambee.fire.nearestKm != null && ambee.fire.nearestKm <= 50
+    ambee.fire?.fireType === "reported" &&
+    ambee.fire.nearestKm != null &&
+    ambee.fire.nearestKm <= 50 &&
+    isWildfireSmokeCandidate(ambee.fire.fireName ?? ambee.fire.summary)
       ? (() => {
           const km = ambee.fire.nearestKm!;
           const loc = (firePlace ?? ambee.fire.fireName)?.replace(/^near\s+/i, "").trim() || null;

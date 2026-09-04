@@ -1,6 +1,7 @@
-import { fetchAmbeeBundle, formatDisaster, isWildfireSmokeCandidate, wildfireDisasterHits } from "./ambee";
+import { fetchAmbeeBundle, formatDisaster, isWildfireSmokeCandidate, canAttributeRegionalSmoke, wildfireDisasterHits } from "./ambee";
 import {
   distantWildfireHits,
+  formatWildfireLabel,
   hotspotCopy,
   isLocalAirSmoky,
   localWildfireHits,
@@ -316,6 +317,10 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     place: e.place,
     lat: e.lat,
     lng: e.lng,
+    eventAt: e.eventAt,
+    expiresAt: e.expiresAt,
+    burnedArea: e.burnedArea,
+    containedPct: e.containedPct,
   }));
 
   const wfHits = wildfireDisasterHits(disasterHits);
@@ -332,8 +337,16 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     aqi: freeAqiVal ?? ambeeAqi,
     nwsSmoke,
   });
-  // Distant WF only counts when local air already looks smoky (plume-arrival test).
-  const regionalWfHit = airSmoky ? distantWfHits[0] ?? null : null;
+  // Distant WF only as regional smoke when fire is fresh/large enough AND air supports it.
+  const regionalWfHit =
+    distantWfHits.find((h) =>
+      canAttributeRegionalSmoke(h, {
+        airSmoky,
+        nwsSmoke,
+        aqi: freeAqiVal ?? ambeeAqi,
+        pm25: freePm25 ?? ambee.aq?.pm25 ?? null,
+      }),
+    ) ?? null;
 
   const ambeeWfNearby = localWfHits.length > 0;
   const ambeeReportedNearby =
@@ -384,14 +397,12 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const ambeeWfHit = localWfHits[0];
   const wildfireParts: string[] = [];
   if (ambeeWfHit) {
-    const label = ambeeWfHit.place
-      ? `Ambee WF near ${ambeeWfHit.place}`
-      : ambeeWfHit.name || "Ambee WF";
+    const label = formatWildfireLabel(ambeeWfHit.name, ambeeWfHit.place);
     wildfireParts.push(
       ambeeWfHit.km != null ? `${label} · ${formatMilesAway(ambeeWfHit.km)}` : label,
     );
   } else if (regionalWfHit) {
-    const label = regionalWfHit.name || regionalWfHit.place || "distant wildfire";
+    const label = formatWildfireLabel(regionalWfHit.name, regionalWfHit.place);
     wildfireParts.push(
       regionalWfHit.km != null
         ? `Regional smoke: ${label} · ${formatMilesAway(regionalWfHit.km)}`
@@ -471,9 +482,8 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     isWildfireSmokeCandidate(ambee.fire.fireName ?? ambee.fire.summary)
       ? (() => {
           const km = ambee.fire.nearestKm!;
-          const loc = (firePlace ?? ambee.fire.fireName)?.replace(/^near\s+/i, "").trim() || null;
           return {
-            text: loc ? `Near ${loc}` : "Wildfire reported",
+            text: formatWildfireLabel(ambee.fire.fireName, firePlace),
             detail: formatMilesAway(km),
             nearby: km <= NEARBY_KM,
             km,

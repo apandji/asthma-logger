@@ -13,6 +13,7 @@ import {
 } from "./env-colors";
 import {
   distantWildfireHits,
+  formatWildfireLabel,
   hazardSeverity,
   isLocalAirSmoky,
   localWildfireHits,
@@ -23,7 +24,7 @@ import {
   summarizeHazards,
   type HazardCopy,
 } from "./hazard-copy";
-import { wildfireDisasterHits } from "./ambee";
+import { canAttributeRegionalSmoke, wildfireDisasterHits } from "./ambee";
 import type { AttackLogDTO, EnvAirStation, EnvPollenSnapshot, EnvSnapshot, EnvSourceValues } from "./types";
 import { formatMiles } from "./units";
 
@@ -67,7 +68,7 @@ const SOURCES = {
   stormsAmbee:
     "Ambee storm reports anywhere in the wider region. Far events are labeled “none nearby” — they are not the weather at this pin.",
   wildfireDisaster:
-    "Primary: local Ambee WF (excluding RX/prescribed). Distant WF only appears as “Regional smoke source” when local PM2.5/AQI is Moderate+ or NWS has a smoke advisory — plume arrival, not fire proximity. FIRMS heat stays secondary.",
+    "Primary: local Ambee WF (excluding RX/prescribed/structure/stale/tiny). Distant WF only as regional smoke when fresh + large enough, and local air is smoky (USG+ if size unknown) or NWS smoke. FIRMS heat stays secondary.",
   volcanoAmbee: "Ambee disasters VO — volcanic ash can travel far. This is an air-quality signal, not a wildfire.",
   extremeTempAmbee: "Ambee disasters ET — heat/cold wave, not a thermometer reading.",
 } as const;
@@ -522,7 +523,19 @@ export function buildEnvSignals(log: AttackLogDTO): {
   });
   const ambeeWfCopy =
     summarizeHazards(localWf, ["WF"], "wildfire") ??
-    (airSmoky && distantWf[0] ? regionalSmokeCopy(distantWf[0]) : null);
+    (() => {
+      if (!airSmoky && !/smoke/i.test(`${free.wildfire ?? ""} ${log.wildfireSummary ?? ""}`)) return null;
+      const nwsSmoke = /smoke/i.test(`${free.wildfire ?? ""} ${log.wildfireSummary ?? ""}`);
+      const hit = distantWf.find((h) =>
+        canAttributeRegionalSmoke(h, {
+          airSmoky,
+          nwsSmoke,
+          aqi: free.aqi ?? ambee.aqi,
+          pm25: free.pm25 ?? ambee.pm25,
+        }),
+      );
+      return hit ? regionalSmokeCopy(hit) : null;
+    })();
   // Prefer live Ambee WF tag; only pull satellite-heat fragments from the stored string as secondary.
   const ambeeHeatOnly = (() => {
     const raw = ambee.wildfire ?? "";
@@ -535,16 +548,11 @@ export function buildEnvSignals(log: AttackLogDTO): {
   let ambeeFireCopy: HazardCopy | null =
     ambeeWfCopy != null ? mergeFireCopy(ambeeHeatOnly, ambeeWfCopy) : null;
   if (!ambeeFireCopy && airSmoky && /regional smoke/i.test(ambee.wildfire ?? "")) {
-    const detail = (ambee.wildfire ?? "")
-      .replace(/^regional smoke(?: source)?\s*[·:|-]\s*/i, "")
-      .replace(/\s*·\s*also satellite heat[\s\S]*$/i, "")
-      .trim();
-    ambeeFireCopy = mergeFireCopy(ambeeHeatOnly, {
-      text: "Regional smoke source",
-      detail: detail || undefined,
-      nearby: false,
-      km: null,
-    });
+    // Prefer live distant WF (name + place) over parsing the stored string.
+    const live = distantWf[0] ? regionalSmokeCopy(distantWf[0]) : null;
+    ambeeFireCopy = live
+      ? mergeFireCopy(ambeeHeatOnly, live)
+      : ambeeHeatOnly;
   }
   if (!ambeeFireCopy) ambeeFireCopy = ambeeHeatOnly;
 

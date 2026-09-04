@@ -11,8 +11,8 @@ import {
 } from "@/lib/local-db";
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
 import { buildEnvSignals, type EnvSignalValue } from "@/lib/env-badges";
-import { wildfireDisasterHits } from "@/lib/ambee";
-import { isLocalAirSmoky } from "@/lib/hazard-copy";
+import { canAttributeRegionalSmoke, wildfireDisasterHits } from "@/lib/ambee";
+import { formatWildfireLabel, isLocalAirSmoky } from "@/lib/hazard-copy";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
 
 /** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
@@ -126,12 +126,37 @@ function collapsedFireHint(log: AttackLogDTO): string | null {
   });
   const hasRegional =
     /regional smoke/i.test(hay) ||
-    (airSmoky && credibleWf.some((h) => h.km != null && h.km > 80));
+    (() => {
+      if (!airSmoky && !/smoke/i.test(hay)) return false;
+      return credibleWf.some(
+        (h) =>
+          h.km != null &&
+          h.km > 80 &&
+          canAttributeRegionalSmoke(h, {
+            airSmoky,
+            nwsSmoke: /smoke/i.test(hay),
+            aqi: log.aqi,
+            pm25: log.snapshot?.v === 2 ? (log.snapshot.free.pm25 ?? log.snapshot.ambee.pm25) : null,
+          }),
+      );
+    })();
 
   if (!log.hasWildfireNearby && !hasCredibleLocalWf && !hasRegional) return null;
 
-  if (hasCredibleLocalWf) return "Wildfire reported";
-  if (hasRegional) return "Regional smoke";
+  if (hasCredibleLocalWf) {
+    const local = credibleWf.find((h) => h.km == null || h.km <= 80);
+    return local ? formatWildfireLabel(local.name, local.place) : "Wildfire reported";
+  }
+  if (hasRegional) {
+    const distant = credibleWf
+      .filter((h) => h.km != null && h.km > 80)
+      .sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9))[0];
+    if (distant) {
+      const label = formatWildfireLabel(distant.name, distant.place);
+      return label.length <= 42 ? label : "Regional smoke";
+    }
+    return "Regional smoke";
+  }
   // Stale Ambee WF that was a prescribed burn (… RX) — ignore.
   if (/Ambee WF/i.test(hay) && !hasCredibleLocalWf) {
     // fall through

@@ -7,12 +7,60 @@ export const NEARBY_KM = 80;
 /** Beyond this, do not present the event as local. */
 export const DISTANT_KM = 250;
 
+/** Soft gate: EPA Moderate (~12.1 µg/m³) — smoke may be affecting local air. */
+export const SMOKE_PM25_UG = 12;
+/** Soft gate: AQI Moderate. */
+export const SMOKE_AQI = 51;
+
 export type HazardCopy = {
   text: string;
   detail?: string;
   nearby: boolean;
   km: number | null;
 };
+
+/** Local PM/AQI or NWS smoke advisory — the lung-relevant smoke signal. */
+export function isLocalAirSmoky(opts: {
+  pm25?: number | null;
+  aqi?: number | null;
+  nwsSmoke?: boolean;
+}): boolean {
+  if (opts.nwsSmoke) return true;
+  if (opts.pm25 != null && Number.isFinite(opts.pm25) && opts.pm25 >= SMOKE_PM25_UG) return true;
+  if (opts.aqi != null && Number.isFinite(opts.aqi) && opts.aqi >= SMOKE_AQI) return true;
+  return false;
+}
+
+export function localWildfireHits(hits: EnvDisasterHit[] | null | undefined): EnvDisasterHit[] {
+  return (hits ?? []).filter((h) => h.type === "WF" && (h.km == null || h.km <= NEARBY_KM));
+}
+
+export function distantWildfireHits(hits: EnvDisasterHit[] | null | undefined): EnvDisasterHit[] {
+  return (hits ?? [])
+    .filter((h) => h.type === "WF" && h.km != null && h.km > NEARBY_KM)
+    .slice()
+    .sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9));
+}
+
+/**
+ * Far wildfire as context when local air is already smoky — not “fire near this town.”
+ * Canadian-plume style: distance can be hundreds/thousands of km.
+ */
+export function regionalSmokeCopy(hit: EnvDisasterHit): HazardCopy {
+  const place = placePhrase(hit.place);
+  const rawName = (hit.name ?? "").trim();
+  const name = rawName || place || "distant wildfire";
+  const label =
+    place && rawName && !rawName.toLowerCase().includes(place.split(",")[0]!.toLowerCase())
+      ? `${rawName} · ${place}`
+      : name;
+  return {
+    text: "Regional smoke source",
+    detail: hit.km != null ? `${label} · ${formatMilesAway(hit.km)}` : label,
+    nearby: false,
+    km: hit.km,
+  };
+}
 
 /** @deprecated Prefer formatMilesAway from units — kept for existing imports. */
 export function formatKmAway(km: number): string {
@@ -207,6 +255,14 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
  */
 export function mergeFireCopy(hotspot: HazardCopy | null, reported: HazardCopy | null): HazardCopy | null {
   if (reported && hotspot) {
+    // Regional smoke (PM-gated distant WF) always leads; heat stays secondary.
+    if (reported.text === "Regional smoke source") {
+      const heatBit = [hotspot.text, hotspot.detail].filter(Boolean).join(" · ");
+      return {
+        ...reported,
+        detail: [reported.detail, heatBit ? `also ${heatBit}` : null].filter(Boolean).join(" · ") || reported.detail,
+      };
+    }
     if (!reported.nearby && hotspot.nearby) {
       // Distant WF report + nearby heat: lead with heat honesty, keep WF as context.
       const wfBit =
@@ -229,6 +285,7 @@ export function mergeFireCopy(hotspot: HazardCopy | null, reported: HazardCopy |
 
 export function hazardSeverity(copy: HazardCopy | null, kind: "storm" | "wildfire"): Severity {
   if (!copy) return "green";
+  if (kind === "wildfire" && copy.text === "Regional smoke source") return "orange";
   if (!copy.nearby) return "green";
   if (kind === "wildfire") {
     if (copy.km != null && copy.km <= 25) return "red";

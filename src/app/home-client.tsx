@@ -12,6 +12,7 @@ import {
 import type { AttackLogDTO, Feeling, LocalLog } from "@/lib/types";
 import { buildEnvSignals, type EnvSignalValue } from "@/lib/env-badges";
 import { wildfireDisasterHits } from "@/lib/ambee";
+import { isLocalAirSmoky } from "@/lib/hazard-copy";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
 
 /** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
@@ -109,7 +110,7 @@ function SignalValue({ value, id }: { value: EnvSignalValue; id: string }) {
   );
 }
 
-/** Honest collapsed fire line — prefer Ambee WF / NWS; never lead with FIRMS heat. */
+/** Honest collapsed fire line — local WF, regional smoke (PM-gated), or NWS. */
 function collapsedFireHint(log: AttackLogDTO): string | null {
   const summary = log.wildfireSummary ?? "";
   const snapWild =
@@ -117,27 +118,35 @@ function collapsedFireHint(log: AttackLogDTO): string | null {
   const hay = `${summary} | ${snapWild}`;
   const credibleWf =
     log.snapshot?.v === 2 ? wildfireDisasterHits(log.snapshot.ambee.disasters) : [];
-  const hasCredibleWf = credibleWf.some((h) => h.km == null || h.km <= 80);
+  const hasCredibleLocalWf = credibleWf.some((h) => h.km == null || h.km <= 80);
+  const airSmoky = isLocalAirSmoky({
+    pm25: log.snapshot?.v === 2 ? (log.snapshot.free.pm25 ?? log.snapshot.ambee.pm25) : null,
+    aqi: log.aqi,
+    nwsSmoke: /smoke/i.test(hay),
+  });
+  const hasRegional =
+    /regional smoke/i.test(hay) ||
+    (airSmoky && credibleWf.some((h) => h.km != null && h.km > 80));
 
-  if (!log.hasWildfireNearby && !hasCredibleWf) return null;
+  if (!log.hasWildfireNearby && !hasCredibleLocalWf && !hasRegional) return null;
 
-  if (hasCredibleWf || (/Ambee WF|Wildfire reported/i.test(hay) && hasCredibleWf)) {
-    return "Wildfire reported";
-  }
+  if (hasCredibleLocalWf) return "Wildfire reported";
+  if (hasRegional) return "Regional smoke";
   // Stale Ambee WF that was a prescribed burn (… RX) — ignore.
-  if (/Ambee WF/i.test(hay) && !hasCredibleWf) {
-    // fall through to NWS / other signals only
+  if (/Ambee WF/i.test(hay) && !hasCredibleLocalWf) {
+    // fall through
   }
   if (/red flag|fire weather watch|fire weather warning/i.test(hay)) {
     const named = hay.match(/(Red Flag Warning|Fire Weather Watch|Fire Weather Warning)/i)?.[1];
     return named ?? "Fire weather";
   }
-  if (/smoke/i.test(hay) && !/\bRX\b|prescribed/i.test(hay)) return "Smoke advisory";
-  // Named NWS fire event (not red-flag) — keep the event name when short.
+  if (/smoke/i.test(hay) && !/\bRX\b|prescribed|regional smoke/i.test(hay)) return "Smoke advisory";
   const nws = summary.split(/[|;]/)[0]?.trim();
-  if (nws && !/FIRMS|Ambee|satellite heat|\bRX\b/i.test(nws) && nws.length <= 42) return nws;
-  if (/Ambee reported/i.test(hay) && hasCredibleWf) return "Wildfire reported";
-  if (log.hasWildfireNearby && hasCredibleWf) return "Fire signal nearby";
+  if (nws && !/FIRMS|Ambee|satellite heat|\bRX\b|Regional smoke/i.test(nws) && nws.length <= 42) {
+    return nws;
+  }
+  if (/Ambee reported/i.test(hay) && hasCredibleLocalWf) return "Wildfire reported";
+  if (log.hasWildfireNearby && hasCredibleLocalWf) return "Fire signal nearby";
   return null;
 }
 

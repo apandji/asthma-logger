@@ -14,6 +14,7 @@ import { buildEnvSignals, type EnvSignalValue } from "@/lib/env-badges";
 import { canAttributeRegionalSmoke, wildfireDisasterHits } from "@/lib/ambee";
 import { formatWildfireLabel, isLocalAirSmoky } from "@/lib/hazard-copy";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
+import type { PatternReport } from "@/lib/patterns";
 
 /** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
 const DEMO_LOCATIONS = {
@@ -241,6 +242,47 @@ function EnvBadges({ log }: { log: AttackLogDTO | undefined }) {
   );
 }
 
+const MATURITY_LABEL: Record<PatternReport["maturity"], string | null> = {
+  locked: null,
+  early: "Early",
+  emerging: "Emerging",
+  solid: "Solid",
+};
+
+function PatternsPanel({ report, loading }: { report: PatternReport | null; loading: boolean }) {
+  if (!report && !loading) return null;
+
+  const tag = report ? MATURITY_LABEL[report.maturity] : null;
+
+  return (
+    <section>
+      <div className="logs-head">
+        <h2>What we’re noticing</h2>
+        {tag ? <span className={`pattern-tag pattern-tag--${report?.maturity}`}>{tag}</span> : null}
+      </div>
+      {!report ? (
+        <p className="empty-card">Looking for patterns…</p>
+      ) : report.maturity === "locked" || report.statements.length === 0 ? (
+        <p className="empty-card">{report.note}</p>
+      ) : (
+        <div className="pattern-card">
+          <ul className="pattern-list">
+            {report.statements.map((s) => (
+              <li key={s.key} className={`pattern-item pattern-item--${s.kind}`}>
+                <span className="pattern-mark" aria-hidden />
+                <span className="pattern-text">
+                  <EnvText>{s.text}</EnvText>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="pattern-note">{report.note}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function FeelingTags({
   logId,
   current,
@@ -285,6 +327,24 @@ export default function HomeClient() {
   const [demoMode, setDemoMode] = useState(false);
   const [highlightLogId, setHighlightLogId] = useState<string | null>(null);
   const [openLogIds, setOpenLogIds] = useState<Record<string, boolean>>({});
+  const [patterns, setPatterns] = useState<PatternReport | null>(null);
+  const [patternsLoading, setPatternsLoading] = useState(false);
+
+  const refreshPatterns = useCallback(async () => {
+    setPatternsLoading(true);
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+      const res = await fetch(`/api/patterns?tz=${encodeURIComponent(tz)}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as { report: PatternReport };
+        setPatterns(data.report);
+      }
+    } catch {
+      // patterns are optional; the log list still works
+    } finally {
+      setPatternsLoading(false);
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     const local = await getAllLocalLogs();
@@ -302,7 +362,8 @@ export default function HomeClient() {
     } catch {
       // fall back to serverLog stored on each local row
     }
-  }, []);
+    void refreshPatterns();
+  }, [refreshPatterns]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -495,6 +556,8 @@ export default function HomeClient() {
         )}
         {status && bannerKind ? <p className={`banner banner--${bannerKind}`}>{status}</p> : null}
       </section>
+
+      <PatternsPanel report={patterns} loading={patternsLoading} />
 
       <section>
         <div className="logs-head">

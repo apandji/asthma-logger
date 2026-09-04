@@ -314,6 +314,28 @@ const DISASTER_LABEL: Record<AmbeeDisasterType, string> = {
   VO: "Volcano",
 };
 
+/**
+ * Ambee labels many non-wildfire events as WF. Prescribed burns (IL DNR "… RX"),
+ * pile burns, and Red Flag / fire-weather watches are not Canadian-wildfire-scale
+ * smoke events — exclude them from breathing-relevant wildfire claims.
+ */
+export function isWildfireSmokeCandidate(name: string | null | undefined): boolean {
+  if (!name) return true;
+  const n = name.toLowerCase();
+  if (/\brx\b/.test(n)) return false;
+  if (/prescribed/.test(n)) return false;
+  if (/pile\s*burn|broadcast\s*burn|controlled\s*burn/.test(n)) return false;
+  if (/red flag/.test(n)) return false;
+  if (/fire weather/.test(n)) return false;
+  return true;
+}
+
+export function wildfireDisasterHits<T extends { type: string; name: string | null }>(
+  hits: T[] | null | undefined,
+): T[] {
+  return (hits ?? []).filter((h) => h.type === "WF" && isWildfireSmokeCandidate(h.name));
+}
+
 function continentFor(lat: number, lon: number): string {
   if (lat >= 7 && lon >= -170 && lon <= -20) return "NAR";
   if (lat < 12 && lon >= -90 && lon <= -30) return "SAR";

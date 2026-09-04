@@ -1,5 +1,15 @@
-import { fetchAmbeeBundle, formatDisaster } from "./ambee";
-import { hotspotCopy, mergeFireCopy, NEARBY_KM, summarizeHazards, type HazardCopy } from "./hazard-copy";
+import { fetchAmbeeBundle, formatDisaster, isWildfireSmokeCandidate, wildfireDisasterHits } from "./ambee";
+import {
+  distantWildfireHits,
+  hotspotCopy,
+  isLocalAirSmoky,
+  localWildfireHits,
+  mergeFireCopy,
+  NEARBY_KM,
+  regionalSmokeCopy,
+  summarizeHazards,
+  type HazardCopy,
+} from "./hazard-copy";
 import { fetchOpenAq } from "./openaq";
 import { formatPlaceName, lookupPlaceName } from "./place";
 import { formatMilesAway } from "./units";
@@ -308,11 +318,32 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     lng: e.lng,
   }));
 
-  const ambeeWfNearby = disasterHits.some((h) => h.type === "WF" && (h.km == null || h.km <= NEARBY_KM));
+  const wfHits = wildfireDisasterHits(disasterHits);
+  const localWfHits = localWildfireHits(wfHits);
+  const distantWfHits = distantWildfireHits(wfHits);
+
+  const freePm25 = openaqHasAir ? openaq.pm25 : airNow.pm25;
+  const freeAqiVal = openaqHasAir ? openaq.aqi : airNow.aqi;
+  const nwsSmoke = fireAlerts.some((a) =>
+    /smoke/i.test(`${a.properties?.event ?? ""} ${a.properties?.headline ?? ""}`),
+  );
+  const airSmoky = isLocalAirSmoky({
+    pm25: freePm25 ?? ambee.aq?.pm25 ?? null,
+    aqi: freeAqiVal ?? ambeeAqi,
+    nwsSmoke,
+  });
+  // Distant WF only counts when local air already looks smoky (plume-arrival test).
+  const regionalWfHit = airSmoky ? distantWfHits[0] ?? null : null;
+
+  const ambeeWfNearby = localWfHits.length > 0;
   const ambeeReportedNearby =
-    ambee.fire?.fireType === "reported" && ambee.fire.nearestKm != null && ambee.fire.nearestKm <= 50;
+    ambee.fire?.fireType === "reported" &&
+    ambee.fire.nearestKm != null &&
+    ambee.fire.nearestKm <= 50 &&
+    isWildfireSmokeCandidate(ambee.fire.fireName ?? ambee.fire.summary);
   // FIRMS / Ambee "detected" heat alone does not claim a breathing-relevant wildfire.
-  const hasWildfireNearby = fireAlerts.length > 0 || ambeeWfNearby || ambeeReportedNearby;
+  const hasWildfireNearby =
+    fireAlerts.length > 0 || ambeeWfNearby || ambeeReportedNearby || regionalWfHit != null;
 
   const pollen = ambee.pollen
     ? {
@@ -331,7 +362,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     Boolean(hit && !hit.place && hit.lat != null && hit.lng != null);
 
   const nearestStorm = disasterHits.find((h) => h.type === "SW" || h.type === "TC");
-  const nearestWf = disasterHits.find((h) => h.type === "WF");
+  const nearestWf = localWfHits[0] ?? regionalWfHit ?? distantWfHits[0];
   const nearestEt = disasterHits.find((h) => h.type === "ET");
 
   const [firePlace, firmsPlace, stormPlace, wfPlace, etPlace] = await Promise.all([
@@ -350,7 +381,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   if (nearestWf && wfPlace) nearestWf.place = wfPlace;
   if (nearestEt && etPlace) nearestEt.place = etPlace;
 
-  const ambeeWfHit = disasterHits.find((h) => h.type === "WF" && (h.km == null || h.km <= NEARBY_KM));
+  const ambeeWfHit = localWfHits[0];
   const wildfireParts: string[] = [];
   if (ambeeWfHit) {
     const label = ambeeWfHit.place
@@ -358,6 +389,13 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
       : ambeeWfHit.name || "Ambee WF";
     wildfireParts.push(
       ambeeWfHit.km != null ? `${label} · ${formatMilesAway(ambeeWfHit.km)}` : label,
+    );
+  } else if (regionalWfHit) {
+    const label = regionalWfHit.name || regionalWfHit.place || "distant wildfire";
+    wildfireParts.push(
+      regionalWfHit.km != null
+        ? `Regional smoke: ${label} · ${formatMilesAway(regionalWfHit.km)}`
+        : `Regional smoke: ${label}`,
     );
   }
   if (fireAlerts.length) {
@@ -422,10 +460,15 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const ambeeStorms = summarizeDisasters(disasterHits, ["SW", "TC"], "storm");
   const ambeeEt = summarizeDisasters(disasterHits, ["ET"]);
   const ambeeVo = summarizeDisasters(disasterHits, ["VO"]);
-  const ambeeWf = summarizeHazards(disasterHits, ["WF"], "wildfire");
+  const ambeeWfLocal = summarizeHazards(localWfHits, ["WF"], "wildfire");
+  const ambeeWfRegional = regionalWfHit ? regionalSmokeCopy(regionalWfHit) : null;
+  const ambeeWf = ambeeWfLocal ?? ambeeWfRegional;
 
   const ambeeReportedFire: HazardCopy | null =
-    ambee.fire?.fireType === "reported" && ambee.fire.nearestKm != null && ambee.fire.nearestKm <= 50
+    ambee.fire?.fireType === "reported" &&
+    ambee.fire.nearestKm != null &&
+    ambee.fire.nearestKm <= 50 &&
+    isWildfireSmokeCandidate(ambee.fire.fireName ?? ambee.fire.summary)
       ? (() => {
           const km = ambee.fire.nearestKm!;
           const loc = (firePlace ?? ambee.fire.fireName)?.replace(/^near\s+/i, "").trim() || null;

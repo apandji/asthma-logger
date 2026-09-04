@@ -296,6 +296,80 @@ body {
   color: var(--danger);
 }
 
+.pattern-tag {
+  font-size: 0.7rem;
+  font-weight: 550;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pattern-tag--early {
+  background: #fff7ed;
+  color: var(--warn);
+}
+
+.pattern-tag--solid {
+  background: #ecfdf3;
+  color: var(--ok);
+}
+
+.pattern-card {
+  padding: 6px 16px 14px;
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.pattern-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pattern-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.pattern-item:last-child {
+  border-bottom: none;
+}
+
+.pattern-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.pattern-item--descriptive .pattern-mark {
+  background: var(--faint);
+}
+
+.pattern-item--no_signal {
+  color: var(--muted);
+}
+
+.pattern-item--no_signal .pattern-mark {
+  background: transparent;
+  border: 1.5px solid var(--faint);
+}
+
+.pattern-note {
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
 .log-row-details {
   padding: 0 14px 14px;
   border-top: 1px solid var(--line);

@@ -42,26 +42,6 @@ export function distantWildfireHits(hits: EnvDisasterHit[] | null | undefined): 
     .sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9));
 }
 
-/**
- * Far wildfire as context when local air is already smoky — not “fire near this town.”
- * Canadian-plume style: distance can be hundreds/thousands of km.
- */
-export function regionalSmokeCopy(hit: EnvDisasterHit): HazardCopy {
-  const place = placePhrase(hit.place);
-  const rawName = (hit.name ?? "").trim();
-  const name = rawName || place || "distant wildfire";
-  const label =
-    place && rawName && !rawName.toLowerCase().includes(place.split(",")[0]!.toLowerCase())
-      ? `${rawName} · ${place}`
-      : name;
-  return {
-    text: "Regional smoke source",
-    detail: hit.km != null ? `${label} · ${formatMilesAway(hit.km)}` : label,
-    nearby: false,
-    km: hit.km,
-  };
-}
-
 /** @deprecated Prefer formatMilesAway from units — kept for existing imports. */
 export function formatKmAway(km: number): string {
   return formatMilesAway(km);
@@ -79,6 +59,64 @@ function parseDistanceToken(value: string, unit: string): number | null {
 function placePhrase(place: string | null | undefined): string | null {
   if (!place) return null;
   return place.replace(/^near\s+/i, "").trim() || null;
+}
+
+/** Drop useless Ambee places like "USA" / country codes. */
+export function usablePlace(place: string | null | undefined): string | null {
+  const p = placePhrase(place);
+  if (!p) return null;
+  if (/^(usa|us|u\.s\.a\.?|united states|can|canada|mex|mexico)$/i.test(p)) return null;
+  return p;
+}
+
+/**
+ * Ambee often sends a bare incident name ("Pinewoods"). Make it read as a fire
+ * when it isn't already a warning/RX/long sentence.
+ */
+export function formatWildfireName(name: string | null | undefined): string | null {
+  if (!name?.trim()) return null;
+  const n = name.trim().replace(/\s+/g, " ");
+  if (/\bRX\b/i.test(n) || /prescribed/i.test(n)) return n;
+  if (/warning|watch|advisory|alert/i.test(n)) return n;
+  if (/\bfire\b/i.test(n) || /\bwildfire\b/i.test(n)) return n;
+  // Short incident-style names: Pinewoods, Bell, Sharp 287, Dallas 191
+  if (n.length <= 48 && n.split(/\s+/).length <= 5 && !/[.;:]/.test(n)) {
+    return `${n} Fire`;
+  }
+  return n;
+}
+
+/** "Pinewoods Fire · Ellsinore, MO" */
+export function formatWildfireLabel(
+  name: string | null | undefined,
+  place: string | null | undefined,
+): string {
+  const fire = formatWildfireName(name);
+  const loc = usablePlace(place);
+  if (fire && loc) return `${fire} · ${loc}`;
+  return fire ?? loc ?? "Wildfire";
+}
+
+/**
+ * Far wildfire as context when local air is already smoky — not “fire near this town.”
+ * Lead with fire name + place; keep “Regional smoke” in the detail line.
+ */
+export function regionalSmokeCopy(hit: EnvDisasterHit): HazardCopy {
+  return {
+    text: formatWildfireLabel(hit.name, hit.place),
+    detail: hit.km != null ? `Regional smoke · ${formatMilesAway(hit.km)}` : "Regional smoke",
+    nearby: false,
+    km: hit.km,
+  };
+}
+
+export function isRegionalSmokeCopy(copy: HazardCopy | null | undefined): boolean {
+  if (!copy) return false;
+  return (
+    copy.text === "Regional smoke source" ||
+    /^regional smoke\b/i.test(copy.detail ?? "") ||
+    /^regional smoke\b/i.test(copy.text)
+  );
 }
 
 function nearestHits(hits: EnvDisasterHit[], types: EnvDisasterType[]): EnvDisasterHit[] {
@@ -105,6 +143,15 @@ export function summarizeHazards(
   const nearby = km == null || km <= NEARBY_KM;
 
   if (km != null && km > DISTANT_KM) {
+    if (noun === "wildfire") {
+      const label = formatWildfireLabel(nearest.name, nearest.place);
+      return {
+        text: "None nearby",
+        detail: `Closest report: ${label} · ${formatMilesAway(km)}`,
+        nearby: false,
+        km,
+      };
+    }
     return {
       text: "None nearby",
       detail: place ? `Closest report: ${place} · ${formatMilesAway(km)}` : `Closest report ${formatMilesAway(km)}`,
@@ -113,7 +160,17 @@ export function summarizeHazards(
     };
   }
 
-  const where = place ? `Near ${place}` : noun === "storm" ? "Storm reported" : "Wildfire reported";
+  const fireLabel = noun === "wildfire" ? formatWildfireLabel(nearest.name, nearest.place) : null;
+  const where =
+    noun === "wildfire"
+      ? fireLabel && fireLabel !== "Wildfire"
+        ? fireLabel
+        : place
+          ? `Near ${place}`
+          : "Wildfire reported"
+      : place
+        ? `Near ${place}`
+        : "Storm reported";
   const alsoNear = matched.filter((h, i) => i > 0 && h.km != null && h.km <= NEARBY_KM);
   if (alsoNear.length === 0 || km == null) {
     return { text: where, detail: km != null ? formatMilesAway(km) : undefined, nearby, km };
@@ -256,7 +313,7 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
 export function mergeFireCopy(hotspot: HazardCopy | null, reported: HazardCopy | null): HazardCopy | null {
   if (reported && hotspot) {
     // Regional smoke (PM-gated distant WF) always leads; heat stays secondary.
-    if (reported.text === "Regional smoke source") {
+    if (isRegionalSmokeCopy(reported)) {
       const heatBit = [hotspot.text, hotspot.detail].filter(Boolean).join(" · ");
       return {
         ...reported,
@@ -285,7 +342,7 @@ export function mergeFireCopy(hotspot: HazardCopy | null, reported: HazardCopy |
 
 export function hazardSeverity(copy: HazardCopy | null, kind: "storm" | "wildfire"): Severity {
   if (!copy) return "green";
-  if (kind === "wildfire" && copy.text === "Regional smoke source") return "orange";
+  if (kind === "wildfire" && isRegionalSmokeCopy(copy)) return "orange";
   if (!copy.nearby) return "green";
   if (kind === "wildfire") {
     if (copy.km != null && copy.km <= 25) return "red";

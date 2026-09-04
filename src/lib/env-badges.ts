@@ -13,6 +13,7 @@ import {
 } from "./env-colors";
 import {
   distantWildfireHits,
+  formatWildfireLabel,
   hazardSeverity,
   isLocalAirSmoky,
   localWildfireHits,
@@ -535,16 +536,11 @@ export function buildEnvSignals(log: AttackLogDTO): {
   let ambeeFireCopy: HazardCopy | null =
     ambeeWfCopy != null ? mergeFireCopy(ambeeHeatOnly, ambeeWfCopy) : null;
   if (!ambeeFireCopy && airSmoky && /regional smoke/i.test(ambee.wildfire ?? "")) {
-    const detail = (ambee.wildfire ?? "")
-      .replace(/^regional smoke(?: source)?\s*[·:|-]\s*/i, "")
-      .replace(/\s*·\s*also satellite heat[\s\S]*$/i, "")
-      .trim();
-    ambeeFireCopy = mergeFireCopy(ambeeHeatOnly, {
-      text: "Regional smoke source",
-      detail: detail || undefined,
-      nearby: false,
-      km: null,
-    });
+    // Prefer live distant WF (name + place) over parsing the stored string.
+    const live = distantWf[0] ? regionalSmokeCopy(distantWf[0]) : null;
+    ambeeFireCopy = live
+      ? mergeFireCopy(ambeeHeatOnly, live)
+      : ambeeHeatOnly;
   }
   if (!ambeeFireCopy) ambeeFireCopy = ambeeHeatOnly;
 

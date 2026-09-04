@@ -73,3 +73,10 @@ npm run dev
 ```
 
 Use `http://localhost:3000/?demo=1` for Denver demo coords without GPS.
+
+## Design docs
+
+- `docs/rewrite-blueprint.md` — principles, data / information architecture, and UX for the planned rewrite.
+- `docs/data-architecture.md` — event / observation / alert model and privacy boundary.
+- `docs/env-signals-and-aggregators.md` — per-signal honesty rules and vendor questions.
+- `docs/ambee-trigger-datasets.md` — which Ambee datasets we use vs skip.

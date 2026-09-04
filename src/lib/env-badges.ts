@@ -55,14 +55,14 @@ const SOURCES = {
   pollenAmbee: "Ambee pollen model (NAB-style risk). Outdoor; not a backyard trap.",
   wildfireNws: "NWS fire/smoke alerts — api.weather.gov",
   wildfireFirms:
-    "NASA FIRMS VIIRS thermal pixels (last 24h). Heat can be industry, ag burns, or campfires — not a confirmed wildfire. Smoke at this pin shows up as PM2.5.",
+    "NASA FIRMS VIIRS thermal pixels (last 24h) — secondary detail only. Heat can be industry, ag burns, or campfires; not a confirmed wildfire. Smoke at this pin shows up as PM2.5.",
   wildfireAmbee:
-    "Ambee fire detection — nearest thermal hotspot distance, not smoke at this pin. Smoke ≈ PM2.5.",
+    "Ambee fire API — prefers fireType=reported (named incident). Detected = satellite heat, shown only as secondary detail. Smoke ≈ PM2.5.",
   weather: "NWS active alerts — api.weather.gov",
   stormsAmbee:
     "Ambee storm reports anywhere in the wider region. Far events are labeled “none nearby” — they are not the weather at this pin.",
   wildfireDisaster:
-    "Ambee WF disaster reports and/or the nearest satellite heat pixel. Place names are reverse-geocoded from the pixel, not a named fire incident. Smoke at the pin shows up as PM2.5.",
+    "Primary: Ambee disasters event_type WF (wildfire tag). FIRMS / detected heat may appear as secondary “also …” detail. Smoke at the pin shows up as PM2.5.",
   volcanoAmbee: "Ambee disasters VO — volcanic ash can travel far. This is an air-quality signal, not a wildfire.",
   extremeTempAmbee: "Ambee disasters ET — heat/cold wave, not a thermometer reading.",
 } as const;
@@ -507,9 +507,17 @@ export function buildEnvSignals(log: AttackLogDTO): {
   const ambeeStormCopy =
     summarizeHazards(ambee.disasters, ["SW", "TC"], "storm") ?? rewriteStormLabel(ambee.storms);
   const freeFireCopy = rewriteFireLabel(free.wildfire);
-  const ambeeHotspotCopy = rewriteFireLabel(ambee.wildfire);
   const ambeeWfCopy = summarizeHazards(ambee.disasters, ["WF"], "wildfire");
-  const ambeeFireCopy = mergeFireCopy(ambeeHotspotCopy, ambeeWfCopy);
+  // Prefer live Ambee WF tag; only pull satellite-heat fragments from the stored string as secondary.
+  const ambeeHeatOnly = (() => {
+    const raw = ambee.wildfire ?? "";
+    const heatChunk = raw.match(/(?:also\s+)?(satellite heat[\s\S]*)/i)?.[1] ?? (/satellite heat/i.test(raw) ? raw : null);
+    return heatChunk ? rewriteFireLabel(heatChunk) : null;
+  })();
+  const ambeeFireCopy =
+    ambeeWfCopy != null
+      ? mergeFireCopy(ambeeHeatOnly, ambeeWfCopy)
+      : rewriteFireLabel(ambee.wildfire);
 
   const rows: EnvSignalRow[] = [
     {
@@ -614,7 +622,7 @@ export function buildEnvSignals(log: AttackLogDTO): {
     },
     {
       key: "wildfire",
-      question: "Wildfires?",
+      question: "Fire?",
       emoji: "🔥",
       free: freeFireCopy
         ? toSignal(
@@ -624,7 +632,13 @@ export function buildEnvSignals(log: AttackLogDTO): {
           )
         : { text: "None nearby", severity: "green", source: SOURCES.wildfireFirms },
       ambee: ambeeFireCopy
-        ? toSignal(ambeeFireCopy, "wildfire", `${SOURCES.wildfireAmbee} ${SOURCES.wildfireDisaster}`)
+        ? toSignal(
+            ambeeFireCopy,
+            "wildfire",
+            /satellite heat|also Satellite/i.test([ambeeFireCopy.text, ambeeFireCopy.detail].join(" "))
+              ? `${SOURCES.wildfireDisaster} ${SOURCES.wildfireAmbee}`
+              : SOURCES.wildfireDisaster,
+          )
         : { text: "None nearby", severity: "green", source: SOURCES.wildfireDisaster },
     },
   ];

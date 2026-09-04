@@ -108,7 +108,7 @@ function SignalValue({ value, id }: { value: EnvSignalValue; id: string }) {
   );
 }
 
-/** Honest collapsed fire line — never claim "wildfire" for satellite heat alone. */
+/** Honest collapsed fire line — prefer Ambee WF / NWS; never lead with FIRMS heat. */
 function collapsedFireHint(log: AttackLogDTO): string | null {
   if (!log.hasWildfireNearby) return null;
   const summary = log.wildfireSummary ?? "";
@@ -116,18 +116,16 @@ function collapsedFireHint(log: AttackLogDTO): string | null {
     log.snapshot?.v === 2 ? (log.snapshot.free.wildfire ?? log.snapshot.ambee.wildfire ?? "") : "";
   const hay = `${summary} | ${snapWild}`;
 
+  if (/Ambee WF|Wildfire reported/i.test(hay)) return "Wildfire reported";
   if (/red flag|fire weather watch|fire weather warning/i.test(hay)) {
     const named = hay.match(/(Red Flag Warning|Fire Weather Watch|Fire Weather Warning)/i)?.[1];
     return named ?? "Fire weather";
   }
-  if (/FIRMS|satellite heat|satellite hotspot|hotspot\(s\)/i.test(hay)) {
-    return "Satellite heat nearby";
-  }
   if (/smoke/i.test(hay)) return "Smoke advisory";
   // Named NWS fire event (not red-flag) — keep the event name when short.
   const nws = summary.split(/[|;]/)[0]?.trim();
-  if (nws && !/^Ambee\b/i.test(nws) && nws.length <= 42) return nws;
-  if (/Ambee/i.test(hay)) return "Fire detection nearby";
+  if (nws && !/FIRMS|Ambee detected|satellite heat/i.test(nws) && nws.length <= 42) return nws;
+  if (/Ambee reported/i.test(hay)) return "Wildfire reported";
   return "Fire signal nearby";
 }
 

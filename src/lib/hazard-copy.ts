@@ -201,25 +201,30 @@ export function rewriteFireLabel(raw: string | null | undefined): HazardCopy | n
   return { text: cleaned, nearby: true, km: null };
 }
 
+/**
+ * Prefer Ambee WF / reported wildfire as the lead. Satellite heat (FIRMS / Ambee
+ * detected) is secondary detail only — not interchangeable with a wildfire claim.
+ */
 export function mergeFireCopy(hotspot: HazardCopy | null, reported: HazardCopy | null): HazardCopy | null {
-  if (hotspot && reported) {
-    const hotKm = hotspot.km ?? 1e9;
-    const repKm = reported.km ?? 1e9;
-    const lead = hotKm <= repKm ? hotspot : reported;
-    const other = lead === hotspot ? reported : hotspot;
-    if (other.km != null && other.km <= NEARBY_KM && other.km !== lead.km) {
-      const otherPlace = other.text.replace(/^Near\s+/i, "").trim();
-      const extra = otherPlace && !lead.text.includes(otherPlace)
-        ? `also ${otherPlace} · ${formatMilesAway(other.km)}`
-        : formatMilesAway(other.km);
+  if (reported && hotspot) {
+    if (!reported.nearby && hotspot.nearby) {
+      // Distant WF report + nearby heat: lead with heat honesty, keep WF as context.
+      const wfBit =
+        reported.text === "None nearby"
+          ? reported.detail
+          : [reported.text, reported.detail].filter(Boolean).join(" · ");
       return {
-        ...lead,
-        detail: [lead.detail, extra].filter(Boolean).join(" · ") || lead.detail,
+        ...hotspot,
+        detail: [hotspot.detail, wfBit ? `report: ${wfBit}` : null].filter(Boolean).join(" · ") || hotspot.detail,
       };
     }
-    return lead;
+    const heatBit = [hotspot.text, hotspot.detail].filter(Boolean).join(" · ");
+    return {
+      ...reported,
+      detail: [reported.detail, heatBit ? `also ${heatBit}` : null].filter(Boolean).join(" · ") || reported.detail,
+    };
   }
-  return hotspot ?? reported;
+  return reported ?? hotspot;
 }
 
 export function hazardSeverity(copy: HazardCopy | null, kind: "storm" | "wildfire"): Severity {

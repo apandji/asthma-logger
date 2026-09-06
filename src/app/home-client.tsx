@@ -14,22 +14,11 @@ import { buildEnvSignals, type EnvSignalValue } from "@/lib/env-badges";
 import { canAttributeRegionalSmoke, wildfireDisasterHits } from "@/lib/ambee";
 import { formatWildfireLabel, isLocalAirSmoky } from "@/lib/hazard-copy";
 import { FEELING_OPTIONS, feelingDisplay } from "@/lib/feelings";
-
-/** Demo coords for testing without GPS. Add ?demo=1 to the URL. */
-const DEMO_LOCATIONS = {
-  denver: {
-    lat: 39.7392,
-    lon: -104.9903,
-    label: "Denver",
-    hint: "often has storm/heat alerts",
-  },
-  wildfire: {
-    lat: 41.7569,
-    lon: -120.1561,
-    label: "Northern CA",
-    hint: "Red Flag / fire-weather area",
-  },
-} as const;
+import {
+  DEBUG_LOCATIONS,
+  isDebugModeEnabled,
+  type DebugLocationKey,
+} from "@/lib/debug-locations";
 
 /** Render PM2.5 with a subscript 2.5 so it doesn't read as "PM 25". */
 function EnvText({ children }: { children: string }) {
@@ -282,7 +271,7 @@ export default function HomeClient() {
   const [enriched, setEnriched] = useState<Record<string, AttackLogDTO>>({});
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
   const [highlightLogId, setHighlightLogId] = useState<string | null>(null);
   const [openLogIds, setOpenLogIds] = useState<Record<string, boolean>>({});
 
@@ -306,7 +295,7 @@ export default function HomeClient() {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      setDemoMode(new URLSearchParams(window.location.search).get("demo") === "1");
+      setDebugMode(isDebugModeEnabled(window.location.search));
       void refresh();
     }, 0);
     return () => clearTimeout(t);
@@ -385,20 +374,20 @@ export default function HomeClient() {
   );
 
   const logInhaler = useCallback(
-    async (latitude: number, longitude: number) => {
+    async (latitude: number, longitude: number, fallbackPlaceName?: string | null) => {
       setBusy(true);
       setStatus("Finding your location…");
       try {
         const id = crypto.randomUUID();
-        let placeName: string | null = null;
+        let placeName: string | null = fallbackPlaceName ?? null;
         try {
           const placeRes = await fetch(`/api/place?lat=${latitude}&lon=${longitude}`, { cache: "no-store" });
           if (placeRes.ok) {
             const data = (await placeRes.json()) as { placeName?: string | null };
-            placeName = data.placeName ?? null;
+            placeName = data.placeName ?? fallbackPlaceName ?? null;
           }
         } catch {
-          // coords still work if the name lookup fails
+          // coords still work if the name lookup fails; keep debugger label if any
         }
 
         const entry: LocalLog = {
@@ -449,9 +438,9 @@ export default function HomeClient() {
     );
   }
 
-  function handleDemoLog(location: keyof typeof DEMO_LOCATIONS) {
-    const demo = DEMO_LOCATIONS[location];
-    void logInhaler(demo.lat, demo.lon);
+  function handleDebugLog(location: DebugLocationKey) {
+    const pin = DEBUG_LOCATIONS[location];
+    void logInhaler(pin.lat, pin.lon, pin.label);
   }
 
   const bannerKind = /error|fail|denied|not available/i.test(status)
@@ -475,22 +464,25 @@ export default function HomeClient() {
         <button type="button" className="log-cta" onClick={handleGeoLog} disabled={busy}>
           {busy ? "Logging…" : "Log inhaler use"}
         </button>
-        {demoMode && (
+        {debugMode && (
           <div className="demo-stack">
-            <span className="demo-label">Demo locations</span>
-            {(Object.entries(DEMO_LOCATIONS) as [keyof typeof DEMO_LOCATIONS, (typeof DEMO_LOCATIONS)[keyof typeof DEMO_LOCATIONS]][]).map(
-              ([key, demo]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`demo-btn${key === "wildfire" ? " demo-btn--alert" : ""}`}
-                  onClick={() => handleDemoLog(key)}
-                  disabled={busy}
-                >
-                  {demo.label} — {demo.hint}
-                </button>
-              ),
-            )}
+            <span className="demo-label">Debugger — simulate inhaler log</span>
+            {(
+              Object.entries(DEBUG_LOCATIONS) as [
+                DebugLocationKey,
+                (typeof DEBUG_LOCATIONS)[DebugLocationKey],
+              ][]
+            ).map(([key, pin]) => (
+              <button
+                key={key}
+                type="button"
+                className={`demo-btn${pin.alert ? " demo-btn--alert" : ""}`}
+                onClick={() => handleDebugLog(key)}
+                disabled={busy}
+              >
+                {pin.label} — {pin.hint}
+              </button>
+            ))}
           </div>
         )}
         {status && bannerKind ? <p className={`banner banner--${bannerKind}`}>{status}</p> : null}

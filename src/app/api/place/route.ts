@@ -10,10 +10,11 @@ export async function GET(request: Request) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
     return NextResponse.json({ error: "lat and lon required" }, { status: 400 });
   }
-  if (lat < 18 || lat > 72 || lon < -180 || lon > -65) {
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
     return NextResponse.json({ placeName: null });
   }
   try {
+    // NWS /points only covers US territories; international pins return null.
     const placeName = await lookupPlaceName(lat, lon);
     return NextResponse.json({ placeName });
   } catch {

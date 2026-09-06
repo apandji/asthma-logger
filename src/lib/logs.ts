@@ -63,8 +63,9 @@ const feelingSchema = z.enum(["ok", "mild", "bad"]).nullable();
 export const createLogSchema = z.object({
   id: z.string().uuid(),
   loggedAt: z.string().datetime(),
-  latitude: z.number().min(18).max(72),
-  longitude: z.number().min(-180).max(-65),
+  // Worldwide — debugger pins include Singapore / Indonesia outside the old US box.
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
   feeling: feelingSchema.optional().default(null),
   deviceId: z.string().max(128).optional().nullable(),
 });

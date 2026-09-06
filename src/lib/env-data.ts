@@ -227,19 +227,34 @@ function summarizeDisasters(
 
 export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEnrichment> {
   const raw: Record<string, unknown> = {};
-  const point = await nwsFetch<NwsPoint>(`https://api.weather.gov/points/${lat.toFixed(4)},${lon.toFixed(4)}`);
-  const nwsPlace = point.properties?.relativeLocation?.properties;
+  // NWS is US-only — fail open so international debugger pins still get OpenAQ/Ambee/FIRMS.
+  let point: NwsPoint | null = null;
+  try {
+    point = await nwsFetch<NwsPoint>(`https://api.weather.gov/points/${lat.toFixed(4)},${lon.toFixed(4)}`);
+  } catch (err) {
+    raw.nwsPointError = err instanceof Error ? err.message : "nws point failed";
+  }
+  const nwsPlace = point?.properties?.relativeLocation?.properties;
   raw.point = nwsPlace ?? null;
   const placeName = formatPlaceName(nwsPlace?.city, nwsPlace?.state);
-  const forecastUrl = point.properties?.forecast;
-  const alertsUrl = `https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`;
+  const forecastUrl = point?.properties?.forecast;
+  const alertsUrl = point
+    ? `https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`
+    : null;
 
   const [forecast, alerts, airNow, openaq, firms, ambee] = await Promise.all([
-    forecastUrl ? nwsFetch<{ properties?: { periods?: NwsPeriod[] } }>(forecastUrl) : Promise.resolve(null),
-    nwsFetch<{ features?: NwsAlert[] }>(alertsUrl).catch((err: Error) => {
-      raw.alertsError = err.message;
-      return { features: [] as NwsAlert[] };
-    }),
+    forecastUrl
+      ? nwsFetch<{ properties?: { periods?: NwsPeriod[] } }>(forecastUrl).catch((err: Error) => {
+          raw.forecastError = err.message;
+          return null;
+        })
+      : Promise.resolve(null),
+    alertsUrl
+      ? nwsFetch<{ features?: NwsAlert[] }>(alertsUrl).catch((err: Error) => {
+          raw.alertsError = err.message;
+          return { features: [] as NwsAlert[] };
+        })
+      : Promise.resolve({ features: [] as NwsAlert[] }),
     fetchAirNow(lat, lon).catch((err: Error) => {
       raw.airNowError = err.message;
       return { aqi: null, aqiCategory: null, pm25: null, ozonePpb: null, raw: null };
@@ -299,8 +314,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     alertLooksLikeExtremeTemp(a.properties?.event ?? "", a.properties?.headline ?? ""),
   );
   const fireAlerts = alertFeatures.filter((a) => alertLooksLikeFire(a.properties?.event ?? "", a.properties?.headline ?? ""));
-  const hasStormAlert = stormAlerts.length > 0;
-  const stormSummary = hasStormAlert
+  const nwsStormSummary = stormAlerts.length
     ? stormAlerts.slice(0, 3).map((a) => a.properties?.event ?? a.properties?.headline ?? "Storm alert").join("; ")
     : null;
   const nwsExtremeTemp = extremeTempAlerts.length
@@ -462,7 +476,7 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
     ozoneStation: openaqHasAir ? openaq.ozoneStation : null,
     pollen: null,
     wildfire: freeWildfireParts.length ? freeWildfireParts.join(" · ") : null,
-    storms: stormSummary,
+    storms: nwsStormSummary,
     extremeTempEvent: nwsExtremeTemp,
     volcano: null,
     disasters: null,
@@ -471,6 +485,9 @@ export async function enrichEnvironment(lat: number, lon: number): Promise<EnvEn
   const ambeeStorms = summarizeDisasters(disasterHits, ["SW", "TC"], "storm");
   const ambeeEt = summarizeDisasters(disasterHits, ["ET"]);
   const ambeeVo = summarizeDisasters(disasterHits, ["VO"]);
+  // Prefer NWS alerts; fall back to Ambee storms for international pins (no NWS).
+  const stormSummary = nwsStormSummary ?? ambeeStorms;
+  const hasStormAlert = Boolean(stormSummary);
   const ambeeWfLocal = summarizeHazards(localWfHits, ["WF"], "wildfire");
   const ambeeWfRegional = regionalWfHit ? regionalSmokeCopy(regionalWfHit) : null;
   const ambeeWf = ambeeWfLocal ?? ambeeWfRegional;

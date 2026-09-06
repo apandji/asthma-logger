@@ -72,4 +72,5 @@ npm install
 npm run dev
 ```
 
-Use `http://localhost:3000/?demo=1` for Denver demo coords without GPS.
+Use `http://localhost:3000/?debug=1` (or `?demo=1`) for debugger pins without GPS:
+Miami (storms), Los Angeles, Bismarck ND, Singapore, Yogyakarta Indonesia.

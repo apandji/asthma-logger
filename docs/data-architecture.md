@@ -232,6 +232,8 @@ flowchart TB
 
 No vendor belongs in this layer. If Ambee replaces AirNow, only the observation `source` and `spatialScale` change.
 
+The same rate table scores upcoming hours. That path is [Predictive engine](./predictive-engine.md).
+
 ---
 
 ## 8. Privacy boundary

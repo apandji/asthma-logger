@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import {
-  buildOllamaPrompt,
+  buildNarratorPrompt,
   parseNarratorJson,
   summarizeWithTemplate,
   toNarratorInput,
 } from "@/lib/insights/summarize";
+import { styleBand, styleTemperature } from "@/lib/insights/style";
 import type { LiftReport, NarratorOutput } from "@/lib/insights/types";
 
 export const runtime = "nodejs";
@@ -13,6 +14,8 @@ type Body = {
   report?: LiftReport;
   /** Force template even if Ollama is up */
   narrator?: "template" | "ollama";
+  /** 0 clinical → 100 poetic */
+  styleScore?: number;
 };
 
 /**
@@ -33,8 +36,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "report required" }, { status: 400 });
   }
 
-  const input = toNarratorInput(body.report);
+  const input = toNarratorInput(body.report, body.styleScore ?? 35);
   const want = body.narrator ?? "ollama";
+  const band = styleBand(input.styleScore ?? 35);
 
   if (want === "template") {
     const out: NarratorOutput = summarizeWithTemplate(input);
@@ -43,7 +47,7 @@ export async function POST(req: Request) {
 
   const host = (process.env.OLLAMA_HOST ?? "http://127.0.0.1:11434").replace(/\/$/, "");
   const model = process.env.OLLAMA_MODEL ?? "gemma2:2b";
-  const prompt = buildOllamaPrompt(input);
+  const prompt = buildNarratorPrompt(input);
   const started = Date.now();
 
   try {
@@ -55,7 +59,7 @@ export async function POST(req: Request) {
         prompt,
         stream: false,
         format: "json",
-        options: { temperature: 0.2, num_predict: 180 },
+        options: { temperature: styleTemperature(band), num_predict: 200 },
       }),
       signal: AbortSignal.timeout(60_000),
     });
@@ -74,7 +78,13 @@ export async function POST(req: Request) {
 
     const data = (await res.json()) as { response?: string };
     const latencyMs = Date.now() - started;
-    const parsed = parseNarratorJson(data.response ?? "", model, latencyMs);
+    const parsed = parseNarratorJson(
+      data.response ?? "",
+      model,
+      latencyMs,
+      "ollama",
+      input.styleScore,
+    );
     if (!parsed) {
       return NextResponse.json({
         ...summarizeWithTemplate(input),

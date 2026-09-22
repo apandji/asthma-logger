@@ -8,6 +8,7 @@ import { buildFramesFromLogs, type FramesBuildMeta } from "@/lib/insights/frames
 import { DEFAULT_GATE, DEMO_GATE, computeLift, formatLift } from "@/lib/insights/lift";
 import { loadDiaryLogs } from "@/lib/insights/load-logs";
 import { summarizeWithTemplate, toNarratorInput } from "@/lib/insights/summarize";
+import { clampStyle, styleBand, styleLabel } from "@/lib/insights/style";
 import type { FeatureFrame, LiftReport, NarratorOutput } from "@/lib/insights/types";
 import { summarizeWithWebLLM, WEBLLM_GEMMA_MODEL } from "@/lib/insights/webllm-narrator";
 
@@ -25,10 +26,13 @@ export default function InsightsDemo() {
   const [loadingLogs, setLoadingLogs] = useState(true);
 
   const [mode, setMode] = useState<NarratorMode>("template");
+  const [styleScore, setStyleScore] = useState(35);
   const [webllmOut, setWebllmOut] = useState<NarratorOutput | null>(null);
   const [webllmBusy, setWebllmBusy] = useState(false);
   const [webllmProgress, setWebllmProgress] = useState<string | null>(null);
   const [webllmError, setWebllmError] = useState<string | null>(null);
+
+  const band = styleBand(styleScore);
 
   const refreshLogs = useCallback(async () => {
     setLoadingLogs(true);
@@ -76,34 +80,56 @@ export default function InsightsDemo() {
 
   const gate = meta?.supplementedDemoBaselines ? DEMO_GATE : DEFAULT_GATE;
   const report: LiftReport = useMemo(() => computeLift(frames, gate), [frames, gate]);
-  const template = useMemo(() => summarizeWithTemplate(toNarratorInput(report)), [report]);
+  const template = useMemo(
+    () => summarizeWithTemplate(toNarratorInput(report, styleScore)),
+    [report, styleScore],
+  );
 
-  async function runWebLLM() {
-    setWebllmBusy(true);
-    setWebllmError(null);
-    setWebllmProgress("Checking WebGPU…");
-    try {
-      if (typeof navigator !== "undefined" && !("gpu" in navigator)) {
-        setWebllmError(
-          "WebGPU not available in this browser. Use Chrome/Edge on desktop for the Gemma demo.",
-        );
+  const runWebLLM = useCallback(
+    async (score = styleScore) => {
+      setWebllmBusy(true);
+      setWebllmError(null);
+      setWebllmProgress("Checking WebGPU…");
+      try {
+        if (typeof navigator !== "undefined" && !("gpu" in navigator)) {
+          setWebllmError(
+            "WebGPU not available in this browser. Use Chrome/Edge on desktop for the Gemma demo.",
+          );
+        }
+        const input = toNarratorInput(report, score);
+        const out = await summarizeWithWebLLM(input, (t) => setWebllmProgress(t));
+        setWebllmOut(out);
+        setMode("webllm");
+        if (out.model?.startsWith("WebLLM error")) {
+          setWebllmError(out.model);
+        }
+      } catch (e) {
+        setWebllmError(e instanceof Error ? e.message : "WebLLM failed");
+      } finally {
+        setWebllmBusy(false);
+        setWebllmProgress(null);
       }
-      const input = toNarratorInput(report);
-      const out = await summarizeWithWebLLM(input, (t) => setWebllmProgress(t));
-      setWebllmOut(out);
-      setMode("webllm");
-      if (out.model?.startsWith("WebLLM error")) {
-        setWebllmError(out.model);
-      }
-    } catch (e) {
-      setWebllmError(e instanceof Error ? e.message : "WebLLM failed");
-    } finally {
-      setWebllmBusy(false);
-      setWebllmProgress(null);
-    }
-  }
+    },
+    [report, styleScore],
+  );
+
+  // When style band changes under WebLLM mode, regenerate (debounced via band, not every tick).
+  useEffect(() => {
+    if (mode !== "webllm") return;
+    if (webllmBusy) return;
+    if (webllmOut?.styleBand === band) return;
+    const t = window.setTimeout(() => {
+      void runWebLLM(styleScore);
+    }, 450);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- regenerate only when band flips
+  }, [band, mode]);
 
   const narrative = mode === "webllm" && webllmOut ? webllmOut : template;
+  const evidenceUnchanged =
+    mode === "webllm" && webllmOut
+      ? "Evidence unchanged — lift table is the same; only the voice moved."
+      : "Evidence unchanged — slider only rewrites the sentence.";
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10">
@@ -115,8 +141,8 @@ export default function InsightsDemo() {
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Insights demo</h1>
         <p className="text-sm leading-relaxed text-neutral-600">
-          Correlations come from your logs in TypeScript. Gemma runs in this browser via WebLLM and
-          only narrates the table.
+          Correlations come from your logs in TypeScript. Gemma (or the template) only narrates the
+          table — the style slider changes voice, not the numbers.
         </p>
       </header>
 
@@ -216,13 +242,34 @@ export default function InsightsDemo() {
               mode === "webllm" ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700"
             }`}
             onClick={() => {
-              if (webllmOut && !webllmBusy) setMode("webllm");
+              if (webllmOut && !webllmBusy && webllmOut.styleBand === band) setMode("webllm");
               else void runWebLLM();
             }}
             disabled={webllmBusy}
           >
             {webllmBusy ? "Loading Gemma…" : "Gemma (WebLLM)"}
           </button>
+        </div>
+
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50/80 px-4 py-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs text-neutral-600">
+            <span>Clinical</span>
+            <span className="font-medium text-neutral-900">
+              {styleLabel(band)} · {clampStyle(styleScore)}
+            </span>
+            <span>Poetic</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={styleScore}
+            aria-label="Narration style from clinical to poetic"
+            className="w-full accent-neutral-900"
+            onChange={(e) => setStyleScore(Number(e.target.value))}
+          />
+          <p className="mt-2 text-[11px] leading-relaxed text-neutral-500">{evidenceUnchanged}</p>
         </div>
 
         {webllmProgress ? (
@@ -234,6 +281,7 @@ export default function InsightsDemo() {
           <p className="mt-2 text-xs text-neutral-500">{narrative.caveat}</p>
           <p className="mt-3 font-mono text-[11px] text-neutral-400">
             source={narrative.source}
+            {narrative.styleBand ? ` · ${narrative.styleBand}` : ""}
             {narrative.model ? ` · ${narrative.model}` : ""}
             {narrative.latencyMs != null ? ` · ${narrative.latencyMs}ms` : ""}
             {narrative.drivers.length > 0 ? ` · ${narrative.drivers.join(", ")}` : ""}
@@ -242,9 +290,9 @@ export default function InsightsDemo() {
 
         {webllmError ? <p className="text-sm text-red-600">{webllmError}</p> : null}
         <p className="text-xs leading-relaxed text-neutral-500">
-          First run downloads ~{WEBLLM_GEMMA_MODEL} weights into browser cache (WebGPU). Re-runs are
-          fast. Mark feeling <strong>ok</strong> on quiet days for real usual-day rows; add{" "}
-          <code className="rounded bg-neutral-100 px-1">?strict=1</code> to disable demo baselines.
+          Template updates instantly with the slider. Gemma re-runs when the band flips (clinical /
+          plain / poetic). First Gemma load downloads {WEBLLM_GEMMA_MODEL} into browser cache
+          (WebGPU). Mark feeling <strong>ok</strong> on quiet days for real usual-day rows.
         </p>
       </section>
     </main>

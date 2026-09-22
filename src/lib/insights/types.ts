@@ -53,6 +53,8 @@ export type NarratorInput = {
     gated: boolean;
   }>;
   rules: string[];
+  /** 0 clinical → 100 poetic */
+  styleScore?: number;
 };
 
 export type NarratorOutput = {
@@ -63,6 +65,8 @@ export type NarratorOutput = {
   source: "template" | "ollama" | "webllm" | "stub";
   model?: string;
   latencyMs?: number;
+  styleScore?: number;
+  styleBand?: "clinical" | "plain" | "poetic";
 };
 
 export const NARRATOR_RULES = [

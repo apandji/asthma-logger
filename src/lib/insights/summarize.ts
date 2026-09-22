@@ -5,7 +5,7 @@ import {
   clampStyle,
   styleBand,
   stylePromptBlock,
-  type StyleBand,
+  type StyleExampleFacts,
   type StyleScore,
 } from "./style";
 
@@ -34,109 +34,46 @@ export function toNarratorInput(report: LiftReport, styleScore: StyleScore = 35)
 }
 
 const CAVEAT =
-  "Outdoor air only — not a medical diagnosis. Comparison to your usual logged days, not a prediction. Style changes voice, not the numbers.";
+  "Outdoor air only — not a medical diagnosis. Comparison to your usual logged days, not a prediction.";
 
-/** Zero-model narrator — always available on device; respects style bands. */
+/**
+ * Fixed factual narrator — always available on device.
+ * Style score is ignored here; only Gemma / Ollama use clinical→poetic voice.
+ */
 export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
-  const score = clampStyle(input.styleScore ?? 35);
-  const band = styleBand(score);
   const gated = input.rows.filter((r) => r.gated);
   const drivers = gated.slice(0, 3).map((r) => `${r.bin}:${r.level}`);
 
   if (gated.length === 0) {
     const headline =
       input.nBaselines < 12
-        ? emptySampleHeadline(band, input.nAttacks, input.nBaselines)
-        : emptyGateHeadline(band, input.nAttacks, input.nBaselines);
+        ? `You have ${input.nAttacks} attack logs and ${input.nBaselines} usual-day samples. Keep logging quiet days so we can compare.`
+        : `Nothing clears the sample gate yet (${input.nAttacks} attacks, ${input.nBaselines} usual days). Patterns need more repeats.`;
     return {
       headline,
       caveat: CAVEAT,
       drivers: [],
       source: "template",
-      styleScore: score,
-      styleBand: band,
     };
   }
 
   const top = gated[0];
   const second = gated[1];
   const liftLabel = formatLift(top.lift);
-  const counts = `${top.attacksWith} of ${input.nAttacks} attacks vs ${top.baselinesWith} of ${input.nBaselines} usual days`;
-  const headline = styledHeadline(band, {
-    binLabel: labelBin(top.bin),
-    level: top.level,
-    counts,
-    liftLabel,
-    secondLabel: second ? `${labelBin(second.bin)} (${second.level})` : null,
-    season: input.season,
-  });
+  let headline = `${labelBin(top.bin)} (${top.level}) showed up on ${top.attacksWith} of ${input.nAttacks} attacks vs ${top.baselinesWith} of ${input.nBaselines} usual days (~${liftLabel}×).`;
+  if (second) {
+    headline += ` Next: ${labelBin(second.bin)} (${second.level}).`;
+  }
+  if (input.season) {
+    headline += ` Season context: ${input.season}.`;
+  }
 
   return {
     headline,
     caveat: CAVEAT,
     drivers,
     source: "template",
-    styleScore: score,
-    styleBand: band,
   };
-}
-
-function emptySampleHeadline(band: StyleBand, attacks: number, baselines: number): string {
-  if (band === "poetic") {
-    return `The diary is still thin — ${attacks} attack marks and ${baselines} quiet-day samples. Keep a few ordinary days so the air has something honest to compare against.`;
-  }
-  if (band === "plain") {
-    return `You have ${attacks} attack logs and ${baselines} usual-day samples. Keep logging quiet days so we can compare.`;
-  }
-  return `Insufficient baseline samples for association analysis (n_attack=${attacks}, n_usual=${baselines}). Continue usual-day logging.`;
-}
-
-function emptyGateHeadline(band: StyleBand, attacks: number, baselines: number): string {
-  if (band === "poetic") {
-    return `Nothing has repeated enough to speak of yet (${attacks} attacks, ${baselines} usual days). Patterns need more weather to echo.`;
-  }
-  if (band === "plain") {
-    return `Nothing clears the sample gate yet (${attacks} attacks, ${baselines} usual days). Patterns need more repeats.`;
-  }
-  return `No gated associations (n_attack=${attacks}, n_usual=${baselines}). Raise sample counts before interpreting lift.`;
-}
-
-function styledHeadline(
-  band: StyleBand,
-  opts: {
-    binLabel: string;
-    level: string;
-    counts: string;
-    liftLabel: string;
-    secondLabel: string | null;
-    season: string | null;
-  },
-): string {
-  const { binLabel, level, counts, liftLabel, secondLabel, season } = opts;
-
-  if (band === "clinical") {
-    let h = `${binLabel} ${level}: elevated co-occurrence — ${counts} (lift ≈ ${liftLabel}×).`;
-    if (secondLabel) h += ` Secondary: ${secondLabel}.`;
-    if (season) h += ` Season stratum: ${season}.`;
-    return h;
-  }
-
-  if (band === "plain") {
-    let h = `${binLabel} (${level}) showed up more on attack days — ${counts} (~${liftLabel}×).`;
-    if (secondLabel) h += ` Also watching: ${secondLabel}.`;
-    if (season) h += ` Season context: ${season}.`;
-    return h;
-  }
-
-  // poetic
-  let h = `When the outdoor air leans ${level} on ${binLabel.toLowerCase()}, your diary marks it more often — ${counts} (~${liftLabel}×).`;
-  if (secondLabel) h += ` A quieter echo: ${secondLabel}.`;
-  if (season) h += ` ${capitalize(season)} sits behind the pattern.`;
-  return h;
-}
-
-function capitalize(s: string): string {
-  return s.length ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
 export function labelBin(bin: string): string {
@@ -167,16 +104,34 @@ export function buildOllamaPrompt(input: NarratorInput): string {
   return buildNarratorPrompt(input);
 }
 
+function exampleFactsFromInput(input: NarratorInput): StyleExampleFacts | undefined {
+  const top = input.rows.find((r) => r.gated) ?? input.rows[0];
+  if (!top) return undefined;
+  return {
+    binLabel: labelBin(top.bin),
+    level: top.level,
+    attacksWith: top.attacksWith,
+    nAttacks: input.nAttacks,
+    baselinesWith: top.baselinesWith,
+    nBaselines: input.nBaselines,
+    liftLabel: formatLift(top.lift),
+  };
+}
+
 export function buildNarratorPrompt(input: NarratorInput): string {
   const score = clampStyle(input.styleScore ?? 35);
   const band = styleBand(score);
+  const example = exampleFactsFromInput(input);
 
   return [
     "You write one honest insight for an asthma outdoor-air diary.",
     "You are given a precomputed lift table. Do not invent counts or new drivers.",
     'Reply with ONLY compact JSON: {"headline":"...","caveat":"...","drivers":["bin:level",...]}',
     "",
-    stylePromptBlock(band),
+    "IMPORTANT: clinical / plain / poetic must be unmistakably different registers.",
+    "If you write the same sentence shape for every style, you fail the task.",
+    "",
+    stylePromptBlock(band, example),
     "",
     "Rules:",
     ...input.rules.map((r) => `- ${r}`),

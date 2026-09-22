@@ -10,6 +10,7 @@ import { loadDiaryLogs } from "@/lib/insights/load-logs";
 import { summarizeWithTemplate, toNarratorInput } from "@/lib/insights/summarize";
 import type { FeatureFrame, LiftReport, NarratorOutput } from "@/lib/insights/types";
 import { summarizeWithWebLLM, WEBLLM_GEMMA_MODEL } from "@/lib/insights/webllm-narrator";
+import { checkWebLLMSupport } from "@/lib/insights/webllm-support";
 
 type NarratorMode = "template" | "webllm";
 type DataMode = "diary" | "synthetic";
@@ -29,6 +30,7 @@ export default function InsightsDemo() {
   const [webllmBusy, setWebllmBusy] = useState(false);
   const [webllmProgress, setWebllmProgress] = useState<string | null>(null);
   const [webllmError, setWebllmError] = useState<string | null>(null);
+  const [webllmBlocked, setWebllmBlocked] = useState<string | null>(null);
 
   const refreshLogs = useCallback(async () => {
     setLoadingLogs(true);
@@ -74,6 +76,22 @@ export default function InsightsDemo() {
     void refreshLogs();
   }, [refreshLogs]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const support = await checkWebLLMSupport();
+      if (cancelled) return;
+      if (!support.ok) {
+        setWebllmBlocked(support.reason);
+      } else {
+        setWebllmBlocked(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const gate = meta?.supplementedDemoBaselines ? DEMO_GATE : DEFAULT_GATE;
   const report: LiftReport = useMemo(() => computeLift(frames, gate), [frames, gate]);
   const template = useMemo(() => summarizeWithTemplate(toNarratorInput(report)), [report]);
@@ -83,10 +101,12 @@ export default function InsightsDemo() {
     setWebllmError(null);
     setWebllmProgress("Checking WebGPU…");
     try {
-      if (typeof navigator !== "undefined" && !("gpu" in navigator)) {
-        setWebllmError(
-          "WebGPU not available in this browser. Use Chrome/Edge on desktop for the Gemma demo.",
-        );
+      const support = await checkWebLLMSupport();
+      if (!support.ok) {
+        setWebllmBlocked(support.reason);
+        setWebllmError(support.reason);
+        setMode("template");
+        return;
       }
       const input = toNarratorInput(report);
       const out = await summarizeWithWebLLM(input, (t) => setWebllmProgress(t));
@@ -94,9 +114,11 @@ export default function InsightsDemo() {
       setMode("webllm");
       if (out.model?.startsWith("WebLLM error")) {
         setWebllmError(out.model);
+        setMode("template");
       }
     } catch (e) {
       setWebllmError(e instanceof Error ? e.message : "WebLLM failed");
+      setMode("template");
     } finally {
       setWebllmBusy(false);
       setWebllmProgress(null);
@@ -214,12 +236,14 @@ export default function InsightsDemo() {
             type="button"
             className={`rounded-full px-3 py-1 text-xs ${
               mode === "webllm" ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700"
-            }`}
+            } disabled:cursor-not-allowed disabled:opacity-50`}
             onClick={() => {
+              if (webllmBlocked) return;
               if (webllmOut && !webllmBusy) setMode("webllm");
               else void runWebLLM();
             }}
-            disabled={webllmBusy}
+            disabled={webllmBusy || Boolean(webllmBlocked)}
+            title={webllmBlocked ?? undefined}
           >
             {webllmBusy ? "Loading Gemma…" : "Gemma (WebLLM)"}
           </button>
@@ -227,6 +251,12 @@ export default function InsightsDemo() {
 
         {webllmProgress ? (
           <p className="font-mono text-[11px] text-neutral-500">{webllmProgress}</p>
+        ) : null}
+
+        {webllmBlocked ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950">
+            {webllmBlocked}
+          </p>
         ) : null}
 
         <article className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
@@ -240,10 +270,14 @@ export default function InsightsDemo() {
           </p>
         </article>
 
-        {webllmError ? <p className="text-sm text-red-600">{webllmError}</p> : null}
+        {webllmError && !webllmBlocked ? (
+          <p className="text-sm text-red-600">{webllmError}</p>
+        ) : null}
         <p className="text-xs leading-relaxed text-neutral-500">
-          First run downloads ~{WEBLLM_GEMMA_MODEL} weights into browser cache (WebGPU). Re-runs are
-          fast. Mark feeling <strong>ok</strong> on quiet days for real usual-day rows; add{" "}
+          Gemma needs desktop Chrome/Edge with WebGPU (~{WEBLLM_GEMMA_MODEL}, ~1.5GB first
+          download). iPhone Safari is blocked on purpose — loading the model often hard-crashes
+          the tab. Template narrator always works. Mark feeling <strong>ok</strong> on quiet days
+          for real usual-day rows; add{" "}
           <code className="rounded bg-neutral-100 px-1">?strict=1</code> to disable demo baselines.
         </p>
       </section>

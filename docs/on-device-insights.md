@@ -147,7 +147,9 @@ If the model returns prose without JSON, the template path is the fallback. Neve
 Open `/insights` after `npm run dev`.
 
 1. **Lift from current data** — merges `/api/logs` (Postgres) with IndexedDB after sync. Attack rows = inhaler logs; usual-day rows = logs where feeling is **ok** (or demo baselines until you have enough ok-days).
-2. **Gemma in the browser** — click **Gemma (WebLLM)**. Uses `gemma-2-2b-it-q4f16_1-MLC` via WebGPU; first load downloads weights to cache. Chrome/Edge desktop recommended.
+2. **Gemma in the browser** — click **Gemma (WebLLM)**. Uses `gemma-2-2b-it-q4f16_1-MLC` via WebGPU; first load downloads ~1.5GB weights to cache. **Chrome/Edge desktop only.**
+
+**iPhone / iPad Safari:** WebLLM is blocked on purpose. Loading Gemma 2B often hard-crashes the tab with “A problem repeatedly occurred” (per-tab memory/GPU limit ≈1–1.5GB — not a recoverable JS error). The template narrator still works on mobile.
 
 Template narrator works with no keys and no GPU. Optional laptop Ollama path: `POST /api/insights/summarize` (see route file).
 

@@ -2,8 +2,9 @@
 
 import { buildOllamaPrompt, parseNarratorJson, summarizeWithTemplate } from "./summarize";
 import type { NarratorInput, NarratorOutput } from "./types";
+import { checkWebLLMSupport } from "./webllm-support";
 
-/** Prebuilt WebLLM model — Gemma 2 2B instruct, ~1.5GB first download. */
+/** Prebuilt WebLLM model — Gemma 2 2B instruct, ~1.5GB first download. Desktop WebGPU only. */
 export const WEBLLM_GEMMA_MODEL = "gemma-2-2b-it-q4f16_1-MLC";
 
 type WebLLMEngine = {
@@ -25,9 +26,20 @@ export function getWebLLMLoadProgress(): string {
   return loadProgress;
 }
 
+/** Clear a failed init so the next attempt can retry after the user switches browsers. */
+export function resetWebLLMEngine(): void {
+  enginePromise = null;
+  loadProgress = "";
+}
+
 export async function getWebLLMEngine(onProgress?: (text: string) => void): Promise<WebLLMEngine> {
   if (!enginePromise) {
     enginePromise = (async () => {
+      const support = await checkWebLLMSupport();
+      if (!support.ok) {
+        throw new Error(support.reason ?? "WebLLM is not supported in this browser");
+      }
+
       const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
       return (await CreateMLCEngine(
         WEBLLM_GEMMA_MODEL,
@@ -39,7 +51,11 @@ export async function getWebLLMEngine(onProgress?: (text: string) => void): Prom
         },
         { context_window_size: 4096 },
       )) as WebLLMEngine;
-    })();
+    })().catch((err) => {
+      // Don't cache a rejected promise forever — allow a clean retry.
+      enginePromise = null;
+      throw err;
+    });
   } else if (onProgress && loadProgress) {
     onProgress(loadProgress);
   }

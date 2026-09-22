@@ -170,7 +170,9 @@ sequenceDiagram
 
 ---
 
-## 8. Where Jev fits
+## 8. Where Jev fits (and where a small LLM fits)
+
+For a Gemma / on-device **narrator** over the lift table — not over raw logs — see [on-device-insights.md](./on-device-insights.md). That path is for the sentence on the card. This section is about labeling unstructured alerts into bins.
 
 [Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) returns typed probabilities for questions you already wrote. It does not rank hours, compute a likelihood ratio, or write the card. Output tokens are free; input tokens and a second call per hour are not.
 

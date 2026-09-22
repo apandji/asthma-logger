@@ -458,6 +458,12 @@ export default function HomeClient() {
         <p className="app-lede">
           Tap when you use your inhaler. Open a log for outdoor air; tap a number to see where it came from.
         </p>
+        <p className="app-lede">
+          <a href="/insights" className="underline underline-offset-2">
+            Insights demo
+          </a>{" "}
+          — weather correlations + on-device Gemma narration.
+        </p>
       </header>
 
       <section>

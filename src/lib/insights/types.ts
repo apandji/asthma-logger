@@ -60,7 +60,7 @@ export type NarratorOutput = {
   caveat: string;
   drivers: string[];
   /** Which narrator produced this */
-  source: "template" | "ollama" | "stub";
+  source: "template" | "ollama" | "webllm" | "stub";
   model?: string;
   latencyMs?: number;
 };

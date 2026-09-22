@@ -107,7 +107,12 @@ export function buildOllamaPrompt(input: NarratorInput): string {
   ].join("\n");
 }
 
-export function parseNarratorJson(text: string, model: string, latencyMs: number): NarratorOutput | null {
+export function parseNarratorJson(
+  text: string,
+  model: string,
+  latencyMs: number,
+  source: NarratorOutput["source"] = "ollama",
+): NarratorOutput | null {
   const trimmed = text.trim();
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
@@ -128,7 +133,7 @@ export function parseNarratorJson(text: string, model: string, latencyMs: number
       drivers: Array.isArray(parsed.drivers)
         ? parsed.drivers.filter((d): d is string => typeof d === "string")
         : [],
-      source: "ollama",
+      source,
       model,
       latencyMs,
     };

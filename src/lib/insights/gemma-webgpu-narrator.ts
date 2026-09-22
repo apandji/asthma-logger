@@ -2,7 +2,7 @@
 
 import { buildOllamaPrompt, parseNarratorJson, summarizeWithTemplate } from "./summarize";
 import type { NarratorInput, NarratorOutput } from "./types";
-import { checkOnDeviceGemmaSupport } from "./webllm-support";
+import { checkOnDeviceGemmaSupport, type OnDeviceGemmaHints } from "./webllm-support";
 
 /** Gemma 3 270M instruct Q8_0 via gemma-webgpu — sized for capable iPhones (~300MB). */
 export const GEMMA_WEBGPU_MODEL = "270m";
@@ -33,10 +33,11 @@ export function resetGemmaWebGpuEngine(): void {
 
 export async function getGemmaWebGpuEngine(
   onProgress?: (text: string) => void,
+  hints?: OnDeviceGemmaHints,
 ): Promise<GemmaWebGpuEngine> {
   if (!enginePromise) {
     enginePromise = (async () => {
-      const support = await checkOnDeviceGemmaSupport();
+      const support = await checkOnDeviceGemmaSupport(hints);
       if (support.path !== "gemma-webgpu") {
         throw new Error(
           support.reason ?? "Gemma 270M WebGPU path is not available in this browser",
@@ -68,10 +69,11 @@ export async function getGemmaWebGpuEngine(
 export async function summarizeWithGemmaWebGpu(
   input: NarratorInput,
   onProgress?: (text: string) => void,
+  hints?: OnDeviceGemmaHints,
 ): Promise<NarratorOutput> {
   const started = Date.now();
   try {
-    const engine = await getGemmaWebGpuEngine(onProgress);
+    const engine = await getGemmaWebGpuEngine(onProgress, hints);
     engine.resetConversation();
     const prompt = buildOllamaPrompt(input);
     engine.addUserMessage(prompt);

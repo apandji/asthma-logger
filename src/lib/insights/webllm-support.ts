@@ -22,6 +22,13 @@ export type OnDeviceGemmaSupport = {
   modelId: string;
 };
 
+export type OnDeviceGemmaHints = {
+  /** Force iOS-like routing (e.g. Insights `?device=ios` for demos). */
+  forceIos?: boolean;
+  /** Force WebGPU yes/no when probing is unavailable in a test harness. */
+  forceWebgpu?: boolean;
+};
+
 function isIOSLike(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
@@ -51,35 +58,11 @@ export function isIOSLikeDevice(): boolean {
   return isIOSLike();
 }
 
-/** @deprecated Prefer checkOnDeviceGemmaSupport — kept for call sites that only care about WebLLM 2B. */
-export type WebLLMSupport = {
-  ok: boolean;
-  reason: string | null;
-  iosLike: boolean;
-  webgpu: boolean;
-};
-
-/** Desktop WebLLM Gemma 2B only — never ok on iOS. */
-export async function checkWebLLMSupport(): Promise<WebLLMSupport> {
-  const full = await checkOnDeviceGemmaSupport();
-  if (full.path === "webllm") {
-    return { ok: true, reason: null, iosLike: full.iosLike, webgpu: full.webgpu };
-  }
-  return {
-    ok: false,
-    reason:
-      full.path === "gemma-webgpu"
-        ? "Use the Gemma 270M path on this device instead of WebLLM 2B."
-        : (full.reason ?? "WebLLM is not supported in this browser"),
-    iosLike: full.iosLike,
-    webgpu: full.webgpu,
-  };
-}
-
-export async function checkOnDeviceGemmaSupport(): Promise<OnDeviceGemmaSupport> {
-  const iosLike = isIOSLike();
-  const webgpu = await hasUsableWebGPU();
-
+/** Pure routing used by the async probe and unit tests. */
+export function resolveOnDeviceGemmaSupport(
+  iosLike: boolean,
+  webgpu: boolean,
+): OnDeviceGemmaSupport {
   if (iosLike) {
     if (!webgpu) {
       return {
@@ -126,4 +109,40 @@ export async function checkOnDeviceGemmaSupport(): Promise<OnDeviceGemmaSupport>
     buttonLabel: "Gemma (WebLLM)",
     modelId: "gemma-2-2b-it-q4f16_1-MLC",
   };
+}
+
+/** @deprecated Prefer checkOnDeviceGemmaSupport — kept for call sites that only care about WebLLM 2B. */
+export type WebLLMSupport = {
+  ok: boolean;
+  reason: string | null;
+  iosLike: boolean;
+  webgpu: boolean;
+};
+
+/** Desktop WebLLM Gemma 2B only — never ok on iOS. */
+export async function checkWebLLMSupport(
+  hints?: OnDeviceGemmaHints,
+): Promise<WebLLMSupport> {
+  const full = await checkOnDeviceGemmaSupport(hints);
+  if (full.path === "webllm") {
+    return { ok: true, reason: null, iosLike: full.iosLike, webgpu: full.webgpu };
+  }
+  return {
+    ok: false,
+    reason:
+      full.path === "gemma-webgpu"
+        ? "Use the Gemma 270M path on this device instead of WebLLM 2B."
+        : (full.reason ?? "WebLLM is not supported in this browser"),
+    iosLike: full.iosLike,
+    webgpu: full.webgpu,
+  };
+}
+
+export async function checkOnDeviceGemmaSupport(
+  hints?: OnDeviceGemmaHints,
+): Promise<OnDeviceGemmaSupport> {
+  const iosLike = hints?.forceIos === true ? true : isIOSLike();
+  const webgpu =
+    typeof hints?.forceWebgpu === "boolean" ? hints.forceWebgpu : await hasUsableWebGPU();
+  return resolveOnDeviceGemmaSupport(iosLike, webgpu);
 }

@@ -22,6 +22,11 @@ type DataMode = "diary" | "synthetic";
 export default function InsightsDemo() {
   const searchParams = useSearchParams();
   const strict = searchParams.get("strict") === "1";
+  const forceIos = searchParams.get("device") === "ios";
+  /** Demo/test override: `?device=ios&webgpu=1` pretends capable iPhone WebGPU. */
+  const forceWebgpuParam = searchParams.get("webgpu");
+  const forceWebgpu =
+    forceWebgpuParam === "1" ? true : forceWebgpuParam === "0" ? false : undefined;
 
   const [dataMode, setDataMode] = useState<DataMode>("diary");
   const [frames, setFrames] = useState<FeatureFrame[]>([]);
@@ -83,13 +88,16 @@ export default function InsightsDemo() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const support = await checkOnDeviceGemmaSupport();
+      const support = await checkOnDeviceGemmaSupport({
+        forceIos: forceIos || undefined,
+        forceWebgpu,
+      });
       if (!cancelled) setGemmaSupport(support);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [forceIos, forceWebgpu]);
 
   const gate = meta?.supplementedDemoBaselines ? DEMO_GATE : DEFAULT_GATE;
   const report: LiftReport = useMemo(() => computeLift(frames, gate), [frames, gate]);
@@ -103,7 +111,10 @@ export default function InsightsDemo() {
     setGemmaError(null);
     setGemmaProgress("Checking WebGPU…");
     try {
-      const support = await checkOnDeviceGemmaSupport();
+      const support = await checkOnDeviceGemmaSupport({
+        forceIos: forceIos || undefined,
+        forceWebgpu,
+      });
       setGemmaSupport(support);
       if (!support.ok || support.path === "none") {
         setGemmaError(support.reason);
@@ -111,10 +122,11 @@ export default function InsightsDemo() {
         return;
       }
 
+      const hints = { forceIos: forceIos || undefined, forceWebgpu };
       const input = toNarratorInput(report);
       const out =
         support.path === "gemma-webgpu"
-          ? await summarizeWithGemmaWebGpu(input, (t) => setGemmaProgress(t))
+          ? await summarizeWithGemmaWebGpu(input, (t) => setGemmaProgress(t), hints)
           : await summarizeWithWebLLM(input, (t) => setGemmaProgress(t));
 
       setGemmaOut(out);
@@ -288,8 +300,9 @@ export default function InsightsDemo() {
         <p className="text-xs leading-relaxed text-neutral-500">
           On-device paths: desktop Chrome/Edge → WebLLM Gemma 2 2B (~1.5GB); iPhone/iPad with WebGPU
           → Gemma 3 270M (~300MB via <code className="rounded bg-neutral-100 px-1">gemma-webgpu</code>
-          ). Without WebGPU, template narrator still works. Mark feeling <strong>ok</strong> on quiet
-          days for real usual-day rows; add{" "}
+          ). Without WebGPU, template narrator still works. Demo routing:{" "}
+          <code className="rounded bg-neutral-100 px-1">?device=ios&amp;webgpu=1</code>. Mark feeling{" "}
+          <strong>ok</strong> on quiet days for real usual-day rows; add{" "}
           <code className="rounded bg-neutral-100 px-1">?strict=1</code> to disable demo baselines.
         </p>
       </section>

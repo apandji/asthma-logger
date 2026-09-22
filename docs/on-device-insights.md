@@ -140,14 +140,16 @@ If the model returns prose without JSON, the template path is the fallback. Neve
 |------|------|
 | `src/lib/insights/lift.ts` | Pure lift / gating |
 | `src/lib/insights/demo-frames.ts` | Synthetic frames for the talk |
-| `src/lib/insights/summarize.ts` | Narrator interface: template + Ollama |
+| `src/lib/insights/style.ts` | Clinical → poetic style bands (voice only) |
+| `src/lib/insights/summarize.ts` | Narrator interface: template + prompt |
 | `src/app/api/insights/summarize/route.ts` | Optional laptop Ollama proxy |
 | `src/app/insights/page.tsx` | Interactive prototype UI |
 
 Open `/insights` after `npm run dev`.
 
 1. **Lift from current data** — merges `/api/logs` (Postgres) with IndexedDB after sync. Attack rows = inhaler logs; usual-day rows = logs where feeling is **ok** (or demo baselines until you have enough ok-days).
-2. **Gemma in the browser** — click **Gemma (WebLLM)**. Uses `gemma-2-2b-it-q4f16_1-MLC` via WebGPU; first load downloads weights to cache. Chrome/Edge desktop recommended.
+2. **Style slider** — Clinical → Poetic. Template updates instantly; Gemma re-runs when the band flips. Counts stay fixed.
+3. **Gemma in the browser** — click **Gemma (WebLLM)**. Uses `gemma-2-2b-it-q4f16_1-MLC` via WebGPU; first load downloads weights to cache. Chrome/Edge desktop recommended.
 
 Template narrator works with no keys and no GPU. Optional laptop Ollama path: `POST /api/insights/summarize` (see route file).
 

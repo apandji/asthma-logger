@@ -1,6 +1,7 @@
 "use client";
 
-import { buildOllamaPrompt, parseNarratorJson, summarizeWithTemplate } from "./summarize";
+import { buildNarratorPrompt, parseNarratorJson, summarizeWithTemplate } from "./summarize";
+import { styleBand, styleTemperature, type StyleScore } from "./style";
 import type { NarratorInput, NarratorOutput } from "./types";
 
 /** Prebuilt WebLLM model — Gemma 2 2B instruct, ~1.5GB first download. */
@@ -51,13 +52,15 @@ export async function summarizeWithWebLLM(
   onProgress?: (text: string) => void,
 ): Promise<NarratorOutput> {
   const started = Date.now();
+  const score = (input.styleScore ?? 35) as StyleScore;
+  const band = styleBand(score);
   try {
     const engine = await getWebLLMEngine(onProgress);
-    const prompt = buildOllamaPrompt(input);
+    const prompt = buildNarratorPrompt(input);
     const reply = await engine.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.15,
-      max_tokens: 220,
+      temperature: styleTemperature(band),
+      max_tokens: 240,
     });
     const text = reply.choices[0]?.message?.content ?? "";
     const parsed = parseNarratorJson(
@@ -65,6 +68,7 @@ export async function summarizeWithWebLLM(
       WEBLLM_GEMMA_MODEL,
       Date.now() - started,
       "webllm",
+      score,
     );
     if (parsed) return parsed;
     return {

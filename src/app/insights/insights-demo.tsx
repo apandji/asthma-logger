@@ -80,10 +80,8 @@ export default function InsightsDemo() {
 
   const gate = meta?.supplementedDemoBaselines ? DEMO_GATE : DEFAULT_GATE;
   const report: LiftReport = useMemo(() => computeLift(frames, gate), [frames, gate]);
-  const template = useMemo(
-    () => summarizeWithTemplate(toNarratorInput(report, styleScore)),
-    [report, styleScore],
-  );
+  /** Template is fixed factual copy — style slider does not touch it. */
+  const template = useMemo(() => summarizeWithTemplate(toNarratorInput(report)), [report]);
 
   const runWebLLM = useCallback(
     async (score = styleScore) => {
@@ -126,10 +124,10 @@ export default function InsightsDemo() {
   }, [band, mode]);
 
   const narrative = mode === "webllm" && webllmOut ? webllmOut : template;
-  const evidenceUnchanged =
-    mode === "webllm" && webllmOut
-      ? "Evidence unchanged — lift table is the same; only the voice moved."
-      : "Evidence unchanged — slider only rewrites the sentence.";
+  const styleActive = mode === "webllm";
+  const evidenceUnchanged = styleActive
+    ? "Evidence unchanged — lift table is fixed; Gemma only rewrites the voice."
+    : "Style slider applies to Gemma only. Switch to Gemma (WebLLM) to hear clinical → poetic.";
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10">
@@ -141,8 +139,8 @@ export default function InsightsDemo() {
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Insights demo</h1>
         <p className="text-sm leading-relaxed text-neutral-600">
-          Correlations come from your logs in TypeScript. Gemma (or the template) only narrates the
-          table — the style slider changes voice, not the numbers.
+          Correlations come from your logs in TypeScript. The template stays factual; Gemma narrates
+          the same table in a voice you dial from clinical to poetic.
         </p>
       </header>
 
@@ -251,11 +249,15 @@ export default function InsightsDemo() {
           </button>
         </div>
 
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50/80 px-4 py-3">
+        <div
+          className={`rounded-lg border border-neutral-200 bg-neutral-50/80 px-4 py-3 ${
+            styleActive ? "" : "opacity-55"
+          }`}
+        >
           <div className="mb-2 flex items-center justify-between gap-3 text-xs text-neutral-600">
             <span>Clinical</span>
             <span className="font-medium text-neutral-900">
-              {styleLabel(band)} · {clampStyle(styleScore)}
+              {styleActive ? `${styleLabel(band)} · ${clampStyle(styleScore)}` : "Gemma only"}
             </span>
             <span>Poetic</span>
           </div>
@@ -265,8 +267,9 @@ export default function InsightsDemo() {
             max={100}
             step={1}
             value={styleScore}
-            aria-label="Narration style from clinical to poetic"
-            className="w-full accent-neutral-900"
+            disabled={!styleActive || webllmBusy}
+            aria-label="Gemma narration style from clinical to poetic"
+            className="w-full accent-neutral-900 disabled:cursor-not-allowed"
             onChange={(e) => setStyleScore(Number(e.target.value))}
           />
           <div className="mt-2 flex flex-wrap gap-2">
@@ -280,8 +283,9 @@ export default function InsightsDemo() {
               <button
                 key={key}
                 type="button"
-                className={`rounded-full px-2.5 py-1 text-[11px] ${
-                  band === key
+                disabled={!styleActive || webllmBusy}
+                className={`rounded-full px-2.5 py-1 text-[11px] disabled:cursor-not-allowed ${
+                  styleActive && band === key
                     ? "bg-neutral-900 text-white"
                     : "bg-white text-neutral-700 ring-1 ring-neutral-200"
                 }`}
@@ -312,9 +316,9 @@ export default function InsightsDemo() {
 
         {webllmError ? <p className="text-sm text-red-600">{webllmError}</p> : null}
         <p className="text-xs leading-relaxed text-neutral-500">
-          Template updates instantly with the slider. Gemma re-runs when the band flips (clinical /
-          plain / poetic). First Gemma load downloads {WEBLLM_GEMMA_MODEL} into browser cache
-          (WebGPU). Mark feeling <strong>ok</strong> on quiet days for real usual-day rows.
+          Template is a fixed count sentence. After Gemma loads, move the slider — it re-runs when
+          the band flips (clinical / plain / poetic). First load downloads {WEBLLM_GEMMA_MODEL} into
+          browser cache (WebGPU).
         </p>
       </section>
     </main>

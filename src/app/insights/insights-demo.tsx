@@ -269,6 +269,28 @@ export default function InsightsDemo() {
             className="w-full accent-neutral-900"
             onChange={(e) => setStyleScore(Number(e.target.value))}
           />
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(
+              [
+                ["clinical", 0],
+                ["plain", 50],
+                ["poetic", 100],
+              ] as const
+            ).map(([key, value]) => (
+              <button
+                key={key}
+                type="button"
+                className={`rounded-full px-2.5 py-1 text-[11px] ${
+                  band === key
+                    ? "bg-neutral-900 text-white"
+                    : "bg-white text-neutral-700 ring-1 ring-neutral-200"
+                }`}
+                onClick={() => setStyleScore(value)}
+              >
+                {styleLabel(key)}
+              </button>
+            ))}
+          </div>
           <p className="mt-2 text-[11px] leading-relaxed text-neutral-500">{evidenceUnchanged}</p>
         </div>
 

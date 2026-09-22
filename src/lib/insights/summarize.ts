@@ -6,6 +6,7 @@ import {
   styleBand,
   stylePromptBlock,
   type StyleBand,
+  type StyleExampleFacts,
   type StyleScore,
 } from "./style";
 
@@ -65,6 +66,10 @@ export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
   const headline = styledHeadline(band, {
     binLabel: labelBin(top.bin),
     level: top.level,
+    attacksWith: top.attacksWith,
+    nAttacks: input.nAttacks,
+    baselinesWith: top.baselinesWith,
+    nBaselines: input.nBaselines,
     counts,
     liftLabel,
     secondLabel: second ? `${labelBin(second.bin)} (${second.level})` : null,
@@ -83,22 +88,22 @@ export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
 
 function emptySampleHeadline(band: StyleBand, attacks: number, baselines: number): string {
   if (band === "poetic") {
-    return `The diary is still thin — ${attacks} attack marks and ${baselines} quiet-day samples. Keep a few ordinary days so the air has something honest to compare against.`;
+    return `The book of quiet days is still missing pages — ${attacks} hard marks, ${baselines} ordinary ones. Leave a few calm afternoons in the log so the outdoor air has a fair chorus to answer.`;
   }
   if (band === "plain") {
-    return `You have ${attacks} attack logs and ${baselines} usual-day samples. Keep logging quiet days so we can compare.`;
+    return `Here's where we are: ${attacks} attack logs and only ${baselines} usual-day samples. Log a few okay days and the comparison gets real.`;
   }
-  return `Insufficient baseline samples for association analysis (n_attack=${attacks}, n_usual=${baselines}). Continue usual-day logging.`;
+  return `Sample inadequacy: n_attack=${attacks}, n_usual=${baselines}. Association analysis deferred pending additional baseline observations.`;
 }
 
 function emptyGateHeadline(band: StyleBand, attacks: number, baselines: number): string {
   if (band === "poetic") {
-    return `Nothing has repeated enough to speak of yet (${attacks} attacks, ${baselines} usual days). Patterns need more weather to echo.`;
+    return `The weather has not yet rhymed often enough to quote (${attacks} attacks, ${baselines} usual days). Wait for the pattern to return like a season.`;
   }
   if (band === "plain") {
-    return `Nothing clears the sample gate yet (${attacks} attacks, ${baselines} usual days). Patterns need more repeats.`;
+    return `Nothing clear yet — ${attacks} attacks and ${baselines} usual days, but no weather bin repeats enough to call out. Keep logging.`;
   }
-  return `No gated associations (n_attack=${attacks}, n_usual=${baselines}). Raise sample counts before interpreting lift.`;
+  return `Null result under gating: n_attack=${attacks}, n_usual=${baselines}. No exposure level meets minimum cell counts for lift reporting.`;
 }
 
 function styledHeadline(
@@ -106,37 +111,77 @@ function styledHeadline(
   opts: {
     binLabel: string;
     level: string;
+    attacksWith: number;
+    nAttacks: number;
+    baselinesWith: number;
+    nBaselines: number;
     counts: string;
     liftLabel: string;
     secondLabel: string | null;
     season: string | null;
   },
 ): string {
-  const { binLabel, level, counts, liftLabel, secondLabel, season } = opts;
+  const {
+    binLabel,
+    level,
+    attacksWith,
+    nAttacks,
+    baselinesWith,
+    nBaselines,
+    counts,
+    liftLabel,
+    secondLabel,
+    season,
+  } = opts;
 
   if (band === "clinical") {
-    let h = `${binLabel} ${level}: elevated co-occurrence — ${counts} (lift ≈ ${liftLabel}×).`;
-    if (secondLabel) h += ` Secondary: ${secondLabel}.`;
+    let h = `Association signal: ${binLabel}=${level}. Attack-conditioned prevalence ${attacksWith}/${nAttacks}; usual-day prevalence ${baselinesWith}/${nBaselines}; crude lift ${liftLabel}×. Not causal.`;
+    if (secondLabel) h += ` Secondary exposure: ${secondLabel}.`;
     if (season) h += ` Season stratum: ${season}.`;
     return h;
   }
 
   if (band === "plain") {
-    let h = `${binLabel} (${level}) showed up more on attack days — ${counts} (~${liftLabel}×).`;
-    if (secondLabel) h += ` Also watching: ${secondLabel}.`;
-    if (season) h += ` Season context: ${season}.`;
+    let h = `Here's the pattern: ${binLabel.toLowerCase()} ran ${level} more often on days you logged an attack (${counts}, about ${liftLabel}×).`;
+    if (secondLabel) h += ` Also showing up: ${secondLabel}.`;
+    if (season) h += ` This is mostly a ${season} slice of your diary.`;
     return h;
   }
 
-  // poetic
-  let h = `When the outdoor air leans ${level} on ${binLabel.toLowerCase()}, your diary marks it more often — ${counts} (~${liftLabel}×).`;
-  if (secondLabel) h += ` A quieter echo: ${secondLabel}.`;
-  if (season) h += ` ${capitalize(season)} sits behind the pattern.`;
+  const image = poeticImage(binLabel, level, season);
+  let h = `${image} Your diary keeps answering the same outdoor weather — ${counts} (~${liftLabel}×).`;
+  if (secondLabel) h += ` Underneath that, a softer rhyme: ${secondLabel}.`;
   return h;
 }
 
-function capitalize(s: string): string {
-  return s.length ? s[0].toUpperCase() + s.slice(1) : s;
+function poeticImage(binLabel: string, level: string, season: string | null): string {
+  const seasonBit = season ? ` in ${season}` : "";
+  switch (binLabel) {
+    case "Ozone":
+      return level === "high"
+        ? `Afternoon light that tastes a little sharp${seasonBit}.`
+        : `A thinner sky${seasonBit}, ozone leaning ${level}.`;
+    case "PM2.5":
+      return level === "high"
+        ? `Haze hangs low enough to feel${seasonBit}.`
+        : `A dust-soft air${seasonBit}, particles ${level}.`;
+    case "Weed pollen":
+      return `Pollen weather — weed counts ${level}${seasonBit}.`;
+    case "Temperature":
+      return level === "hot"
+        ? `Heat presses the outdoor hour${seasonBit}.`
+        : `The outdoor temperature sits ${level}${seasonBit}.`;
+    case "Humidity":
+      return `The air turns ${level} with moisture${seasonBit}.`;
+    case "Smoke-like air":
+      return `A smoky edge on the outdoor air${seasonBit}.`;
+    case "Heat alert":
+      return `The forecast names the heat out loud${seasonBit}.`;
+    case "Time of day":
+      return `Those ${level} hours keep returning${seasonBit}.`;
+    default:
+      return `Outdoor air marked ${level} for ${binLabel.toLowerCase()}${seasonBit}.`;
+  }
 }
 
 export function labelBin(bin: string): string {
@@ -167,16 +212,34 @@ export function buildOllamaPrompt(input: NarratorInput): string {
   return buildNarratorPrompt(input);
 }
 
+function exampleFactsFromInput(input: NarratorInput): StyleExampleFacts | undefined {
+  const top = input.rows.find((r) => r.gated) ?? input.rows[0];
+  if (!top) return undefined;
+  return {
+    binLabel: labelBin(top.bin),
+    level: top.level,
+    attacksWith: top.attacksWith,
+    nAttacks: input.nAttacks,
+    baselinesWith: top.baselinesWith,
+    nBaselines: input.nBaselines,
+    liftLabel: formatLift(top.lift),
+  };
+}
+
 export function buildNarratorPrompt(input: NarratorInput): string {
   const score = clampStyle(input.styleScore ?? 35);
   const band = styleBand(score);
+  const example = exampleFactsFromInput(input);
 
   return [
     "You write one honest insight for an asthma outdoor-air diary.",
     "You are given a precomputed lift table. Do not invent counts or new drivers.",
     'Reply with ONLY compact JSON: {"headline":"...","caveat":"...","drivers":["bin:level",...]}',
     "",
-    stylePromptBlock(band),
+    "IMPORTANT: clinical / plain / poetic must be unmistakably different registers.",
+    "If you write the same sentence shape for every style, you fail the task.",
+    "",
+    stylePromptBlock(band, example),
     "",
     "Rules:",
     ...input.rules.map((r) => `- ${r}`),

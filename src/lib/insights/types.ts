@@ -60,7 +60,7 @@ export type NarratorOutput = {
   caveat: string;
   drivers: string[];
   /** Which narrator produced this */
-  source: "template" | "ollama" | "webllm" | "stub";
+  source: "template" | "ollama" | "webllm" | "gemma-webgpu" | "stub";
   model?: string;
   latencyMs?: number;
 };

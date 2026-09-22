@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@mlc-ai/web-llm"],
+  transpilePackages: ["@mlc-ai/web-llm", "gemma-webgpu"],
   headers: async () => [
     {
       source: "/((?!_next/static|_next/image|favicon.ico).*)",

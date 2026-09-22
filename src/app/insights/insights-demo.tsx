@@ -5,14 +5,18 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { buildDemoFrames } from "@/lib/insights/demo-frames";
 import { buildFramesFromLogs, type FramesBuildMeta } from "@/lib/insights/frames-from-logs";
+import { summarizeWithGemmaWebGpu } from "@/lib/insights/gemma-webgpu-narrator";
 import { DEFAULT_GATE, DEMO_GATE, computeLift, formatLift } from "@/lib/insights/lift";
 import { loadDiaryLogs } from "@/lib/insights/load-logs";
 import { summarizeWithTemplate, toNarratorInput } from "@/lib/insights/summarize";
 import type { FeatureFrame, LiftReport, NarratorOutput } from "@/lib/insights/types";
-import { summarizeWithWebLLM, WEBLLM_GEMMA_MODEL } from "@/lib/insights/webllm-narrator";
-import { checkWebLLMSupport } from "@/lib/insights/webllm-support";
+import { summarizeWithWebLLM } from "@/lib/insights/webllm-narrator";
+import {
+  checkOnDeviceGemmaSupport,
+  type OnDeviceGemmaSupport,
+} from "@/lib/insights/webllm-support";
 
-type NarratorMode = "template" | "webllm";
+type NarratorMode = "template" | "gemma";
 type DataMode = "diary" | "synthetic";
 
 export default function InsightsDemo() {
@@ -26,11 +30,11 @@ export default function InsightsDemo() {
   const [loadingLogs, setLoadingLogs] = useState(true);
 
   const [mode, setMode] = useState<NarratorMode>("template");
-  const [webllmOut, setWebllmOut] = useState<NarratorOutput | null>(null);
-  const [webllmBusy, setWebllmBusy] = useState(false);
-  const [webllmProgress, setWebllmProgress] = useState<string | null>(null);
-  const [webllmError, setWebllmError] = useState<string | null>(null);
-  const [webllmBlocked, setWebllmBlocked] = useState<string | null>(null);
+  const [gemmaOut, setGemmaOut] = useState<NarratorOutput | null>(null);
+  const [gemmaBusy, setGemmaBusy] = useState(false);
+  const [gemmaProgress, setGemmaProgress] = useState<string | null>(null);
+  const [gemmaError, setGemmaError] = useState<string | null>(null);
+  const [gemmaSupport, setGemmaSupport] = useState<OnDeviceGemmaSupport | null>(null);
 
   const refreshLogs = useCallback(async () => {
     setLoadingLogs(true);
@@ -79,13 +83,8 @@ export default function InsightsDemo() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const support = await checkWebLLMSupport();
-      if (cancelled) return;
-      if (!support.ok) {
-        setWebllmBlocked(support.reason);
-      } else {
-        setWebllmBlocked(null);
-      }
+      const support = await checkOnDeviceGemmaSupport();
+      if (!cancelled) setGemmaSupport(support);
     })();
     return () => {
       cancelled = true;
@@ -96,36 +95,44 @@ export default function InsightsDemo() {
   const report: LiftReport = useMemo(() => computeLift(frames, gate), [frames, gate]);
   const template = useMemo(() => summarizeWithTemplate(toNarratorInput(report)), [report]);
 
-  async function runWebLLM() {
-    setWebllmBusy(true);
-    setWebllmError(null);
-    setWebllmProgress("Checking WebGPU…");
+  const gemmaBlocked = gemmaSupport && !gemmaSupport.ok ? gemmaSupport.reason : null;
+  const gemmaButtonLabel = gemmaSupport?.buttonLabel ?? "Gemma (on-device)";
+
+  async function runGemma() {
+    setGemmaBusy(true);
+    setGemmaError(null);
+    setGemmaProgress("Checking WebGPU…");
     try {
-      const support = await checkWebLLMSupport();
-      if (!support.ok) {
-        setWebllmBlocked(support.reason);
-        setWebllmError(support.reason);
+      const support = await checkOnDeviceGemmaSupport();
+      setGemmaSupport(support);
+      if (!support.ok || support.path === "none") {
+        setGemmaError(support.reason);
         setMode("template");
         return;
       }
+
       const input = toNarratorInput(report);
-      const out = await summarizeWithWebLLM(input, (t) => setWebllmProgress(t));
-      setWebllmOut(out);
-      setMode("webllm");
-      if (out.model?.startsWith("WebLLM error")) {
-        setWebllmError(out.model);
+      const out =
+        support.path === "gemma-webgpu"
+          ? await summarizeWithGemmaWebGpu(input, (t) => setGemmaProgress(t))
+          : await summarizeWithWebLLM(input, (t) => setGemmaProgress(t));
+
+      setGemmaOut(out);
+      setMode("gemma");
+      if (out.model?.includes("error")) {
+        setGemmaError(out.model);
         setMode("template");
       }
     } catch (e) {
-      setWebllmError(e instanceof Error ? e.message : "WebLLM failed");
+      setGemmaError(e instanceof Error ? e.message : "Gemma failed");
       setMode("template");
     } finally {
-      setWebllmBusy(false);
-      setWebllmProgress(null);
+      setGemmaBusy(false);
+      setGemmaProgress(null);
     }
   }
 
-  const narrative = mode === "webllm" && webllmOut ? webllmOut : template;
+  const narrative = mode === "gemma" && gemmaOut ? gemmaOut : template;
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-10">
@@ -137,8 +144,8 @@ export default function InsightsDemo() {
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Insights demo</h1>
         <p className="text-sm leading-relaxed text-neutral-600">
-          Correlations come from your logs in TypeScript. Gemma runs in this browser via WebLLM and
-          only narrates the table.
+          Correlations come from your logs in TypeScript. Gemma only narrates the lift table —
+          desktop uses WebLLM (2B); capable iPhones use Gemma 3 270M over WebGPU.
         </p>
       </header>
 
@@ -235,27 +242,34 @@ export default function InsightsDemo() {
           <button
             type="button"
             className={`rounded-full px-3 py-1 text-xs ${
-              mode === "webllm" ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700"
+              mode === "gemma" ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700"
             } disabled:cursor-not-allowed disabled:opacity-50`}
             onClick={() => {
-              if (webllmBlocked) return;
-              if (webllmOut && !webllmBusy) setMode("webllm");
-              else void runWebLLM();
+              if (gemmaBlocked) return;
+              if (gemmaOut && !gemmaBusy) setMode("gemma");
+              else void runGemma();
             }}
-            disabled={webllmBusy || Boolean(webllmBlocked)}
-            title={webllmBlocked ?? undefined}
+            disabled={gemmaBusy || Boolean(gemmaBlocked) || !gemmaSupport}
+            title={gemmaBlocked ?? undefined}
           >
-            {webllmBusy ? "Loading Gemma…" : "Gemma (WebLLM)"}
+            {gemmaBusy ? "Loading Gemma…" : gemmaButtonLabel}
           </button>
         </div>
 
-        {webllmProgress ? (
-          <p className="font-mono text-[11px] text-neutral-500">{webllmProgress}</p>
+        {gemmaProgress ? (
+          <p className="font-mono text-[11px] text-neutral-500">{gemmaProgress}</p>
         ) : null}
 
-        {webllmBlocked ? (
+        {gemmaBlocked ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-relaxed text-amber-950">
-            {webllmBlocked}
+            {gemmaBlocked}
+          </p>
+        ) : null}
+
+        {gemmaSupport?.path === "gemma-webgpu" && !gemmaBusy && !gemmaOut ? (
+          <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm leading-relaxed text-sky-950">
+            Capable iPhone/iPad detected. Gemma 3 270M (~300MB) will stream into WebGPU — first load
+            downloads weights; later visits reuse cache when the browser allows.
           </p>
         ) : null}
 
@@ -270,14 +284,12 @@ export default function InsightsDemo() {
           </p>
         </article>
 
-        {webllmError && !webllmBlocked ? (
-          <p className="text-sm text-red-600">{webllmError}</p>
-        ) : null}
+        {gemmaError && !gemmaBlocked ? <p className="text-sm text-red-600">{gemmaError}</p> : null}
         <p className="text-xs leading-relaxed text-neutral-500">
-          Gemma needs desktop Chrome/Edge with WebGPU (~{WEBLLM_GEMMA_MODEL}, ~1.5GB first
-          download). iPhone Safari is blocked on purpose — loading the model often hard-crashes
-          the tab. Template narrator always works. Mark feeling <strong>ok</strong> on quiet days
-          for real usual-day rows; add{" "}
+          On-device paths: desktop Chrome/Edge → WebLLM Gemma 2 2B (~1.5GB); iPhone/iPad with WebGPU
+          → Gemma 3 270M (~300MB via <code className="rounded bg-neutral-100 px-1">gemma-webgpu</code>
+          ). Without WebGPU, template narrator still works. Mark feeling <strong>ok</strong> on quiet
+          days for real usual-day rows; add{" "}
           <code className="rounded bg-neutral-100 px-1">?strict=1</code> to disable demo baselines.
         </p>
       </section>

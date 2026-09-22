@@ -1,16 +1,25 @@
 /**
- * WebLLM + Gemma 2B (~1.5GB) is a desktop WebGPU demo path.
- * iOS Safari will often hard-crash the tab (OOM / GPU process) with
- * "A problem repeatedly occurred" — that cannot be caught in JS.
+ * On-device Gemma capability routing.
+ *
+ * - Desktop + WebGPU → WebLLM Gemma 2 2B (~1.5GB)
+ * - iPhone/iPad + WebGPU → gemma-webgpu Gemma 3 270M (~300MB, streamed weights)
+ * - iPhone/iPad without WebGPU → blocked (needs iOS 26+ / Safari WebGPU)
+ *
+ * The 2B WebLLM path is never used on iOS — it OOMs the tab.
  */
 
-export type WebLLMSupport = {
+export type OnDeviceGemmaPath = "webllm" | "gemma-webgpu" | "none";
+
+export type OnDeviceGemmaSupport = {
+  path: OnDeviceGemmaPath;
   ok: boolean;
-  /** Short reason when ok is false */
   reason: string | null;
-  /** True when this is iPhone/iPad Safari (or iPadOS desktop UA) */
   iosLike: boolean;
   webgpu: boolean;
+  /** Short button label */
+  buttonLabel: string;
+  /** Model id shown in UI / metadata */
+  modelId: string;
 };
 
 function isIOSLike(): boolean {
@@ -38,36 +47,83 @@ async function hasUsableWebGPU(): Promise<boolean> {
   }
 }
 
-/**
- * Cheap sync hint for UI before async WebGPU probe finishes.
- * Never treat this alone as permission to load the model.
- */
-export function isLikelyWebLLMHostile(): boolean {
+export function isIOSLikeDevice(): boolean {
   return isIOSLike();
 }
 
+/** @deprecated Prefer checkOnDeviceGemmaSupport — kept for call sites that only care about WebLLM 2B. */
+export type WebLLMSupport = {
+  ok: boolean;
+  reason: string | null;
+  iosLike: boolean;
+  webgpu: boolean;
+};
+
+/** Desktop WebLLM Gemma 2B only — never ok on iOS. */
 export async function checkWebLLMSupport(): Promise<WebLLMSupport> {
+  const full = await checkOnDeviceGemmaSupport();
+  if (full.path === "webllm") {
+    return { ok: true, reason: null, iosLike: full.iosLike, webgpu: full.webgpu };
+  }
+  return {
+    ok: false,
+    reason:
+      full.path === "gemma-webgpu"
+        ? "Use the Gemma 270M path on this device instead of WebLLM 2B."
+        : (full.reason ?? "WebLLM is not supported in this browser"),
+    iosLike: full.iosLike,
+    webgpu: full.webgpu,
+  };
+}
+
+export async function checkOnDeviceGemmaSupport(): Promise<OnDeviceGemmaSupport> {
   const iosLike = isIOSLike();
+  const webgpu = await hasUsableWebGPU();
+
   if (iosLike) {
+    if (!webgpu) {
+      return {
+        path: "none",
+        ok: false,
+        reason:
+          "This iPhone/iPad doesn’t expose WebGPU yet (needs a recent Safari, typically iOS 26+). Template narrator still works. Or open Insights on desktop Chrome/Edge for the larger Gemma demo.",
+        iosLike: true,
+        webgpu: false,
+        buttonLabel: "Gemma (on-device)",
+        modelId: "gemma-3-270m-it",
+      };
+    }
     return {
-      ok: false,
-      reason:
-        "iPhone/iPad Safari cannot safely load Gemma in-browser — the ~1.5GB WebGPU model often crashes the tab (memory/GPU). Use the template narrator here, or open Insights in Chrome/Edge on a desktop.",
+      path: "gemma-webgpu",
+      ok: true,
+      reason: null,
       iosLike: true,
-      webgpu: false,
+      webgpu: true,
+      buttonLabel: "Gemma 270M",
+      modelId: "gemma-3-270m-it-Q8_0",
     };
   }
 
-  const webgpu = await hasUsableWebGPU();
   if (!webgpu) {
     return {
+      path: "none",
       ok: false,
       reason:
-        "WebGPU is not available in this browser. Use Chrome or Edge on a desktop for the Gemma (WebLLM) demo.",
+        "WebGPU is not available in this browser. Use Chrome or Edge on a desktop for the Gemma demo, or a recent iPhone Safari with WebGPU for Gemma 270M.",
       iosLike: false,
       webgpu: false,
+      buttonLabel: "Gemma (WebLLM)",
+      modelId: "gemma-2-2b-it-q4f16_1-MLC",
     };
   }
 
-  return { ok: true, reason: null, iosLike: false, webgpu: true };
+  return {
+    path: "webllm",
+    ok: true,
+    reason: null,
+    iosLike: false,
+    webgpu: true,
+    buttonLabel: "Gemma (WebLLM)",
+    modelId: "gemma-2-2b-it-q4f16_1-MLC",
+  };
 }

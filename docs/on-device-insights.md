@@ -144,7 +144,12 @@ If the model returns prose without JSON, the template path is the fallback. Neve
 | `src/app/api/insights/summarize/route.ts` | Optional laptop Ollama proxy |
 | `src/app/insights/page.tsx` | Interactive prototype UI |
 
-Open `/insights` after `npm run dev`. Template works with no keys. For Gemma: install [Ollama](https://ollama.com), pull a small Gemma, set `OLLAMA_MODEL=gemma2:2b` (or your tag), keep Ollama on `localhost:11434`.
+Open `/insights` after `npm run dev`.
+
+1. **Lift from current data** — merges `/api/logs` (Postgres) with IndexedDB after sync. Attack rows = inhaler logs; usual-day rows = logs where feeling is **ok** (or demo baselines until you have enough ok-days).
+2. **Gemma in the browser** — click **Gemma (WebLLM)**. Uses `gemma-2-2b-it-q4f16_1-MLC` via WebGPU; first load downloads weights to cache. Chrome/Edge desktop recommended.
+
+Template narrator works with no keys and no GPU. Optional laptop Ollama path: `POST /api/insights/summarize` (see route file).
 
 ---
 

@@ -66,10 +66,10 @@ export type NarratorOutput = {
 };
 
 export const NARRATOR_RULES = [
-  'Lead with “Your attacks were potentially triggered by …” naming the top outdoor signals from the table.',
-  "Use the real counts for the #1 driver (attacksWith of nAttacks vs baselinesWith of nBaselines).",
+  "Sound like a diary narrator, not a stats readout or a causal diagnosis.",
+  "Name the top outdoor signals from the table in plain language and weave in the #1 counts once.",
   "Do not invent drivers or counts. Do not predict a future attack or give medical advice.",
-  "Soft language is OK (“potentially triggered”, “lined up with”, “showed up more often”). Absolute causation is not.",
-  "Put hedging only in caveat. Headline must stay concrete.",
+  "Soft association language is OK (“lining up with”, “shows up more on harder days”). Absolute causation is not.",
+  "Put hedging only in caveat. Headline must stay concrete and human.",
   "If the table is empty or nAttacks is 0, then say we need more logs — otherwise never claim there is nothing to say.",
 ] as const;

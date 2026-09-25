@@ -81,9 +81,9 @@ export async function summarizeWithGemmaWebGpu(
     onProgress?.("Generating…");
     let text = "";
     for await (const token of engine.generate({
-      temperature: 0.15,
+      temperature: 0.35,
       topP: 0.9,
-      maxTokens: 220,
+      maxTokens: 240,
     })) {
       text += token;
     }

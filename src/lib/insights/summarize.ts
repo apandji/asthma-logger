@@ -69,12 +69,22 @@ export function toNarratorInput(report: LiftReport): NarratorInput {
 }
 
 const CAVEAT =
-  "Outdoor air only — not a medical diagnosis. “Potentially triggered” means these showed up more on your attack logs than on usual days, not that they caused an attack.";
+  "Outdoor air only — not a medical diagnosis. Comparison to your usual logged days, not a prediction.";
 
-/** Zero-model narrator — always available on device. */
-export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
+function joinList(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "unclear outdoor signals";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
+function topSignals(input: NarratorInput) {
   const signals = input.rows.filter((r) => r.gated || (r.lift > 1.25 && r.attacksWith >= 2));
-  const top = signals.length > 0 ? signals : input.rows;
+  return signals.length > 0 ? signals : input.rows;
+}
+
+/** Dry lift-table voice — the “stats / association” side of the demo. */
+export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
+  const top = topSignals(input);
 
   if (top.length === 0 || input.nAttacks === 0) {
     return {
@@ -88,15 +98,12 @@ export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
     };
   }
 
-  const names = top.slice(0, 3).map((r) => labelDriver(r.bin, r.level));
   const lead = top[0];
+  const second = top[1];
   const liftLabel = formatLift(lead.lift);
-  const early = !top.some((r) => r.gated);
-
-  let headline = `Your attacks were potentially triggered by ${joinList(names)}.`;
-  headline += ` ${labelDriver(lead.bin, lead.level)} showed up on ${lead.attacksWith} of ${input.nAttacks} attacks vs ${lead.baselinesWith} of ${input.nBaselines} usual days (~${liftLabel}×).`;
-  if (early) {
-    headline += " Early signal — more usual-day logs will tighten this.";
+  let headline = `${labelBin(lead.bin)} (${lead.level}) showed up on ${lead.attacksWith} of ${input.nAttacks} attacks vs ${lead.baselinesWith} of ${input.nBaselines} usual days (~${liftLabel}×).`;
+  if (second) {
+    headline += ` Next: ${labelBin(second.bin)} (${second.level}).`;
   }
   if (input.season) {
     headline += ` Season context: ${input.season}.`;
@@ -110,46 +117,70 @@ export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
   };
 }
 
-function joinList(parts: string[]): string {
-  if (parts.length <= 1) return parts[0] ?? "unclear outdoor signals";
-  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
-  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+/**
+ * Warm diary voice used when Gemma hedges into empty disclaimers.
+ * Must sound obviously different from summarizeWithTemplate.
+ */
+export function summarizeWithNarrativeFallback(input: NarratorInput): NarratorOutput {
+  const top = topSignals(input);
+  if (top.length === 0 || input.nAttacks === 0) {
+    return summarizeWithTemplate(input);
+  }
+  const names = top.slice(0, 3).map((r) => labelDriver(r.bin, r.level));
+  const lead = top[0];
+  const liftLabel = formatLift(lead.lift);
+  let headline = `Looking at your diary, the harder days keep lining up with ${joinList(names)}.`;
+  headline += ` On attack logs, ${labelDriver(lead.bin, lead.level)} shows up about ${liftLabel}× as often as on quieter days (${lead.attacksWith}/${input.nAttacks} vs ${lead.baselinesWith}/${input.nBaselines}).`;
+  if (input.season) {
+    headline += ` That pattern is showing up in ${input.season}.`;
+  }
+
+  return {
+    headline,
+    caveat: CAVEAT,
+    drivers: top.slice(0, 3).map((r) => `${r.bin}:${r.level}`),
+    source: "template",
+  };
 }
 
 export function buildOllamaPrompt(input: NarratorInput): string {
   const top = input.rows.slice(0, 3);
   const driverIds = top.map((r) => `${r.bin}:${r.level}`);
   const human = top.map((r) => labelDriver(r.bin, r.level));
-  const hasSignals = top.length > 0 && input.nAttacks > 0;
+  const lead = top[0];
+  const liftLabel = lead ? formatLift(lead.lift) : "—";
 
-  const exampleHeadline = hasSignals
-    ? `Your attacks were potentially triggered by ${joinList(human)}. ${labelDriver(top[0].bin, top[0].level)} showed up on ${top[0].attacksWith} of ${input.nAttacks} attacks vs ${top[0].baselinesWith} of ${input.nBaselines} usual days.`
+  const exampleHeadline = lead
+    ? `Looking at your diary, harder days keep lining up with ${joinList(human)} outdoors. ${labelDriver(lead.bin, lead.level)} shows up about ${liftLabel}× as often on attack logs (${lead.attacksWith} of ${input.nAttacks}) as on quieter days (${lead.baselinesWith} of ${input.nBaselines}).`
     : `You have ${input.nAttacks} attack logs and ${input.nBaselines} usual-day samples — keep logging quiet days.`;
 
   return [
-    "You narrate an asthma outdoor-air diary for the user.",
-    "You receive a precomputed lift table. Numbers are already correct — do not invent counts or new drivers.",
+    "You are the warm diary narrator for an asthma outdoor-air app.",
+    "A separate Template button already prints dry lift stats. YOUR job is different: sound like a thoughtful friend reading the diary aloud.",
+    "You receive a precomputed lift table. Numbers are ground truth — do not invent counts or new drivers.",
     "",
-    "Return ONLY one JSON object (no markdown, no prose outside JSON):",
-    '{"headline":"...","caveat":"...","drivers":["ozone:high","heat_alert:yes"]}',
+    "Return ONLY one JSON object (no markdown):",
+    '{"headline":"...","caveat":"...","drivers":["ozone:high","pm25:moderate"]}',
     "",
-    "headline requirements:",
-    '- Start like: "Your attacks were potentially triggered by X, Y, and Z."',
-    "- Then one short sentence with the real counts for the #1 driver (attacksWith of nAttacks vs baselinesWith of nBaselines).",
-    "- Name 1–3 drivers from the table using plain language (ozone, weed pollen, heat, afternoon, smoke-like air).",
-    "- Keep headline under 320 characters. Put disclaimers ONLY in caveat — never in headline.",
+    "headline voice (MUST differ from dry stats):",
+    '- Open like a person: "Looking at your diary…", "On your harder days…", "What stands out is…"',
+    "- Name 1–3 outdoor signals in plain language (ozone, weed pollen, heat, afternoon, smoke-like air).",
+    "- Include the real #1 counts once, woven into the sentence (e.g. 8 of 10 vs 0 of 10), not as a spreadsheet readback.",
+    '- Do NOT start with "Your attacks were potentially triggered by".',
+    '- Do NOT start with "Ozone (high) showed up on N of M" — that is the Template voice.',
+    "- Do NOT say weather caused an attack, or predict the next one.",
+    "- Keep under 340 characters. Put hedging ONLY in caveat.",
     "",
-    "caveat requirements:",
-    '- One short line: outdoor air only, not a diagnosis, “potentially” means higher on attack days than usual days.',
+    "caveat: one short outdoor-air / not-a-diagnosis line.",
     "",
-    "drivers requirements:",
-    `- Use ONLY ids from this list: ${JSON.stringify(driverIds.length ? driverIds : ["(none)"])}`,
+    "drivers:",
+    `- ONLY ids from: ${JSON.stringify(driverIds.length ? driverIds : ["(none)"])}`,
     '- Never output the literal string "bin:level".',
     "",
     "Rules:",
     ...input.rules.map((r) => `- ${r}`),
     "",
-    "Good example shape for THIS table:",
+    "Example in the right register for THIS table:",
     JSON.stringify(
       {
         headline: exampleHeadline,
@@ -174,10 +205,7 @@ export function buildOllamaPrompt(input: NarratorInput): string {
   ].join("\n");
 }
 
-function sanitizeDrivers(
-  raw: unknown,
-  input: NarratorInput,
-): string[] {
+function sanitizeDrivers(raw: unknown, input: NarratorInput): string[] {
   const allowed = new Set(input.rows.map((r) => `${r.bin}:${r.level}`));
   const fromModel = Array.isArray(raw)
     ? raw.filter((d): d is string => typeof d === "string" && d !== "bin:level" && allowed.has(d))
@@ -188,19 +216,18 @@ function sanitizeDrivers(
 
 function headlineLooksUseless(headline: string, input: NarratorInput): boolean {
   const h = headline.toLowerCase();
-  if (/need more usual days|need more attacks|draw more conclusions|based on a precomputed/i.test(h)) {
+  if (/need more usual days|need more attacks|draw more conclusions|based on a precomputed|does not claim causation/i.test(h)) {
     return input.rows.length > 0 && input.nAttacks > 0;
   }
-  if (!/potentially triggered|showed up|more often|lined up/i.test(h) && input.rows.length > 0) {
-    // Vague titles like "Outdoor air quality and asthma…" with no drivers
-    const mentionsDriver = input.rows.some(
-      (r) =>
-        h.includes(labelBin(r.bin).toLowerCase()) ||
-        h.includes(r.bin.replaceAll("_", " ")) ||
-        h.includes(r.level),
-    );
-    return !mentionsDriver;
-  }
+  if (input.rows.length === 0) return false;
+  const mentionsDriver = input.rows.some(
+    (r) =>
+      h.includes(labelBin(r.bin).toLowerCase()) ||
+      h.includes(r.bin.replaceAll("_", " ")) ||
+      h.includes(r.level),
+  );
+  // Vague titles with no outdoor signal named
+  if (!mentionsDriver && h.length < 120) return true;
   return false;
 }
 
@@ -223,15 +250,16 @@ export function parseNarratorJson(
     };
     if (typeof parsed.headline !== "string" || !parsed.headline.trim()) return null;
 
-    let headline = parsed.headline.trim();
-    const drivers = input ? sanitizeDrivers(parsed.drivers, input) : Array.isArray(parsed.drivers)
-      ? parsed.drivers.filter((d): d is string => typeof d === "string" && d !== "bin:level")
-      : [];
+    const headline = parsed.headline.trim();
+    const drivers = input
+      ? sanitizeDrivers(parsed.drivers, input)
+      : Array.isArray(parsed.drivers)
+        ? parsed.drivers.filter((d): d is string => typeof d === "string" && d !== "bin:level")
+        : [];
 
     if (input && headlineLooksUseless(headline, input)) {
-      // Prefer template voice over Gemma's empty disclaimer.
       return {
-        ...summarizeWithTemplate(input),
+        ...summarizeWithNarrativeFallback(input),
         source,
         model: `${model} (repaired)`,
         latencyMs,

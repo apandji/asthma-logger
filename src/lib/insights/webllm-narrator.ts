@@ -72,8 +72,8 @@ export async function summarizeWithWebLLM(
     const prompt = buildOllamaPrompt(input);
     const reply = await engine.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.15,
-      max_tokens: 220,
+      temperature: 0.35,
+      max_tokens: 240,
     });
     const text = reply.choices[0]?.message?.content ?? "";
     const parsed = parseNarratorJson(

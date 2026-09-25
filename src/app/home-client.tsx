@@ -277,20 +277,44 @@ export default function HomeClient() {
 
   const refresh = useCallback(async () => {
     const local = await getAllLocalLogs();
-    setLogs(local);
+    const byId = new Map<string, LocalLog>(local.map((l) => [l.id, l]));
+
     try {
       const res = await fetch("/api/logs", { cache: "no-store" });
       if (res.ok) {
-        const data = (await res.json()) as { logs: AttackLogDTO[] };
+        const data = (await res.json()) as { logs: AttackLogDTO[]; demo?: boolean };
         const map: Record<string, AttackLogDTO> = {};
         for (const row of data.logs) {
           map[row.id] = row;
+          // Demo / server-only rows: surface them in the diary list without IndexedDB.
+          if (!byId.has(row.id)) {
+            byId.set(row.id, {
+              id: row.id,
+              loggedAt: row.loggedAt,
+              latitude: row.latitude,
+              longitude: row.longitude,
+              feeling: (row.feeling as Feeling | null) ?? null,
+              syncStatus: "synced",
+              serverEnvStatus: row.envStatus,
+              serverLog: row,
+              placeName: row.placeName ?? null,
+            });
+          }
         }
         setEnriched(map);
+        if (data.demo) {
+          setStatus("Demo diary loaded (20 sample logs in LA). Insights uses this same data.");
+        }
       }
     } catch {
       // fall back to serverLog stored on each local row
     }
+
+    setLogs(
+      [...byId.values()].sort(
+        (a, b) => new Date(b.loggedAt).getTime() - new Date(a.loggedAt).getTime(),
+      ),
+    );
   }, []);
 
   useEffect(() => {

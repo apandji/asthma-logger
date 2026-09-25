@@ -99,7 +99,11 @@ export default function InsightsDemo() {
     };
   }, [forceIos, forceWebgpu]);
 
-  const gate = meta?.supplementedDemoBaselines ? DEMO_GATE : DEFAULT_GATE;
+  const baselineCount = frames.filter((f) => f.kind === "baseline").length;
+  const gate =
+    meta?.supplementedDemoBaselines || baselineCount < DEFAULT_GATE.minBaselines
+      ? DEMO_GATE
+      : DEFAULT_GATE;
   const report: LiftReport = useMemo(() => computeLift(frames, gate), [frames, gate]);
   const template = useMemo(() => summarizeWithTemplate(toNarratorInput(report)), [report]);
 

@@ -81,6 +81,7 @@ export async function summarizeWithWebLLM(
       WEBLLM_GEMMA_MODEL,
       Date.now() - started,
       "webllm",
+      input,
     );
     if (parsed) return parsed;
     return {

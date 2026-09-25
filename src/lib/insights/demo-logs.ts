@@ -1,4 +1,4 @@
-import type { AttackLogDTO, EnvSnapshot, EnvSourceValues } from "@/lib/types";
+import type { AttackLogDTO, EnvSnapshot, EnvSourceValues, EnvStatus } from "@/lib/types";
 
 function emptySources(): EnvSourceValues {
   return {
@@ -122,7 +122,7 @@ export function buildDemoAttackLogs(): AttackLogDTO[] {
       latitude: 34.0522,
       longitude: -118.2437,
       feeling: s.feeling,
-      envStatus: "ready",
+      envStatus: "ready" as EnvStatus,
       envFetchedAt: loggedAt(s.daysAgo, s.hour),
       envError: null,
       aqi: s.aqi,

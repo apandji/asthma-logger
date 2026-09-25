@@ -74,7 +74,7 @@ export async function POST(req: Request) {
 
     const data = (await res.json()) as { response?: string };
     const latencyMs = Date.now() - started;
-    const parsed = parseNarratorJson(data.response ?? "", model, latencyMs);
+    const parsed = parseNarratorJson(data.response ?? "", model, latencyMs, "ollama", input);
     if (!parsed) {
       return NextResponse.json({
         ...summarizeWithTemplate(input),

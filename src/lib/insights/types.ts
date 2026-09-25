@@ -66,8 +66,10 @@ export type NarratorOutput = {
 };
 
 export const NARRATOR_RULES = [
-  "Do not claim causation or predict an attack.",
-  "Always mention the counts for the top driver when gated rows exist.",
-  "If no gated rows, say we need more usual days or more attacks.",
-  "Outdoor air only — not indoor, not a diagnosis.",
+  'Lead with “Your attacks were potentially triggered by …” naming the top outdoor signals from the table.',
+  "Use the real counts for the #1 driver (attacksWith of nAttacks vs baselinesWith of nBaselines).",
+  "Do not invent drivers or counts. Do not predict a future attack or give medical advice.",
+  "Soft language is OK (“potentially triggered”, “lined up with”, “showed up more often”). Absolute causation is not.",
+  "Put hedging only in caveat. Headline must stay concrete.",
+  "If the table is empty or nAttacks is 0, then say we need more logs — otherwise never claim there is nothing to say.",
 ] as const;

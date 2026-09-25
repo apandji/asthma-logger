@@ -93,6 +93,7 @@ export async function summarizeWithGemmaWebGpu(
       GEMMA_WEBGPU_MODEL_ID,
       Date.now() - started,
       "gemma-webgpu",
+      input,
     );
     if (parsed) return parsed;
     return {

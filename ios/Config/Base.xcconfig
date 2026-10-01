@@ -1,0 +1,11 @@
+// Shared build settings. Personal values (team, bundle prefix, API keys) go in Secrets.xcconfig,
+// which is gitignored. Copy Secrets.example.xcconfig → Secrets.xcconfig and fill it in.
+
+BUNDLE_ID_PREFIX = com.example
+DEVELOPMENT_TEAM =
+OPENAQ_API_KEY =
+AIRNOW_API_KEY =
+
+#include? "Secrets.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = $(BUNDLE_ID_PREFIX).asthmalog

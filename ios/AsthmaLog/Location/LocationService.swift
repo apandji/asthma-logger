@@ -1,3 +1,4 @@
+import Observation
 import CoreLocation
 import CoreMotion
 import AsthmaCore

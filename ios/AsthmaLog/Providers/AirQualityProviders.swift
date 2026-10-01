@@ -5,7 +5,7 @@ import Foundation
 struct OpenAQProvider {
     let key: String
 
-    func observations(latitude lat: Double, longitude lon: Double) async throws -> [Observation] {
+    func observations(latitude lat: Double, longitude lon: Double) async throws -> [EnvObservation] {
         var locations = try await search(lat, lon, monitor: true)
         let hasPM = locations.contains { ($0.sensors ?? []).contains(where: \.measuresPM25) }
         let hasO3 = locations.contains { ($0.sensors ?? []).contains(where: \.measuresOzone) }
@@ -22,7 +22,7 @@ struct OpenAQProvider {
             latest[id] = try await HTTP.get(url, headers: headers, as: OpenAQ.Results<OpenAQ.Latest>.self).results ?? []
         }
 
-        var out: [Observation] = []
+        var out: [EnvObservation] = []
         if let loc = pmLoc, let id = loc.id,
            let r = OpenAQ.reading(at: loc, latest: latest[id] ?? [], lat: lat, lon: lon, measures: { $0.measuresPM25 }) {
             out.append(OpenAQ.observation(r, signal: .pm25))
@@ -53,7 +53,7 @@ struct OpenAQProvider {
 struct AirNowProvider {
     let key: String
 
-    func current(latitude: Double, longitude: Double) async throws -> [Observation] {
+    func current(latitude: Double, longitude: Double) async throws -> [EnvObservation] {
         let rows: [AirNow.Row] = try await HTTP.get(url("observation/latLong/current/", latitude, longitude))
         return AirNow.aqiObservation(rows, asOf: .now).map { [$0] } ?? []
     }

@@ -138,8 +138,8 @@ public enum OpenAQ {
         return nil
     }
 
-    public static func observation(_ r: Reading, signal: Signal) -> Observation {
-        Observation(
+    public static func observation(_ r: Reading, signal: Signal) -> EnvObservation {
+        EnvObservation(
             signal: signal,
             value: r.value,
             unit: signal == .pm25 ? "µg/m³" : "ppb",
@@ -178,11 +178,11 @@ public enum AirNow {
     }
 
     /// AQI observation with the driver pollutant (the highest AQI row).
-    public static func aqiObservation(_ rows: [Row], asOf: Date) -> Observation? {
+    public static func aqiObservation(_ rows: [Row], asOf: Date) -> EnvObservation? {
         guard let best = rows.filter({ ($0.AQI ?? -1) >= 0 }).max(by: { ($0.AQI ?? -1) < ($1.AQI ?? -1) }),
               let aqi = best.AQI else { return nil }
         let driver = best.ParameterName.map { " (\($0))" } ?? ""
-        return Observation(
+        return EnvObservation(
             signal: .aqi, value: Double(aqi), unit: "AQI", asOf: asOf, source: "AirNow",
             spatialScale: .region, confidence: .medium,
             stationName: best.ReportingArea, category: (best.Category?.Name ?? "") + driver

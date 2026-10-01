@@ -155,7 +155,7 @@ import Testing
 
 @Suite struct ConditionsTests {
     @Test func honestCopy() {
-        let o = Observation(signal: .pm25, value: 27.4, unit: "µg/m³", asOf: Date(timeIntervalSince1970: 16 * 3600),
+        let o = EnvObservation(signal: .pm25, value: 27.4, unit: "µg/m³", asOf: Date(timeIntervalSince1970: 16 * 3600),
                             source: "OpenAQ", spatialScale: .station, distanceKm: 17.6, stationName: "Denver-CAMP")
         #expect(ObservationCopy.line(o, timeZone: TimeZone(identifier: "UTC")!) ==
             "Regional outdoor PM2.5 27 µg/m³ · 11 mi from Denver-CAMP · 4:00 PM · OpenAQ")
@@ -164,9 +164,9 @@ import Testing
     @Test func conditionsFeedFrames() {
         let now = Date()
         let c = Conditions(observations: [
-            Observation(signal: .temperature, value: 96, unit: "°F", asOf: now, source: "Apple Weather", spatialScale: .modelGrid),
-            Observation(signal: .ozone, value: 72, unit: "ppb", asOf: now, source: "OpenAQ", spatialScale: .station),
-            Observation(signal: .ozone, value: 40, unit: "ppb", asOf: now, source: "AirNow", spatialScale: .region),
+            EnvObservation(signal: .temperature, value: 96, unit: "°F", asOf: now, source: "Apple Weather", spatialScale: .modelGrid),
+            EnvObservation(signal: .ozone, value: 72, unit: "ppb", asOf: now, source: "OpenAQ", spatialScale: .station),
+            EnvObservation(signal: .ozone, value: 40, unit: "ppb", asOf: now, source: "AirNow", spatialScale: .region),
         ])
         let f = FrameBuilder.frame(id: "a", kind: .attack, hourOfDay: 15, month: 7, conditions: c.input)
         #expect(f.tempBand == .hot)

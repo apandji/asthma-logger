@@ -17,46 +17,70 @@ The app targets **iOS 27** and the **Foundation Models** framework, both newer t
 
 ```
 ios/
-├── project.yml          XcodeGen spec — the source of truth for the Xcode project
+├── README.md            first-run guide for the owner (Xcode, signing, keys)
+├── project.yml          XcodeGen spec: the source of truth for the Xcode project
+├── Config/              Base.xcconfig (committed), Secrets.xcconfig (gitignored: team, bundle prefix, API keys)
+├── scripts/test-core.sh runs AsthmaCore tests (local Swift, or Docker in cloud sessions)
 ├── AsthmaCore/          Swift package, Foundation only. Builds and tests on Linux.
 │   ├── Sources/AsthmaCore/
-│   │   ├── Frames/      FeatureFrame, bins, binSpecVersion
-│   │   ├── Lift/        lift table, gate, smoothed log-LR scoring
-│   │   ├── Narrator/    template narrator, prompt builder, output validation
-│   │   └── Places/      visit clustering → home / work / frequent (pure math)
-│   └── Tests/AsthmaCoreTests/   includes golden tests against ../../fixtures
+│   │   ├── Frames/      FeatureFrame, Banding (raw value → band), FrameBuilder, DemoData
+│   │   ├── Conditions/  Observation + provenance, honest copy, OpenAQ/AirNow decoding and station choice
+│   │   ├── Lift/        bins, lift table, gate
+│   │   ├── Forecast/    RateTable (smoothed log-LR), RiskBander, Outlook (windows, cold start)
+│   │   ├── Narrator/    style bands, template, prompt builder, NarrationGuard (output checks)
+│   │   ├── Journal/     JournalTag (closed list), TagExtraction
+│   │   └── Places/      visit clustering → home/work/frequent; indoor/outdoor guesser
+│   └── Tests/AsthmaCoreTests/   golden tests against ../../fixtures + unit tests
 └── AsthmaLog/           the app: SwiftUI + Apple frameworks
-    ├── App/             entry point, tab bar (Journal, Insights)
-    ├── Journal/
-    ├── Insights/
-    ├── Providers/       WeatherKit, OpenAQ, AirNow (Ambee later) behind one protocol
-    ├── Location/        CoreLocation, visits, indoor/outdoor inference
+    ├── App/             entry point, tabs (Journal, Insights), Prefs keys
+    ├── Journal/         JournalView, EventDetailView, LogService (log → locate → stamp)
+    ├── Insights/        InsightsView, InsightsModel
+    ├── Settings/        SettingsView (insight voice slider lives here), settings toolbar
+    ├── Providers/       WeatherKit, OpenAQ, AirNow, ConditionsService (parallel, fail-open), attribution
+    ├── Location/        CoreLocation (async liveUpdates, no delegate), CoreMotion
     ├── Health/          HealthKit writes
-    ├── Intelligence/    Foundation Models narrator + tag extraction, Speech, Vision
-    ├── Persistence/     SwiftData models
-    └── Theme/           every color, font and spacing token lives here
+    ├── Intelligence/    Foundation Models: narration + tag suggestions
+    ├── Persistence/     SwiftData LogEvent
+    └── Theme/           every color, font and spacing token; Card, Chip
 ```
 
 **The split matters.** Anything that can be plain Swift goes in `AsthmaCore` so cloud agents can test it. `AsthmaLog` stays a thin layer that calls Apple frameworks and draws views. If you find logic in a view, move it.
 
 ## Project file: XcodeGen
 
-We commit `project.yml`, not `.xcodeproj` (it's gitignored). That way:
+We commit `project.yml`, not `.xcodeproj`. The generated project, `Info.plist` and entitlements are gitignored. That way:
 
-- Agents in the cloud can add files, targets, capabilities and Info.plist keys by editing YAML.
+- Agents in the cloud can add files, capabilities and Info.plist keys by editing YAML.
 - No `project.pbxproj` merge conflicts.
 
-Owner's one-time setup on the Mac: `brew install xcodegen`. After every pull: `cd ios && xcodegen`, then open `AsthmaLog.xcodeproj`.
+Usage strings, entitlements and the API-key plumbing (`$(OPENAQ_API_KEY)` → Info.plist → `Secrets`) all live in `project.yml`. Change them there, never in Xcode's UI, or `xcodegen` will wipe the change.
+
+The app target sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`: app code is main-actor unless marked `nonisolated`. Types that must cross isolation (e.g. `@Generable` structs) are marked `nonisolated`. Keep `Decodable` API types in `AsthmaCore`.
 
 ## Build and test
 
 | Where | Command | Notes |
 |-------|---------|-------|
-| Cloud or Mac | `cd ios/AsthmaCore && swift test` | Must pass before every PR |
-| Mac (Remote Control) | `cd ios && xcodegen && xcodebuild -scheme AsthmaLog -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build` | Use whichever simulator is installed |
-| Phone | Xcode → select iPhone → Run | Needs signing team + capabilities (below) |
+| Cloud or Mac | `ios/scripts/test-core.sh` | Must pass before every PR |
+| Cloud | `swiftc -parse` on changed app files | Syntax only; the app needs Apple SDKs to type-check |
+| Mac (Remote Control) | `cd ios && xcodegen && xcodebuild -scheme AsthmaLog -destination 'generic/platform=iOS Simulator' build` | Real compile of the app |
+| Phone | Xcode → pick the iPhone → Run | See README for signing and capabilities |
 
-Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web prototype's lift table for the shared v1 bins exactly.
+Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web prototype's lift table, template headline and bands exactly.
+
+## Status
+
+| Built | Not yet |
+|-------|---------|
+| Log a puff / usual moment, offline-first | Voice notes (Speech + tag suggestions UI) |
+| Precise fix, motion, indoor/outdoor guess + correction | Place learning (visits → home/work) — `Places.cluster` is ready in core |
+| WeatherKit, OpenAQ, AirNow, fail-open with provenance | Pollen (Ambee) |
+| HealthKit inhaler usage write + delete | Photos |
+| Insights: lift, template + Foundation Models narration with output checks | Risograph theme |
+| Look-ahead: 72 h WeatherKit + AirNow categories, personal windows or cold-start hazards | Notifications |
+| Settings: voice slider, model toggle, Health, auto usual moments, demo data | |
+
+**Unverified on device** (written without an Apple SDK; check first if the build fails): `CLServiceSession` / `CLLocationUpdate.liveUpdates()` usage, `WeatherService.weather(for:including: .current, .alerts)`, `HKQuantityType(.inhalerUsage)`, the `FoundationModels` calls in `Intelligence/OnDeviceModel.swift`, and `@Generable` on `nonisolated` structs.
 
 ## Frameworks and how we use them
 

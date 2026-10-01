@@ -1,0 +1,57 @@
+# XcodeGen spec — the source of truth for the Xcode project. After pulling: `xcodegen` (from ios/).
+# The generated AsthmaLog.xcodeproj, Info.plist and entitlements are not committed.
+name: AsthmaLog
+options:
+  deploymentTarget:
+    iOS: "27.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+packages:
+  AsthmaCore:
+    path: AsthmaCore
+targets:
+  AsthmaLog:
+    type: application
+    platform: iOS
+    sources:
+      - AsthmaLog
+    dependencies:
+      - package: AsthmaCore
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        # App code runs on the main actor unless it opts out — fewer concurrency errors for UI code.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: AsthmaLog/Info.plist
+      properties:
+        CFBundleDisplayName: Asthma Log
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: Your location stamps each inhaler log with the outdoor air and weather where you were.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Lets the app learn your home, work and usual places so forecasts use the right spot.
+        NSMotionUsageDescription: Movement (walking, driving, still) helps guess whether you were indoors or outdoors.
+        NSHealthUpdateUsageDescription: Saves each inhaler puff to Apple Health as Inhaler Usage.
+        NSHealthShareUsageDescription: Reads nothing yet. Required by Apple Health alongside saving.
+        NSMicrophoneUsageDescription: Record a short voice note about how you're feeling.
+        NSSpeechRecognitionUsageDescription: Turns your voice note into text on this iPhone.
+        OPENAQ_API_KEY: $(OPENAQ_API_KEY)
+        AIRNOW_API_KEY: $(AIRNOW_API_KEY)
+    entitlements:
+      path: AsthmaLog/AsthmaLog.entitlements
+      properties:
+        com.apple.developer.weatherkit: true
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []

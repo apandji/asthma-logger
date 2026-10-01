@@ -1,0 +1,476 @@
+{
+  "binSpecVersion": 1,
+  "cases": [
+    {
+      "input": {
+        "pm25": 11.9
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "low",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "pm25": 12
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "moderate",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": true,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "pm25": 34.9
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "moderate",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": true,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "pm25": 35
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "high",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": true,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "ozone": 54.9
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "low",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "ozone": 55
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "moderate",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "ozone": 69.9
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "moderate",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "ozone": 70
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "high",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "temperatureF": 32
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "cold",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "temperatureF": 32.1
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "mild",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "temperatureF": 89.9
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "mild",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "temperatureF": 90
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "hot",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "temperatureF": 70,
+        "isExtremeTemp": true
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "hot",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": true
+      }
+    },
+    {
+      "input": {
+        "humidity": 34.9
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "dry",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "humidity": 35
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "ok",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "humidity": 65
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "ok",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "humidity": 65.1
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "humid",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "weed": "Very High"
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "high",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "weed": "High"
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "high",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "weed": "Moderate"
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "moderate",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "weed": "Low"
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "low",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "weed": "None"
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "none",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "weed": "???"
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "unknown",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "aqi": 50,
+        "temperatureF": 70
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "mild",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "aqi": 51,
+        "temperatureF": 70
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "mild",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": true,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "temperatureF": 70,
+        "stormSummary": "Excessive Heat Warning"
+      },
+      "expected": {
+        "hourOfDay": 15,
+        "season": "summer",
+        "tempBand": "mild",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": true
+      }
+    },
+    {
+      "input": {
+        "temperatureF": 70,
+        "loggedAt": "2026-01-10T03:00:00"
+      },
+      "expected": {
+        "hourOfDay": 3,
+        "season": "winter",
+        "tempBand": "mild",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "temperatureF": 70,
+        "loggedAt": "2026-04-10T23:00:00"
+      },
+      "expected": {
+        "hourOfDay": 23,
+        "season": "spring",
+        "tempBand": "mild",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    },
+    {
+      "input": {
+        "temperatureF": 70,
+        "loggedAt": "2026-10-10T12:00:00"
+      },
+      "expected": {
+        "hourOfDay": 12,
+        "season": "fall",
+        "tempBand": "mild",
+        "humidityBand": "unknown",
+        "pm25Band": "unknown",
+        "ozoneBand": "unknown",
+        "pollenWeed": "unknown",
+        "smokeAtPoint": false,
+        "heatAlert": false
+      }
+    }
+  ]
+}

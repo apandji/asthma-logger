@@ -7,8 +7,15 @@ fixtures/
   lift-<name>.json   { "binSpecVersion": 1, "gate": {...}, "frames": [...], "expected": { LiftReport } }
 ```
 
-- Generate `expected` from the web prototype; don't hand-edit it.
+- Regenerate from `web/`: `npx tsx scripts/export-fixtures.ts`. Don't hand-edit.
 - `ios/AsthmaCore` tests load every `lift-*.json` and must match `expected` exactly (counts, `gated`, ordering; rates to 1e-9).
 - When a bin edge changes, bump `binSpecVersion` and regenerate.
 
-First fixture to add: the synthetic demo frames from `web/src/lib/insights/demo-frames.ts`.
+| File | What |
+|------|------|
+| `lift-demo-gate.json` | Demo diary (10 inhaler, 24 usual) with the demo gate, plus the template headline |
+| `lift-demo-default-gate.json` | Same frames, production gate |
+| `lift-edge-small.json` | Too few samples, unknown bands, infinite lift |
+| `bands-v1.json` | Raw value → band edge cases (PM2.5, ozone, temp, humidity, pollen, smoke, heat, season) |
+
+Run the iOS side with `ios/scripts/test-core.sh`.

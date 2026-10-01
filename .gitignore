@@ -18,3 +18,7 @@ DerivedData/
 .build/
 .swiftpm/
 Package.resolved
+
+# XcodeGen output
+ios/AsthmaLog/Info.plist
+ios/AsthmaLog/AsthmaLog.entitlements

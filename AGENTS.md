@@ -1,9 +1,100 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# Asthma trigger log — agent guide
 
-# This is NOT the Next.js you know
+Read this first. It covers the product, the rules that hold across both apps, and how we work. Then read the AGENTS.md in the folder you are changing (`ios/` or `web/`).
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+This is **not medical advice** and the app is not a medical device. Every surface says so in plain words.
 
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+---
 
-<!-- END:nextjs-agent-rules -->
+## What we are building
+
+A diary for people who use a rescue inhaler. Each puff is a log: **when**, **where**, and **what the conditions were**. From enough logs (and enough ordinary days to compare against) the app learns which conditions show up more often on *your* inhaler days, and uses that to flag upcoming days that look like them.
+
+Two views:
+
+| View | Job |
+|------|-----|
+| **Journal** | The record. One tap logs a puff; outdoor conditions, place, and indoor/outdoor are stamped on it. Voice notes (and optionally the day's photos) add the context the APIs can't see. |
+| **Insights** | Patterns and look-ahead. "High ozone showed up on 8 of 14 inhaler days vs 3 of 40 usual days." Then: "Thu afternoon looks more like your inhaler days than your usual ones." |
+
+## Repo map
+
+| Path | What | Status |
+|------|------|--------|
+| `ios/` | The iOS app (SwiftUI, iOS 27). **Where new product work happens.** | Starting |
+| `ios/AsthmaCore/` | Pure Swift package: frames, lift, gating, narrator prompts. Builds on Linux. | Planned |
+| `web/` | Next.js prototype (Vercel + Supabase). A separate app, kept for demos and as a possible API proxy. | Working prototype |
+| `docs/` | Design docs, the product spec for both apps. Read the one that matches your task. | Living |
+| `fixtures/` | Shared test data: sample logs → expected lift table. Both apps' tests check against it. | Planned |
+
+The web app and the iOS app share **ideas and contracts**, not code. Don't import across them, and don't "fix" the web app to match iOS unless asked.
+
+## Principles (non-negotiable)
+
+Each one comes from the docs. Follow the link before you change anything in that area.
+
+1. **Code finds the pattern; the model only says it.** Bins, counts, lift and gating are deterministic code. The language model gets the gated table, never raw logs or coordinates, and returns structured output (`headline`, `caveat`, `drivers`). A template narrator always works without the model. → [docs/on-device-insights.md](docs/on-device-insights.md)
+2. **Honest numbers.** Every environmental value carries `source`, `asOf`, `spatialScale`, `distanceKm`, `confidence`, and is labeled **outdoor**. A 15-mile monitor is "regional", not "at your location". → [docs/env-signals-and-aggregators.md](docs/env-signals-and-aggregators.md), [docs/data-architecture.md](docs/data-architecture.md)
+3. **Compare against usual days.** Inhaler logs alone can't show a pattern. We need baseline samples (ordinary hours, no puff) to compare with. Unsampled hours are missing, not negatives. → [docs/predictive-engine.md §4](docs/predictive-engine.md)
+4. **One frame for past and future.** Past logs and forecast hours go through the same bins with the same edges (`binSpecVersion`). Risk days come from the same rate table as the Journal patterns. No separate "prediction model". → [docs/predictive-engine.md §3](docs/predictive-engine.md)
+5. **Never say an attack will happen.** Allowed: "looks more like your inhaler days". Not allowed: a percent risk, "you will have an attack", "the air you will breathe", causal claims.
+6. **Fail open.** Each data source is optional. A missing key or a failed call must never block a log.
+
+## Decisions so far
+
+| Topic | Decision | Notes |
+|-------|----------|-------|
+| Platform | iOS 27+, iPhone 15 Pro is the test device | Needed for Apple Foundation Models |
+| On-device AI | Apple **Foundation Models** for language; Vision / Speech for photos and voice | Template narrator stays the fallback |
+| Audience | TestFlight group | Proof of concept first; privacy matters but isn't the gate |
+| Storage | **Local-first** (SwiftData). No server for iOS | CloudKit or sync later, if ever |
+| Weather | **WeatherKit** | Ambee contract is being renegotiated |
+| Air quality / pollen | **OpenAQ** (nearest station) + **AirNow** (fallback + AQ forecast) | WeatherKit has no AQ or pollen. **Pollen is a known gap** until Ambee |
+| Location | Precise; learn home / work / frequent places; infer indoor vs outdoor | Home place drives the forecast |
+| HealthKit | **Write** inhaler usage | Reads (peak flow, SpO₂, sleep…) later |
+| Apple Watch | Not in the proof of concept | |
+| Journaling | Voice note → on-device transcript → model extracts tags you confirm. Photos of the day, opt-in | Confirmed tags become bins |
+| Risk prediction | From *when* (hour, season), *where* (place, indoor/outdoor), and *conditions* (weather, AQ) on inhaler days vs usual days | |
+| Look | Dark, stock iOS for now. Risograph-inspired (minimal, lightweight) later | Keep styling in one theme file so it can be swapped |
+
+## Shared contracts
+
+These must mean the same thing in both apps. Change one → update `docs/`, `fixtures/`, and both implementations, or note why one app lags.
+
+- **Feature frame**: one hour at one place, binned. Shared v1 bins: `pm25`, `ozone`, `pollen_weed`, `temp`, `humidity`, `smoke_at_point`, `heat_alert`, `hour`, `season`. iOS adds `place`, `indoor_outdoor`, and journal tags as v2. Reference: `web/src/lib/insights/types.ts`, `lift.ts`.
+- **Lift row**: `attacksWith`, `baselinesWith`, `nAttacks`, `nBaselines`, rates, `lift`, `gated`. Raw counts are always shown to the user.
+- **Gate**: default 8 inhaler logs, 20 baselines, 4 in the level, lift > 1.25.
+- **Scoring for risk days**: smoothed log likelihood ratio (add-k, k=2) per [docs/predictive-engine.md §5](docs/predictive-engine.md). Display lift stays raw.
+- **Narrator I/O**: input = gated rows + rules + style; output = `{headline, caveat, drivers}`. Never shows an ungated or invented number.
+
+## How we work
+
+The owner is new to Swift and works by describing what they want. So:
+
+- **Small, demoable steps.** One feature per branch/PR, each ending in something you can see on the phone.
+- **Explain Apple-side steps.** When a change needs Xcode clicks (signing, capabilities, entitlements, App Store Connect), list them exactly.
+- **Say what you verified.** Every PR states: tests run, built in Xcode yes/no, tried on device yes/no.
+- **Ask before** adding a dependency, a new data source, a new permission prompt, or anything that sends user data off the device.
+
+Two ways to run an agent on this repo:
+
+| Mode | Where it runs | Can do | Can't do |
+|------|---------------|--------|----------|
+| **Cloud** (claude.ai/code, Claude app) | Linux container | Edit anything; `swift test` in `ios/AsthmaCore`; lint/build `web/`; open PRs | Build the iOS app, run the simulator, install on a phone |
+| **Remote Control** (`claude remote-control` in this repo on the Mac, or Claude Desktop) | Owner's Mac | Everything above plus `xcodegen`, `xcodebuild`, simulator, tests on the app target | Tap through the app on the phone for you |
+
+Rule of thumb: logic and tests in the cloud; anything that has to compile the app or touch a device goes through Remote Control or the owner's Xcode. A cloud PR that changes `ios/AsthmaLog/` says **"not compiled — build in Xcode before merging."**
+
+## Inspiration
+
+<!-- Fill in together: apps, references, images, people. -->
+- Risograph print: limited spot inks, visible grain, slight misregistration, off-white paper. Minimal and light. (Not yet; the first build is stock dark iOS.)
+- _TODO: apps whose logging or insight UX we admire_
+- _TODO: tone references for insight copy (the web prototype has a clinical → plain → poetic slider)_
+
+## Open questions
+
+- Ambee contract: which datasets, and does a key ever ship in the app or only behind a proxy?
+- Pollen source until Ambee (Google Pollen API? skip?).
+- Baseline sampling on iOS: daily at home place, on app open, or on place visits?
+- Photos: which signals are worth it (scene type, outdoor/indoor, smoke/pets/gym) vs the permission cost?

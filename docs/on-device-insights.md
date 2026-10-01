@@ -138,14 +138,14 @@ If the model returns prose without JSON, the template path is the fallback. Neve
 
 | Path | Role |
 |------|------|
-| `src/lib/insights/lift.ts` | Pure lift / gating |
-| `src/lib/insights/demo-frames.ts` | Synthetic frames for the talk |
-| `src/lib/insights/style.ts` | Clinical → poetic style bands (voice only) |
-| `src/lib/insights/summarize.ts` | Narrator interface: template + prompt |
-| `src/app/api/insights/summarize/route.ts` | Optional laptop Ollama proxy |
-| `src/app/insights/page.tsx` | Interactive prototype UI |
+| `web/src/lib/insights/lift.ts` | Pure lift / gating |
+| `web/src/lib/insights/demo-frames.ts` | Synthetic frames for the talk |
+| `web/src/lib/insights/style.ts` | Clinical → poetic style bands (voice only) |
+| `web/src/lib/insights/summarize.ts` | Narrator interface: template + prompt |
+| `web/src/app/api/insights/summarize/route.ts` | Optional laptop Ollama proxy |
+| `web/src/app/insights/page.tsx` | Interactive prototype UI |
 
-Open `/insights` after `npm run dev`.
+Open `/insights` after `npm run dev` (from `web/`).
 
 1. **Lift from current data** — merges `/api/logs` (Postgres) with IndexedDB after sync. Attack rows = inhaler logs; usual-day rows = logs where feeling is **ok** (or demo baselines until you have enough ok-days).
 2. **Style slider (Gemma only)** — Clinical → Poetic. Template stays a fixed count sentence; Gemma re-runs when the band flips. Counts stay fixed.

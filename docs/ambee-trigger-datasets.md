@@ -14,7 +14,7 @@ When `AMBEE_API_KEY` is set, each **new** log (after sync) calls Ambee endpoints
 | `/fire/latest/by-lat-lng` | Nearest fire km if ≤ 50 km |
 | `/disasters/latest/by-lat-lng` + `/disasters/latest/by-continent` | Storms (SW), cyclones (TC), extreme temp (ET), wildfires (WF), volcanoes (VO, shown on **Air**, not Wildfires) — **with distance** |
 
-Snapshot JSON lives in `AttackLog.envSnapshotJson`. Badges say **outdoor / modeled**. Existing Supabase DBs need `prisma/supabase-add-env-snapshot.sql` once.
+Snapshot JSON lives in `AttackLog.envSnapshotJson`. Badges say **outdoor / modeled**. Existing Supabase DBs need `web/prisma/supabase-add-env-snapshot.sql` once.
 
 NWS alerts, AirNow (when keyed), and FIRMS still run. We do **not** call fire-risk, ILI, or weather.`ozone`. Inversion heuristic is dropped (not measurable here).
 

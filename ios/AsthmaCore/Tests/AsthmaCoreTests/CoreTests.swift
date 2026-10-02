@@ -247,6 +247,12 @@ import Testing
 }
 
 @Suite struct ForecastFrameTests {
+    @Test func gateProgress() {
+        let p = GateProgress(nAttacks: 5, nBaselines: 2, gate: .default)
+        #expect(!p.isMet && p.minAttacks == 8 && p.minBaselines == 20)
+        #expect(GateProgress(nAttacks: 8, nBaselines: 20, gate: .default).isMet)
+    }
+
     @Test func lookAheadReadsPlainly() {
         let evening = RateTable.Entry(bin: "hour", level: "evening", attacksWith: 4, baselinesWith: 0, logLR: 1.2, gated: true)
         let ozone = RateTable.Entry(bin: "ozone", level: "high", attacksWith: 8, baselinesWith: 2, logLR: 0.9, gated: true)

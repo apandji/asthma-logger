@@ -53,7 +53,9 @@ struct InsightsView: View {
 
     private var patternCard: some View {
         Card(title: "Your pattern", systemImage: "sparkles") {
-            if let n = model.narration {
+            if let p = model.progress, !p.isMet {
+                learning(p)
+            } else if let n = model.narration {
                 Text(n.headline).font(Theme.headlineSerif)
                 Text(n.caveat).font(Theme.caption).foregroundStyle(Theme.secondaryText)
                 HStack {
@@ -72,6 +74,10 @@ struct InsightsView: View {
 
     private var lookAheadCard: some View {
         Card(title: "Looking ahead", systemImage: "calendar") {
+            if let p = model.progress, !p.isMet {
+                Text("Until felt air knows your pattern, this only shows general outdoor alerts.")
+                    .font(Theme.caption).foregroundStyle(Theme.secondaryText)
+            }
             if model.isLoadingForecast && model.days.isEmpty {
                 ProgressView()
             }
@@ -81,7 +87,11 @@ struct InsightsView: View {
                         Text(day.day.formatted(.dateTime.weekday(.abbreviated).month().day()))
                             .font(Theme.body.weight(.semibold))
                         Spacer()
-                        Chip(text: day.band.rawValue.capitalized, color: color(day.band))
+                        if day.isPersonal {
+                            Chip(text: day.band.rawValue.capitalized, color: color(day.band))
+                        } else if !day.genericHazards.isEmpty {
+                            Chip(text: "Heads-up", color: Theme.accent)
+                        }
                     }
                     ForEach(day.windows) { w in
                         Text(OutlookCopy.headline(w, timeRange: timeRange(w))).font(Theme.caption)
@@ -129,6 +139,27 @@ struct InsightsView: View {
             } else {
                 Text("Log each time you use your inhaler. felt air adds I'm okay moments on its own.").font(Theme.caption)
             }
+        }
+    }
+
+    /// Before the sample gate: no sentence to read yet, just honest progress.
+    @ViewBuilder private func learning(_ p: GateProgress) -> some View {
+        Text("Still learning your pattern").font(Theme.headline)
+        progressRow("Times you used your inhaler", p.attacks, p.minAttacks)
+        progressRow("I'm okay moments", p.baselines, p.minBaselines)
+        Text("I'm okay moments are added automatically when you open the app. Outdoor air only, not a diagnosis.")
+            .font(Theme.caption).foregroundStyle(Theme.secondaryText)
+    }
+
+    private func progressRow(_ label: String, _ n: Int, _ goal: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                Spacer()
+                Text("\(min(n, goal)) of \(goal)").font(Theme.number).foregroundStyle(Theme.secondaryText)
+            }
+            .font(Theme.caption)
+            ProgressView(value: Double(min(n, goal)), total: Double(goal)).tint(Theme.accent)
         }
     }
 

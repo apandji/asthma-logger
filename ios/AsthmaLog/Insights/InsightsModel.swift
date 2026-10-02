@@ -12,6 +12,7 @@ final class InsightsModel {
     private(set) var isLoadingForecast = false
     private(set) var usingDemo = false
     private(set) var frameCount = (attacks: 0, baselines: 0, skipped: 0)
+    private(set) var progress: GateProgress?
 
     private var table: RateTable?
     private var bander: RiskBander?
@@ -33,6 +34,7 @@ final class InsightsModel {
         }
         let report = Lift.compute(frames, gate: gate)
         self.report = report
+        progress = GateProgress(nAttacks: report.nAttacks, nBaselines: report.nBaselines, gate: gate)
         let table = RateTable(frames: frames, gate: gate)
         self.table = table
         bander = RiskBander(table: table, baselineFrames: frames)

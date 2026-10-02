@@ -22,7 +22,7 @@ enum Theme {
 
     static let headline = Font.system(.title3, design: .rounded).weight(.semibold)
     /// The one New York sentence per screen (the insight headline). Never bold.
-    static let headlineSerif = Font.system(.title2, design: .serif, weight: .medium)
+    static let headlineSerif = Font.system(.title3, design: .serif, weight: .medium)
     static let body = Font.body
     static let caption = Font.caption
     static let number = Font.system(.body, design: .rounded).monospacedDigit()

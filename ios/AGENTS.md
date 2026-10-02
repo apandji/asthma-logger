@@ -82,7 +82,7 @@ Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web pr
 | Look-ahead: 72 h WeatherKit + AirNow categories, personal windows or cold-start hazards | Notifications |
 | Settings: voice slider, model toggle, Health, auto usual moments, demo data | |
 
-**Compiled, not yet run on device** (Xcode 27.0, iOS 27.0 SDK, 2026-10-01: clean build for `generic/platform=iOS`, no errors or warnings): `CLServiceSession` / `CLLocationUpdate.liveUpdates()`, `WeatherService.weather(for:including: .current, .alerts)`, `HKQuantityType(.inhalerUsage)`, the `FoundationModels` calls in `Intelligence/OnDeviceModel.swift`, `@Generable` on `nonisolated` structs, and `async let` in `ConditionsService` all type-check as written. The only compile fix needed was renaming `Observation` → `EnvObservation` (see "Project file" above). Still to confirm on the iPhone: location prompt and fix, WeatherKit auth (needs the App ID service), the Health write, and Foundation Models availability.
+**On device** (iPhone 15 Pro, iOS 27, Xcode 27.0, 2026-10-01): builds clean with no warnings; logging a puff works; precise location (±13 m) stamps the log; WeatherKit, OpenAQ and AirNow all return outdoor conditions, with the Apple Weather attribution shown. Compile fix needed: `Observation` → `EnvObservation` (see "Project file" above). AirNow moved to its 2026 services (`observation/current/ziplatLong`, `forecast/current`) after the old `latLong` ones were retired. **Not yet confirmed:** the Health write (Inhaler Usage in the Health app), the Insights look-ahead, and Foundation Models narration.
 
 ## Frameworks and how we use them
 

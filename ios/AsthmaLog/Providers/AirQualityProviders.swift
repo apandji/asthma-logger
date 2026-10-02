@@ -54,26 +54,14 @@ struct AirNowProvider {
     let key: String
 
     func current(latitude: Double, longitude: Double) async throws -> [EnvObservation] {
-        let rows: [AirNow.Row] = try await HTTP.get(url("observation/latLong/current/", latitude, longitude))
+        let rows: [AirNow.Observed] = try await HTTP.get(url("observation/current/ziplatLong/", latitude, longitude))
         return AirNow.aqiObservation(rows, asOf: .now).map { [$0] } ?? []
     }
 
     /// AQI category numbers by local date string "yyyy-MM-dd".
     func forecast(latitude: Double, longitude: Double) async throws -> [String: (pm25: Int?, ozone: Int?)] {
-        let today = Self.dayString(.now)
-        let rows: [AirNow.Row] = try await HTTP.get(url("forecast/latLong/", latitude, longitude, extra: [URLQueryItem(name: "date", value: today)]))
-        var out: [String: (pm25: Int?, ozone: Int?)] = [:]
-        for row in rows {
-            guard let day = row.DateForecast?.trimmingCharacters(in: .whitespaces), let cat = row.Category?.Number else { continue }
-            var entry = out[day] ?? (nil, nil)
-            switch AirNow.signal(for: row) {
-            case .pm25?: entry.pm25 = max(entry.pm25 ?? 0, cat)
-            case .ozone?: entry.ozone = max(entry.ozone ?? 0, cat)
-            default: continue
-            }
-            out[day] = entry
-        }
-        return out
+        let rows: [AirNow.Forecast] = try await HTTP.get(url("forecast/current/", latitude, longitude))
+        return AirNow.categoriesByDay(rows)
     }
 
     static func dayString(_ date: Date) -> String {
@@ -84,15 +72,14 @@ struct AirNowProvider {
         return f.string(from: date)
     }
 
-    private func url(_ path: String, _ lat: Double, _ lon: Double, extra: [URLQueryItem] = []) -> URL {
+    private func url(_ path: String, _ lat: Double, _ lon: Double) -> URL {
         var c = URLComponents(string: "https://www.airnowapi.org/aq/\(path)")!
         c.queryItems = [
             URLQueryItem(name: "format", value: "application/json"),
             URLQueryItem(name: "latitude", value: String(lat)),
             URLQueryItem(name: "longitude", value: String(lon)),
-            URLQueryItem(name: "distance", value: "25"),
             URLQueryItem(name: "API_KEY", value: key),
-        ] + extra
+        ]
         return c.url!
     }
 }

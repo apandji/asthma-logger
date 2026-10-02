@@ -154,39 +154,65 @@ public enum OpenAQ {
 }
 
 /// AirNow (EPA) current observations and daily forecasts. Values are AQI, not concentrations.
+/// Uses the 2026 services (`observation/current/ziplatLong`, `forecast/current`); the old
+/// `…/latLong/` services were retired on 2026-09-30 and now answer 410.
 public enum AirNow {
-    public struct Category: Codable, Sendable {
-        public var Number: Int?
-        public var Name: String?
+    /// One row of `observation/current/ziplatLong`: the closest reading per pollutant.
+    public struct Observed: Codable, Sendable {
+        public var dateObserved: String?
+        /// Local hour as "HH:mm", e.g. "19:00".
+        public var hourObserved: String?
+        public var reportingAreaName: String?
+        public var siteName: String?
+        public var parameterName: String?
+        public var nowcastAQI: Int?
+        public var aqiCategoryName: String?
     }
 
-    public struct Row: Codable, Sendable {
-        public var DateObserved: String?
-        public var HourObserved: Int?
-        public var DateForecast: String?
-        public var ReportingArea: String?
-        public var ParameterName: String?
-        public var AQI: Int?
-        public var Category: Category?
+    /// One row of `forecast/current`: a daily category per pollutant. `aqi` is often -1 (category only).
+    public struct Forecast: Codable, Sendable {
+        /// Local date "yyyy-MM-dd" the forecast is for.
+        public var dateValid: String?
+        public var reportingArea: String?
+        public var parameterName: String?
+        public var aqi: Int?
+        public var categoryNumber: Int?
+        public var categoryName: String?
     }
 
-    public static func signal(for row: Row) -> Signal? {
-        let p = (row.ParameterName ?? "").uppercased()
+    public static func signal(for parameterName: String?) -> Signal? {
+        let p = (parameterName ?? "").uppercased()
         if p.contains("PM2.5") { return .pm25 }
         if p.contains("OZONE") || p == "O3" { return .ozone }
         return nil
     }
 
     /// AQI observation with the driver pollutant (the highest AQI row).
-    public static func aqiObservation(_ rows: [Row], asOf: Date) -> EnvObservation? {
-        guard let best = rows.filter({ ($0.AQI ?? -1) >= 0 }).max(by: { ($0.AQI ?? -1) < ($1.AQI ?? -1) }),
-              let aqi = best.AQI else { return nil }
-        let driver = best.ParameterName.map { " (\($0))" } ?? ""
+    public static func aqiObservation(_ rows: [Observed], asOf: Date) -> EnvObservation? {
+        guard let best = rows.filter({ ($0.nowcastAQI ?? -1) >= 0 }).max(by: { ($0.nowcastAQI ?? -1) < ($1.nowcastAQI ?? -1) }),
+              let aqi = best.nowcastAQI else { return nil }
+        let driver = best.parameterName.map { " (\($0))" } ?? ""
         return EnvObservation(
             signal: .aqi, value: Double(aqi), unit: "AQI", asOf: asOf, source: "AirNow",
             spatialScale: .region, confidence: .medium,
-            stationName: best.ReportingArea, category: (best.Category?.Name ?? "") + driver
+            stationName: best.reportingAreaName, category: (best.aqiCategoryName ?? "") + driver
         )
+    }
+
+    /// Highest PM2.5 and ozone category (1–6) per local date "yyyy-MM-dd".
+    public static func categoriesByDay(_ rows: [Forecast]) -> [String: (pm25: Int?, ozone: Int?)] {
+        var out: [String: (pm25: Int?, ozone: Int?)] = [:]
+        for row in rows {
+            guard let day = row.dateValid?.trimmingCharacters(in: .whitespaces), let cat = row.categoryNumber, cat >= 1 else { continue }
+            var entry = out[day] ?? (nil, nil)
+            switch signal(for: row.parameterName) {
+            case .pm25?: entry.pm25 = max(entry.pm25 ?? 0, cat)
+            case .ozone?: entry.ozone = max(entry.ozone ?? 0, cat)
+            default: continue
+            }
+            out[day] = entry
+        }
+        return out
     }
 }
 

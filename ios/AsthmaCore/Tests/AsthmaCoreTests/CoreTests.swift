@@ -190,6 +190,32 @@ import Testing
         let o3 = OpenAQ.reading(at: pm!, latest: latest, lat: 38.627, lon: -90.199) { $0.measuresOzone }
         #expect(o3.map { abs($0.value - 61) < 1e-9 } == true)
     }
+
+    // Shapes from the 2026 AirNow services (observation/current/ziplatLong, forecast/current).
+    @Test func airNowDecodesCurrentServices() throws {
+        let observed = """
+        [{"dateObserved":"2026-10-01","hourObserved":"19:00","localTimeZone":"CDT","reportingAreaName":"Saint Louis",
+          "siteID":"295100085","siteName":"Blair Street","parameterName":"PM2.5","nowcastAQI":16,"aqiCategoryName":"Good"},
+         {"dateObserved":"2026-10-01","hourObserved":"19:00","localTimeZone":"CDT","reportingAreaName":"Saint Louis",
+          "siteID":"295100085","siteName":"Blair Street","parameterName":"OZONE","nowcastAQI":38,"aqiCategoryName":"Good"}]
+        """
+        let rows = try JSONDecoder().decode([AirNow.Observed].self, from: Data(observed.utf8))
+        let o = try #require(AirNow.aqiObservation(rows, asOf: Date()))
+        #expect(o.value == 38 && o.source == "AirNow" && o.spatialScale == .region)
+        #expect(o.stationName == "Saint Louis" && o.category == "Good (OZONE)")
+
+        let forecast = """
+        [{"dateIssue":"2026-10-01","dateValid":"2026-10-01","reportingArea":"Saint Louis","parameterName":"OZONE",
+          "aqi":-1,"categoryNumber":1,"categoryName":"Good","actionDay":false,"discussion":""},
+         {"dateIssue":"2026-10-01","dateValid":"2026-10-02","reportingArea":"Saint Louis","parameterName":"OZONE",
+          "aqi":-1,"categoryNumber":3,"categoryName":"Unhealthy for Sensitive Groups","actionDay":true,"discussion":""},
+         {"dateIssue":"2026-10-01","dateValid":"2026-10-02","reportingArea":"Saint Louis","parameterName":"PM2.5",
+          "aqi":-1,"categoryNumber":2,"categoryName":"Moderate","actionDay":false,"discussion":""}]
+        """
+        let days = AirNow.categoriesByDay(try JSONDecoder().decode([AirNow.Forecast].self, from: Data(forecast.utf8)))
+        #expect(days["2026-10-01"]?.ozone == 1 && days["2026-10-01"]?.pm25 == nil)
+        #expect(days["2026-10-02"]?.ozone == 3 && days["2026-10-02"]?.pm25 == 2)
+    }
 }
 
 @Suite struct ForecastFrameTests {

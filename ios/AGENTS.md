@@ -24,7 +24,7 @@ ios/
 ├── AsthmaCore/          Swift package, Foundation only. Builds and tests on Linux.
 │   ├── Sources/AsthmaCore/
 │   │   ├── Frames/      FeatureFrame, Banding (raw value → band), FrameBuilder, DemoData
-│   │   ├── Conditions/  Observation + provenance, honest copy, OpenAQ/AirNow decoding and station choice
+│   │   ├── Conditions/  EnvObservation + provenance, honest copy, OpenAQ/AirNow decoding and station choice
 │   │   ├── Lift/        bins, lift table, gate
 │   │   ├── Forecast/    RateTable (smoothed log-LR), RiskBander, Outlook (windows, cold start)
 │   │   ├── Narrator/    style bands, template, prompt builder, NarrationGuard (output checks)
@@ -57,6 +57,8 @@ Usage strings, entitlements and the API-key plumbing (`$(OPENAQ_API_KEY)` → In
 
 The app target sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`: app code is main-actor unless marked `nonisolated`. Types that must cross isolation (e.g. `@Generable` structs) are marked `nonisolated`. Keep `Decodable` API types in `AsthmaCore`.
 
+Don't name an `AsthmaCore` type after an Apple module (`Observation`, `SwiftData`, `WeatherKit`…). Macros like `@Observable` and `@Model` expand to module-qualified names such as `Observation.Observable`, and a same-named type shadows the module in every file that imports `AsthmaCore`. That is why the outdoor-reading type is `EnvObservation`.
+
 ## Build and test
 
 | Where | Command | Notes |
@@ -80,7 +82,7 @@ Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web pr
 | Look-ahead: 72 h WeatherKit + AirNow categories, personal windows or cold-start hazards | Notifications |
 | Settings: voice slider, model toggle, Health, auto usual moments, demo data | |
 
-**Unverified on device** (written without an Apple SDK; check first if the build fails): `CLServiceSession` / `CLLocationUpdate.liveUpdates()` usage, `WeatherService.weather(for:including: .current, .alerts)`, `HKQuantityType(.inhalerUsage)`, the `FoundationModels` calls in `Intelligence/OnDeviceModel.swift`, and `@Generable` on `nonisolated` structs.
+**On device** (iPhone 15 Pro, iOS 27, Xcode 27.0, 2026-10-01): builds clean with no warnings; logging a puff works and writes Inhaler Usage to Apple Health; Insights renders the template narration and the look-ahead (demo data); precise location (±13 m) stamps the log; WeatherKit, OpenAQ and AirNow all return outdoor conditions, with the Apple Weather attribution shown. Compile fix needed: `Observation` → `EnvObservation` (see "Project file" above). AirNow moved to its 2026 services (`observation/current/ziplatLong`, `forecast/current`) after the old `latLong` ones were retired. **Not yet confirmed:** Foundation Models narration (Apple Intelligence was not on), and Insights from real logs rather than demo data.
 
 ## Frameworks and how we use them
 

@@ -12,11 +12,11 @@ struct ConditionsService {
         let weather = weather
 
         async let w = Self.attempt { try await weather.current(latitude: latitude, longitude: longitude) }
-        async let aq = Self.attempt { () -> [Observation] in
+        async let aq = Self.attempt { () -> [EnvObservation] in
             guard let openAQKey else { return [] }
             return try await OpenAQProvider(key: openAQKey).observations(latitude: latitude, longitude: longitude)
         }
-        async let an = Self.attempt { () -> [Observation] in
+        async let an = Self.attempt { () -> [EnvObservation] in
             guard let airNowKey else { return [] }
             return try await AirNowProvider(key: airNowKey).current(latitude: latitude, longitude: longitude)
         }

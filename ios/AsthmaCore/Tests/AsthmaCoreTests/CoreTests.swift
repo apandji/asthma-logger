@@ -155,18 +155,22 @@ import Testing
 
 @Suite struct ConditionsTests {
     @Test func honestCopy() {
-        let o = Observation(signal: .pm25, value: 27.4, unit: "µg/m³", asOf: Date(timeIntervalSince1970: 16 * 3600),
+        let o = EnvObservation(signal: .pm25, value: 27.4, unit: "µg/m³", asOf: Date(timeIntervalSince1970: 16 * 3600),
                             source: "OpenAQ", spatialScale: .station, distanceKm: 17.6, stationName: "Denver-CAMP")
         #expect(ObservationCopy.line(o, timeZone: TimeZone(identifier: "UTC")!) ==
             "Regional outdoor PM2.5 27 µg/m³ · 11 mi from Denver-CAMP · 4:00 PM · OpenAQ")
+        let uv = EnvObservation(signal: .uvIndex, value: 0, unit: "UV", asOf: Date(timeIntervalSince1970: 16 * 3600),
+                                source: "Apple Weather", spatialScale: .modelGrid)
+        #expect(ObservationCopy.line(uv, timeZone: TimeZone(identifier: "UTC")!) ==
+            "Modeled outdoor UV index 0 · 4:00 PM · Apple Weather")
     }
 
     @Test func conditionsFeedFrames() {
         let now = Date()
         let c = Conditions(observations: [
-            Observation(signal: .temperature, value: 96, unit: "°F", asOf: now, source: "Apple Weather", spatialScale: .modelGrid),
-            Observation(signal: .ozone, value: 72, unit: "ppb", asOf: now, source: "OpenAQ", spatialScale: .station),
-            Observation(signal: .ozone, value: 40, unit: "ppb", asOf: now, source: "AirNow", spatialScale: .region),
+            EnvObservation(signal: .temperature, value: 96, unit: "°F", asOf: now, source: "Apple Weather", spatialScale: .modelGrid),
+            EnvObservation(signal: .ozone, value: 72, unit: "ppb", asOf: now, source: "OpenAQ", spatialScale: .station),
+            EnvObservation(signal: .ozone, value: 40, unit: "ppb", asOf: now, source: "AirNow", spatialScale: .region),
         ])
         let f = FrameBuilder.frame(id: "a", kind: .attack, hourOfDay: 15, month: 7, conditions: c.input)
         #expect(f.tempBand == .hot)
@@ -189,6 +193,35 @@ import Testing
         let latest = [OpenAQ.Latest(datetime: .init(utc: ISO8601DateFormatter().string(from: Date()), local: nil), value: 0.061, sensorsId: 21)]
         let o3 = OpenAQ.reading(at: pm!, latest: latest, lat: 38.627, lon: -90.199) { $0.measuresOzone }
         #expect(o3.map { abs($0.value - 61) < 1e-9 } == true)
+    }
+
+    // Shapes from the 2026 AirNow services (observation/current/ziplatLong, forecast/current).
+    @Test func airNowDecodesCurrentServices() throws {
+        let observed = """
+        [{"dateObserved":"2026-10-01","hourObserved":"19:00","localTimeZone":"CDT","reportingAreaName":"Saint Louis",
+          "siteID":"295100085","siteName":"Blair Street","parameterName":"PM2.5","nowcastAQI":16,"aqiCategoryName":"Good"},
+         {"dateObserved":"2026-10-01","hourObserved":"19:00","localTimeZone":"CDT","reportingAreaName":"Saint Louis",
+          "siteID":"295100085","siteName":"Blair Street","parameterName":"OZONE","nowcastAQI":38,"aqiCategoryName":"Good"}]
+        """
+        let rows = try JSONDecoder().decode([AirNow.Observed].self, from: Data(observed.utf8))
+        let o = try #require(AirNow.aqiObservation(rows, fetchedAt: Date()))
+        #expect(o.value == 38 && o.source == "AirNow" && o.spatialScale == .region)
+        // Stamped with the hour AirNow observed (19:00 CDT = 00:00 UTC), not the fetch time.
+        #expect(o.asOf == ISO8601DateFormatter().date(from: "2026-10-02T00:00:00Z"))
+        #expect(ObservationCopy.line(o, timeZone: TimeZone(identifier: "UTC")!) ==
+            "Regional outdoor AQI 38 · Good · ozone · Saint Louis · 12:00 AM · AirNow")
+
+        let forecast = """
+        [{"dateIssue":"2026-10-01","dateValid":"2026-10-01","reportingArea":"Saint Louis","parameterName":"OZONE",
+          "aqi":-1,"categoryNumber":1,"categoryName":"Good","actionDay":false,"discussion":""},
+         {"dateIssue":"2026-10-01","dateValid":"2026-10-02","reportingArea":"Saint Louis","parameterName":"OZONE",
+          "aqi":-1,"categoryNumber":3,"categoryName":"Unhealthy for Sensitive Groups","actionDay":true,"discussion":""},
+         {"dateIssue":"2026-10-01","dateValid":"2026-10-02","reportingArea":"Saint Louis","parameterName":"PM2.5",
+          "aqi":-1,"categoryNumber":2,"categoryName":"Moderate","actionDay":false,"discussion":""}]
+        """
+        let days = AirNow.categoriesByDay(try JSONDecoder().decode([AirNow.Forecast].self, from: Data(forecast.utf8)))
+        #expect(days["2026-10-01"]?.ozone == 1 && days["2026-10-01"]?.pm25 == nil)
+        #expect(days["2026-10-02"]?.ozone == 3 && days["2026-10-02"]?.pm25 == 2)
     }
 }
 

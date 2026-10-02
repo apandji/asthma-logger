@@ -1,0 +1,864 @@
+<title>Asthma Log Riso Sketch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one phone-width column. Journal = today's radial portrait (time = angle, place = ring)
+   + the selected moment's journal card + past days as postcards. Insights behind a tab.
+   Each signal is one riso ink; overlapping inks overprint; misregistration = uncertainty. */
+:root {
+  --paper: #EEECE6;
+  --paper-2: #E3E0D8;
+  --ink-key: #1B1A1F;
+  --ink-soft: #57545C;
+  --ink-faint: #8E8B94;
+  --rule: rgba(27, 26, 31, .14);
+  --air: #F0447A;       /* particles + ozone */
+  --weather: #1F5FB8;   /* heat + humidity */
+  --pollen: #C99400;    /* pollen (with Ambee) */
+  --blend: multiply;
+  --grain-opacity: .08;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Helvetica Neue", sans-serif;
+  --font-body: "Public Sans", -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #141418; --paper-2: #1E1E25; --ink-key: #EDEAE3; --ink-soft: #ABA8B1; --ink-faint: #6F6C76;
+    --rule: rgba(237, 234, 227, .14); --air: #E0457A; --weather: #3A7FD0; --pollen: #B38E28;
+    --blend: screen; --grain-opacity: .06; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #141418; --paper-2: #1E1E25; --ink-key: #EDEAE3; --ink-soft: #ABA8B1; --ink-faint: #6F6C76;
+  --rule: rgba(237, 234, 227, .14); --air: #E0457A; --weather: #3A7FD0; --pollen: #B38E28;
+  --blend: screen; --grain-opacity: .06; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--paper); color: var(--ink-key);
+  font: 15px/1.45 var(--font-body);
+  padding-inline: 16px; padding-block: 0;
+}
+.grain {
+  position: fixed; inset: 0; pointer-events: none; z-index: 50;
+  background-image: var(--grain-url); background-size: 160px;
+  mix-blend-mode: var(--blend); opacity: var(--grain-opacity);
+}
+.app { max-width: 440px; margin-inline: auto; padding-block: 18px 120px; display: grid; gap: 22px; }
+.page[hidden] { display: none !important; }
+.page { display: grid; gap: 22px; }
+
+header.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.eyebrow { font: 500 11px/1.2 var(--font-data); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+h1 { font: 700 34px/1 var(--font-display); letter-spacing: -.02em; margin: 6px 0 0; text-wrap: balance; }
+h2 { font: 700 20px/1.15 var(--font-display); margin: 0; text-wrap: balance; }
+h3 { font: 700 16px/1.2 var(--font-display); margin: 0; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--rule); background: transparent;
+  color: var(--ink-key); display: grid; place-items: center; cursor: pointer; flex: none;
+}
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--ink-key); outline-offset: 2px; }
+.text-btn { border: 0; background: none; color: var(--ink-soft); font: 500 14px var(--font-body); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; padding: 0; }
+
+/* Portrait */
+.portrait-wrap { display: grid; gap: 8px; }
+#portrait { width: 100%; aspect-ratio: 1; max-width: 100%; display: block; cursor: pointer; touch-action: manipulation; }
+.legend-line { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; font: 11px var(--font-data); color: var(--ink-soft); }
+.legend-line i { font-style: normal; display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: -1px; margin-right: 4px; }
+.lg-puff { background: var(--ink-key); }
+.lg-ok { border: 1.5px solid var(--ink-key); }
+.lg-air { background: var(--air); }
+.lg-wx { background: var(--weather); }
+
+/* Moment card */
+.moment { border-top: 2px solid var(--ink-key); padding-top: 14px; display: grid; gap: 14px; }
+.moment-head { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; }
+.moment-head canvas { width: 64px; height: 64px; }
+.where { font-size: 14px; color: var(--ink-soft); margin-top: 4px; }
+.where button { font-size: 13px; }
+.since { display: grid; gap: 6px; }
+.since-row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; font-size: 14px; align-items: baseline; }
+.since-row span:first-child { font: 11px var(--font-data); color: var(--ink-soft); text-transform: uppercase; letter-spacing: .05em; }
+.since-row b { font-family: var(--font-data); font-weight: 500; font-variant-numeric: tabular-nums; }
+.sources { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.sources li { font: 11.5px/1.45 var(--font-data); color: var(--ink-soft); }
+.note-box { background: var(--paper-2); border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+.note-box blockquote { margin: 0; font: italic 15px/1.45 var(--font-body); }
+.mic { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--rule); border-radius: 999px; background: var(--paper); color: var(--ink-key); padding: 8px 14px; font: 600 14px var(--font-body); cursor: pointer; justify-self: start; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1px solid var(--rule); border-radius: 999px; padding: 6px 12px; background: transparent;
+  color: var(--ink-key); font: 500 13px var(--font-body); cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--ink-key); color: var(--paper); border-color: var(--ink-key); }
+.chip.suggested { border-style: dashed; }
+.small { font-size: 12px; color: var(--ink-faint); }
+
+/* History postcards */
+.history { display: grid; gap: 12px; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; }
+.card { border: 0; background: none; padding: 0; color: var(--ink-key); text-align: left; cursor: pointer; display: grid; gap: 4px; min-width: 0; }
+.card canvas { width: 100%; aspect-ratio: 1; display: block; border-radius: 10px; background: var(--paper-2); }
+.card[aria-current="true"] canvas { outline: 2px solid var(--ink-key); outline-offset: 2px; }
+.card span { font: 11px var(--font-data); color: var(--ink-soft); }
+.card b { font: 600 12px var(--font-body); color: var(--ink-key); }
+details.key { border-top: 1px solid var(--rule); padding-top: 12px; }
+details.key summary { cursor: pointer; font-weight: 600; }
+.key-rows { display: grid; gap: 10px; margin-top: 12px; }
+.key-row { display: grid; grid-template-columns: 76px 1fr; gap: 10px; align-items: center; font-size: 13px; color: var(--ink-soft); }
+.key-row b { color: var(--ink-key); font-weight: 600; }
+.key-row canvas { width: 76px; height: 40px; }
+
+/* FAB */
+.fab {
+  position: fixed; z-index: 25; width: 60px; height: 60px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+  right: max(16px, calc(50% - 220px + 4px)); bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  background: transparent; color: var(--ink-key); font: 700 13px/1 var(--font-display);
+  box-shadow: 0 6px 18px rgba(0,0,0,.18);
+}
+.fab canvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; }
+.fab span { position: relative; }
+.fab:active { transform: scale(.94); }
+.toast {
+  position: fixed; z-index: 26; left: 50%; transform: translateX(-50%); bottom: calc(146px + env(safe-area-inset-bottom, 0px));
+  background: var(--ink-key); color: var(--paper); padding: 8px 14px; border-radius: 999px; font: 12px var(--font-data);
+  max-width: calc(100% - 32px); text-align: center;
+}
+
+/* Insights */
+.headline { font: 500 24px/1.25 var(--font-display); letter-spacing: -.01em; margin: 0; text-wrap: pretty; }
+.caveat { font-size: 13px; color: var(--ink-soft); margin: 8px 0 0; }
+.source { font: 11px var(--font-data); color: var(--ink-faint); margin-top: 8px; }
+.fields { display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px; }
+.field { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.field canvas { width: 100%; display: block; }
+.field .count { font: 500 22px/1 var(--font-display); }
+.field .count small { font: 12px var(--font-body); color: var(--ink-soft); display: block; margin-top: 4px; }
+.ahead { display: grid; gap: 14px; }
+.ahead-day { display: grid; gap: 4px; }
+.ahead-day header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ahead-day canvas { width: 100%; height: 30px; display: block; }
+.ahead-day p { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.band { font: 11px var(--font-data); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
+.band.on { color: var(--ink-key); }
+.band.on::before { content: "● "; color: var(--air); }
+details.how { border-top: 1px solid var(--rule); padding-top: 12px; }
+details.how summary { cursor: pointer; font-weight: 600; }
+.table-wrap { overflow-x: auto; margin-top: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font: 500 11px var(--font-data); color: var(--ink-soft); text-transform: uppercase; letter-spacing: .05em; }
+td.num { font-family: var(--font-data); }
+.note { font-size: 12px; color: var(--ink-faint); }
+
+/* Tab bar */
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(10px);
+  border-top: 1px solid var(--rule); display: flex; justify-content: center; gap: 8px;
+}
+nav.tabs button {
+  border: 0; background: none; color: var(--ink-soft); font: 600 14px var(--font-body);
+  padding: 10px 22px; border-radius: 999px; cursor: pointer;
+}
+nav.tabs button[aria-selected="true"] { color: var(--ink-key); background: var(--paper-2); }
+
+/* Sheets + tooltip */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 30; }
+.sheet {
+  position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 31;
+  width: min(440px, 100%); max-height: 80%; overflow: auto;
+  background: var(--paper); color: var(--ink-key); border-radius: 20px 20px 0 0; border: 1px solid var(--rule);
+  padding: 20px 16px calc(24px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 14px;
+}
+.sheet .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; padding: 2px; }
+.seg button { border: 0; background: none; color: var(--ink-soft); padding: 6px 12px; border-radius: 999px; font: 500 13px var(--font-body); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink-key); color: var(--paper); }
+input[type=range] { width: 100%; accent-color: var(--ink-key); }
+.range-labels { display: flex; justify-content: space-between; font: 11px var(--font-data); color: var(--ink-soft); }
+.tip {
+  position: fixed; z-index: 40; pointer-events: none; background: var(--ink-key); color: var(--paper);
+  font: 11px/1.3 var(--font-data); padding: 6px 8px; border-radius: 6px; white-space: nowrap;
+}
+.demo-flag { font: 11px var(--font-data); color: var(--ink-faint); text-align: center; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="grain" aria-hidden="true"></div>
+
+<div class="app">
+  <!-- JOURNAL -->
+  <section class="page" id="page-journal" aria-label="Journal">
+    <header class="top">
+      <div>
+        <div class="eyebrow" id="day-eyebrow"></div>
+        <h1 id="day-title">Today</h1>
+      </div>
+      <button class="icon-btn" data-open="settings" aria-label="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
+      </button>
+    </header>
+
+    <div class="portrait-wrap">
+      <canvas id="portrait" role="img"></canvas>
+      <div class="legend-line" aria-hidden="true">
+        <span><i class="lg-puff"></i>puff</span><span><i class="lg-ok"></i>I'm okay</span>
+        <span><i class="lg-air"></i>air</span><span><i class="lg-wx"></i>weather</span><span>rings: home · work · out</span>
+      </div>
+    </div>
+
+    <article class="moment" id="moment" aria-live="polite"></article>
+
+    <section class="history" aria-label="Earlier days">
+      <h2>Earlier</h2>
+      <div class="cards" id="cards"></div>
+    </section>
+
+    <details class="key">
+      <summary>How to read a day</summary>
+      <div class="key-rows" id="key-rows"></div>
+    </details>
+    <p class="demo-flag">Demo diary · made-up moments around St. Louis</p>
+  </section>
+
+  <!-- INSIGHTS -->
+  <section class="page" id="page-insights" aria-label="Insights" hidden>
+    <header class="top">
+      <div>
+        <div class="eyebrow" id="insights-eyebrow"></div>
+        <h1>Insights</h1>
+      </div>
+      <button class="icon-btn" data-open="settings" aria-label="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
+      </button>
+    </header>
+
+    <div>
+      <p class="headline" id="headline"></p>
+      <p class="caveat">Outdoor air only. Not a diagnosis, and not a prediction.</p>
+      <div class="source" id="voice-source"></div>
+    </div>
+
+    <div class="chips" id="drivers" role="group" aria-label="Show one condition across your moments"></div>
+
+    <div class="fields">
+      <div class="field">
+        <div class="count" id="count-a"></div>
+        <canvas id="field-a" aria-label="One mark per puff"></canvas>
+      </div>
+      <div class="field">
+        <div class="count" id="count-b"></div>
+        <canvas id="field-b" aria-label="One mark per I'm okay moment"></canvas>
+      </div>
+    </div>
+
+    <section class="ahead" aria-label="Looking ahead">
+      <h2>Looking ahead</h2>
+      <div id="ahead"></div>
+      <p class="note">Forecast for home. Air quality from AirNow, weather from Apple Weather. Pollen isn't included yet.</p>
+    </section>
+
+    <details class="how">
+      <summary>How we know</summary>
+      <div class="table-wrap"><table id="evidence"></table></div>
+      <p class="note">Counts compare your puffs with your "I'm okay" moments. A pattern needs at least 6 puffs, 12 okay moments, and 3 puffs at that level (demo threshold).</p>
+    </details>
+  </section>
+</div>
+
+<button class="fab" id="fab" aria-label="Log a puff by hand. Your inhaler sensor normally does this."><canvas id="fab-canvas"></canvas><span>puff</span></button>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="journal">Journal</button>
+  <button role="tab" aria-selected="false" data-tab="insights">Insights</button>
+</nav>
+
+<div class="scrim" id="scrim" hidden></div>
+<section class="sheet" id="sheet-settings" hidden aria-modal="true" role="dialog" aria-labelledby="settings-title">
+  <div class="row"><h2 id="settings-title">Settings</h2><button class="text-btn" data-close>Done</button></div>
+  <div>
+    <div class="row"><b>Insight voice</b><span class="eyebrow" id="voice-label"></span></div>
+    <input type="range" id="voice" min="0" max="100" value="80" aria-label="Insight voice, clinical to poetic">
+    <div class="range-labels"><span>Clinical</span><span>Plain</span><span>Poetic</span></div>
+    <p class="note">Changes how the on-device model words your pattern. The numbers never change.</p>
+  </div>
+  <div class="row">
+    <b>Preview</b>
+    <div class="seg" id="theme-seg">
+      <button data-theme-choice="system" aria-pressed="true">System</button>
+      <button data-theme-choice="light" aria-pressed="false">Paper</button>
+      <button data-theme-choice="dark" aria-pressed="false">Night</button>
+    </div>
+  </div>
+</section>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(() => {
+  // =====================================================================================
+  // Demo diary: 14 days. Puffs come from the inhaler sensor; "I'm okay" moments are sampled
+  // at random times each day (place, time, outdoor air) so puffs have something to compare with.
+  // =====================================================================================
+  const DAYS = 14, TODAY = DAYS - 1;
+  const END = new Date(2026, 9, 2);          // Thu 2 Oct 2026
+  const NOW = 18 + 20 / 60;                  // demo clock: 6:20 PM
+  const dayDate = d => new Date(END.getFullYear(), END.getMonth(), END.getDate() - (TODAY - d));
+  const HOT = new Set([0, 1, 2, 3, 4, 6, 9, 10, 12, 13]);
+
+  const PLACES = {
+    home: { kind: "home", name: "Home", station: "Blair St", km: 3.4 },
+    work: { kind: "work", name: "Work", station: "Clayton", km: 6.1 },
+    out: [
+      { kind: "out", name: "Tower Grove Park", station: "Blair St", km: 4.0 },
+      { kind: "out", name: "Forest Park", station: "Forest Park", km: 1.1 },
+      { kind: "out", name: "South Grand", station: "Blair St", km: 2.6 },
+      { kind: "out", name: "Ted Drewes", station: "Arnold West", km: 18.6 },
+    ],
+  };
+
+  function rng(seed) { let s = seed % 2147483647 || 1; return () => (s = s * 16807 % 2147483647) / 2147483647; }
+
+  function conditions(d, h) {
+    const hot = HOT.has(d), afternoon = h >= 12.5 && h <= 19.5;
+    return {
+      temp: hot && afternoon ? "hot" : "mild",
+      ozone: hot && h >= 13 && h <= 19.5 && d !== 2 ? "high" : (h >= 11 && h <= 19.5 && d % 2 === 0 ? "moderate" : "low"),
+      pm25: h >= 17 && d % 4 === 1 ? "moderate" : "low",
+      humidity: h < 9 ? "humid" : (hot && afternoon && d % 2 === 0 ? "dry" : (d % 5 === 3 ? "humid" : "ok")),
+      heat: hot && afternoon && d % 3 === 0,
+      smoke: false,
+    };
+  }
+  function placeFor(d, h, r) {
+    const wd = dayDate(d).getDay();
+    if (h < 8 || h >= 22) return PLACES.home;
+    const weekday = wd >= 1 && wd <= 5;
+    if (weekday && h >= 9 && h < 17) return h >= 12 && h < 13.5 ? PLACES.out[Math.floor(r() * 3)] : PLACES.work;
+    if (h >= 17 || !weekday) return r() < .55 ? PLACES.out[Math.floor(r() * 4)] : PLACES.home;
+    return PLACES.home;
+  }
+  function moment(id, kind, d, h, place, extra = {}) {
+    const c = conditions(d, h), seed = id.split("").reduce((a, ch) => a + ch.charCodeAt(0) * 31, d * 7);
+    const j = (seed % 7) - 3;
+    return {
+      id, kind, day: d, t: h, place, indoor: place.kind !== "out", tags: new Set(), suggested: [], note: null, ...c,
+      val: {
+        ozone: { low: 36, moderate: 60, high: 74 }[c.ozone] + j,
+        pm25: { low: 7, moderate: 19, high: 41 }[c.pm25] + Math.round(j / 2),
+        temp: Math.round((c.temp === "hot" ? 91 : 63 + Math.min(h - 6, 10) * 1.1) + j),
+        humidity: { dry: 29, ok: 48, humid: 74 }[c.humidity] + j,
+      },
+      angle: (seed * 2.399) % (Math.PI * 2),
+      ...extra,
+    };
+  }
+
+  const logs = [];
+  // Puffs (inhaler sensor). Today has two.
+  const PUFFS = [[0, 15.2], [1, 16.6], [3, 14.1], [4, 18.3], [4, 17.0], [6, 15.5], [7, 19.2], [9, 13.7], [10, 16.3], [12, 20.1]];
+  PUFFS.forEach(([d, h], i) => { const r = rng(i * 97 + 5); logs.push(moment(`p${i}`, "puff", d, h, placeFor(d, h, r))); });
+  logs.push(moment("pt1", "puff", TODAY, 13 + 5 / 60, PLACES.out[0], {
+    note: "Walking Juno around the park at lunch. Really hot, kind of hazy.", suggested: ["Exercise", "Pets"], motion: "walking",
+  }));
+  logs.push(moment("pt2", "puff", TODAY, 17 + 40 / 60, PLACES.out[2], { motion: "walking" }));
+  // "I'm okay" moments: five random samples a day; today only before now.
+  for (let d = 0; d < DAYS; d++) {
+    const r = rng(d * 131 + 17);
+    const hours = d === TODAY ? [7.2, 9 + 40 / 60, 12 + 25 / 60, 15 + 5 / 60, 17 + 55 / 60]
+      : Array.from({ length: 5 }, () => 7 + r() * 15).sort((a, b) => a - b);
+    hours.forEach((h, i) => logs.push(moment(`u${d}-${i}`, "ok", d, h, placeFor(d, h, r), { motion: "stationary" })));
+  }
+
+  const TAGS = ["Exercise", "Pets", "Smoke", "Cold air", "Dust", "Strong scents", "Cooking", "Cold or flu", "Stress"];
+  const LEVEL = { low: 1, moderate: 2, high: 3 };
+  const airLevel = l => Math.max(LEVEL[l.ozone], LEVEL[l.pm25]);
+  const weatherLevel = l => l.temp === "hot" ? 3 : (l.humidity !== "ok" ? 2 : 1);
+  const fmtT = t => { const h = Math.floor(t), m = Math.round((t - h) * 60); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+
+  // =====================================================================================
+  // Lift (port of AsthmaCore Lift.compute with the demo gate)
+  // =====================================================================================
+  const GATE = { minAttacks: 6, minBaselines: 12, minIn: 3 };
+  const hourPart = h => h >= 5 && h < 12 ? "morning" : h >= 12 && h < 17 ? "afternoon" : h >= 17 && h < 22 ? "evening" : "night";
+  const BINS = [
+    ["PM2.5", l => l.pm25], ["Ozone", l => l.ozone], ["Temperature", l => l.temp], ["Humidity", l => l.humidity],
+    ["Heat alert", l => l.heat ? "yes" : null], ["Time of day", l => hourPart(l.t)], ["Place", l => l.place.kind],
+  ];
+  function lift() {
+    const A = logs.filter(l => l.kind === "puff"), B = logs.filter(l => l.kind === "ok");
+    const rows = [];
+    for (const [label, of] of BINS) {
+      for (const level of [...new Set(logs.map(of).filter(Boolean))].sort()) {
+        const a = A.filter(l => of(l) === level).length, b = B.filter(l => of(l) === level).length;
+        const ar = a / A.length, br = b / B.length;
+        const lf = br === 0 ? (a > 0 ? Infinity : 1) : ar / br;
+        rows.push({ label, level, of, a, b, nA: A.length, nB: B.length, lift: lf,
+          gated: A.length >= GATE.minAttacks && B.length >= GATE.minBaselines && a >= GATE.minIn && lf > 1.25 });
+      }
+    }
+    return rows.map((r, i) => [r, i]).sort((x, y) => {
+      const lx = isFinite(x[0].lift) ? x[0].lift : 999, ly = isFinite(y[0].lift) ? y[0].lift : 999;
+      return ly - lx || x[1] - y[1];
+    }).map(x => x[0]);
+  }
+  let ROWS = lift();
+  const fmtLift = v => !isFinite(v) ? "only on puffs" : v >= 10 ? `${Math.round(v)}×` : `${v.toFixed(1)}×`;
+  const rowName = r => r.label === "Time of day" ? r.level[0].toUpperCase() + r.level.slice(1)
+    : r.label === "Place" ? (r.level === "out" ? "Out and about" : "At " + r.level) : `${r.label} ${r.level}`;
+
+  // =====================================================================================
+  // Riso drawing
+  // =====================================================================================
+  const DPR = Math.min(window.devicePixelRatio || 1, 3);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  let T = {}, patterns = {};
+  function readTokens() {
+    T = { paper: css("--paper"), paper2: css("--paper-2"), key: css("--ink-key"), soft: css("--ink-soft"), faint: css("--ink-faint"),
+      rule: css("--rule"), air: css("--air"), weather: css("--weather"), pollen: css("--pollen"), blend: css("--blend") };
+    patterns = {};
+  }
+  function pattern(ctx, kind, color) {
+    const k = kind + color;
+    if (patterns[k]) return patterns[k];
+    const c = document.createElement("canvas"), s = 6 * DPR;
+    c.width = c.height = s;
+    const p = c.getContext("2d");
+    p.fillStyle = p.strokeStyle = color; p.lineWidth = DPR;
+    if (kind === "dots") { p.beginPath(); p.arc(s / 2, s / 2, 1.25 * DPR, 0, 7); p.fill(); }
+    if (kind === "lines") p.fillRect(0, s / 2 - DPR / 2, s, DPR);
+    if (kind === "hatch") { p.beginPath(); p.moveTo(0, s); p.lineTo(s, 0); p.stroke(); }
+    const pat = ctx.createPattern(c, "repeat");
+    pat.setTransform?.(new DOMMatrix().scale(1 / DPR));
+    return (patterns[k] = pat);
+  }
+  function inkShape(ctx, ink, kind, draw) {
+    ctx.save();
+    ctx.globalCompositeOperation = T.blend;
+    ctx.beginPath(); draw(); ctx.globalAlpha = .55 * (ctx.__fade ?? 1); ctx.fillStyle = ink; ctx.fill();
+    ctx.globalAlpha = ctx.__fade ?? 1; ctx.fillStyle = pattern(ctx, kind, ink); ctx.fill();
+    ctx.restore();
+  }
+
+  /** One moment as a mark: pink air disc, blue weather ellipse, key-ink core. Offset = uncertainty. */
+  function glyph(ctx, x, y, l, s = 1, opts = {}) {
+    ctx.__fade = opts.fade ? .2 : 1;
+    const mis = opts.noMis ? 0 : Math.min(4.5, .6 + l.place.km / 4.5) * s;
+    const wr = [0, 6, 9.5, 13][weatherLevel(l)] * s, ar = [0, 5.5, 9, 13][airLevel(l)] * s;
+    if (opts.only !== "air") inkShape(ctx, T.weather, "lines", () => ctx.ellipse(x - Math.cos(l.angle) * .8 * s, y - Math.sin(l.angle) * .8 * s, wr * 1.15, wr * .72, 0, 0, 7));
+    if (opts.only !== "weather") inkShape(ctx, T.air, "dots", () => ctx.arc(x + Math.cos(l.angle) * mis, y + Math.sin(l.angle) * mis, ar, 0, 7));
+    ctx.save();
+    ctx.globalAlpha = ctx.__fade;
+    ctx.fillStyle = ctx.strokeStyle = T.key;
+    ctx.lineWidth = 1.4 * Math.max(s, .7);
+    ctx.beginPath(); ctx.arc(x, y, (l.kind === "puff" ? 4.2 : 3.4) * s, 0, 7);
+    l.kind === "puff" ? ctx.fill() : ctx.stroke();
+    if (opts.frame && l.indoor) {
+      ctx.lineWidth = 1; ctx.strokeStyle = T.soft;
+      const h = 16 * s; ctx.beginPath(); ctx.roundRect(x - h, y - h, h * 2, h * 2, 3 * s); ctx.stroke();
+    }
+    ctx.restore();
+    ctx.__fade = 1;
+  }
+
+  function sized(canvas, h) {
+    const w = canvas.clientWidth, ht = h ?? canvas.clientHeight;
+    canvas.width = Math.round(w * DPR); canvas.height = Math.round(ht * DPR);
+    if (h != null) canvas.style.height = h + "px";
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, w, ht);
+    return [ctx, w, ht];
+  }
+
+  // =====================================================================================
+  // The day portrait: angle = time (midnight at top, clockwise), ring = place, thread = path.
+  // =====================================================================================
+  const RING = { home: .36, work: .6, out: .84 };
+  function polar(cx, cy, R, t, ring) {
+    const a = t / 24 * Math.PI * 2 - Math.PI / 2;
+    return [cx + Math.cos(a) * R * ring, cy + Math.sin(a) * R * ring];
+  }
+  function drawDay(ctx, size, d, o = {}) {
+    const cx = size / 2, cy = size / 2, R = size / 2 - (o.mini ? 6 : 30);
+    const s = o.mini ? .42 : 1;
+    // place rings
+    ctx.save();
+    ctx.strokeStyle = T.rule; ctx.lineWidth = 1;
+    Object.values(RING).forEach(r => { ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, 7); ctx.stroke(); });
+    if (!o.mini) {
+      // hour ticks + labels
+      ctx.fillStyle = T.faint; ctx.font = `10px ${css("--font-data")}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      for (let h = 0; h < 24; h++) {
+        const [x1, y1] = polar(cx, cy, R, h, 1.0), [x2, y2] = polar(cx, cy, R, h, h % 6 ? 1.03 : 1.07);
+        ctx.strokeStyle = T.rule; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      [[0, "midnight"], [6, "6 am"], [12, "noon"], [18, "6 pm"]].forEach(([h, t]) => { const [x, y] = polar(cx, cy, R, h, 1.17); ctx.fillText(t, x, y); });
+      // ring names in the quiet small hours
+      ctx.textAlign = "left"; ctx.fillStyle = T.soft;
+      Object.entries(RING).forEach(([k, r]) => { const [x, y] = polar(cx, cy, R, 1.6, r); ctx.fillText(k, x, y); });
+    }
+    const day = logs.filter(l => l.day === d).sort((a, b) => a.t - b.t);
+    // rest of today: not lived yet
+    if (o.now != null) {
+      ctx.setLineDash([2, 4]); ctx.strokeStyle = T.faint;
+      ctx.beginPath(); ctx.arc(cx, cy, R * 1.0, o.now / 24 * Math.PI * 2 - Math.PI / 2, 1.5 * Math.PI); ctx.stroke();
+      ctx.setLineDash([]);
+      const [hx, hy] = polar(cx, cy, R, o.now, 1.0);
+      ctx.strokeStyle = T.key; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.fillStyle = T.key; ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, 7); ctx.fill();
+      if (!o.mini) { ctx.font = `10px ${css("--font-data")}`; ctx.textAlign = "left"; const [lx, ly] = polar(cx, cy, R, o.now + .35, 1.07); ctx.fillText("now", lx, ly); }
+    }
+    // thread: the day's path between places
+    if (day.length > 1) {
+      ctx.strokeStyle = T.key; ctx.globalAlpha = .35; ctx.lineWidth = o.mini ? .8 : 1.1;
+      ctx.beginPath();
+      day.forEach((l, i) => {
+        const [x, y] = polar(cx, cy, R, l.t, RING[l.place.kind]);
+        if (!i) { ctx.moveTo(x, y); return; }
+        const p = day[i - 1], tm = (p.t + l.t) / 2, rm = (RING[p.place.kind] + RING[l.place.kind]) / 2;
+        const [mx, my] = polar(cx, cy, R, tm, rm);
+        ctx.quadraticCurveTo(mx, my, x, y);
+      });
+      ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    // marks: okay moments first, puffs printed on top
+    const hits = [];
+    [...day.filter(l => l.kind === "ok"), ...day.filter(l => l.kind === "puff")].forEach(l => {
+      const [x, y] = polar(cx, cy, R, l.t, RING[l.place.kind]);
+      glyph(ctx, x, y, l, l.kind === "puff" ? s * 1.25 : s);
+      hits.push({ x, y, l });
+    });
+    if (o.selected) {
+      const h = hits.find(h => h.l.id === o.selected);
+      if (h) { ctx.strokeStyle = T.key; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(h.x, h.y, 21, 0, 7); ctx.stroke(); }
+    }
+    return hits;
+  }
+
+  // =====================================================================================
+  // Journal state
+  // =====================================================================================
+  let shownDay = TODAY, selectedId = null, portraitHits = [];
+  function defaultSelection(d) {
+    const day = logs.filter(l => l.day === d).sort((a, b) => b.t - a.t);
+    return (day.find(l => l.kind === "puff") || day[0])?.id;
+  }
+
+  function renderHeader() {
+    const date = dayDate(shownDay);
+    const day = logs.filter(l => l.day === shownDay);
+    const p = day.filter(l => l.kind === "puff").length;
+    document.getElementById("day-title").textContent = shownDay === TODAY ? "Today" : date.toLocaleDateString("en-US", { weekday: "long" });
+    document.getElementById("day-eyebrow").textContent =
+      `${date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} · ${p} puff${p === 1 ? "" : "s"} · ${day.length - p} okay`;
+    document.getElementById("portrait").setAttribute("aria-label",
+      `Day portrait for ${date.toDateString()}: ${p} puffs and ${day.length - p} okay moments. Tap a mark to read its moment.`);
+  }
+
+  function drawPortrait() {
+    const cv = document.getElementById("portrait");
+    const [ctx, w] = sized(cv, cv.clientWidth);
+    portraitHits = drawDay(ctx, w, shownDay, { now: shownDay === TODAY ? NOW : null, selected: selectedId });
+  }
+
+  function hitAt(hits, cv, ev, r = 24) {
+    const b = cv.getBoundingClientRect(), x = ev.clientX - b.left, y = ev.clientY - b.top;
+    let best = null, bd = r;
+    for (const h of hits) { const dd = Math.hypot(h.x - x, h.y - y); if (dd < bd) { bd = dd; best = h.l; } }
+    return best;
+  }
+  const portrait = document.getElementById("portrait"), tip = document.getElementById("tip");
+  portrait.addEventListener("click", ev => {
+    const l = hitAt(portraitHits, portrait, ev);
+    if (l) { selectedId = l.id; drawPortrait(); renderMoment(); }
+  });
+  portrait.addEventListener("pointermove", ev => {
+    if (ev.pointerType === "touch") return;
+    const l = hitAt(portraitHits, portrait, ev);
+    if (!l) { tip.hidden = true; return; }
+    tip.textContent = `${fmtT(l.t)} · ${l.kind === "puff" ? "puff" : "I'm okay"} · ${l.place.name}`;
+    tip.hidden = false;
+    tip.style.left = Math.min(ev.clientX + 12, innerWidth - tip.offsetWidth - 8) + "px";
+    tip.style.top = (ev.clientY - 34) + "px";
+  });
+  portrait.addEventListener("pointerleave", () => tip.hidden = true);
+
+  // ---------- Moment card: journal context for one moment ----------
+  function renderMoment() {
+    const el = document.getElementById("moment");
+    const l = logs.find(x => x.id === selectedId);
+    if (!l) { el.innerHTML = `<p class="small">No moments yet.</p>`; return; }
+    const day = logs.filter(x => x.day === l.day && x.t < l.t).sort((a, b) => b.t - a.t);
+    const prev = day.find(x => x.kind === "ok") || day[0];
+    const regional = l.place.km > 16;
+    const scale = regional ? "Regional outdoor" : "Outdoor";
+    const mi = Math.max(1, Math.round(l.place.km * .621));
+    const diff = (label, a, b, unit) => {
+      const dir = b > a ? "up" : b < a ? "down" : "same";
+      return `<div class="since-row"><span>${label}</span><div><b>${a} → ${b}${unit}</b> <span class="small">${dir === "same" ? "no change" : dir}</span></div></div>`;
+    };
+    const isPuff = l.kind === "puff";
+    const tagsHtml = TAGS.map(t => {
+      const on = l.tags.has(t), sug = l.suggested.includes(t) && !on;
+      return `<button class="chip${sug ? " suggested" : ""}" data-tag="${t}" aria-pressed="${on}">${t}${sug ? " ?" : ""}</button>`;
+    }).join("");
+    el.innerHTML = `
+      <div class="moment-head">
+        <div>
+          <div class="eyebrow">${fmtT(l.t)} · ${isPuff ? "Puff · from your inhaler" : "I'm okay · sampled automatically"}</div>
+          <h2>${l.place.kind === "out" ? l.place.name : l.place.name + (l.place.kind === "home" ? "" : "")}</h2>
+          <div class="where">${l.indoor ? "Probably indoors" : "Probably outdoors"} · ${l.motion === "walking" ? "walking" : "not moving"} · <button class="text-btn" id="flip-io">${l.indoor ? "I was outside" : "I was inside"}</button></div>
+        </div>
+        <canvas id="moment-glyph" aria-hidden="true"></canvas>
+      </div>
+      ${prev ? `<div class="since">
+        <div class="eyebrow">Since ${fmtT(prev.t)} · ${prev.kind === "puff" ? "puff" : "okay moment"} at ${prev.place.name}</div>
+        ${diff("Ozone", prev.val.ozone, l.val.ozone, " ppb")}
+        ${diff("Temp", prev.val.temp, l.val.temp, "°F")}
+        ${diff("Humidity", prev.val.humidity, l.val.humidity, "%")}
+      </div>` : ""}
+      ${isPuff || l.note ? `<div class="note-box">
+        ${l.note ? `<blockquote>“${l.note}”</blockquote><div class="small">Transcribed on your iPhone. Tags with a ? were suggested from your note. Tap to confirm.</div>`
+          : `<div><b>What was happening?</b><div class="small">Say it in a sentence. We'll suggest tags; nothing counts until you confirm.</div></div>
+             <button class="mic" id="mic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Record a note</button>`}
+        <div class="chips">${tagsHtml}</div>
+      </div>` : `<p class="small">Okay moments are taken a few times a day at random, so your puffs have ordinary moments to be compared with.</p>`}
+      <details>
+        <summary class="small" style="cursor:pointer">Sources for this moment</summary>
+        <ul class="sources" style="margin-top:8px">
+          <li>${scale} ozone ${l.val.ozone} ppb · ${mi} mi from ${l.place.station} · OpenAQ</li>
+          <li>${scale} PM2.5 ${l.val.pm25} µg/m³ · ${mi} mi from ${l.place.station} · OpenAQ</li>
+          <li>Modeled outdoor ${l.val.temp}°F, humidity ${l.val.humidity}% · Apple Weather</li>
+          ${l.heat ? "<li>Heat Advisory · National Weather Service</li>" : ""}
+          <li>${regional ? "The air station is over 10 miles away, so the pink prints off-register." : "The air station is nearby, so the pink prints almost in register."}</li>
+        </ul>
+      </details>`;
+    const cv = el.querySelector("#moment-glyph");
+    const [ctx, w, h] = sized(cv, 64);
+    glyph(ctx, w / 2, h / 2, l, 1.6, { frame: true });
+  }
+  document.getElementById("moment").addEventListener("click", ev => {
+    const l = logs.find(x => x.id === selectedId); if (!l) return;
+    const chip = ev.target.closest("[data-tag]");
+    if (chip) { const t = chip.dataset.tag; l.tags.has(t) ? l.tags.delete(t) : l.tags.add(t); renderMoment(); return; }
+    if (ev.target.closest("#flip-io")) { l.indoor = !l.indoor; renderMoment(); return; }
+    if (ev.target.closest("#mic")) {
+      l.note = "Got stuck behind a bus on Grand, lots of exhaust. Bit stressed.";
+      l.suggested = ["Smoke", "Stress"];
+      renderMoment();
+    }
+  });
+
+  // ---------- History postcards ----------
+  function renderCards() {
+    const box = document.getElementById("cards");
+    if (!box.children.length) {
+      let html = "";
+      for (let d = TODAY; d >= 0; d--) {
+        const date = dayDate(d), p = logs.filter(l => l.day === d && l.kind === "puff").length;
+        html += `<button class="card" data-day="${d}" aria-label="${date.toDateString()}, ${p} puffs"><canvas></canvas><b>${d === TODAY ? "Today" : date.toLocaleDateString("en-US", { weekday: "short", day: "numeric" })}</b><span>${p ? p + " puff" + (p > 1 ? "s" : "") : "no puffs"}</span></button>`;
+      }
+      box.innerHTML = html;
+    }
+    box.querySelectorAll(".card").forEach(c => {
+      const d = +c.dataset.day, cv = c.querySelector("canvas");
+      c.setAttribute("aria-current", d === shownDay);
+      const [ctx, w] = sized(cv, cv.clientWidth);
+      drawDay(ctx, w, d, { mini: true, now: d === TODAY ? NOW : null });
+    });
+  }
+  document.getElementById("cards").addEventListener("click", ev => {
+    const c = ev.target.closest(".card"); if (!c) return;
+    shownDay = +c.dataset.day; selectedId = defaultSelection(shownDay);
+    renderHeader(); drawPortrait(); renderMoment(); renderCards();
+    scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  });
+
+  // ---------- Key ----------
+  function drawKey() {
+    const base = logs.find(l => l.id === "pt1");
+    const sample = o => ({ ...base, place: { ...base.place, km: 3 }, ...o });
+    const rows = [
+      ["A <b>solid dot</b> is a puff from your inhaler. A <b>ring</b> is an okay moment we sampled.", (c, w, h) => { glyph(c, w / 3, h / 2, sample({ ozone: "low", pm25: "low", temp: "mild", humidity: "ok" })); glyph(c, 2 * w / 3, h / 2, sample({ kind: "ok", ozone: "low", pm25: "low", temp: "mild", humidity: "ok" })); }],
+      ["<b>Around the circle</b> is the time of day. <b>The rings</b> are home, work and out. The thin line is your path.", (c, w, h) => { c.strokeStyle = T.rule; [8, 13, 18].forEach(r => { c.beginPath(); c.arc(w / 2, h + 2, r, Math.PI, 0); c.stroke(); }); c.strokeStyle = T.key; c.globalAlpha = .4; c.beginPath(); c.moveTo(w / 2 - 8, h - 2); c.quadraticCurveTo(w / 2, h - 18, w / 2 + 18, h - 2); c.stroke(); c.globalAlpha = 1; }],
+      ["<b>Pink dots: air.</b> Bigger means more ozone or particles.", (c, w, h) => ["low", "moderate", "high"].forEach((lv, i) => glyph(c, 14 + i * 24, h / 2, sample({ ozone: lv, pm25: "low" }), .8, { only: "air", noMis: true }))],
+      ["<b>Blue lines: weather.</b> Bigger means hotter or more humid.", (c, w, h) => [["mild", "ok"], ["mild", "humid"], ["hot", "dry"]].forEach(([t, hu], i) => glyph(c, 14 + i * 24, h / 2, sample({ temp: t, humidity: hu }), .8, { only: "weather", noMis: true }))],
+      ["<b>Where inks overlap</b> they print darker: things happening together.", (c, w, h) => glyph(c, w / 2, h / 2, sample({ ozone: "high", temp: "hot" }), 1.1, { noMis: true })],
+      ["<b>Off-register</b> means less sure: the air station is far away.", (c, w, h) => { glyph(c, w / 3, h / 2, sample({ ozone: "high", place: { km: 1 } }), .9); glyph(c, 2 * w / 3 + 4, h / 2, sample({ ozone: "high", place: { km: 22 } }), .9); }],
+      ["<b>Yellow hatch: pollen.</b> Coming when we add a pollen source.", (c, w, h) => inkShape(c, T.pollen, "hatch", () => c.arc(w / 2, h / 2, 12, 0, 7))],
+    ];
+    const box = document.getElementById("key-rows");
+    if (!box.children.length) box.innerHTML = rows.map((r, i) => `<div class="key-row"><canvas data-k="${i}" aria-hidden="true"></canvas><div>${r[0]}</div></div>`).join("");
+    box.querySelectorAll("canvas").forEach(cv => { const [c, w, h] = sized(cv, 40); rows[+cv.dataset.k][1](c, w, h); });
+  }
+  document.querySelector("details.key").addEventListener("toggle", drawKey);
+
+  // ---------- FAB: manual puff (normally the inhaler sensor logs it) ----------
+  function drawFab(pressed) {
+    const cv = document.getElementById("fab-canvas");
+    const [ctx, w, h] = sized(cv);
+    ctx.fillStyle = T.paper; ctx.beginPath(); ctx.arc(w / 2, h / 2, w / 2, 0, 7); ctx.fill();
+    inkShape(ctx, T.weather, "lines", () => ctx.arc(w / 2 + 2.5, h / 2 + 2, w / 2 - 6, 0, 7));
+    inkShape(ctx, T.air, "dots", () => ctx.arc(w / 2 - 1, h / 2 - 1, w / 2 - (pressed ? 6 : 2), 0, 7));
+  }
+  const toast = document.getElementById("toast");
+  let added = 0;
+  document.getElementById("fab").addEventListener("click", () => {
+    drawFab(true);
+    const t = NOW + (++added) * 2 / 60;
+    const l = moment(`pm${added}`, "puff", TODAY, t, PLACES.out[2], { motion: "walking" });
+    logs.push(l);
+    shownDay = TODAY; selectedId = l.id;
+    toast.textContent = `Puff logged at ${fmtT(t)} · stamping place and outdoor air (demo)`;
+    toast.hidden = false;
+    setTimeout(() => { toast.hidden = true; drawFab(false); }, 1800);
+    ROWS = lift();
+    renderHeader(); drawPortrait(); renderMoment(); renderCards(); renderInsightsText();
+    scrollTo({ top: 0 });
+  });
+
+  // =====================================================================================
+  // Insights
+  // =====================================================================================
+  let driver = null;
+  const band = v => v <= 33 ? "clinical" : v <= 66 ? "plain" : "poetic";
+  function renderInsightsText() {
+    const gated = ROWS.filter(r => r.gated);
+    const top = gated[0];
+    if (!driver || !gated.includes(driver)) driver = gated.find(r => driver && r.label === driver.label && r.level === driver.level) || top;
+    const nA = top.nA, nB = top.nB;
+    document.getElementById("insights-eyebrow").textContent = `Last 14 days · ${nA} puffs · ${nB} okay moments`;
+    const v = +document.getElementById("voice").value, b = band(v);
+    const voices = {
+      clinical: `Association signal: ozone=high on ${top.a}/${nA} puffs vs ${top.b}/${nB} okay-moment samples; crude lift ${fmtLift(top.lift)}. Not causal.`,
+      plain: `Here's the pattern: ozone was high around ${top.a} of your ${nA} puffs, and around only ${top.b} of your ${nB} okay moments.`,
+      poetic: `The afternoons keep arriving hot and hazy, and your inhaler keeps answering: high ozone at ${top.a} of ${nA} puffs, at ${top.b} of ${nB} quiet moments.`,
+    };
+    document.getElementById("headline").textContent = voices[b];
+    document.getElementById("voice-label").textContent = b;
+    document.getElementById("voice-source").textContent = `Apple Intelligence · ${b} voice · counts checked against the table`;
+    document.getElementById("drivers").innerHTML = gated.slice(0, 4).map((r, i) =>
+      `<button class="chip" data-i="${i}" aria-pressed="${r === driver}">${rowName(r)}</button>`).join("");
+    renderTable();
+    if (!document.getElementById("page-insights").hidden) drawFields();
+  }
+  document.getElementById("voice").addEventListener("input", renderInsightsText);
+  document.getElementById("drivers").addEventListener("click", ev => {
+    const b = ev.target.closest(".chip"); if (!b) return;
+    driver = ROWS.filter(r => r.gated)[+b.dataset.i]; renderInsightsText();
+  });
+
+  function drawField(cv, list, cols) {
+    const w = cv.clientWidth, cell = w / cols, rows = Math.ceil(list.length / cols);
+    const [ctx] = sized(cv, rows * cell);
+    list.forEach((l, i) => glyph(ctx, (i % cols + .5) * cell, (Math.floor(i / cols) + .5) * cell, l, Math.min(1, cell / 32), { fade: driver.of(l) !== driver.level }));
+  }
+  function drawFields() {
+    const A = logs.filter(l => l.kind === "puff"), B = logs.filter(l => l.kind === "ok");
+    const label = rowName(driver).toLowerCase();
+    document.getElementById("count-a").innerHTML = `${driver.a} of ${driver.nA}<small>puffs · ${label}</small>`;
+    document.getElementById("count-b").innerHTML = `${driver.b} of ${driver.nB}<small>okay moments · ${label}</small>`;
+    drawField(document.getElementById("field-a"), A, 4);
+    drawField(document.getElementById("field-b"), B, 10);
+  }
+
+  const H0 = 5, H1 = 23;
+  const hx = (h, w) => 10 + (h - H0) / (H1 - H0) * (w - 20);
+  const AHEAD = [
+    { name: "Fri 3 Oct", band: "Looks like your puff days", on: true, windows: [[13, 19, ["hot"]], [14, 17.5, ["ozone"]]],
+      text: "1–7 PM: hot, with ozone moderate to high (AirNow forecast)." },
+    { name: "Sat 4 Oct", band: "Usual", on: false, windows: [], text: "Nothing that looks like your puff days." },
+    { name: "Sun 5 Oct", band: "Looks like your puff days", on: true, windows: [[14, 18, ["ozone", "hot"]]],
+      text: "2–6 PM: high ozone and heat. Further out, so less certain." },
+  ];
+  function drawAhead() {
+    const box = document.getElementById("ahead");
+    if (!box.children.length) {
+      box.innerHTML = AHEAD.map((d, i) => `<div class="ahead-day"><header><b>${d.name}</b><span class="band ${d.on ? "on" : ""}">${d.band}</span></header><canvas data-a="${i}" role="img" aria-label="${d.name}: ${d.text}"></canvas><p>${d.text}</p></div>`).join("");
+    }
+    box.querySelectorAll("canvas").forEach(cv => {
+      const d = AHEAD[+cv.dataset.a];
+      const [ctx, w, h] = sized(cv, 30);
+      ctx.strokeStyle = T.rule; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(hx(H0, w), h / 2); ctx.lineTo(hx(H1, w), h / 2); ctx.stroke();
+      [6, 12, 18].forEach(hr => { ctx.beginPath(); ctx.moveTo(hx(hr, w), h / 2 - 4); ctx.lineTo(hx(hr, w), h / 2 + 4); ctx.stroke(); });
+      const fuzz = +cv.dataset.a * 1.5;
+      d.windows.forEach(([a, b, drivers]) => drivers.forEach(dr => {
+        const ink = dr === "ozone" ? T.air : T.weather, kind = dr === "ozone" ? "dots" : "lines", off = dr === "ozone" ? fuzz : -fuzz;
+        inkShape(ctx, ink, kind, () => ctx.roundRect(hx(a, w) + off, 4 + (dr === "ozone" ? 2 : 0), hx(b, w) - hx(a, w), h - 10, 8));
+      }));
+    });
+  }
+  function renderTable() {
+    document.getElementById("evidence").innerHTML = `<thead><tr><th>Condition</th><th>Puffs</th><th>Okay</th><th>Lift</th><th></th></tr></thead><tbody>` +
+      ROWS.filter(r => r.a > 0).slice(0, 10).map(r => `<tr><td>${rowName(r)}</td><td class="num">${r.a} / ${r.nA}</td><td class="num">${r.b} / ${r.nB}</td><td class="num">${fmtLift(r.lift)}</td><td>${r.gated ? "Pattern" : "Not enough yet"}</td></tr>`).join("") + "</tbody>";
+  }
+
+  // =====================================================================================
+  // Chrome: tabs, sheets, theme, grain
+  // =====================================================================================
+  function showTab(name) {
+    document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
+    document.getElementById("page-journal").hidden = name !== "journal";
+    document.getElementById("page-insights").hidden = name !== "insights";
+    document.getElementById("fab").hidden = name !== "journal";
+    try { localStorage.setItem("riso-tab", name); } catch {}
+    drawAll(); scrollTo(0, 0);
+  }
+  document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+  const scrim = document.getElementById("scrim");
+  function openSheet(s) { s.hidden = false; scrim.hidden = false; s.querySelector("button")?.focus(); }
+  function closeSheets() { document.querySelectorAll(".sheet").forEach(x => x.hidden = true); scrim.hidden = true; }
+  scrim.addEventListener("click", closeSheets);
+  document.addEventListener("click", ev => {
+    if (ev.target.closest("[data-close]")) closeSheets();
+    if (ev.target.closest("[data-open=settings]")) openSheet(document.getElementById("sheet-settings"));
+  });
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeSheets(); });
+  document.getElementById("theme-seg").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    const choice = b.dataset.themeChoice;
+    if (choice === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", choice);
+    document.querySelectorAll("#theme-seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeChanged);
+  new MutationObserver(themeChanged).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  function makeGrain() {
+    const c = document.createElement("canvas"); c.width = c.height = 160;
+    const g = c.getContext("2d"), img = g.createImageData(160, 160);
+    for (let i = 0; i < img.data.length; i += 4) { const v = Math.random() * 255; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+    g.putImageData(img, 0, 0);
+    document.documentElement.style.setProperty("--grain-url", `url(${c.toDataURL()})`);
+  }
+  function drawAll() {
+    if (!document.getElementById("page-journal").hidden) {
+      drawFab(false); drawPortrait(); renderMoment(); renderCards();
+      if (document.querySelector("details.key").open) drawKey();
+    }
+    if (!document.getElementById("page-insights").hidden) { drawFields(); drawAhead(); }
+  }
+  function themeChanged() { readTokens(); drawAll(); }
+  let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawAll, 120); });
+
+  // =====================================================================================
+  // Boot
+  // =====================================================================================
+  makeGrain(); readTokens();
+  selectedId = defaultSelection(TODAY);
+  renderHeader(); renderInsightsText();
+  let start = "journal";
+  try { start = localStorage.getItem("riso-tab") || "journal"; } catch {}
+  showTab(start === "insights" ? "insights" : "journal");
+  document.fonts?.ready.then(drawAll);
+})();
+</script>

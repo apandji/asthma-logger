@@ -69,32 +69,31 @@ async function fetchAirNow(lat: number, lon: number) {
     return { aqi: null, aqiCategory: null, pm25: null, ozonePpb: null, raw: null as unknown };
   }
 
-  const url = new URL("https://www.airnowapi.org/aq/observation/latLong/current/");
+  // 2026 service; the old observation/latLong/current/ was retired on 2026-09-30 (410).
+  // AirNow picks the closest monitor per pollutant itself (up to 50 miles), so there is no distance param.
+  const url = new URL("https://www.airnowapi.org/aq/observation/current/ziplatLong/");
   url.searchParams.set("format", "application/json");
   url.searchParams.set("latitude", String(lat));
   url.searchParams.set("longitude", String(lon));
-  url.searchParams.set("distance", "25");
   url.searchParams.set("API_KEY", key);
 
   const res = await fetch(url.toString(), { next: { revalidate: 0 } });
   if (!res.ok) throw new Error(`AirNow ${res.status}`);
   const data = (await res.json()) as Array<{
-    AQI?: number;
-    Category?: { Name?: string };
-    ParameterName?: string;
-    Value?: number;
+    nowcastAQI?: number;
+    aqiCategoryName?: string;
+    parameterName?: string;
   }>;
   if (!Array.isArray(data) || data.length === 0) {
     return { aqi: null, aqiCategory: null, pm25: null, ozonePpb: null, raw: data };
   }
-  const pmRow = data.find((d) => /PM2\.5/i.test(d.ParameterName ?? ""));
-  const ozoneRow = data.find((d) => /OZONE/i.test(d.ParameterName ?? ""));
-  const best = data.reduce((a, b) => ((a.AQI ?? -1) >= (b.AQI ?? -1) ? a : b));
+  const best = data.reduce((a, b) => ((a.nowcastAQI ?? -1) >= (b.nowcastAQI ?? -1) ? a : b));
   return {
-    aqi: best.AQI ?? null,
-    aqiCategory: best.Category?.Name ?? null,
-    pm25: pmRow?.Value ?? null,
-    ozonePpb: ozoneRow?.Value ?? null,
+    aqi: best.nowcastAQI ?? null,
+    aqiCategory: best.aqiCategoryName ?? null,
+    // AirNow returns AQI only, not concentrations.
+    pm25: null,
+    ozonePpb: null,
     raw: data,
   };
 }

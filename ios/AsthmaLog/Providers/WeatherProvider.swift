@@ -7,12 +7,12 @@ import WeatherKit
 struct WeatherProvider {
     static let source = "Apple Weather"
 
-    func current(latitude: Double, longitude: Double) async throws -> (observations: [Observation], alerts: [ConditionAlert]) {
+    func current(latitude: Double, longitude: Double) async throws -> (observations: [EnvObservation], alerts: [ConditionAlert]) {
         let location = CLLocation(latitude: latitude, longitude: longitude)
         let (now, alerts) = try await WeatherService.shared.weather(for: location, including: .current, .alerts)
         let asOf = now.date
-        func obs(_ signal: Signal, _ value: Double, _ unit: String) -> Observation {
-            Observation(signal: signal, value: value, unit: unit, asOf: asOf, source: Self.source,
+        func obs(_ signal: Signal, _ value: Double, _ unit: String) -> EnvObservation {
+            EnvObservation(signal: signal, value: value, unit: unit, asOf: asOf, source: Self.source,
                         spatialScale: .modelGrid, confidence: .medium)
         }
         let observations = [

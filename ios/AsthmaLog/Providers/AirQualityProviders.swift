@@ -5,7 +5,7 @@ import Foundation
 struct OpenAQProvider {
     let key: String
 
-    func observations(latitude lat: Double, longitude lon: Double) async throws -> [Observation] {
+    func observations(latitude lat: Double, longitude lon: Double) async throws -> [EnvObservation] {
         var locations = try await search(lat, lon, monitor: true)
         let hasPM = locations.contains { ($0.sensors ?? []).contains(where: \.measuresPM25) }
         let hasO3 = locations.contains { ($0.sensors ?? []).contains(where: \.measuresOzone) }
@@ -22,7 +22,7 @@ struct OpenAQProvider {
             latest[id] = try await HTTP.get(url, headers: headers, as: OpenAQ.Results<OpenAQ.Latest>.self).results ?? []
         }
 
-        var out: [Observation] = []
+        var out: [EnvObservation] = []
         if let loc = pmLoc, let id = loc.id,
            let r = OpenAQ.reading(at: loc, latest: latest[id] ?? [], lat: lat, lon: lon, measures: { $0.measuresPM25 }) {
             out.append(OpenAQ.observation(r, signal: .pm25))
@@ -53,27 +53,15 @@ struct OpenAQProvider {
 struct AirNowProvider {
     let key: String
 
-    func current(latitude: Double, longitude: Double) async throws -> [Observation] {
-        let rows: [AirNow.Row] = try await HTTP.get(url("observation/latLong/current/", latitude, longitude))
-        return AirNow.aqiObservation(rows, asOf: .now).map { [$0] } ?? []
+    func current(latitude: Double, longitude: Double) async throws -> [EnvObservation] {
+        let rows: [AirNow.Observed] = try await HTTP.get(url("observation/current/ziplatLong/", latitude, longitude))
+        return AirNow.aqiObservation(rows, fetchedAt: .now).map { [$0] } ?? []
     }
 
     /// AQI category numbers by local date string "yyyy-MM-dd".
     func forecast(latitude: Double, longitude: Double) async throws -> [String: (pm25: Int?, ozone: Int?)] {
-        let today = Self.dayString(.now)
-        let rows: [AirNow.Row] = try await HTTP.get(url("forecast/latLong/", latitude, longitude, extra: [URLQueryItem(name: "date", value: today)]))
-        var out: [String: (pm25: Int?, ozone: Int?)] = [:]
-        for row in rows {
-            guard let day = row.DateForecast?.trimmingCharacters(in: .whitespaces), let cat = row.Category?.Number else { continue }
-            var entry = out[day] ?? (nil, nil)
-            switch AirNow.signal(for: row) {
-            case .pm25?: entry.pm25 = max(entry.pm25 ?? 0, cat)
-            case .ozone?: entry.ozone = max(entry.ozone ?? 0, cat)
-            default: continue
-            }
-            out[day] = entry
-        }
-        return out
+        let rows: [AirNow.Forecast] = try await HTTP.get(url("forecast/current/", latitude, longitude))
+        return AirNow.categoriesByDay(rows)
     }
 
     static func dayString(_ date: Date) -> String {
@@ -84,15 +72,14 @@ struct AirNowProvider {
         return f.string(from: date)
     }
 
-    private func url(_ path: String, _ lat: Double, _ lon: Double, extra: [URLQueryItem] = []) -> URL {
+    private func url(_ path: String, _ lat: Double, _ lon: Double) -> URL {
         var c = URLComponents(string: "https://www.airnowapi.org/aq/\(path)")!
         c.queryItems = [
             URLQueryItem(name: "format", value: "application/json"),
             URLQueryItem(name: "latitude", value: String(lat)),
             URLQueryItem(name: "longitude", value: String(lon)),
-            URLQueryItem(name: "distance", value: "25"),
             URLQueryItem(name: "API_KEY", value: key),
-        ] + extra
+        ]
         return c.url!
     }
 }

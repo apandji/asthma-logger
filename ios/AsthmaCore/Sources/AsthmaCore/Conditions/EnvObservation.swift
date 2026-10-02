@@ -24,7 +24,9 @@ public enum Confidence: String, Codable, Sendable, Comparable {
 
 /// One outdoor number with where and when it came from. Every number the UI shows is one of these.
 /// See docs/data-architecture.md §5 ("the honesty contract").
-public struct Observation: Codable, Sendable, Equatable {
+/// Named `EnvObservation`, not `Observation`: that name would shadow Apple's Observation module and
+/// break `@Observable` / `@Model` in any app file that imports AsthmaCore.
+public struct EnvObservation: Codable, Sendable, Equatable {
     public var signal: Signal
     public var value: Double
     /// e.g. "°F", "%", "µg/m³", "ppb", "AQI"
@@ -84,12 +86,12 @@ public struct ConditionAlert: Codable, Sendable, Equatable {
 
 /// Everything stamped on one log. Providers fail open: a missing source adds an error string, not a crash.
 public struct Conditions: Codable, Sendable, Equatable {
-    public var observations: [Observation]
+    public var observations: [EnvObservation]
     public var alerts: [ConditionAlert]
     public var errors: [String]
     public var fetchedAt: Date
 
-    public init(observations: [Observation] = [], alerts: [ConditionAlert] = [], errors: [String] = [], fetchedAt: Date = Date()) {
+    public init(observations: [EnvObservation] = [], alerts: [ConditionAlert] = [], errors: [String] = [], fetchedAt: Date = Date()) {
         self.observations = observations
         self.alerts = alerts
         self.errors = errors
@@ -97,7 +99,7 @@ public struct Conditions: Codable, Sendable, Equatable {
     }
 
     /// Best observation for a signal: the order providers were merged in is the priority order.
-    public func best(_ signal: Signal) -> Observation? {
+    public func best(_ signal: Signal) -> EnvObservation? {
         observations.first { $0.signal == signal }
     }
 
@@ -127,32 +129,33 @@ public enum ObservationCopy {
         case .ozone: "Ozone"
         case .aqi: "AQI"
         case .pollenWeed: "Weed pollen"
-        case .uvIndex: "UV"
+        case .uvIndex: "UV index"
         case .windSpeed: "Wind"
         }
     }
 
     /// "outdoor", "regional outdoor" or "modeled outdoor" — never "at your location".
-    public static func scaleWord(_ o: Observation) -> String {
+    public static func scaleWord(_ o: EnvObservation) -> String {
         if o.spatialScale == .modelGrid { return "Modeled outdoor" }
         if o.spatialScale == .region || o.spatialScale == .city { return "Regional outdoor" }
         if let km = o.distanceKm, km > regionalKm { return "Regional outdoor" }
         return "Outdoor"
     }
 
-    public static func value(_ o: Observation) -> String {
+    public static func value(_ o: EnvObservation) -> String {
         if o.signal == .pollenWeed, let c = o.category { return c }
         let rounded = o.value.rounded()
         let number = rounded == o.value || abs(o.value) >= 10 ? String(Int(rounded)) : String(format: "%.1f", o.value)
         switch o.unit {
         case "°F": return "\(number)°F"
         case "%": return "\(number)%"
-        case "AQI": return o.category.map { "\(number) (\($0))" } ?? number
+        case "AQI": return o.category.map { "\(number) · \($0)" } ?? number
+        case "UV": return number
         default: return "\(number) \(o.unit)"
         }
     }
 
-    public static func line(_ o: Observation, timeZone: TimeZone = .current, locale: Locale = Locale(identifier: "en_US")) -> String {
+    public static func line(_ o: EnvObservation, timeZone: TimeZone = .current, locale: Locale = Locale(identifier: "en_US")) -> String {
         var parts = ["\(scaleWord(o)) \(label(o.signal)) \(value(o))"]
         if let km = o.distanceKm {
             let mi = km * 0.621371

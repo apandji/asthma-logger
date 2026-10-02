@@ -54,9 +54,18 @@ struct EventDetailView: View {
                         Label("\(a.name) · \(a.source)", systemImage: "exclamationmark.triangle")
                             .font(Theme.caption)
                     }
-                    ForEach(c.errors, id: \.self) { Text($0).font(Theme.caption).foregroundStyle(Theme.secondaryText) }
-                }
-                if let err = event.envError {
+                    // Source errors are for debugging, not for reading every time: one line, details on tap.
+                    if !c.errors.isEmpty {
+                        DisclosureGroup {
+                            ForEach(c.errors, id: \.self) { Text($0).font(Theme.caption).foregroundStyle(Theme.secondaryText) }
+                        } label: {
+                            Text(c.observations.isEmpty ? "Couldn't get outdoor conditions" : "Some sources didn't load")
+                                .font(Theme.caption)
+                                .foregroundStyle(c.observations.isEmpty ? Color.orange : Theme.secondaryText)
+                        }
+                    }
+                } else if let err = event.envError {
+                    // No conditions at all (e.g. location off): the message says what to do, so keep it visible.
                     Text(err).font(Theme.caption).foregroundStyle(.orange)
                 }
                 if event.envStatus != .ready && Date().timeIntervalSince(event.loggedAt) < 3600 {

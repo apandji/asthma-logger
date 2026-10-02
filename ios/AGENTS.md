@@ -121,7 +121,7 @@ No iOS API says "indoors", so this is a guess with a confidence level: `likelyIn
 - Always check `SystemLanguageModel.default.availability` first. Not available → template narrator, silently.
 - Two jobs only: **narrate** the gated lift table (port `web/src/lib/insights/summarize.ts` + `style.ts`), and **extract tags** from journal text. It never computes stats.
 - Use guided generation for structured output, not JSON-in-text parsing.
-- Validate output in `AsthmaCore`: every number in the headline must appear in the input table, and banned phrases ("will have an attack", percentages, causal claims) are rejected → template fallback.
+- Validate output in `AsthmaCore`: every number in the headline must appear in the input table, and banned phrases ("will have an attack", percentages, causal claims, the word "attack", ratios like "3×") are rejected → template fallback.
 - Keep prompts small: the gated rows and rules, not the diary.
 
 ## Persistence (SwiftData)

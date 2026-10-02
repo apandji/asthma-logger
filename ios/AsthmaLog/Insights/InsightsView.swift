@@ -89,9 +89,8 @@ struct InsightsView: View {
                             Text($0).font(.caption2).foregroundStyle(Theme.secondaryText)
                         }
                     }
-                    if !day.genericHazards.isEmpty {
-                        Text("The forecast says: \(day.genericHazards.joined(separator: ", ")). Not your pattern yet.")
-                            .font(Theme.caption)
+                    if let line = OutlookCopy.coldStart(day.genericHazards) {
+                        Text(line).font(Theme.caption)
                     }
                     if day.leadHours > 30 {
                         Text("Further out — less certain.").font(.caption2).foregroundStyle(Theme.secondaryText)

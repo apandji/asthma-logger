@@ -67,7 +67,9 @@ import Testing
         let f = FeatureFrame(id: "x", kind: .baseline, hourOfDay: 15, season: .summer, ozoneBand: .high, heatAlert: true)
         let days = Outlook.days(hours: [ForecastHour(start: Date(timeIntervalSince1970: 0), frame: f)],
                                 table: table, bander: bander, calendar: cal)
-        #expect(days[0].genericHazards == ["Heat alert", "High ozone"])
+        #expect(days[0].genericHazards == ["a heat alert", "high ozone"])
+        #expect(OutlookCopy.coldStart(days[0].genericHazards) ==
+            "The forecast shows a heat alert and high ozone. That's a general heads-up, not your pattern yet.")
         #expect(days[0].windows.isEmpty)
     }
 }
@@ -106,7 +108,7 @@ import Testing
 
     @Test func guardAcceptsHonestSentence() {
         let out = NarrationGuard.accept(
-            headline: "Quick read: ozone was high on 8 of 10 inhaler days vs 0 of 24 usual days (~99×).",
+            headline: "Here's what stands out: ozone was high on 8 of the 10 times you used your inhaler, and on 0 of 24 usual days.",
             caveat: "Outdoor air only.", drivers: ["ozone:high", "made:up"], input: input)
         #expect(out.source == .onDevice)
         #expect(out.drivers == ["ozone:high"])
@@ -118,6 +120,10 @@ import Testing
         #expect(!NarrationGuard.problems(headline: "You will have an attack on Thursday.", input: input).isEmpty)
         #expect(!NarrationGuard.problems(headline: "Ozone causes 80% of your attacks.", input: input).isEmpty)
         #expect(NarrationGuard.problems(headline: "PM2.5 was moderate on 8 of 10.", input: input).isEmpty)
+        // Plain-language rules: no "attacks", no ratios.
+        #expect(!NarrationGuard.problems(headline: "Ozone was high on 8 of 10 attacks.", input: input).isEmpty)
+        #expect(!NarrationGuard.problems(headline: "Ozone was high 8 of 10 times (~99×).", input: input).isEmpty)
+        #expect(!NarrationGuard.problems(headline: "Ozone was high twice as often on 8 of 10.", input: input).isEmpty)
         let out = NarrationGuard.accept(headline: "You will have an attack.", caveat: "", drivers: [], input: input)
         #expect(out.source == .template)
     }

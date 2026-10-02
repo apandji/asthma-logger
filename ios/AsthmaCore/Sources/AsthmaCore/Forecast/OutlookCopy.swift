@@ -20,6 +20,15 @@ public enum OutlookCopy {
         return lines
     }
 
+    /// Before there's a personal pattern: "The forecast shows high ozone and a heat alert. That's a general
+    /// heads-up, not your pattern yet."
+    public static func coldStart(_ hazards: [String]) -> String? {
+        guard !hazards.isEmpty else { return nil }
+        let list = hazards.count == 1 ? hazards[0]
+            : hazards.dropLast().joined(separator: ", ") + " and " + hazards.last!
+        return "The forecast shows \(list). That's a general heads-up, not your pattern yet."
+    }
+
     /// A bin level as a short noun phrase: "evening", "high ozone", "humid air".
     public static func phrase(_ bin: String, _ level: String) -> String {
         switch bin {

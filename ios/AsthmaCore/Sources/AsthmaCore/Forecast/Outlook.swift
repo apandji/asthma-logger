@@ -105,15 +105,16 @@ public enum Outlook {
 }
 
 /// Outdoor hazards anyone would want to know about. Used before we know this person's pattern.
+/// Phrased to sit mid-sentence ("high ozone", "a heat alert"); `OutlookCopy.coldStart` builds the line.
 public enum GenericHazards {
     public static func list(_ f: FeatureFrame) -> [String] {
         var out: [String] = []
-        if f.pm25Band == .high { out.append("High PM2.5") }
-        if f.ozoneBand == .high { out.append("High ozone") }
-        if f.pollenWeed == .high { out.append("High weed pollen") }
-        if f.heatAlert { out.append("Heat alert") }
-        if f.tempBand == .cold { out.append("Freezing air") }
-        if f.smokeAtPoint && f.pm25Band == .high { out.append("Smoke-like air") }
+        if f.pm25Band == .high { out.append("high PM2.5") }
+        if f.ozoneBand == .high { out.append("high ozone") }
+        if f.pollenWeed == .high { out.append("high weed pollen") }
+        if f.heatAlert { out.append("a heat alert") }
+        if f.tempBand == .cold { out.append("freezing air") }
+        if f.smokeAtPoint && f.pm25Band == .high { out.append("smoke-like air") }
         return out
     }
 }

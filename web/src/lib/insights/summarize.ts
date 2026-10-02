@@ -1,6 +1,5 @@
 import type { LiftReport, NarratorInput, NarratorOutput } from "./types";
 import { NARRATOR_RULES } from "./types";
-import { formatLift } from "./lift";
 import {
   clampStyle,
   styleBand,
@@ -138,11 +137,11 @@ function exampleFactsFromInput(input: NarratorInput): StyleExampleFacts | undefi
   return {
     binLabel: labelBin(top.bin),
     level: top.level,
+    clause: conditionClause(top.bin, top.level),
     attacksWith: top.attacksWith,
     nAttacks: input.nAttacks,
     baselinesWith: top.baselinesWith,
     nBaselines: input.nBaselines,
-    liftLabel: formatLift(top.lift),
   };
 }
 

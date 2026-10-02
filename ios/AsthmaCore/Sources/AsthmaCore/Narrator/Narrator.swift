@@ -125,9 +125,9 @@ public enum Narrator {
     public static func prompt(_ input: NarratorInput) -> (instructions: String, prompt: String) {
         let style = NarratorStyle(score: input.styleScore)
         let example = (input.rows.first(where: \.gated) ?? input.rows.first).map {
-            NarratorStyle.ExampleFacts(binLabel: Bins.label($0.bin), level: $0.level, attacksWith: $0.attacksWith,
-                                       nAttacks: input.nAttacks, baselinesWith: $0.baselinesWith,
-                                       nBaselines: input.nBaselines, liftLabel: Lift.format($0.lift))
+            NarratorStyle.ExampleFacts(binLabel: Bins.label($0.bin), level: $0.level, clause: clause($0.bin, $0.level),
+                                       attacksWith: $0.attacksWith, nAttacks: input.nAttacks,
+                                       baselinesWith: $0.baselinesWith, nBaselines: input.nBaselines)
         }
         let instructions = ([
             "You write one honest insight for an asthma inhaler diary.",
@@ -168,6 +168,11 @@ public enum NarrationGuard {
         #"\bcaus(e|es|ed|ing)\b"#,
         #"\bdiagnos(is|e|ed)\b(?! *—)"#,
         #"\blungs? (know|remember|warn|whisper)"#,
+        // Plain-language rules: inhaler uses, not "attacks"; counts, not ratios.
+        #"\battacks?\b"#,
+        #"×"#,
+        #"\b\d+(\.\d+)?x\b"#,
+        #"\b(twice|three times|four times) as\b"#,
     ]
 
     /// Numbers that may appear: counts, totals, formatted lifts.

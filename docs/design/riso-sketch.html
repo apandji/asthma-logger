@@ -1,0 +1,682 @@
+<title>Asthma Log Riso Sketch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one phone-width column, two pages (Journal, Insights) behind a bottom tab bar.
+   Each data signal is one riso ink; overlapping inks overprint; misregistration = uncertainty. */
+:root {
+  --paper: #EEECE6;
+  --paper-2: #E3E0D8;
+  --ink-key: #1B1A1F;
+  --ink-soft: #57545C;
+  --ink-faint: #8E8B94;
+  --rule: rgba(27, 26, 31, .14);
+  --air: #F0447A;       /* particles + ozone */
+  --weather: #1F5FB8;   /* heat + humidity */
+  --pollen: #C99400;    /* pollen (with Ambee) */
+  --blend: multiply;
+  --grain-opacity: .08;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Helvetica Neue", sans-serif;
+  --font-body: "Public Sans", -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #141418; --paper-2: #1E1E25; --ink-key: #EDEAE3; --ink-soft: #ABA8B1; --ink-faint: #6F6C76;
+    --rule: rgba(237, 234, 227, .14); --air: #E0457A; --weather: #3A7FD0; --pollen: #B38E28;
+    --blend: screen; --grain-opacity: .06; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #141418; --paper-2: #1E1E25; --ink-key: #EDEAE3; --ink-soft: #ABA8B1; --ink-faint: #6F6C76;
+  --rule: rgba(237, 234, 227, .14); --air: #E0457A; --weather: #3A7FD0; --pollen: #B38E28;
+  --blend: screen; --grain-opacity: .06; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--paper); color: var(--ink-key);
+  font: 15px/1.45 var(--font-body);
+  padding-inline: 16px; padding-block: 0;
+}
+.grain {
+  position: fixed; inset: 0; pointer-events: none; z-index: 50;
+  background-image: var(--grain-url); background-size: 160px;
+  mix-blend-mode: var(--blend); opacity: var(--grain-opacity);
+}
+.app { max-width: 440px; margin-inline: auto; padding-block: 18px 96px; display: grid; gap: 22px; }
+.page[hidden] { display: none !important; }
+.page { display: grid; gap: 22px; }
+
+header.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.eyebrow { font: 500 11px/1.2 var(--font-data); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+h1 { font: 700 34px/1 var(--font-display); letter-spacing: -.02em; margin: 6px 0 0; text-wrap: balance; }
+h2 { font: 700 20px/1.15 var(--font-display); margin: 0; text-wrap: balance; }
+.icon-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--rule); background: transparent;
+  color: var(--ink-key); display: grid; place-items: center; cursor: pointer;
+}
+.icon-btn:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--ink-key); outline-offset: 2px; }
+
+/* Puff button */
+.log-area { display: grid; justify-items: center; gap: 10px; padding-block: 6px 2px; }
+.puff {
+  position: relative; width: 168px; height: 168px; border-radius: 50%; border: 0; cursor: pointer;
+  background: transparent; color: var(--ink-key); font: 700 26px/1 var(--font-display);
+}
+.puff canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.puff span { position: relative; }
+.puff:active { transform: scale(.97); }
+.fine { border: 0; background: none; color: var(--ink-soft); font: 500 14px var(--font-body); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.status { font: 12px var(--font-data); color: var(--ink-soft); min-height: 1.2em; }
+
+/* Day rows */
+.diary { display: grid; gap: 0; }
+.axis, .day { display: grid; grid-template-columns: 54px 1fr; align-items: center; }
+.axis { font: 10px var(--font-data); color: var(--ink-faint); padding-bottom: 4px; }
+.axis-ticks { position: relative; height: 12px; }
+.axis-ticks span { position: absolute; transform: translateX(-50%); }
+.day { border-top: 1px solid var(--rule); min-height: 46px; }
+.day .date { font: 11px/1.2 var(--font-data); color: var(--ink-soft); }
+.day .date b { display: block; font: 500 13px var(--font-body); color: var(--ink-key); }
+.day canvas { width: 100%; height: 46px; display: block; cursor: pointer; touch-action: manipulation; }
+
+/* Key */
+.key { border: 1px solid var(--rule); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+.key-row { display: grid; grid-template-columns: 76px 1fr; gap: 10px; align-items: center; font-size: 13px; color: var(--ink-soft); }
+.key-row b { color: var(--ink-key); font-weight: 600; }
+.key-row canvas { width: 76px; height: 40px; }
+
+/* Insights */
+.headline { font: 500 24px/1.25 var(--font-display); letter-spacing: -.01em; margin: 0; text-wrap: pretty; }
+.caveat { font-size: 13px; color: var(--ink-soft); margin: 8px 0 0; }
+.source { font: 11px var(--font-data); color: var(--ink-faint); margin-top: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1px solid var(--rule); border-radius: 999px; padding: 6px 12px; background: transparent;
+  color: var(--ink-key); font: 500 13px var(--font-body); cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--ink-key); color: var(--paper); border-color: var(--ink-key); }
+.fields { display: grid; grid-template-columns: 1fr 1.5fr; gap: 16px; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field canvas { width: 100%; display: block; }
+.field .count { font: 500 22px/1 var(--font-display); }
+.field .count small { font: 12px var(--font-body); color: var(--ink-soft); display: block; margin-top: 4px; }
+.ahead { display: grid; gap: 14px; }
+.ahead-day { display: grid; gap: 4px; }
+.ahead-day header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ahead-day canvas { width: 100%; height: 30px; display: block; }
+.ahead-day p { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.band { font: 11px var(--font-data); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
+.band.on { color: var(--ink-key); }
+.band.on::before { content: "● "; color: var(--air); }
+details.how { border-top: 1px solid var(--rule); padding-top: 12px; }
+details.how summary { cursor: pointer; font-weight: 600; }
+.table-wrap { overflow-x: auto; margin-top: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font: 500 11px var(--font-data); color: var(--ink-soft); text-transform: uppercase; letter-spacing: .05em; }
+td.num { font-family: var(--font-data); }
+.note { font-size: 12px; color: var(--ink-faint); }
+
+/* Tab bar */
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(10px);
+  border-top: 1px solid var(--rule); display: flex; justify-content: center; gap: 8px;
+}
+nav.tabs button {
+  border: 0; background: none; color: var(--ink-soft); font: 600 14px var(--font-body);
+  padding: 10px 22px; border-radius: 999px; cursor: pointer;
+}
+nav.tabs button[aria-selected="true"] { color: var(--ink-key); background: var(--paper-2); }
+
+/* Sheets + tooltip */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 30; }
+.sheet {
+  position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 31;
+  width: min(440px, 100%); max-height: 80%; overflow: auto;
+  background: var(--paper); color: var(--ink-key); border-radius: 20px 20px 0 0; border: 1px solid var(--rule);
+  padding: 20px 16px calc(24px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 14px;
+}
+.sheet .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.sheet ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.sheet li { font: 12px/1.45 var(--font-data); color: var(--ink-soft); }
+.sheet li b { color: var(--ink-key); font-weight: 500; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; padding: 2px; }
+.seg button { border: 0; background: none; color: var(--ink-soft); padding: 6px 12px; border-radius: 999px; font: 500 13px var(--font-body); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink-key); color: var(--paper); }
+input[type=range] { width: 100%; accent-color: var(--ink-key); }
+.range-labels { display: flex; justify-content: space-between; font: 11px var(--font-data); color: var(--ink-soft); }
+.tip {
+  position: fixed; z-index: 40; pointer-events: none; background: var(--ink-key); color: var(--paper);
+  font: 11px/1.3 var(--font-data); padding: 6px 8px; border-radius: 6px; white-space: nowrap;
+}
+.demo-flag { font: 11px var(--font-data); color: var(--ink-faint); text-align: center; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="grain" aria-hidden="true"></div>
+
+<div class="app">
+  <!-- JOURNAL -->
+  <section class="page" id="page-journal" aria-label="Journal">
+    <header class="top">
+      <div>
+        <div class="eyebrow" id="today-label">Thursday · 2 October</div>
+        <h1>Journal</h1>
+      </div>
+      <button class="icon-btn" data-open="settings" aria-label="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
+      </button>
+    </header>
+
+    <div class="log-area">
+      <button class="puff" id="puff" aria-label="Log a puff"><canvas id="puff-canvas"></canvas><span>puff</span></button>
+      <button class="fine" id="fine">I'm fine right now</button>
+      <div class="status" id="status" role="status"></div>
+    </div>
+
+    <div class="diary" id="diary" aria-label="Last two weeks, one row per day">
+      <div class="axis"><span></span><div class="axis-ticks" id="axis"></div></div>
+    </div>
+
+    <section class="key" aria-label="How to read the marks">
+      <h2>How to read a mark</h2>
+      <div id="key-rows"></div>
+    </section>
+    <p class="demo-flag">Demo diary · made-up logs, St. Louis</p>
+  </section>
+
+  <!-- INSIGHTS -->
+  <section class="page" id="page-insights" aria-label="Insights" hidden>
+    <header class="top">
+      <div>
+        <div class="eyebrow">Last 14 days · 10 puffs · 24 usual moments</div>
+        <h1>Insights</h1>
+      </div>
+      <button class="icon-btn" data-open="settings" aria-label="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>
+      </button>
+    </header>
+
+    <div>
+      <p class="headline" id="headline"></p>
+      <p class="caveat">Outdoor air only. Not a diagnosis, and not a prediction.</p>
+      <div class="source" id="voice-source"></div>
+    </div>
+
+    <div class="chips" id="drivers" role="group" aria-label="Show one condition across your days"></div>
+
+    <div class="fields">
+      <div class="field">
+        <div class="count" id="count-a"></div>
+        <canvas id="field-a" aria-label="One mark per puff"></canvas>
+      </div>
+      <div class="field">
+        <div class="count" id="count-b"></div>
+        <canvas id="field-b" aria-label="One mark per usual moment"></canvas>
+      </div>
+    </div>
+
+    <section class="ahead" aria-label="Looking ahead">
+      <h2>Looking ahead</h2>
+      <div id="ahead"></div>
+      <p class="note">Forecast for your last logged spot. Air quality from AirNow, weather from Apple Weather. Pollen isn't included yet.</p>
+    </section>
+
+    <details class="how">
+      <summary>How we know</summary>
+      <div class="table-wrap"><table id="evidence"></table></div>
+      <p class="note">Counts compare your puffs with your usual moments. A pattern needs at least 6 puffs, 12 usual moments, and 3 puffs at that level (demo threshold).</p>
+    </details>
+  </section>
+</div>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="journal" id="tab-journal">Journal</button>
+  <button role="tab" aria-selected="false" data-tab="insights" id="tab-insights">Insights</button>
+</nav>
+
+<div class="scrim" id="scrim" hidden></div>
+<section class="sheet" id="sheet-log" hidden aria-modal="true" role="dialog" aria-labelledby="log-title"></section>
+<section class="sheet" id="sheet-settings" hidden aria-modal="true" role="dialog" aria-labelledby="settings-title">
+  <div class="row"><h2 id="settings-title">Settings</h2><button class="fine" data-close>Done</button></div>
+  <div>
+    <div class="row"><b>Insight voice</b><span class="eyebrow" id="voice-label"></span></div>
+    <input type="range" id="voice" min="0" max="100" value="80" aria-label="Insight voice, clinical to poetic">
+    <div class="range-labels"><span>Clinical</span><span>Plain</span><span>Poetic</span></div>
+    <p class="note">Changes how the on-device model words your pattern. The numbers never change.</p>
+  </div>
+  <div class="row">
+    <b>Preview</b>
+    <div class="seg" id="theme-seg">
+      <button data-theme-choice="system" aria-pressed="true">System</button>
+      <button data-theme-choice="light" aria-pressed="false">Paper</button>
+      <button data-theme-choice="dark" aria-pressed="false">Night</button>
+    </div>
+  </div>
+</section>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(() => {
+  // ---------- Demo diary (same story and counts as AsthmaCore DemoData) ----------
+  const DAYS = 14;
+  const END = new Date(2026, 9, 2); // Thu 2 Oct 2026
+  const dayDate = d => new Date(END.getFullYear(), END.getMonth(), END.getDate() - (DAYS - 1 - d));
+  const STATIONS = [["Blair St", 3.4], ["Arnold West", 18.6], ["Ladue", 6.1], ["Blair St", 2.2], ["Margaretta", 9.8], ["Arnold West", 21.0]];
+
+  // hour, ozone, pm25, temp, humidity, smoke, heat alert — from DemoData.frames()
+  const attackSpec = [
+    [15,"high","moderate","hot","ok",false,true],[16,"high","low","hot","dry",false,true],
+    [14,"high","moderate","hot","ok",false,false],[18,"high","low","mild","ok",false,false],
+    [17,"high","high","hot","humid",true,true],[15,"moderate","low","hot","ok",false,false],
+    [19,"high","moderate","mild","ok",false,false],[13,"high","low","hot","dry",false,true],
+    [16,"high","moderate","hot","ok",false,false],[20,"moderate","low","mild","humid",false,false],
+  ];
+  const attackDays = [0, 1, 3, 4, 6, 7, 9, 10, 12, 13];
+  const logs = [];
+  attackSpec.forEach((a, i) => logs.push(makeLog(`p${i}`, "puff", attackDays[i], a[0], (i * 23) % 60,
+    { ozone: a[1], pm25: a[2], temp: a[3], humidity: a[4], smoke: a[5], heat: a[6] }, i % 3 === 0, i)));
+  for (let d = 0; d < 24; d++) {
+    const morning = d % 3 !== 0;
+    logs.push(makeLog(`u${d}`, "usual", Math.floor(d * DAYS / 24), morning ? 8 + (d % 3) : 12 + (d % 4), (d * 17) % 60, {
+      ozone: morning ? "low" : d % 6 === 0 ? "moderate" : "low",
+      pm25: d % 7 === 0 ? "moderate" : "low",
+      temp: morning ? "mild" : d % 5 === 0 ? "hot" : "mild",
+      humidity: d % 4 === 0 ? "humid" : "ok",
+      smoke: false, heat: !morning && d % 8 === 0,
+    }, morning, d + 3));
+  }
+
+  function makeLog(id, kind, day, hour, minute, c, indoor, seed) {
+    const [station, km] = STATIONS[seed % STATIONS.length];
+    const jitter = (seed * 37 % 7) - 3;
+    const val = {
+      ozone: { low: 38, moderate: 61, high: 74 }[c.ozone] + jitter,
+      pm25: { low: 7, moderate: 19, high: 41 }[c.pm25] + Math.round(jitter / 2),
+      temp: { mild: 74, hot: 93 }[c.temp] + jitter,
+      humidity: { dry: 28, ok: 49, humid: 72 }[c.humidity] + jitter,
+    };
+    return { id, kind, day, hour, minute, ...c, indoor, station, km, val, angle: (seed * 2.399) % (Math.PI * 2) };
+  }
+
+  const LEVEL = { low: 1, moderate: 2, high: 3, mild: 1, hot: 3 };
+  const airLevel = l => Math.max(LEVEL[l.ozone], LEVEL[l.pm25]);
+  const weatherLevel = l => l.temp === "hot" ? 3 : (l.humidity !== "ok" ? 2 : 1);
+
+  // ---------- Lift (port of AsthmaCore Lift.compute, demo gate) ----------
+  const GATE = { minAttacks: 6, minBaselines: 12, minIn: 3 };
+  const hourPart = h => h >= 5 && h < 12 ? "morning" : h < 17 && h >= 12 ? "afternoon" : h >= 17 && h < 22 ? "evening" : "night";
+  const BINS = [
+    ["PM2.5", "pm25", l => l.pm25], ["Ozone", "ozone", l => l.ozone], ["Temperature", "temp", l => l.temp],
+    ["Humidity", "humidity", l => l.humidity], ["Smoke-like air", "smoke", l => l.smoke ? "yes" : null, true],
+    ["Heat alert", "heat", l => l.heat ? "yes" : null, true], ["Time of day", "hour", l => hourPart(l.hour)],
+  ];
+  function lift() {
+    const A = logs.filter(l => l.kind === "puff"), B = logs.filter(l => l.kind === "usual");
+    const rows = [];
+    for (const [label, bin, of] of BINS) {
+      const levels = [...new Set(logs.map(of).filter(Boolean))].sort();
+      for (const level of levels) {
+        const a = A.filter(l => of(l) === level).length, b = B.filter(l => of(l) === level).length;
+        const ar = a / A.length, br = b / B.length;
+        const lf = br === 0 ? (a > 0 ? Infinity : 1) : ar / br;
+        rows.push({ label, bin, level, a, b, nA: A.length, nB: B.length, lift: lf, of,
+          gated: A.length >= GATE.minAttacks && B.length >= GATE.minBaselines && a >= GATE.minIn && lf > 1.25 });
+      }
+    }
+    return rows.map((r, i) => [r, i]).sort((x, y) => {
+      const lx = isFinite(x[0].lift) ? x[0].lift : 999, ly = isFinite(y[0].lift) ? y[0].lift : 999;
+      return ly - lx || x[1] - y[1];
+    }).map(x => x[0]);
+  }
+  const ROWS = lift();
+  const fmtLift = v => !isFinite(v) ? "only on puffs" : v >= 10 ? `${Math.round(v)}×` : `${v.toFixed(1)}×`;
+
+  // ---------- Theme tokens ----------
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  let T = {};
+  function readTokens() {
+    T = { paper: css("--paper"), key: css("--ink-key"), soft: css("--ink-soft"), faint: css("--ink-faint"),
+      rule: css("--rule"), air: css("--air"), weather: css("--weather"), pollen: css("--pollen"), blend: css("--blend") };
+    patterns = {};
+  }
+
+  // ---------- Riso textures ----------
+  let patterns = {};
+  function pattern(ctx, kind, color) {
+    const k = kind + color;
+    if (patterns[k]) return patterns[k];
+    const c = document.createElement("canvas"), s = 6 * DPR;
+    c.width = c.height = s;
+    const p = c.getContext("2d");
+    p.fillStyle = p.strokeStyle = color;
+    p.lineWidth = DPR;
+    if (kind === "dots") { p.beginPath(); p.arc(s / 2, s / 2, 1.25 * DPR, 0, 7); p.fill(); }
+    if (kind === "lines") { p.fillRect(0, s / 2 - DPR / 2, s, DPR); }
+    if (kind === "hatch") { p.beginPath(); p.moveTo(0, s); p.lineTo(s, 0); p.stroke(); }
+    return (patterns[k] = ctx.createPattern(c, "repeat"));
+  }
+  const DPR = Math.min(window.devicePixelRatio || 1, 3);
+
+  function inkShape(ctx, ink, kind, draw) {
+    ctx.save();
+    ctx.globalCompositeOperation = T.blend;
+    ctx.beginPath(); draw(); ctx.globalAlpha = .55; ctx.fillStyle = ink; ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = pattern(ctx, kind, ink); ctx.fill();
+    ctx.restore();
+  }
+
+  /** One log as a mark. Inks: air (pink dots), weather (blue lines). Offset = uncertainty. */
+  function glyph(ctx, x, y, l, s = 1, opts = {}) {
+    const fade = opts.fade ? .22 : 1;
+    ctx.save(); ctx.globalAlpha = fade;
+    const mis = opts.noMis ? 0 : Math.min(4.5, 0.6 + l.km / 4.5) * s;
+    const wr = [0, 6, 9.5, 13][weatherLevel(l)] * s;
+    const ar = [0, 5.5, 9, 13][airLevel(l)] * s;
+    const ax = x + Math.cos(l.angle) * mis, ay = y + Math.sin(l.angle) * mis;
+    const wx = x - Math.cos(l.angle) * 0.8 * s, wy = y - Math.sin(l.angle) * 0.8 * s;
+    if (!opts.only || opts.only === "weather") inkShape(ctx, T.weather, "lines", () => ctx.ellipse(wx, wy, wr * 1.15, wr * .72, 0, 0, 7));
+    if (!opts.only || opts.only === "air") inkShape(ctx, T.air, "dots", () => ctx.arc(ax, ay, ar, 0, 7));
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = ctx.strokeStyle = T.key;
+    ctx.lineWidth = 1.4 * s;
+    ctx.beginPath(); ctx.arc(x, y, 3.6 * s, 0, 7);
+    l.kind === "puff" ? ctx.fill() : ctx.stroke();
+    if (l.indoor) {
+      ctx.lineWidth = 1; ctx.strokeStyle = T.soft;
+      const h = 16 * s;
+      ctx.beginPath(); ctx.roundRect(x - h, y - h, h * 2, h * 2, 3 * s); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function sized(canvas, h) {
+    const w = canvas.clientWidth;
+    const ht = h ?? canvas.clientHeight;
+    canvas.width = Math.round(w * DPR); canvas.height = Math.round(ht * DPR);
+    if (h) canvas.style.height = h + "px";
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, w, ht);
+    return [ctx, w, ht];
+  }
+
+  // ---------- Journal ----------
+  const H0 = 5, H1 = 23;
+  const hx = (h, w) => 14 + (h - H0) / (H1 - H0) * (w - 28);
+  const rowHits = new Map();
+  const fmtTime = l => { const h = l.hour % 12 || 12; return `${h}:${String(l.minute).padStart(2, "0")} ${l.hour < 12 ? "AM" : "PM"}`; };
+
+  function buildDiary() {
+    const diary = document.getElementById("diary");
+    const axis = document.getElementById("axis");
+    axis.innerHTML = [6, 9, 12, 15, 18, 21].map(h => `<span data-h="${h}">${h === 12 ? "noon" : (h % 12) + (h < 12 ? "a" : "p")}</span>`).join("");
+    for (let d = DAYS - 1; d >= 0; d--) {
+      const date = dayDate(d);
+      const row = document.createElement("div");
+      row.className = "day";
+      const dayLogs = logs.filter(l => l.day === d);
+      const puffs = dayLogs.filter(l => l.kind === "puff").length;
+      row.innerHTML = `<div class="date"><b>${date.toLocaleDateString("en-US", { weekday: "short" })}</b>${date.getDate()} ${date.toLocaleDateString("en-US", { month: "short" })}</div><canvas data-day="${d}" role="img" aria-label="${date.toDateString()}: ${puffs} puff${puffs === 1 ? "" : "s"}, ${dayLogs.length - puffs} usual moment${dayLogs.length - puffs === 1 ? "" : "s"}"></canvas>`;
+      diary.appendChild(row);
+    }
+  }
+
+  function drawDiary() {
+    const axisW = document.getElementById("axis").clientWidth;
+    document.querySelectorAll("#axis span").forEach(s => s.style.left = hx(+s.dataset.h, axisW) + "px");
+    document.querySelectorAll(".day canvas").forEach(cv => {
+      const d = +cv.dataset.day;
+      const [ctx, w, h] = sized(cv, 46);
+      ctx.strokeStyle = T.rule; ctx.lineWidth = 1;
+      [6, 12, 18].forEach(hr => { ctx.beginPath(); ctx.moveTo(hx(hr, w), h - 5); ctx.lineTo(hx(hr, w), h); ctx.stroke(); });
+      const hits = [];
+      logs.filter(l => l.day === d).sort((a, b) => a.kind === "puff" ? 1 : -1).forEach(l => {
+        const x = hx(l.hour + l.minute / 60, w), y = h / 2;
+        glyph(ctx, x, y, l, 1);
+        hits.push({ x, y, l });
+      });
+      rowHits.set(cv, hits);
+    });
+  }
+
+  function hitAt(cv, ev) {
+    const r = cv.getBoundingClientRect();
+    const x = ev.clientX - r.left, y = ev.clientY - r.top;
+    let best = null, bd = 22;
+    for (const h of rowHits.get(cv) || []) {
+      const dd = Math.hypot(h.x - x, h.y - y);
+      if (dd < bd) { bd = dd; best = h.l; }
+    }
+    return best;
+  }
+
+  const tip = document.getElementById("tip");
+  document.getElementById("diary").addEventListener("pointermove", ev => {
+    const cv = ev.target.closest("canvas"); if (!cv || ev.pointerType === "touch") return;
+    const l = hitAt(cv, ev);
+    if (!l) { tip.hidden = true; return; }
+    tip.textContent = `${fmtTime(l)} · ${l.kind === "puff" ? "puff" : "usual"} · ozone ${l.ozone} · ${l.val.temp}°F`;
+    tip.hidden = false;
+    tip.style.left = Math.min(ev.clientX + 12, innerWidth - tip.offsetWidth - 8) + "px";
+    tip.style.top = (ev.clientY - 34) + "px";
+  });
+  document.getElementById("diary").addEventListener("pointerleave", () => tip.hidden = true);
+  document.getElementById("diary").addEventListener("click", ev => {
+    const cv = ev.target.closest("canvas"); if (!cv) return;
+    const l = hitAt(cv, ev); if (l) openLog(l);
+  });
+
+  function openLog(l) {
+    const date = dayDate(l.day);
+    const regional = l.km > 16;
+    const sheet = document.getElementById("sheet-log");
+    sheet.innerHTML = `
+      <div class="row"><div><div class="eyebrow">${date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })} · ${fmtTime(l)}</div>
+        <h2 id="log-title">${l.kind === "puff" ? "Inhaler puff" : "Usual moment"}</h2></div>
+        <canvas id="sheet-glyph" style="width:72px;height:72px"></canvas></div>
+      <ul>
+        <li><b>${regional ? "Regional outdoor" : "Outdoor"} ozone ${l.val.ozone} ppb</b> · ${Math.round(l.km * .621)} mi from ${l.station} · OpenAQ</li>
+        <li><b>${regional ? "Regional outdoor" : "Outdoor"} PM2.5 ${l.val.pm25} µg/m³</b> · ${Math.round(l.km * .621)} mi from ${l.station} · OpenAQ</li>
+        <li><b>Modeled outdoor temp ${l.val.temp}°F</b> · humidity ${l.val.humidity}% · Apple Weather</li>
+        <li><b>${l.indoor ? "Likely indoors" : "Likely outdoors"}</b> · ${l.indoor ? "at home, not moving" : "walking, sharp GPS"} · tap to correct</li>
+        ${l.heat ? "<li><b>Heat Advisory</b> · National Weather Service</li>" : ""}
+      </ul>
+      <p class="note">${regional ? "The air reading comes from a station more than 10 miles away, so its ink prints off-register." : "The air reading comes from a nearby station, so its ink prints almost in register."} Outdoor air near you, not indoor air.</p>
+      <div class="row"><button class="fine" data-close>Close</button></div>`;
+    openSheet(sheet);
+    const cv = sheet.querySelector("#sheet-glyph");
+    const [ctx, w, h] = sized(cv, 72);
+    glyph(ctx, w / 2, h / 2, l, 2);
+  }
+
+  // Puff button: a big pink halftone disc over a blue offset — the button is itself a print.
+  function drawPuff(pressed) {
+    const cv = document.getElementById("puff-canvas");
+    const [ctx, w, h] = sized(cv);
+    const r = w / 2 - 6;
+    inkShape(ctx, T.weather, "lines", () => ctx.arc(w / 2 + 4, h / 2 + 3, r - 8, 0, 7));
+    inkShape(ctx, T.air, "dots", () => ctx.arc(w / 2 - 2, h / 2 - 2, r - (pressed ? 6 : 0), 0, 7));
+  }
+
+  const status = document.getElementById("status");
+  function addLog(kind) {
+    const now = new Date();
+    const hour = Math.min(Math.max(now.getHours(), H0 + 1), H1 - 1);
+    status.textContent = "Stamping where you are and the outdoor air…";
+    drawPuff(true);
+    setTimeout(() => {
+      const l = makeLog(`n${logs.length}`, kind, DAYS - 1, hour, now.getMinutes(),
+        { ozone: "moderate", pm25: "low", temp: "hot", humidity: "ok", smoke: false, heat: false }, kind === "usual", logs.length);
+      logs.push(l);
+      drawPuff(false); drawDiary();
+      status.textContent = `${kind === "puff" ? "Puff" : "Usual moment"} logged at ${fmtTime(l)} · demo, not saved`;
+    }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 700);
+  }
+  document.getElementById("puff").addEventListener("click", () => addLog("puff"));
+  document.getElementById("fine").addEventListener("click", () => addLog("usual"));
+
+  // Key
+  function drawKey() {
+    const sample = (o) => ({ ...logs[0], km: 3, indoor: false, ...o });
+    const rows = [
+      ["A puff is a solid dot. A usual moment is a ring.", (c, w, h) => { glyph(c, w / 3, h / 2, sample({ ozone: "low", pm25: "low", temp: "mild", humidity: "ok" }), 1); glyph(c, 2 * w / 3, h / 2, sample({ kind: "usual", ozone: "low", pm25: "low", temp: "mild", humidity: "ok" }), 1); }],
+      ["<b>Pink dots: air.</b> Bigger means more ozone or particles.", (c, w, h) => ["low", "moderate", "high"].forEach((lv, i) => glyph(c, 14 + i * 24, h / 2, sample({ ozone: lv, pm25: "low" }), .8, { only: "air", noMis: true }))],
+      ["<b>Blue lines: weather.</b> Bigger means hotter or more humid.", (c, w, h) => [["mild", "ok"], ["mild", "humid"], ["hot", "ok"]].forEach(([t, hu], i) => glyph(c, 14 + i * 24, h / 2, sample({ temp: t, humidity: hu }), .8, { only: "weather", noMis: true }))],
+      ["<b>Where inks overlap</b>, they print darker: things happening together.", (c, w, h) => glyph(c, w / 2, h / 2, sample({ ozone: "high", temp: "hot" }), 1.1, { noMis: true })],
+      ["<b>Off-register</b> means less sure: the air station is far away.", (c, w, h) => { glyph(c, w / 3, h / 2, sample({ ozone: "high", km: 1 }), .9); glyph(c, 2 * w / 3 + 4, h / 2, sample({ ozone: "high", km: 22 }), .9); }],
+      ["<b>A frame</b> means you were probably indoors.", (c, w, h) => glyph(c, w / 2, h / 2, sample({ indoor: true, ozone: "moderate" }), .9)],
+      ["<b>Yellow hatch: pollen.</b> Coming when we add a pollen source.", (c, w, h) => inkShape(c, T.pollen, "hatch", () => c.arc(w / 2, h / 2, 12, 0, 7))],
+    ];
+    const box = document.getElementById("key-rows");
+    if (!box.children.length) {
+      box.innerHTML = rows.map((r, i) => `<div class="key-row"><canvas data-k="${i}" aria-hidden="true"></canvas><div>${r[0]}</div></div>`).join("");
+    }
+    box.querySelectorAll("canvas").forEach(cv => { const [c, w, h] = sized(cv, 40); rows[+cv.dataset.k][1](c, w, h); });
+  }
+
+  // ---------- Insights ----------
+  const gated = ROWS.filter(r => r.gated);
+  let driver = gated[0];
+  const top = gated[0];
+  const VOICES = {
+    clinical: `Association signal: ozone=high on ${top.a}/${top.nA} inhaler logs vs ${top.b}/${top.nB} usual-day samples. Not causal.`,
+    plain: `Here's the pattern: ozone was high on ${top.a} of your ${top.nA} puffs and on ${top.b} of your ${top.nB} usual moments.`,
+    poetic: `Late-summer afternoons keep arriving hazy and bright, and your diary keeps answering: high ozone on ${top.a} of ${top.nA} puffs, ${top.b} of ${top.nB} quiet moments.`,
+  };
+  const band = v => v <= 33 ? "clinical" : v <= 66 ? "plain" : "poetic";
+
+  function renderVoice() {
+    const v = +document.getElementById("voice").value;
+    const b = band(v);
+    document.getElementById("headline").textContent = VOICES[b];
+    document.getElementById("voice-label").textContent = b;
+    document.getElementById("voice-source").textContent = `Apple Intelligence · ${b} voice · counts checked against the table`;
+  }
+  document.getElementById("voice").addEventListener("input", renderVoice);
+
+  function renderDrivers() {
+    const box = document.getElementById("drivers");
+    box.innerHTML = gated.slice(0, 4).map((r, i) => `<button class="chip" data-i="${i}" aria-pressed="${r === driver}">${r.label === "Time of day" ? r.level[0].toUpperCase() + r.level.slice(1) : r.label + " " + r.level}</button>`).join("");
+  }
+  document.getElementById("drivers").addEventListener("click", ev => {
+    const b = ev.target.closest(".chip"); if (!b) return;
+    driver = gated[+b.dataset.i]; renderDrivers(); drawFields();
+  });
+
+  function drawField(cv, list, cols) {
+    const w = cv.clientWidth, cell = w / cols, rows = Math.ceil(list.length / cols);
+    const [ctx] = sized(cv, rows * cell);
+    list.forEach((l, i) => {
+      const x = (i % cols + .5) * cell, y = (Math.floor(i / cols) + .5) * cell;
+      glyph(ctx, x, y, l, Math.min(1, cell / 34), { fade: driver.of(l) !== driver.level });
+    });
+  }
+  function drawFields() {
+    const A = logs.filter(l => l.kind === "puff" && l.id.startsWith("p"));
+    const B = logs.filter(l => l.kind === "usual" && l.id.startsWith("u"));
+    const label = driver.label === "Time of day" ? driver.level : `${driver.label.toLowerCase()} ${driver.level}`;
+    document.getElementById("count-a").innerHTML = `${driver.a} of ${driver.nA}<small>puffs with ${label}</small>`;
+    document.getElementById("count-b").innerHTML = `${driver.b} of ${driver.nB}<small>usual moments with ${label}</small>`;
+    drawField(document.getElementById("field-a"), A, 4);
+    drawField(document.getElementById("field-b"), B, 6);
+  }
+
+  // Look ahead: hours that resemble inhaler days print in the inks of their drivers.
+  const AHEAD = [
+    { name: "Fri 3 Oct", band: "Looks like your puff days", on: true, windows: [[13, 19, ["hot"]], [14, 17, ["ozone"]]],
+      text: "1–7 PM: hot afternoon, ozone moderate to high (AirNow forecast)." },
+    { name: "Sat 4 Oct", band: "Usual", on: false, windows: [], text: "Nothing that resembles your puff days." },
+    { name: "Sun 5 Oct", band: "Looks like your puff days", on: true, windows: [[14, 18, ["ozone", "hot"]]],
+      text: "2–6 PM: high ozone and heat. Further out, so less certain." },
+  ];
+  function drawAhead() {
+    const box = document.getElementById("ahead");
+    if (!box.children.length) {
+      box.innerHTML = AHEAD.map((d, i) => `<div class="ahead-day"><header><b>${d.name}</b><span class="band ${d.on ? "on" : ""}">${d.band}</span></header><canvas data-a="${i}" role="img" aria-label="${d.name}: ${d.text}"></canvas><p>${d.text}</p></div>`).join("");
+    }
+    box.querySelectorAll("canvas").forEach(cv => {
+      const d = AHEAD[+cv.dataset.a];
+      const [ctx, w, h] = sized(cv, 30);
+      ctx.strokeStyle = T.rule; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(hx(H0, w), h / 2); ctx.lineTo(hx(H1, w), h / 2); ctx.stroke();
+      [6, 12, 18].forEach(hr => { ctx.beginPath(); ctx.moveTo(hx(hr, w), h / 2 - 4); ctx.lineTo(hx(hr, w), h / 2 + 4); ctx.stroke(); });
+      const fuzz = +cv.dataset.a * 1.5;
+      d.windows.forEach(([a, b, drivers]) => drivers.forEach(dr => {
+        const ink = dr === "ozone" ? T.air : T.weather, kind = dr === "ozone" ? "dots" : "lines";
+        const off = dr === "ozone" ? fuzz : -fuzz;
+        inkShape(ctx, ink, kind, () => ctx.roundRect(hx(a, w) + off, 4 + (dr === "ozone" ? 2 : 0), hx(b, w) - hx(a, w), h - 10, 8));
+      }));
+    });
+  }
+
+  function renderTable() {
+    const t = document.getElementById("evidence");
+    t.innerHTML = `<thead><tr><th>Condition</th><th>Puffs</th><th>Usual</th><th>Lift</th><th></th></tr></thead><tbody>` +
+      ROWS.filter(r => r.a > 0).slice(0, 9).map(r => `<tr><td>${r.label} · ${r.level}</td><td class="num">${r.a} / ${r.nA}</td><td class="num">${r.b} / ${r.nB}</td><td class="num">${fmtLift(r.lift)}</td><td>${r.gated ? "Pattern" : "Not enough yet"}</td></tr>`).join("") + "</tbody>";
+  }
+
+  // ---------- Chrome: tabs, sheets, theme ----------
+  function showTab(name) {
+    document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
+    document.getElementById("page-journal").hidden = name !== "journal";
+    document.getElementById("page-insights").hidden = name !== "insights";
+    try { localStorage.setItem("riso-tab", name); } catch {}
+    drawAll();
+    scrollTo(0, 0);
+  }
+  document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+  const scrim = document.getElementById("scrim");
+  function openSheet(s) { document.querySelectorAll(".sheet").forEach(x => x.hidden = true); s.hidden = false; scrim.hidden = false; s.querySelector("button")?.focus(); }
+  function closeSheets() { document.querySelectorAll(".sheet").forEach(x => x.hidden = true); scrim.hidden = true; }
+  scrim.addEventListener("click", closeSheets);
+  document.addEventListener("click", ev => {
+    if (ev.target.closest("[data-close]")) closeSheets();
+    if (ev.target.closest("[data-open=settings]")) openSheet(document.getElementById("sheet-settings"));
+  });
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeSheets(); });
+
+  document.getElementById("theme-seg").addEventListener("click", ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    const choice = b.dataset.themeChoice;
+    if (choice === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", choice);
+    document.querySelectorAll("#theme-seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    themeChanged();
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeChanged);
+  new MutationObserver(themeChanged).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+  function makeGrain() {
+    const c = document.createElement("canvas"); c.width = c.height = 160;
+    const g = c.getContext("2d"), img = g.createImageData(160, 160);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = Math.random() * 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    document.documentElement.style.setProperty("--grain-url", `url(${c.toDataURL()})`);
+  }
+
+  function drawAll() {
+    if (!document.getElementById("page-journal").hidden) { drawPuff(false); drawDiary(); drawKey(); }
+    if (!document.getElementById("page-insights").hidden) { drawFields(); drawAhead(); }
+  }
+  function themeChanged() { readTokens(); drawAll(); }
+  let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawAll, 120); });
+
+  // ---------- Boot ----------
+  makeGrain(); readTokens(); buildDiary(); renderVoice(); renderDrivers(); renderTable();
+  let start = "journal";
+  try { start = localStorage.getItem("riso-tab") || "journal"; } catch {}
+  showTab(start === "insights" ? "insights" : "journal");
+  document.fonts?.ready.then(drawAll);
+})();
+</script>

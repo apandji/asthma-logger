@@ -362,7 +362,7 @@
     "gatedRows": []
   },
   "expectedTemplate": {
-    "headline": "You have 5 attack logs and 5 usual-day samples. Keep logging quiet days so we can compare.",
+    "headline": "You've used your inhaler 5 times and logged 5 usual moments. Keep logging usual days so there's something to compare.",
     "caveat": "Outdoor air only — not a medical diagnosis. Comparison to your usual logged days, not a prediction.",
     "drivers": []
   }

@@ -75,6 +75,21 @@ import Testing
 @Suite struct NarratorTests {
     let input = NarratorInput(report: Lift.compute(DemoData.frames(), gate: .demo), styleScore: 80)
 
+    // Golden fixtures cover "never happened" and too-few-samples; this covers a nonzero usual count.
+    @Test func templateReadsPlainly() {
+        var i = input
+        i.season = nil
+        i.rows = [NarratorRow(bin: "humidity", level: "humid", attacksWith: 8, baselinesWith: 6,
+                              attackRate: 0.8, baselineRate: 0.25, lift: 3.2, gated: true)]
+        i.nAttacks = 10
+        i.nBaselines = 24
+        #expect(Narrator.template(i).headline ==
+            "8 of the 10 times you used your inhaler, it was humid. On usual days, that only happened 6 of 24 times.")
+        #expect(Narrator.clause("hour", "evening") == "it was evening")
+        #expect(Narrator.clause("indoor_outdoor", "outdoor") == "you were likely outdoors")
+        #expect(Narrator.clause("tag_coldAir", "yes") == "you noted cold air")
+    }
+
     @Test func styleBands() {
         #expect(NarratorStyle(score: 0) == .clinical)
         #expect(NarratorStyle(score: 33) == .clinical)

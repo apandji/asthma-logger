@@ -47,8 +47,8 @@ export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
   if (gated.length === 0) {
     const headline =
       input.nBaselines < 12
-        ? `You have ${input.nAttacks} attack logs and ${input.nBaselines} usual-day samples. Keep logging quiet days so we can compare.`
-        : `Nothing clears the sample gate yet (${input.nAttacks} attacks, ${input.nBaselines} usual days). Patterns need more repeats.`;
+        ? `You've used your inhaler ${input.nAttacks} times and logged ${input.nBaselines} usual moments. Keep logging usual days so there's something to compare.`
+        : `Nothing stands out yet (${input.nAttacks} inhaler uses, ${input.nBaselines} usual days). Patterns need more repeats.`;
     return {
       headline,
       caveat: CAVEAT,
@@ -57,15 +57,19 @@ export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
     };
   }
 
+  // Plain counts, no ratio: "8 of the 10 times you used your inhaler, ozone was high. …"
   const top = gated[0];
   const second = gated[1];
-  const liftLabel = formatLift(top.lift);
-  let headline = `${labelBin(top.bin)} (${top.level}) showed up on ${top.attacksWith} of ${input.nAttacks} attacks vs ${top.baselinesWith} of ${input.nBaselines} usual days (~${liftLabel}×).`;
+  let headline = `${top.attacksWith} of the ${input.nAttacks} times you used your inhaler, ${conditionClause(top.bin, top.level)}.`;
+  headline +=
+    top.baselinesWith === 0
+      ? ` On usual days, that never happened (0 of ${input.nBaselines}).`
+      : ` On usual days, that only happened ${top.baselinesWith} of ${input.nBaselines} times.`;
   if (second) {
-    headline += ` Next: ${labelBin(second.bin)} (${second.level}).`;
+    headline += ` Also common: ${conditionClause(second.bin, second.level)}.`;
   }
   if (input.season) {
-    headline += ` Season context: ${input.season}.`;
+    headline += ` Most of these logs are from ${input.season}.`;
   }
 
   return {
@@ -74,6 +78,30 @@ export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
     drivers,
     source: "template",
   };
+}
+
+/** One bin level as a plain clause, e.g. "ozone was high", "it was evening". Mirrored in iOS `Narrator.clause`. */
+export function conditionClause(bin: string, level: string): string {
+  switch (bin) {
+    case "pm25":
+      return `PM2.5 was ${level}`;
+    case "ozone":
+      return `ozone was ${level}`;
+    case "pollen_weed":
+      return level === "none" ? "there was no weed pollen" : `weed pollen was ${level}`;
+    case "temp":
+      return `it was ${level} out`;
+    case "humidity":
+      return level === "ok" ? "humidity was normal" : `it was ${level}`;
+    case "smoke_at_point":
+      return level === "yes" ? "there were signs of smoke in the air" : "there were no signs of smoke in the air";
+    case "heat_alert":
+      return level === "yes" ? "there was a heat alert" : "there was no heat alert";
+    case "hour":
+      return `it was ${level}`;
+    default:
+      return `${labelBin(bin).toLowerCase()} was ${level}`;
+  }
 }
 
 export function labelBin(bin: string): string {

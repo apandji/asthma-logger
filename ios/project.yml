@@ -33,17 +33,16 @@ targets:
     info:
       path: AsthmaLog/Info.plist
       properties:
-        CFBundleDisplayName: Asthma Log
+        CFBundleDisplayName: felt air
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
-        UIUserInterfaceStyle: Dark
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: Your location stamps each inhaler log with the outdoor air and weather where you were.
         NSLocationAlwaysAndWhenInUseUsageDescription: Lets the app learn your home, work and usual places so forecasts use the right spot.
         NSMotionUsageDescription: Movement (walking, driving, still) helps guess whether you were indoors or outdoors.
-        NSHealthUpdateUsageDescription: Saves each inhaler puff to Apple Health as Inhaler Usage.
+        NSHealthUpdateUsageDescription: Saves each time you use your inhaler to Apple Health as Inhaler Usage.
         NSHealthShareUsageDescription: Reads nothing yet. Required by Apple Health alongside saving.
         NSMicrophoneUsageDescription: Record a short voice note about how you're feeling.
         NSSpeechRecognitionUsageDescription: Turns your voice note into text on this iPhone.

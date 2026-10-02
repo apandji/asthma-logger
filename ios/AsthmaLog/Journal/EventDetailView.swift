@@ -13,7 +13,7 @@ struct EventDetailView: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("What", value: event.kind == .attack ? "Inhaler puff" : "Usual moment")
+                LabeledContent("What", value: event.kind == .attack ? "Used inhaler" : "I'm okay")
                 LabeledContent("When", value: event.loggedAt.formatted(date: .abbreviated, time: .shortened))
                 if event.kind == .attack {
                     LabeledContent("Apple Health", value: event.healthSampleID == nil ? "Not saved" : "Saved")

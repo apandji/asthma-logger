@@ -1,15 +1,15 @@
 import SwiftUI
 
-/// Every color, font and spacing token. Views never hard-code styling, so the risograph pass
-/// later only has to change this file.
+/// Every color, font and spacing token. Views never hard-code styling.
+/// Spec: docs/design/visual-style.md (Apple-native, light and dark, ink only for data).
 enum Theme {
-    // Riso-ish spot inks, used sparingly on a stock dark iOS base.
-    static let accent = Color(red: 1.0, green: 0.282, blue: 0.690)   // fluorescent pink
-    static let ink2 = Color(red: 0.0, green: 0.471, blue: 0.749)     // riso blue
-    static let ink3 = Color(red: 0.0, green: 0.663, blue: 0.361)     // riso green
+    // Inks for data, one per signal family. Light / dark values from the spec.
+    static let accent = Color(light: 0xE8336D, dark: 0xFF4F86)   // air (pink); also the primary action
+    static let ink2 = Color(light: 0x1F6FD1, dark: 0x4C9BFF)     // weather (blue)
+    static let ink3 = Color(light: 0x248A3D, dark: 0x30D158)     // quiet days (system-like green)
 
-    static let background = Color.black
-    static let surface = Color(white: 0.11)
+    static let background = Color(uiColor: .systemGroupedBackground)
+    static let surface = Color(uiColor: .secondarySystemGroupedBackground)
     static let secondaryText = Color.secondary
 
     static let elevated = accent
@@ -21,6 +21,8 @@ enum Theme {
     static let spacing: CGFloat = 12
 
     static let headline = Font.system(.title3, design: .rounded).weight(.semibold)
+    /// The one New York sentence per screen (the insight headline). Never bold.
+    static let headlineSerif = Font.system(.title2, design: .serif, weight: .medium)
     static let body = Font.body
     static let caption = Font.caption
     static let number = Font.system(.body, design: .rounded).monospacedDigit()
@@ -59,5 +61,16 @@ struct Chip: View {
             .padding(.vertical, 3)
             .foregroundStyle(color)
             .background(color.opacity(0.15), in: .capsule)
+    }
+}
+
+extension Color {
+    /// A color that follows light / dark mode, from 0xRRGGBB values.
+    init(light: UInt32, dark: UInt32) {
+        func ui(_ hex: UInt32) -> UIColor {
+            UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                    blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+        }
+        self.init(uiColor: UIColor { $0.userInterfaceStyle == .dark ? ui(dark) : ui(light) })
     }
 }

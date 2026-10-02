@@ -22,7 +22,7 @@ struct InsightsView: View {
                     lookAheadCard
                     evidenceCard
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Compares your inhaler logs with your usual moments. Outdoor air only. Not medical advice, and not a prediction of an attack.")
+                        Text("Compares the times you used your inhaler with your I'm okay moments. Outdoor air only. Not medical advice, and not a prediction of an attack.")
                         WeatherAttributionView()
                     }
                     .font(Theme.caption)
@@ -54,7 +54,7 @@ struct InsightsView: View {
     private var patternCard: some View {
         Card(title: "Your pattern", systemImage: "sparkles") {
             if let n = model.narration {
-                Text(n.headline).font(Theme.headline)
+                Text(n.headline).font(Theme.headlineSerif)
                 Text(n.caveat).font(Theme.caption).foregroundStyle(Theme.secondaryText)
                 HStack {
                     Chip(text: n.source == .onDevice ? "Apple Intelligence · \(NarratorStyle(score: styleScore).label)" : "Template",
@@ -107,7 +107,7 @@ struct InsightsView: View {
     private var evidenceCard: some View {
         Card(title: "Evidence", systemImage: "tablecells") {
             let c = model.frameCount
-            Text("\(c.attacks) inhaler logs · \(c.baselines) usual moments" + (c.skipped > 0 ? " · \(c.skipped) without conditions" : ""))
+            Text("\(c.attacks) inhaler logs · \(c.baselines) I'm okay moments" + (c.skipped > 0 ? " · \(c.skipped) without conditions" : ""))
                 .font(Theme.caption).foregroundStyle(Theme.secondaryText)
             if let rows = model.report?.rows.prefix(8), !rows.isEmpty {
                 ForEach(Array(rows)) { r in
@@ -127,7 +127,7 @@ struct InsightsView: View {
                     }
                 }
             } else {
-                Text("Log puffs and usual moments to start comparing.").font(Theme.caption)
+                Text("Log each time you use your inhaler. felt air adds I'm okay moments on its own.").font(Theme.caption)
             }
         }
     }

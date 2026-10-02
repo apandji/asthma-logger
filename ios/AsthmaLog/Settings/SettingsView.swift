@@ -36,12 +36,12 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("Save puffs to Apple Health", isOn: $writeToHealth)
-                    Toggle("Log a usual moment on app open", isOn: $autoBaseline)
+                    Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
+                    Toggle("Add I'm okay moments automatically", isOn: $autoBaseline)
                 } header: {
                     Text("Logging")
                 } footer: {
-                    Text("Usual moments are what your inhaler logs are compared against. When on, opening the app logs one if there's been none in 20 hours and no puff in the last 2.")
+                    Text("I'm okay moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
                 }
 
                 Section("Data sources") {
@@ -58,7 +58,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Text("Asthma Log is a diary, not a medical device. It compares outdoor conditions on your inhaler days with your usual days. It can't see indoor air and doesn't diagnose or predict attacks.")
+                    Text("felt air is a diary, not a medical device. It compares outdoor conditions when you used your inhaler with your I'm okay moments. It can't see indoor air and doesn't diagnose or predict attacks.")
                         .font(Theme.caption)
                         .foregroundStyle(Theme.secondaryText)
                 }

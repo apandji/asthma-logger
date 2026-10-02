@@ -9,7 +9,7 @@ enum LocationError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .denied: "Location is off for Asthma Log. Turn it on in Settings → Privacy → Location Services."
+        case .denied: "Location is off for felt air. Turn it on in Settings → Privacy → Location Services."
         case .unavailable: "Couldn't get a location fix."
         }
     }

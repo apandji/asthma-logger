@@ -2,28 +2,24 @@ import AsthmaCore
 import SwiftData
 import SwiftUI
 
-/// The record: one tap logs a puff; each log gets place, indoor/outdoor and outdoor conditions.
+/// The record. Logging lives in the tab bar accessory (RootView); each log gets place, indoor/outdoor and outdoor conditions.
 struct JournalView: View {
     @Environment(\.modelContext) private var context
     @Environment(LogService.self) private var services
     @Query(sort: \LogEvent.loggedAt, order: .reverse) private var events: [LogEvent]
-    @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
-    @State private var isLogging = false
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    logButtons
+                if let error = services.lastError {
+                    Text(error).font(Theme.caption).foregroundStyle(.orange)
                 }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
 
                 if events.isEmpty {
                     ContentUnavailableView(
                         "No logs yet",
                         systemImage: "wind",
-                        description: Text("Tap Log a puff each time you use your rescue inhaler. We'll stamp where you were and what the outdoor air was like.")
+                        description: Text("Tap Used inhaler below each time you use your rescue inhaler. We'll stamp where you were and what the outdoor air was like.")
                     )
                     .listRowBackground(Color.clear)
                 }
@@ -50,43 +46,6 @@ struct JournalView: View {
         }
     }
 
-    private var logButtons: some View {
-        VStack(spacing: Theme.spacing) {
-            Button {
-                log(.attack)
-            } label: {
-                Label(isLogging ? "Logging…" : "Log a puff", systemImage: "lungs.fill")
-                    .font(Theme.headline)
-                    .frame(maxWidth: .infinity, minHeight: 64)
-            }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.roundedRectangle(radius: Theme.cornerRadius))
-            .sensoryFeedback(.success, trigger: events.count)
-
-            Button {
-                log(.baseline)
-            } label: {
-                Label("I'm fine — log a usual moment", systemImage: "checkmark.circle")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-
-            if let error = services.lastError {
-                Text(error).font(Theme.caption).foregroundStyle(.orange)
-            }
-        }
-        .disabled(isLogging)
-        .padding(.vertical, Theme.spacing)
-    }
-
-    private func log(_ kind: FrameKind) {
-        isLogging = true
-        Task {
-            await services.log(kind, in: context, writeToHealth: writeToHealth)
-            isLogging = false
-        }
-    }
-
     private var days: [(day: Date, events: [LogEvent])] {
         let cal = Calendar.current
         let grouped = Dictionary(grouping: events) { cal.startOfDay(for: $0.loggedAt) }
@@ -104,7 +63,7 @@ struct EventRow: View {
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(event.kind == .attack ? "Inhaler puff" : "Usual moment")
+                    Text(event.kind == .attack ? "Used inhaler" : "I'm okay")
                     Spacer()
                     Text(event.loggedAt.formatted(date: .omitted, time: .shortened))
                         .font(Theme.number)

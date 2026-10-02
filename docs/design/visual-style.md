@@ -1,5 +1,7 @@
 # Visual style: Apple-native, with ink for data
 
+The app is called **felt air**.
+
 The design spec for the iOS app's look. Mockups: [`visual-style-mockups.html`](visual-style-mockups.html) (open in a browser; Journal and Recap in light and dark). This refines the [riso visual language](riso-visual-language.md): it keeps the riso inks and the overprint idea for data, and drops the paper texture, grain, misregistration and custom type.
 
 ## The idea
@@ -83,10 +85,10 @@ Modeled on Health's Cycle Tracking: a week of day capsules on top, the selected 
    - **● Air**: rows like "Ozone · High" (value in ink, semibold).
    - **● Weather**: "Humidity · Humid 84%", "Temperature · 84°F".
    - **● Notes**: "Anything going on? +", which opens the check-in sheet. Confirmed tags show here as the value.
-   - **● Moments**: one row per moment with its mark glyph (34 pt), "Used inhaler" / "I'm okay", the time and a chevron to its sources.
+   - **● Moments**: one row per moment with its mark glyph (34 pt), "Used inhaler" / "I'm okay", the time and a chevron to its sources. I'm okay rows are labelled "added automatically".
    Rows show conditions that stood out first; everything else is under the moment.
 6. **History** (calendar button): the Last 5 weeks grid, 7 columns of day circles with the inhaler count, discs behind days where something stood out, today ringed in the air ink, and a one-line key. Tapping a day jumps the strip to it.
-7. **Logging**: a pink "+" action in the floating tab bar logs "Used inhaler" in one tap; "I'm okay" is a row action in the Log ("+ I'm okay"). Both shrink away once puffs come from a smart inhaler and okay moments are sampled automatically.
+7. **Logging**: one action, "Used inhaler", in the floating bar above the tab bar (`tabViewBottomAccessory`), one tap from anywhere. There is no I'm okay button: I'm okay moments are captured in the background (see below). The action shrinks away once uses come from a smart inhaler.
 
 ### Recap (replaces Insights)
 
@@ -100,9 +102,16 @@ Modeled on Health's Cycle Tracking: a week of day capsules on top, the selected 
 
 The voice slider (clinical → plain → poetic) stays in Settings and only changes the model's headline.
 
+## I'm okay moments
+
+Not a button. felt air captures them in the background: place, time and outdoor air at moments when you didn't use your inhaler. They are the comparison set for every pattern (predictive-engine.md §4).
+
+- **Now:** one on app open, if there's been none in 20 hours and no inhaler use in the last 2.
+- **Next:** a few a day at random times, from background tasks and visits at home. This needs the Always location permission; ask the owner before adding the prompt.
+
 ## Check-in sheet (proposed, from State of Mind)
 
-Tapping "Used inhaler" or "I'm okay" logs immediately (logging must stay one tap and work offline), then offers a light sheet:
+Tapping "Used inhaler" logs immediately (logging must stay one tap and work offline), then offers a light sheet:
 
 - the mark, large, with its discs;
 - "Anything going on? (optional)" with the closed `JournalTag` list as chips. Chips the user taps are confirmed tags and become bins; nothing is suggested without the user tapping;
@@ -121,11 +130,14 @@ Follows the Say / Do not say table in [predictive-engine.md §2](../predictive-e
 - VoiceOver: a day circle reads "Wednesday, 2 inhaler uses, air stood out"; a mark reads its title, time and conditions.
 - Respect Reduce Motion and Reduce Transparency (discs become solid at the same lightness when transparency is reduced).
 
+## Decided
+
+- Name: **felt air**.
+- Logging: one "Used inhaler" action in the floating tab bar accessory. No I'm okay button.
+- Breathing slider: not in the build.
+
 ## What's not decided
 
-- **App name.** "felt air" is a candidate; the display name is still "Asthma Log".
-- **Breathing slider** in the check-in (tight ↔ easy, like State of Mind's scale). New data, and it would change what an "I'm okay" moment means. Not in the first build.
-- **Logging placement**: tab-bar "+" for Used inhaler and a Log row for I'm okay, or two buttons on the Journal.
 - **Joint conditions** ("humid *and* high ozone"): needs counting pairs in the rate table; until then copy names each condition with its own count.
 - **Automatic "I'm okay" samples** at home need the Always location permission; ask the owner first.
 
@@ -133,7 +145,7 @@ Follows the Say / Do not say table in [predictive-engine.md §2](../predictive-e
 
 Order, each a small PR that ends on the phone:
 
-1. Theme tokens (light + dark, follow system), New York headline style, rename "usual moment" → "I'm okay" in the UI.
+1. Theme tokens (light + dark, follow system), New York headline style, name "felt air", rename "usual moment" → "I'm okay", logging in the tab bar accessory, no I'm okay button. *(done)*
 2. `GlyphSpec` + "stood out" rule in `AsthmaCore` with tests; a `MarkView` that draws it.
 3. Recap screen.
 4. Journal: week strip, headline, day log with tinted cards, logging actions.

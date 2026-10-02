@@ -49,7 +49,7 @@ const SOURCES = {
   tempAmbee: "Ambee weather — outdoor model/obs blend (~hourly). Not indoor air.",
   humidityNone: "No free humidity API — NWS forecast does not include relative humidity at this endpoint.",
   humidityAmbee: "Ambee weather humidity / dewpoint — outdoor.",
-  aqiAirnow: "EPA AirNow official monitor — max AQI within 25 miles. Regional, not the air at this pin.",
+  aqiAirnow: "EPA AirNow official monitors — highest NowCast AQI among the closest monitor per pollutant (up to 50 miles). Regional, not the air at this pin.",
   aqiOpenaq:
     "OpenAQ nearest ground station (often an EPA/AirNow monitor). Hourly concentration at that site — not NowCast AQI, not indoor, not this street.",
   aqiAmbee: "Ambee outdoor AQ model (~500 m claimed). Not indoor air.",

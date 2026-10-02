@@ -1,5 +1,7 @@
 # Riso visual language
 
+> **For the app UI, [visual-style.md](visual-style.md) supersedes this.** It keeps the inks, overprint and mark rules from here, and drops paper texture, grain, misregistration, the radial day portrait and custom type. This doc stays as the source of the ink idea.
+
 The design spec for the simpler, riso-printed interface. The interactive sketch is `riso-sketch.html` in this folder: open it in a browser, or see the published copy at https://claude.ai/artifact/DgYHmNmWjqhRXD7WjDn8v3 (private to the owner). Inspiration: Giorgia Lupi's data humanism, especially *Bruises*. Every data point is a hand-made mark, there's always a key, and the human context sits beside the numbers.
 
 ## The idea

@@ -129,7 +129,7 @@ public enum ObservationCopy {
         case .ozone: "Ozone"
         case .aqi: "AQI"
         case .pollenWeed: "Weed pollen"
-        case .uvIndex: "UV"
+        case .uvIndex: "UV index"
         case .windSpeed: "Wind"
         }
     }
@@ -149,7 +149,8 @@ public enum ObservationCopy {
         switch o.unit {
         case "°F": return "\(number)°F"
         case "%": return "\(number)%"
-        case "AQI": return o.category.map { "\(number) (\($0))" } ?? number
+        case "AQI": return o.category.map { "\(number) · \($0)" } ?? number
+        case "UV": return number
         default: return "\(number) \(o.unit)"
         }
     }

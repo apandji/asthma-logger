@@ -162,6 +162,8 @@ public enum AirNow {
         public var dateObserved: String?
         /// Local hour as "HH:mm", e.g. "19:00".
         public var hourObserved: String?
+        /// US zone abbreviation, e.g. "CDT".
+        public var localTimeZone: String?
         public var reportingAreaName: String?
         public var siteName: String?
         public var parameterName: String?
@@ -187,16 +189,45 @@ public enum AirNow {
         return nil
     }
 
-    /// AQI observation with the driver pollutant (the highest AQI row).
-    public static func aqiObservation(_ rows: [Observed], asOf: Date) -> EnvObservation? {
+    /// AQI observation with the driver pollutant (the highest AQI row), stamped with the hour AirNow
+    /// observed it. Falls back to `fetchedAt` only if that hour can't be read.
+    public static func aqiObservation(_ rows: [Observed], fetchedAt: Date) -> EnvObservation? {
         guard let best = rows.filter({ ($0.nowcastAQI ?? -1) >= 0 }).max(by: { ($0.nowcastAQI ?? -1) < ($1.nowcastAQI ?? -1) }),
               let aqi = best.nowcastAQI else { return nil }
-        let driver = best.parameterName.map { " (\($0))" } ?? ""
+        let category = [best.aqiCategoryName, pollutantName(best.parameterName)].compactMap { $0 }.joined(separator: " · ")
         return EnvObservation(
-            signal: .aqi, value: Double(aqi), unit: "AQI", asOf: asOf, source: "AirNow",
+            signal: .aqi, value: Double(aqi), unit: "AQI", asOf: observedAt(best) ?? fetchedAt, source: "AirNow",
             spatialScale: .region, confidence: .medium,
-            stationName: best.reportingAreaName, category: (best.aqiCategoryName ?? "") + driver
+            stationName: best.reportingAreaName, category: category.nonEmpty
         )
+    }
+
+    /// "ozone", "PM2.5", or AirNow's own name for anything else.
+    static func pollutantName(_ parameterName: String?) -> String? {
+        switch signal(for: parameterName) {
+        case .ozone?: "ozone"
+        case .pm25?: "PM2.5"
+        default: parameterName?.nonEmpty
+        }
+    }
+
+    /// AirNow's US zone abbreviations → UTC offset in hours. A fixed table so Linux and Apple agree.
+    static let zoneOffsets: [String: Int] = [
+        "EST": -5, "EDT": -4, "CST": -6, "CDT": -5, "MST": -7, "MDT": -6, "PST": -8, "PDT": -7,
+        "AKST": -9, "AKDT": -8, "HST": -10, "SST": -11, "CHST": 10, "AST": -4, "UTC": 0, "GMT": 0,
+    ]
+
+    /// `dateObserved` "2026-10-01" + `hourObserved` "19:00" + `localTimeZone` "CDT" → the instant observed.
+    public static func observedAt(_ row: Observed) -> Date? {
+        guard let day = row.dateObserved, let hour = row.hourObserved,
+              let zone = row.localTimeZone?.trimmingCharacters(in: .whitespaces).uppercased(),
+              let offset = zoneOffsets[zone], let tz = TimeZone(secondsFromGMT: offset * 3600) else { return nil }
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = tz
+        f.dateFormat = "yyyy-MM-dd HH:mm"
+        return f.date(from: "\(day.trimmingCharacters(in: .whitespaces)) \(hour.trimmingCharacters(in: .whitespaces))")
     }
 
     /// Highest PM2.5 and ozone category (1–6) per local date "yyyy-MM-dd".

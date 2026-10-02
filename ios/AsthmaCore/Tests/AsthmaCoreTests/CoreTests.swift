@@ -159,6 +159,10 @@ import Testing
                             source: "OpenAQ", spatialScale: .station, distanceKm: 17.6, stationName: "Denver-CAMP")
         #expect(ObservationCopy.line(o, timeZone: TimeZone(identifier: "UTC")!) ==
             "Regional outdoor PM2.5 27 µg/m³ · 11 mi from Denver-CAMP · 4:00 PM · OpenAQ")
+        let uv = EnvObservation(signal: .uvIndex, value: 0, unit: "UV", asOf: Date(timeIntervalSince1970: 16 * 3600),
+                                source: "Apple Weather", spatialScale: .modelGrid)
+        #expect(ObservationCopy.line(uv, timeZone: TimeZone(identifier: "UTC")!) ==
+            "Modeled outdoor UV index 0 · 4:00 PM · Apple Weather")
     }
 
     @Test func conditionsFeedFrames() {
@@ -200,9 +204,12 @@ import Testing
           "siteID":"295100085","siteName":"Blair Street","parameterName":"OZONE","nowcastAQI":38,"aqiCategoryName":"Good"}]
         """
         let rows = try JSONDecoder().decode([AirNow.Observed].self, from: Data(observed.utf8))
-        let o = try #require(AirNow.aqiObservation(rows, asOf: Date()))
+        let o = try #require(AirNow.aqiObservation(rows, fetchedAt: Date()))
         #expect(o.value == 38 && o.source == "AirNow" && o.spatialScale == .region)
-        #expect(o.stationName == "Saint Louis" && o.category == "Good (OZONE)")
+        // Stamped with the hour AirNow observed (19:00 CDT = 00:00 UTC), not the fetch time.
+        #expect(o.asOf == ISO8601DateFormatter().date(from: "2026-10-02T00:00:00Z"))
+        #expect(ObservationCopy.line(o, timeZone: TimeZone(identifier: "UTC")!) ==
+            "Regional outdoor AQI 38 · Good · ozone · Saint Louis · 12:00 AM · AirNow")
 
         let forecast = """
         [{"dateIssue":"2026-10-01","dateValid":"2026-10-01","reportingArea":"Saint Louis","parameterName":"OZONE",

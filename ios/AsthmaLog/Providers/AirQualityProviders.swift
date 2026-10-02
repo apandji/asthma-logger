@@ -55,7 +55,7 @@ struct AirNowProvider {
 
     func current(latitude: Double, longitude: Double) async throws -> [EnvObservation] {
         let rows: [AirNow.Observed] = try await HTTP.get(url("observation/current/ziplatLong/", latitude, longitude))
-        return AirNow.aqiObservation(rows, asOf: .now).map { [$0] } ?? []
+        return AirNow.aqiObservation(rows, fetchedAt: .now).map { [$0] } ?? []
     }
 
     /// AQI category numbers by local date string "yyyy-MM-dd".

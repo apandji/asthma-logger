@@ -795,7 +795,7 @@
     ]
   },
   "expectedTemplate": {
-    "headline": "Ozone (high) showed up on 8 of 10 attacks vs 0 of 24 usual days (~99×). Next: Weed pollen (high). Season context: summer.",
+    "headline": "8 of the 10 times you used your inhaler, ozone was high. On usual days, that never happened (0 of 24). Also common: weed pollen was high. Most of these logs are from summer.",
     "caveat": "Outdoor air only — not a medical diagnosis. Comparison to your usual logged days, not a prediction.",
     "drivers": [
       "ozone:high",

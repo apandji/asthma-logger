@@ -22,6 +22,9 @@ public struct RiskWindow: Sendable, Identifiable {
     /// Top two drivers by log-LR (positive only).
     public var drivers: [RateTable.Entry]
     public var isPartial: Bool
+    /// Totals behind the driver counts, so copy can say "4 of your 10".
+    public var nAttacks: Int
+    public var nBaselines: Int
     public var id: Date { start }
 }
 
@@ -82,7 +85,8 @@ public enum Outlook {
             let drivers = Array(best.values.sorted { $0.logLR > $1.logLR }.prefix(2))
             out.append(RiskWindow(start: first.0.start, end: last.0.start.addingTimeInterval(3600),
                                   peakScore: run.map(\.1).max() ?? 0, drivers: drivers,
-                                  isPartial: run.contains { $0.0.isPartial }))
+                                  isPartial: run.contains { $0.0.isPartial },
+                                  nAttacks: table.nAttacks, nBaselines: table.nBaselines))
         }
 
         for h in hours {
@@ -101,15 +105,16 @@ public enum Outlook {
 }
 
 /// Outdoor hazards anyone would want to know about. Used before we know this person's pattern.
+/// Phrased to sit mid-sentence ("high ozone", "a heat alert"); `OutlookCopy.coldStart` builds the line.
 public enum GenericHazards {
     public static func list(_ f: FeatureFrame) -> [String] {
         var out: [String] = []
-        if f.pm25Band == .high { out.append("High PM2.5") }
-        if f.ozoneBand == .high { out.append("High ozone") }
-        if f.pollenWeed == .high { out.append("High weed pollen") }
-        if f.heatAlert { out.append("Heat alert") }
-        if f.tempBand == .cold { out.append("Freezing air") }
-        if f.smokeAtPoint && f.pm25Band == .high { out.append("Smoke-like air") }
+        if f.pm25Band == .high { out.append("high PM2.5") }
+        if f.ozoneBand == .high { out.append("high ozone") }
+        if f.pollenWeed == .high { out.append("high weed pollen") }
+        if f.heatAlert { out.append("a heat alert") }
+        if f.tempBand == .cold { out.append("freezing air") }
+        if f.smokeAtPoint && f.pm25Band == .high { out.append("smoke-like air") }
         return out
     }
 }

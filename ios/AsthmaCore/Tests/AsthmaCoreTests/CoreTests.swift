@@ -67,13 +67,30 @@ import Testing
         let f = FeatureFrame(id: "x", kind: .baseline, hourOfDay: 15, season: .summer, ozoneBand: .high, heatAlert: true)
         let days = Outlook.days(hours: [ForecastHour(start: Date(timeIntervalSince1970: 0), frame: f)],
                                 table: table, bander: bander, calendar: cal)
-        #expect(days[0].genericHazards == ["Heat alert", "High ozone"])
+        #expect(days[0].genericHazards == ["a heat alert", "high ozone"])
+        #expect(OutlookCopy.coldStart(days[0].genericHazards) ==
+            "The forecast shows a heat alert and high ozone. That's a general heads-up, not your pattern yet.")
         #expect(days[0].windows.isEmpty)
     }
 }
 
 @Suite struct NarratorTests {
     let input = NarratorInput(report: Lift.compute(DemoData.frames(), gate: .demo), styleScore: 80)
+
+    // Golden fixtures cover "never happened" and too-few-samples; this covers a nonzero usual count.
+    @Test func templateReadsPlainly() {
+        var i = input
+        i.season = nil
+        i.rows = [NarratorRow(bin: "humidity", level: "humid", attacksWith: 8, baselinesWith: 6,
+                              attackRate: 0.8, baselineRate: 0.25, lift: 3.2, gated: true)]
+        i.nAttacks = 10
+        i.nBaselines = 24
+        #expect(Narrator.template(i).headline ==
+            "8 of the 10 times you used your inhaler, it was humid. On usual days, that only happened 6 of 24 times.")
+        #expect(Narrator.clause("hour", "evening") == "it was evening")
+        #expect(Narrator.clause("indoor_outdoor", "outdoor") == "you were likely outdoors")
+        #expect(Narrator.clause("tag_coldAir", "yes") == "you noted cold air")
+    }
 
     @Test func styleBands() {
         #expect(NarratorStyle(score: 0) == .clinical)
@@ -91,7 +108,7 @@ import Testing
 
     @Test func guardAcceptsHonestSentence() {
         let out = NarrationGuard.accept(
-            headline: "Quick read: ozone was high on 8 of 10 inhaler days vs 0 of 24 usual days (~99×).",
+            headline: "Here's what stands out: ozone was high on 8 of the 10 times you used your inhaler, and on 0 of 24 usual days.",
             caveat: "Outdoor air only.", drivers: ["ozone:high", "made:up"], input: input)
         #expect(out.source == .onDevice)
         #expect(out.drivers == ["ozone:high"])
@@ -103,6 +120,10 @@ import Testing
         #expect(!NarrationGuard.problems(headline: "You will have an attack on Thursday.", input: input).isEmpty)
         #expect(!NarrationGuard.problems(headline: "Ozone causes 80% of your attacks.", input: input).isEmpty)
         #expect(NarrationGuard.problems(headline: "PM2.5 was moderate on 8 of 10.", input: input).isEmpty)
+        // Plain-language rules: no "attacks", no ratios.
+        #expect(!NarrationGuard.problems(headline: "Ozone was high on 8 of 10 attacks.", input: input).isEmpty)
+        #expect(!NarrationGuard.problems(headline: "Ozone was high 8 of 10 times (~99×).", input: input).isEmpty)
+        #expect(!NarrationGuard.problems(headline: "Ozone was high twice as often on 8 of 10.", input: input).isEmpty)
         let out = NarrationGuard.accept(headline: "You will have an attack.", caveat: "", drivers: [], input: input)
         #expect(out.source == .template)
     }
@@ -226,6 +247,20 @@ import Testing
 }
 
 @Suite struct ForecastFrameTests {
+    @Test func lookAheadReadsPlainly() {
+        let evening = RateTable.Entry(bin: "hour", level: "evening", attacksWith: 4, baselinesWith: 0, logLR: 1.2, gated: true)
+        let ozone = RateTable.Entry(bin: "ozone", level: "high", attacksWith: 8, baselinesWith: 2, logLR: 0.9, gated: true)
+        let w = RiskWindow(start: Date(), end: Date(), peakScore: 2, drivers: [evening, ozone], isPartial: true,
+                           nAttacks: 10, nBaselines: 24)
+        #expect(OutlookCopy.headline(w, timeRange: "8 PM–10 PM") ==
+            "8 PM–10 PM looks more like the times you used your inhaler: evening and high ozone.")
+        #expect(OutlookCopy.evidence(w) == [
+            "Evening: 4 of your 10 inhaler times, 0 of 24 usual days.",
+            "High ozone: 8 of your 10 inhaler times, 2 of 24 usual days.",
+            "No air-quality forecast for these hours, so this is weather only.",
+        ])
+    }
+
     @Test func categoriesBecomeBands() {
         let f = FrameBuilder.forecastFrame(id: "h", hourOfDay: 15, month: 7,
                                            ForecastConditions(temperatureF: 91, humidityPct: 70, pm25Category: 1, ozoneCategory: 3))

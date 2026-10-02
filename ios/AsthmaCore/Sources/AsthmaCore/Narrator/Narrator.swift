@@ -74,28 +74,60 @@ public enum Narrator {
         let gated = input.rows.filter(\.gated)
         guard let top = gated.first else {
             let headline = input.nBaselines < 12
-                ? "You have \(input.nAttacks) attack logs and \(input.nBaselines) usual-day samples. Keep logging quiet days so we can compare."
-                : "Nothing clears the sample gate yet (\(input.nAttacks) attacks, \(input.nBaselines) usual days). Patterns need more repeats."
+                ? "You've used your inhaler \(input.nAttacks) times and logged \(input.nBaselines) usual moments. Keep logging usual days so there's something to compare."
+                : "Nothing stands out yet (\(input.nAttacks) inhaler uses, \(input.nBaselines) usual days). Patterns need more repeats."
             return NarratorOutput(headline: headline, caveat: caveat, drivers: [], source: .template)
         }
-        var headline = "\(Bins.label(top.bin)) (\(top.level)) showed up on \(top.attacksWith) of \(input.nAttacks) attacks vs \(top.baselinesWith) of \(input.nBaselines) usual days (~\(Lift.format(top.lift))×)."
+        // Plain counts, no ratio: "8 of the 10 times you used your inhaler, ozone was high. …"
+        var headline = "\(top.attacksWith) of the \(input.nAttacks) times you used your inhaler, \(clause(top.bin, top.level))."
+        headline += top.baselinesWith == 0
+            ? " On usual days, that never happened (0 of \(input.nBaselines))."
+            : " On usual days, that only happened \(top.baselinesWith) of \(input.nBaselines) times."
         if gated.count > 1 {
-            let second = gated[1]
-            headline += " Next: \(Bins.label(second.bin)) (\(second.level))."
+            headline += " Also common: \(clause(gated[1].bin, gated[1].level))."
         }
         if let season = input.season {
-            headline += " Season context: \(season)."
+            headline += " Most of these logs are from \(season)."
         }
         return NarratorOutput(headline: headline, caveat: caveat, drivers: gated.prefix(3).map(\.id), source: .template)
+    }
+
+    /// One bin level as a plain clause, e.g. "ozone was high", "it was evening".
+    /// v1 bins mirror `conditionClause` in web/src/lib/insights/summarize.ts; v2 bins are iOS only.
+    public static func clause(_ bin: String, _ level: String) -> String {
+        switch bin {
+        case "pm25": return "PM2.5 was \(level)"
+        case "ozone": return "ozone was \(level)"
+        case "pollen_weed": return level == "none" ? "there was no weed pollen" : "weed pollen was \(level)"
+        case "temp": return "it was \(level) out"
+        case "humidity": return level == "ok" ? "humidity was normal" : "it was \(level)"
+        case "smoke_at_point": return level == "yes" ? "there were signs of smoke in the air" : "there were no signs of smoke in the air"
+        case "heat_alert": return level == "yes" ? "there was a heat alert" : "there was no heat alert"
+        case "hour": return "it was \(level)"
+        case "place":
+            switch level {
+            case "home": return "you were at home"
+            case "work": return "you were at work"
+            case "frequent": return "you were at one of your usual places"
+            default: return "you were somewhere else"
+            }
+        case "indoor_outdoor": return "you were likely \(level)s"  // often a guess, never stated as fact
+        default:
+            if bin.hasPrefix("tag_") {
+                let tag = Bins.label(bin).lowercased()
+                return level == "yes" ? "you noted \(tag)" : "you didn't note \(tag)"
+            }
+            return "\(Bins.label(bin).lowercased()) was \(level)"
+        }
     }
 
     /// Instructions + prompt for an on-device model using guided generation (no JSON parsing needed).
     public static func prompt(_ input: NarratorInput) -> (instructions: String, prompt: String) {
         let style = NarratorStyle(score: input.styleScore)
         let example = (input.rows.first(where: \.gated) ?? input.rows.first).map {
-            NarratorStyle.ExampleFacts(binLabel: Bins.label($0.bin), level: $0.level, attacksWith: $0.attacksWith,
-                                       nAttacks: input.nAttacks, baselinesWith: $0.baselinesWith,
-                                       nBaselines: input.nBaselines, liftLabel: Lift.format($0.lift))
+            NarratorStyle.ExampleFacts(binLabel: Bins.label($0.bin), level: $0.level, clause: clause($0.bin, $0.level),
+                                       attacksWith: $0.attacksWith, nAttacks: input.nAttacks,
+                                       baselinesWith: $0.baselinesWith, nBaselines: input.nBaselines)
         }
         let instructions = ([
             "You write one honest insight for an asthma inhaler diary.",
@@ -136,6 +168,11 @@ public enum NarrationGuard {
         #"\bcaus(e|es|ed|ing)\b"#,
         #"\bdiagnos(is|e|ed)\b(?! *—)"#,
         #"\blungs? (know|remember|warn|whisper)"#,
+        // Plain-language rules: inhaler uses, not "attacks"; counts, not ratios.
+        #"\battacks?\b"#,
+        #"×"#,
+        #"\b\d+(\.\d+)?x\b"#,
+        #"\b(twice|three times|four times) as\b"#,
     ]
 
     /// Numbers that may appear: counts, totals, formatted lifts.

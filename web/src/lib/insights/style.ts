@@ -42,36 +42,34 @@ export function styleTemperature(band: StyleBand): number {
 export type StyleExampleFacts = {
   binLabel: string;
   level: string;
+  /** The template's plain clause, e.g. "ozone was high". */
+  clause: string;
   attacksWith: number;
   nAttacks: number;
   baselinesWith: number;
   nBaselines: number;
-  liftLabel: string;
 };
 
-/** Concrete few-shots using THIS diary's top row — Gemma copies register, not invented stats. */
+/** Concrete few-shots using THIS diary's top row — the model copies register, not invented stats. Mirrored in iOS Style.swift. */
 export function styleFewShot(band: StyleBand, f: StyleExampleFacts): string {
-  const counts = `${f.attacksWith} of ${f.nAttacks} vs ${f.baselinesWith} of ${f.nBaselines}`;
-  const bin = f.binLabel;
-  const lvl = f.level;
-
   if (band === "clinical") {
     return [
       "Example headline in THIS register (same facts, your voice must match this density):",
-      `"Association signal: ${bin}=${lvl}. Attack-conditioned prevalence ${f.attacksWith}/${f.nAttacks}; usual-day prevalence ${f.baselinesWith}/${f.nBaselines}; crude lift ${f.liftLabel}×. Not causal."`,
+      `"${f.binLabel} ${f.level}: present on ${f.attacksWith} of ${f.nAttacks} inhaler uses and ${f.baselinesWith} of ${f.nBaselines} usual days. An association in your log, not a cause."`,
     ].join("\n");
   }
 
   if (band === "plain") {
     return [
       "Example headline in THIS register (same facts, your voice must match this warmth):",
-      `"Quick read: ${bin.toLowerCase()} was ${lvl} a lot more often when you logged an attack (${counts} usual-day comparison, about ${f.liftLabel}×). Outdoor air only — not a diagnosis."`,
+      `"Here's what stands out: ${f.clause} on ${f.attacksWith} of the ${f.nAttacks} times you used your inhaler, and on only ${f.baselinesWith} of ${f.nBaselines} usual days."`,
     ].join("\n");
   }
 
+  const clause = f.clause.charAt(0).toUpperCase() + f.clause.slice(1);
   return [
     "Example headline in THIS register (same facts, your voice must match this lyric shape):",
-    `"There is a weather that keeps finding the hard days — ${lvl} ${bin.toLowerCase()} in the outdoor air — and your log keeps answering (${counts}; ~${f.liftLabel}×). Not fate. Just a rhyme the diary keeps humming."`,
+    `"Some days the outdoor air feels heavier. ${clause} on ${f.attacksWith} of the ${f.nAttacks} times you reached for your inhaler, and on just ${f.baselinesWith} of ${f.nBaselines} ordinary days. Not a cause, just something your log keeps noticing."`,
   ].join("\n");
 }
 
@@ -79,40 +77,27 @@ export function stylePromptBlock(band: StyleBand, example?: StyleExampleFacts): 
   const shared = [
     "CRITICAL: The three registers must sound OBVIOUSLY different. Do not write a bland middle sentence for every style.",
     "Voice only — the lift table is ground truth.",
-    "You MUST include the exact attack/usual counts for the top gated driver (e.g. 8 of 14 vs 3 of 40).",
-    "Never invent drivers, counts, diagnoses, or predictions of an attack.",
-    "Never say weather caused the attack. Never say lungs know / remember / warn / whisper.",
+    "You MUST include the exact counts for the top gated driver: how many of the times they used their inhaler, and how many usual days (e.g. 8 of 10 vs 3 of 24).",
+    "Count inhaler uses as 'times you used your inhaler'. Never use the word 'attack'.",
+    "Never state a ratio or multiplier like '3×' or 'twice as often'. Give the two counts instead.",
+    "Never invent drivers, counts, diagnoses, or predictions.",
+    "Never say the weather caused anything. Never say lungs know / remember / warn / whisper.",
     "Outdoor air context only.",
   ];
 
   let voice: string;
   switch (band) {
     case "clinical":
-      voice = [
-        "Register: CLINICAL (sound like a methods note).",
-        "Use technical diction: prevalence, co-occurrence, lift, conditioned on attack days, usual-day sample.",
-        "Lead with the exposure name and level. Prefer fractions (8/14) and '×' lift.",
-        "No metaphors. No second-person coaching. One dense sentence preferred; max two.",
-        "Forbidden words: 'weather leans', 'echo', 'humming', 'hard days', 'quick read'.",
-      ].join(" ");
+      voice =
+        "Register: CLINICAL (sound like a short methods note). Precise and neutral: name the condition and level, then the two counts. Words like 'present on', 'inhaler uses', 'usual days', 'association'. No metaphors. No second-person coaching. One or two short sentences.";
       break;
     case "plain":
-      voice = [
-        "Register: PLAIN (sound like a friend summarizing your diary).",
-        "Start with 'Quick read:' or 'Here's the pattern:'. Use you/your.",
-        "Everyday words only — no 'prevalence', 'co-occurrence', 'stratum', 'crude lift'.",
-        "Say the pattern in one plain sentence, then the counts in the same breath.",
-        "No metaphor, no research jargon.",
-      ].join(" ");
+      voice =
+        "Register: PLAIN (sound like a friend reading your log back to you). Use you/your. Short sentences, everyday words. No jargon (no 'prevalence', 'co-occurrence', 'lift'). No stock openers like 'Quick read'. Say what stands out, with the two counts in the same sentence.";
       break;
     case "poetic":
-      voice = [
-        "Register: POETIC (sound like a short lyric essay, still honest).",
-        "Open with imagery about outdoor air, season, heat, haze, pollen, afternoon light — then land the exact counts.",
-        "Vary sentence rhythm. Allow one metaphor. Prefer sensory language over clinical nouns.",
-        "Do NOT open with the pollutant name as a chart label. Do NOT use 'Quick read', 'prevalence', or 'co-occurrence'.",
-        "Still include exact counts before the end. Max three sentences. No destiny / prophecy / body-as-fate.",
-      ].join(" ");
+      voice =
+        "Register: POETIC (a short lyric note, still honest). Open with one image of outdoor air, season, heat, haze, pollen or light, then land the exact counts. Vary rhythm. Allow one metaphor. Do NOT open with the pollutant name as a chart label. Max three sentences. No destiny / prophecy / body-as-fate.";
       break;
   }
 

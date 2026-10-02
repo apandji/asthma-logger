@@ -38,9 +38,11 @@ One rate table feeds both reads. A separate model for “the future” would dri
 
 | Say | Do not say |
 |-----|------------|
-| “Thu 2–7p looks more like your attack hours than your usual ones.” | “You will have an attack.” |
-| “Driver: ozone, high. 8 of 12 attacks, 3 of 40 usual days.” | A percentage risk. |
-| “Outdoor forecast, not indoor air. We don’t know your pattern yet.” | “Hyperlocal” or “the air you will breathe.” |
+| “2–7 PM looks more like the times you used your inhaler: high ozone.” | “You will have an attack.” |
+| “8 of the 10 times you used your inhaler, ozone was high. On usual days, that only happened 3 of 24 times.” | A percentage risk. |
+| “The forecast shows high ozone. That’s a general heads-up, not your pattern yet.” | “Hyperlocal” or “the air you will breathe.” |
+| “Times you used your inhaler” | “Attacks” (a puff log isn’t a diagnosis) |
+| Two plain counts | A ratio or multiplier (“~3×”, “twice as often”) |
 
 Absolute risk is not identified. People log some attacks and not others, and a baseline sample is “no attack reported,” not “this hour was fine.” Case-control style samples support a **likelihood ratio**, not P(attack | weather).
 

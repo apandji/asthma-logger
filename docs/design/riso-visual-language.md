@@ -35,18 +35,29 @@ Yellow is below 3:1 contrast on paper, so it always appears with its hatch and a
 - **Indoor frame:** a thin rounded square (32 pt) in soft ink when indoors (guessed or confirmed).
 - Glyph geometry belongs in `AsthmaCore` as a pure `GlyphSpec` (layers, radii, offsets) with tests; SwiftUI only draws it.
 
+## Capture model
+
+- **Puffs come from the inhaler** (a smart-inhaler sensor). A small floating **puff** button is only the manual fallback.
+- **"I'm okay" moments are sampled automatically**, about five a day at random times: place, time, outdoor air. These are the usual moments puffs are compared with. Nothing is asked of the user.
+
 ## Screens
 
-**Journal**
-- Header: date eyebrow, "Journal", gear (Settings).
-- A big round **puff** button that is itself a print (pink halftone over offset blue). "I'm fine right now" text button under it logs a usual moment. One status line.
-- Day rows, newest first: date label + a 5 AM–11 PM strip with ticks at 6/12/18; marks placed at log time. Tap a mark → bottom sheet with the honest observation lines (source, distance, time), indoor/outdoor correction, and its glyph drawn large.
-- "How to read a mark" key at the bottom, drawn with real glyphs.
+**Journal: today's portrait + the moment's context**
+- Header: "Today" (or the weekday when browsing history), eyebrow "Thu, Oct 2 · 2 puffs · 5 okay", gear.
+- **Day portrait** (main visual, Lupi-style radial): angle = time of day (midnight at top, clockwise); **ring = place** (inner home, middle work, outer out); a thin key-ink **thread** joins the day's moments in order (your path). Okay moments print first as rings; puffs print on top as solid dots at 1.25× scale. Today shows a "now" hand and a dotted arc for hours not yet lived. A one-line legend sits under it; the full key is a "How to read a day" disclosure.
+- **Moment card** (the screen's main job): tap a mark to select it; the default is today's latest puff. It shows:
+  - time · "Puff · from your inhaler" or "I'm okay · sampled automatically";
+  - the place name, probably indoors/outdoors · motion, and a one-tap correction;
+  - **Since** the previous okay moment today: ozone, temp and humidity as "a → b" with up/down;
+  - for puffs, a **note box**: a voice-note transcript (or a "Record a note" button), plus closed-list tag chips. Suggested tags are dashed with a "?" and count only once confirmed;
+  - "Sources for this moment" (the honesty lines), collapsed.
+- **Earlier**: past days as postcard-sized mini portraits (3 columns, newest first) with "2 puffs". Tapping one loads it into the main portrait and scrolls to top.
+- **FAB**: 60 pt, bottom-right above the tab bar, printed pink over offset blue, label "puff".
 
 **Insights**
 - One headline in the chosen voice (Settings slider), the caveat, and a small source line.
 - Driver chips from **gated** rows only (top 4). Selecting one re-inks the unit fields.
-- Unit fields: one mark per puff (4 columns) and per usual moment (6 columns); marks without the selected condition fade to 22%. Counts above each field ("8 of 10 puffs with ozone high").
+- Unit fields: one mark per puff (4 columns) and per okay moment (10 columns); marks without the selected condition fade to 22%. Counts above each field ("8 of 10 puffs with ozone high").
 - Looking ahead: 3 day strips on the same hour axis; elevated windows printed in the inks of their drivers (ozone → pink dots, heat → blue lines), overprinting where both apply. Later days print slightly off-register (less certain).
 - "How we know" disclosure with the evidence table (counts, lift, Pattern / Not enough yet).
 

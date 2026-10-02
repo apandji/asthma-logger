@@ -22,6 +22,9 @@ public struct RiskWindow: Sendable, Identifiable {
     /// Top two drivers by log-LR (positive only).
     public var drivers: [RateTable.Entry]
     public var isPartial: Bool
+    /// Totals behind the driver counts, so copy can say "4 of your 10".
+    public var nAttacks: Int
+    public var nBaselines: Int
     public var id: Date { start }
 }
 
@@ -82,7 +85,8 @@ public enum Outlook {
             let drivers = Array(best.values.sorted { $0.logLR > $1.logLR }.prefix(2))
             out.append(RiskWindow(start: first.0.start, end: last.0.start.addingTimeInterval(3600),
                                   peakScore: run.map(\.1).max() ?? 0, drivers: drivers,
-                                  isPartial: run.contains { $0.0.isPartial }))
+                                  isPartial: run.contains { $0.0.isPartial },
+                                  nAttacks: table.nAttacks, nBaselines: table.nBaselines))
         }
 
         for h in hours {

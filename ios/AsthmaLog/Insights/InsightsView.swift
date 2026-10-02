@@ -84,7 +84,10 @@ struct InsightsView: View {
                         Chip(text: day.band.rawValue.capitalized, color: color(day.band))
                     }
                     ForEach(day.windows) { w in
-                        Text(windowText(w)).font(Theme.caption)
+                        Text(OutlookCopy.headline(w, timeRange: timeRange(w))).font(Theme.caption)
+                        ForEach(OutlookCopy.evidence(w), id: \.self) {
+                            Text($0).font(.caption2).foregroundStyle(Theme.secondaryText)
+                        }
                     }
                     if !day.genericHazards.isEmpty {
                         Text("The forecast says: \(day.genericHazards.joined(separator: ", ")). Not your pattern yet.")
@@ -149,12 +152,8 @@ struct InsightsView: View {
         }
     }
 
-    private func windowText(_ w: RiskWindow) -> String {
-        let time = "\(w.start.formatted(date: .omitted, time: .shortened))–\(w.end.formatted(date: .omitted, time: .shortened))"
-        let drivers = w.drivers.map { "\(Bins.label($0.bin)) \($0.level) (\($0.attacksWith) inhaler, \($0.baselinesWith) usual)" }
-        let base = "\(time) looks more like your inhaler days"
-        let partial = w.isPartial ? " · weather only" : ""
-        return drivers.isEmpty ? base + partial : "\(base): \(drivers.joined(separator: ", "))\(partial)"
+    private func timeRange(_ w: RiskWindow) -> String {
+        "\(w.start.formatted(date: .omitted, time: .shortened))–\(w.end.formatted(date: .omitted, time: .shortened))"
     }
 
     private func color(_ band: RiskBand) -> Color {

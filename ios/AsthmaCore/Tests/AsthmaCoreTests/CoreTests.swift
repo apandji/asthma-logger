@@ -241,6 +241,20 @@ import Testing
 }
 
 @Suite struct ForecastFrameTests {
+    @Test func lookAheadReadsPlainly() {
+        let evening = RateTable.Entry(bin: "hour", level: "evening", attacksWith: 4, baselinesWith: 0, logLR: 1.2, gated: true)
+        let ozone = RateTable.Entry(bin: "ozone", level: "high", attacksWith: 8, baselinesWith: 2, logLR: 0.9, gated: true)
+        let w = RiskWindow(start: Date(), end: Date(), peakScore: 2, drivers: [evening, ozone], isPartial: true,
+                           nAttacks: 10, nBaselines: 24)
+        #expect(OutlookCopy.headline(w, timeRange: "8 PM–10 PM") ==
+            "8 PM–10 PM looks more like the times you used your inhaler: evening and high ozone.")
+        #expect(OutlookCopy.evidence(w) == [
+            "Evening: 4 of your 10 inhaler times, 0 of 24 usual days.",
+            "High ozone: 8 of your 10 inhaler times, 2 of 24 usual days.",
+            "No air-quality forecast for these hours, so this is weather only.",
+        ])
+    }
+
     @Test func categoriesBecomeBands() {
         let f = FrameBuilder.forecastFrame(id: "h", hourOfDay: 15, month: 7,
                                            ForecastConditions(temperatureF: 91, humidityPct: 70, pm25Category: 1, ozoneCategory: 3))

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Weave calendar prototype</title>
+<!-- felt air: continuous week strip that pinches out to a month; each moment is an overprinted density-weave swatch (air quality, humidity, temperature, pollen); tapping a day shows a line chart of moments and baseline captures. Demo data. -->
+<style>
+  :root { --ink: #1C1C1E; --sec: #6C6C70; }
+  body { margin: 0; padding: 20px 12px 40px; background: #E5E5EA; font-family: -apple-system, system-ui, sans-serif; color: #1C1C1E; }
+  .wrap { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; justify-content: center; }
+  .phone { width: 360px; max-width: 100%; border-radius: 40px; background: #F2F2F7; overflow: hidden; padding: 14px 0 18px; box-shadow: 0 0 0 1px rgba(0,0,0,.1); }
+  .side { flex: 1; min-width: 260px; max-width: 420px; font-size: 14px; color: #3A3A3C; line-height: 1.6; }
+  .side b { color: #000; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; align-items: center; padding: 4px 16px 0; }
+  .seg { display: flex; background: #E3E3E8; border-radius: 9px; padding: 2px; gap: 2px; }
+  .seg button { border: 0; background: transparent; font: 500 13px -apple-system, system-ui; padding: 5px 12px; border-radius: 7px; color: #000; cursor: pointer; }
+  .seg button.on { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .title { font-size: 28px; font-weight: 700; margin: 6px 16px 2px; letter-spacing: -.3px; }
+  .sub { font-size: 13px; color: var(--sec); margin: 0 16px 8px; }
+  #cal { transition: opacity .25s ease, transform .25s ease; transform-origin: 50% 0; touch-action: pan-x pan-y; }
+  .week { display: flex; overflow-x: auto; gap: 6px; padding: 4px 12px 10px; scrollbar-width: none; }
+  .week::-webkit-scrollbar { display: none; }
+  .wd { flex: 0 0 44px; border-radius: 22px; padding: 6px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; background: #fff; min-height: 160px; }
+  .wd.sel, .md.sel { outline: 2px solid #1C1C1E; }
+  .wd .l { font-size: 11px; color: var(--sec); font-weight: 600; }
+  .wd .n { font-size: 15px; font-weight: 600; }
+  .more { font-size: 11px; font-weight: 600; color: var(--sec); background: #E9E9EE; border-radius: 8px; padding: 1px 6px; margin-top: 2px; }
+  .month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 4px 12px 10px; }
+  .mh { font-size: 11px; color: var(--sec); text-align: center; font-weight: 600; }
+  .md { background: #fff; border-radius: 10px; min-height: 54px; padding: 3px 2px; cursor: pointer; display: flex; flex-direction: column; align-items: center; }
+  .md .n { font-size: 11px; font-weight: 600; align-self: flex-start; margin-left: 4px; }
+  .card { background: #fff; border-radius: 16px; margin: 10px 16px 0; padding: 12px 14px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 15px; }
+  .row + .row { border-top: 0.5px solid rgba(60,60,67,.16); }
+  .chips { font-size: 12px; color: var(--sec); }
+  .btn { border: 0; background: none; color: #E2477E; font: 500 15px -apple-system, system-ui; padding: 6px 0; cursor: pointer; }
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--sec); margin: 6px 16px 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .note { font-size: 11px; color: #8E8E93; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+ <div class="phone">
+  <div class="nav"><span style="width:60px"></span>
+   <div class="seg" id="viewSeg"><button data-v="week" class="on">Week</button><button data-v="month">Month</button></div>
+   <span style="width:60px;text-align:right;font-size:13px;color:#E2477E">Today</span></div>
+  <div class="title">Journal</div>
+  <div class="sub" id="hint"></div>
+  <div id="cal"></div>
+  <div class="legend" id="legend"></div>
+  <div class="card" id="day"></div>
+  <div class="card">
+   <div class="seg" id="facSeg" style="margin-bottom:10px"></div>
+   <svg id="chart" viewBox="0 0 330 210" width="100%"></svg>
+   <div class="legend" style="margin:4px 0 0"><span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="#1C1C1E"/></svg>Moments</span><span><svg width="10" height="10"><circle cx="5" cy="5" r="3" fill="none" stroke="#8E8E93" stroke-width="1.4"/></svg>Baseline captures</span></div>
+   <div class="note" id="chartNote"></div>
+  </div>
+ </div>
+ <div class="side">
+  <p><b>Try it.</b> Scroll the week sideways. Pinch two fingers together on the strip (or ctrl-scroll on a trackpad, or tap Month) for the calendar; pinch apart or tap a day to come back. Tap any day. Switch factors on the chart.</p>
+  <p><b>Each swatch is one moment</b> (a time you used your inhaler). Four layers overprint inside it. Each factor is put into a band, and the band sets the density of its weave: sparse dots (low), checker (medium), fine weave (high). Each factor also has its own angle, so the layers stay distinct without colour.</p>
+  <div id="key"></div>
+  <p class="note" style="font-size:12px">Demo data. Pollen values are made up: felt air has no pollen source yet, so in the app this layer stays empty and labelled. The chart line only joins captured readings; it isn't continuous measurement.</p>
+ </div>
+</div>
+<script>
+let seed = 4; const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+const F = {
+  aq:   { name: "Air quality", short: "AQI", ink: "#E2477E", unit: "AQI", rot: 0,
+          band: v => v <= 50 ? 0 : v <= 100 ? 1 : 2, word: (v, b) => ["good", "moderate", "high"][b], zones: [[0, 50], [50, 100], [100, 160]], min: 0, max: 160,
+          labels: [["High", 130], ["Medium", 75], ["Low", 25]] },
+  hum:  { name: "Humidity", short: "Humidity", ink: "#2F6FC4", unit: "%", rot: 90,
+          band: v => (v >= 40 && v <= 60) ? 0 : ((v >= 30 && v < 40) || (v > 60 && v <= 75)) ? 1 : 2, word: (v, b) => b === 0 ? "comfortable" : (v < 50 ? "dry" : "humid"),
+          zones: [[40, 60], [30, 40], [60, 75], [0, 30], [75, 100]], min: 20, max: 100, labels: [["Humid", 88], ["OK", 50], ["Dry", 25]] },
+  temp: { name: "Temperature", short: "Temp", ink: "#E07A1F", unit: "°F", rot: 45,
+          band: v => (v >= 60 && v <= 75) ? 0 : ((v >= 45 && v < 60) || (v > 75 && v <= 85)) ? 1 : 2, word: (v, b) => b === 0 ? "mild" : (v < 67 ? "cold" : "hot"),
+          zones: [[60, 75], [45, 60], [75, 85], [25, 45], [85, 100]], min: 25, max: 100, labels: [["Hot", 92], ["Mild", 67], ["Cold", 35]] },
+  pol:  { name: "Pollen", short: "Pollen", ink: "#C9A400", unit: "index", rot: -45,
+          band: v => v < 2.5 ? 0 : v < 4.9 ? 1 : 2, word: (v, b) => ["low", "medium", "high"][b], zones: [[0, 2.5], [2.5, 4.9], [4.9, 8]], min: 0, max: 8,
+          labels: [["High", 6.5], ["Medium", 3.7], ["Low", 1.2]] },
+};
+const ORDER = ["aq", "hum", "temp", "pol"];
+const today = new Date(2026, 9, 3), DAYS = 35;
+function sample(d, h) { const k = Math.sin((d * 24 + h) / 9); return { aq: Math.max(8, Math.round(48 + 38 * k + rnd() * 40 - (d % 7 === 2 ? 20 : 0))), hum: Math.round(58 + 22 * Math.sin((d * 24 + h) / 13) + rnd() * 14), temp: Math.round(70 + 12 * Math.sin((h - 9) / 24 * 6.28) - d * .25 + rnd() * 8), pol: Math.round((2.6 + 2.2 * Math.sin(d / 5) + rnd() * 1.6) * 10) / 10 }; }
+const data = [];
+for (let i = 0; i < DAYS; i++) {
+  const d = new Date(today); d.setDate(today.getDate() - (DAYS - 1 - i));
+  const r = rnd(); const n = r < .42 ? 0 : r < .66 ? 1 : r < .82 ? 2 : r < .92 ? 3 : r < .97 ? 4 : 5;
+  const moments = [...Array(n)].map(() => { const h = 7 + Math.floor(rnd() * 15); return { h, m: Math.floor(rnd() * 4) * 15, v: sample(i, h) }; }).sort((a, b) => a.h - b.h);
+  const base = [9, 13, 18].map(h => ({ h: h + Math.floor(rnd() * 2), m: 0, v: sample(i, h) }));
+  data.push({ date: d, moments, base });
+}
+let view = "week", sel = DAYS - 1, fac = "aq", expanded = false, pid = 0;
+
+function weave(k, b) {
+  const f = F[k], cell = [7, 5.2, 3.6][b], sq = [2.2, cell / 2, cell / 2][b];
+  let pat = `<rect x="0" y="0" width="${sq}" height="${sq}" fill="${f.ink}"/>`;
+  if (b > 0) pat += `<rect x="${cell / 2}" y="${cell / 2}" width="${sq}" height="${sq}" fill="${f.ink}"/>`;
+  if (b === 2) pat += `<rect x="${cell / 2}" y="0" width="${sq * .55}" height="${sq * .55}" fill="${f.ink}" opacity=".55"/>`;
+  return { cell, pat };
+}
+function swatch(v, r, only) {
+  const id = "s" + (pid++), s = r * 2;
+  let defs = `<clipPath id="c${id}"><circle cx="${r}" cy="${r}" r="${r - .5}"/></clipPath>`, layers = "";
+  for (const k of (only || ORDER)) {
+    const f = F[k], { cell, pat } = weave(k, f.band(v[k])), o = ORDER.indexOf(k);
+    defs += `<pattern id="p${id}${k}" width="${cell}" height="${cell}" patternUnits="userSpaceOnUse" patternTransform="rotate(${f.rot}) translate(${o * .9},${o * .6})">${pat}</pattern>`;
+    layers += `<rect x="0" y="0" width="${s}" height="${s}" fill="url(#p${id}${k})" style="mix-blend-mode:multiply" opacity=".92"/>`;
+  }
+  return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" aria-hidden="true"><defs>${defs}</defs><g clip-path="url(#c${id})"><circle cx="${r}" cy="${r}" r="${r}" fill="#fff"/>${layers}</g><circle cx="${r}" cy="${r}" r="${r - .6}" fill="none" stroke="rgba(0,0,0,.18)"/></svg>`;
+}
+const L = ["S", "M", "T", "W", "T", "F", "S"];
+function renderCal() {
+  const c = document.getElementById("cal");
+  if (view === "week") {
+    c.innerHTML = `<div class="week" id="wk">${data.map((d, i) => {
+      const ms = d.moments, extra = ms.length - 3;
+      return `<div class="wd${i === sel ? " sel" : ""}" data-i="${i}"><span class="l">${L[d.date.getDay()]}</span><span class="n" style="${i === DAYS - 1 ? "color:#E2477E" : ""}">${d.date.getDate()}</span>${ms.slice(0, 3).map(m => swatch(m.v, 15)).join("")}${extra > 0 ? `<span class="more">+${extra}</span>` : ""}</div>`;
+    }).join("")}</div>`;
+    const wk = document.getElementById("wk"); wk.scrollLeft = wk.scrollWidth;
+    wk.querySelectorAll(".wd").forEach(e => e.onclick = () => { sel = +e.dataset.i; expanded = false; renderAll(false); });
+    document.getElementById("hint").textContent = "Pinch together on the strip for the month";
+  } else {
+    const first = data[0].date.getDay(); let cells = L.map(l => `<div class="mh">${l}</div>`).join("");
+    for (let k = 0; k < first; k++) cells += "<div></div>";
+    data.forEach((d, i) => {
+      const ms = d.moments, extra = ms.length - 3;
+      cells += `<div class="md${i === sel ? " sel" : ""}" data-i="${i}"><span class="n" style="${i === DAYS - 1 ? "color:#E2477E" : ""}">${d.date.getDate()}</span><div style="display:flex;flex-wrap:wrap;justify-content:center;gap:1px">${ms.slice(0, 3).map(m => swatch(m.v, 8)).join("")}</div>${extra > 0 ? `<span class="more" style="font-size:10px;padding:0 4px">+${extra}</span>` : ""}</div>`;
+    });
+    c.innerHTML = `<div class="month">${cells}</div>`;
+    c.querySelectorAll(".md").forEach(e => e.onclick = () => { sel = +e.dataset.i; expanded = false; view = "week"; renderAll(true); });
+    document.getElementById("hint").textContent = "Pinch apart, or tap a day, to go back to the week";
+  }
+  document.querySelectorAll("#viewSeg button").forEach(b => b.classList.toggle("on", b.dataset.v === view));
+}
+const words = v => ORDER.map(k => { const f = F[k]; return `${f.short} ${f.word(v[k], f.band(v[k]))}`; }).join(" · ");
+const fmtT = (h, m) => `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+function renderDay() {
+  const d = data[sel], ms = d.moments, show = expanded ? ms : ms.slice(0, 3);
+  let h = `<div style="font-size:17px;font-weight:600">${d.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</div><div class="chips" style="margin-bottom:4px">${ms.length ? `${ms.length} moment${ms.length > 1 ? "s" : ""}` : "No moments"} · ${d.base.length} baseline captures</div>`;
+  if (!ms.length) h += `<div class="chips" style="padding:6px 0">Nothing logged. Baselines were still captured in the background.</div>`;
+  h += show.map(m => `<div class="row">${swatch(m.v, 16)}<div style="flex:1"><div><b style="font-weight:600">Used inhaler</b> <span style="color:#6C6C70">${fmtT(m.h, m.m)}</span></div><div class="chips">${words(m.v)}</div></div><span style="color:#C7C7CC">›</span></div>`).join("");
+  if (ms.length > 3) h += `<button class="btn" id="moreBtn">${expanded ? "Show less" : `Show ${ms.length - 3} more`}</button>`;
+  document.getElementById("day").innerHTML = h;
+  const mb = document.getElementById("moreBtn"); if (mb) mb.onclick = () => { expanded = !expanded; renderDay(); };
+}
+function renderFacSeg() {
+  const s = document.getElementById("facSeg");
+  s.innerHTML = ORDER.map(k => `<button data-f="${k}" class="${k === fac ? "on" : ""}" style="padding:5px 9px;font-size:12px">${F[k].short}</button>`).join("");
+  s.querySelectorAll("button").forEach(b => b.onclick = () => { fac = b.dataset.f; renderFacSeg(); renderChart(); });
+}
+function renderChart() {
+  const f = F[fac], svg = document.getElementById("chart");
+  const W = 330, H = 210, l = 46, r = 10, t = 10, b = 24, from = Math.max(0, sel - 13), to = sel;
+  const X = (i, h) => l + ((i - from) + h / 24) / (to - from + 1) * (W - l - r), Y = v => t + (1 - (v - f.min) / (f.max - f.min)) * (H - t - b);
+  let s = "";
+  const zoneFill = [.05, .11, .18];
+  f.zones.forEach(([lo, hi]) => { const bd = f.band((lo + hi) / 2), y1 = Y(Math.min(hi, f.max)), y2 = Y(Math.max(lo, f.min)); s += `<rect x="${l}" y="${y1}" width="${W - l - r}" height="${y2 - y1}" fill="${f.ink}" opacity="${zoneFill[bd]}"/>`; });
+  f.labels.forEach(([n, v]) => s += `<text x="${l - 6}" y="${Y(v) + 4}" font-size="11" fill="#8E8E93" text-anchor="end">${n}</text>`);
+  s += `<rect x="${X(sel, 0)}" y="${t}" width="${(W - l - r) / (to - from + 1)}" height="${H - t - b}" fill="#000" opacity=".05"/>`;
+  for (let i = from; i <= to; i += 3) { const d = data[i].date; s += `<text x="${X(i, 12)}" y="${H - 8}" font-size="11" fill="#8E8E93" text-anchor="middle">${d.getMonth() + 1}/${d.getDate()}</text>`; }
+  const pts = [];
+  for (let i = from; i <= to; i++) { data[i].base.forEach(p => pts.push({ i, h: p.h + p.m / 60, v: p.v[fac], k: "b" })); data[i].moments.forEach(p => pts.push({ i, h: p.h + p.m / 60, v: p.v[fac], k: "m" })); }
+  pts.sort((a, c) => (a.i * 24 + a.h) - (c.i * 24 + c.h));
+  s += `<path d="M${pts.map(p => `${X(p.i, p.h).toFixed(1)},${Y(p.v).toFixed(1)}`).join(" L")}" fill="none" stroke="${f.ink}" stroke-width="1.2" opacity=".45"/>`;
+  pts.filter(p => p.k === "b").forEach(p => s += `<circle cx="${X(p.i, p.h)}" cy="${Y(p.v)}" r="2.6" fill="#fff" stroke="#8E8E93" stroke-width="1.3"/>`);
+  pts.filter(p => p.k === "m").forEach(p => s += `<circle cx="${X(p.i, p.h)}" cy="${Y(p.v)}" r="4" fill="${f.ink}" stroke="#fff" stroke-width="1"/>`);
+  svg.innerHTML = s;
+  document.getElementById("chartNote").textContent = (fac === "pol" ? "Demo values: no pollen source yet. " : "") + `Last 14 days to ${data[sel].date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, in ${f.unit}. The line only joins captured readings.`;
+}
+function renderKey() {
+  const ex = { aq: [30, 80, 140], hum: [50, 68, 90], temp: [68, 80, 95], pol: [1, 3.5, 6] };
+  document.getElementById("key").innerHTML = ORDER.map(k => `<div style="display:flex;align-items:center;gap:6px;margin:6px 0"><span style="width:96px;color:#000">${F[k].name}</span>${ex[k].map(v => { const one = {}; one[k] = v; return swatch(one, 11, [k]); }).join("")}<span style="font-size:12px;color:#6C6C70">low · med · high</span></div>`).join("")
+    + `<p style="font-size:12px;color:#6C6C70">Temperature and humidity count as high when far from comfortable in either direction (cold or hot, dry or humid); the words say which way.</p>`;
+  document.getElementById("legend").innerHTML = ORDER.map(k => `<span><i style="width:8px;height:8px;border-radius:2px;background:${F[k].ink};display:inline-block"></i>${F[k].name}</span>`).join("") + `<span>· denser = higher</span>`;
+}
+function renderAll(anim) {
+  const c = document.getElementById("cal");
+  if (anim) { c.style.opacity = 0; c.style.transform = "scale(.96)"; setTimeout(() => { renderCal(); c.style.opacity = 1; c.style.transform = "scale(1)"; }, 180); } else renderCal();
+  renderDay(); renderChart();
+}
+function setView(v) { if (v !== view) { view = v; renderAll(true); } }
+document.querySelectorAll("#viewSeg button").forEach(b => b.onclick = () => setView(b.dataset.v));
+const cal = document.getElementById("cal");
+cal.addEventListener("wheel", e => { if (!e.ctrlKey) return; e.preventDefault(); setView(e.deltaY > 0 ? "month" : "week"); }, { passive: false });
+// Two-finger pinch on touch screens: together = month, apart = week.
+let pinch0 = null;
+const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+cal.addEventListener("touchstart", e => { if (e.touches.length === 2) pinch0 = dist(e.touches); }, { passive: true });
+cal.addEventListener("touchmove", e => { if (pinch0 && e.touches.length === 2) { e.preventDefault(); const r = dist(e.touches) / pinch0; if (r < .8) { setView("month"); pinch0 = null; } else if (r > 1.25) { setView("week"); pinch0 = null; } } }, { passive: false });
+cal.addEventListener("touchend", () => { pinch0 = null; });
+// Safari trackpad / iOS gesture events
+cal.addEventListener("gesturechange", e => { e.preventDefault(); if (e.scale < .85) setView("month"); else if (e.scale > 1.2) setView("week"); });
+renderFacSeg(); renderKey(); renderAll(false);
+</script>
+</body>
+</html>

@@ -94,6 +94,7 @@ Rule of thumb: logic and tests in the cloud; anything that has to compile the ap
 <!-- Fill in together: apps, references, images, people. -->
 - Apple Health: Cycle Tracking (week strip, tinted log), State of Mind (check-in with chips), Highlights (comparison cards). See [docs/design/visual-style.md](docs/design/visual-style.md).
 - Risograph print: limited spot inks and overprint, kept for data marks only. See [docs/design/riso-visual-language.md](docs/design/riso-visual-language.md).
+- Textiles: a creative-coding knitting editor (letters as cross-stitch) and a woven pattern system (two-colour weaves that get denser in steps). See [docs/design/textile-direction.md](docs/design/textile-direction.md).
 - _TODO: apps whose logging or insight UX we admire_
 - _TODO: tone references for insight copy (the web prototype has a clinical → plain → poetic slider)_
 

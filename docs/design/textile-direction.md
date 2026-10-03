@@ -62,6 +62,20 @@ Never stitched: body text, numbers, lists, Settings, permission screens, control
 - **Drawing in SwiftUI:** each stitch is two short rounded strokes plus a thin highlight in a `Canvas`. The fabric is a faint tiled image or a small shader. The stitch-in animation is a `trim` on the second stroke.
 - **Order:** the Recap sampler first (it carries the honesty rule), then the Journal week strip, then onboarding.
 
+## Related inspiration: woven density
+
+A pattern system of circular swatches woven from two colours (cyan with slate, yellow with olive), in steps from a sparse scatter of stitches to a checkerboard to a fine, dense weave, with mode (light/dark) and theme settings. Saved locally as `docs/gallery/private/inspiration/woven-density-pattern-system.jpg` (third-party, not committed).
+
+How it could apply:
+
+- **Density for level.** A condition's band could be woven rather than sized: low = sparse stitches, moderate = checker, high = dense weave. That reads in greyscale and needs no number.
+- **One weave per family.** Each signal family keeps its ink (pink air, blue weather, yellow pollen later) woven with a neutral thread, the way the swatches pair a bright with a muted colour.
+- **Overlap as a mixed weave.** Where air and weather both stood out, the two weaves interlace, the textile version of the riso overprint.
+- **Themeable.** The swatches swap palettes by mode and theme, which fits the token approach in `ios/AsthmaLog/Theme/`.
+- **Where:** day swatches in the history sampler and the week strip, and the Recap discs. Not behind text.
+
+Caution: a finer weave suggests more precision than a band has. Keep three steps at most, matching the three bands, and always label them.
+
 ## Risks
 
 - **Gimmick.** One material, used sparingly. If a screen doesn't carry data or brand, it stays plain.

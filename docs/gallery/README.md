@@ -91,3 +91,4 @@ All on the "iPhone Air" simulator (iOS 27), current build of branch `claude/visu
 | `drafts/onboarding-and-recap.png` | Onboarding with overlapping dots; Recap with a highlighted sentence | 2026-10-01 | Owner's Figma drafts | — |
 | `inspiration/web-tiles-duotone-editorial.webp` | Third-party websites: duotone tile grids, editorial serif | 2026-10-01 | Third-party web | — |
 | `inspiration/halftone-swatches-and-dot-poster.webp` | Halftone tint scale and a blurred dot poster | 2026-10-01 | Third-party | — |
+| `inspiration/woven-density-pattern-system.jpg` | A woven / checker pattern system: circular swatches in two-colour weaves (cyan + slate, yellow + olive) from sparse to dense, with mode and theme settings | 2026-10-03 | Third-party | — |

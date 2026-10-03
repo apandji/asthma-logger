@@ -4,6 +4,8 @@ The app is called **felt air**.
 
 The design spec for the iOS app's look. Mockups: [`visual-style-mockups.html`](visual-style-mockups.html) (open in a browser; Journal and Recap in light and dark). This refines the [riso visual language](riso-visual-language.md): it keeps the riso inks and the overprint idea for data, and drops the paper texture, grain, misregistration and custom type.
 
+> **Possible direction:** [textile-direction.md](textile-direction.md) adds stitches and fabric for brand moments and data on top of this spec. Not decided.
+
 ## The idea
 
 The app should feel like it shipped with the iPhone. Layout, type, controls and colours are stock iOS, following Apple Health most closely: the Journal borrows Cycle Tracking's week strip and tinted log, and the check-in borrows State of Mind. Two things are ours:

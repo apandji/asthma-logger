@@ -60,6 +60,7 @@ xcrun simctl spawn $U defaults write com.pandjico.asthmalog useDemoData -bool NO
 | File | What it shows | Date | Source | Light / dark |
 |------|---------------|------|--------|--------------|
 | `visual-style-mockups.png` | Journal (week strip + day log) and Recap (highlight sentence, inhaler vs usual bars, "Today" card) as phone frames. Demo numbers. | 2026-10-01 | Render of `docs/design/visual-style-mockups.html` (WKWebView, 2x, system fonts) | Both, side by side |
+| `textile-mockups.jpg` | Textile direction: onboarding, Journal, logging, moment, Recap, history, look-ahead (light) and Journal + Recap on knit (dark). Demo data. | 2026-10-03 | Render of `docs/design/textile-mockups.html` (WKWebView, 1240 pt wide, 2x, JPEG 82) | Light and dark |
 | `riso-sketch.jpg` | Riso sketch: "Today" clock-face of puffs and okay moments, moment detail with condition changes and tag chips, "Earlier" grid of past days, Settings sheet with insight-voice slider. Made-up demo diary. | 2026-10-01 | Render of `docs/design/riso-sketch.html` (WKWebView, 430 pt wide, 2x, fallback fonts instead of Google Fonts) | Light ("System" preview) |
 | `riso-sketch-browser-partial.jpg` | Partial capture of the riso sketch from an earlier session (cropped strip). | 2026-10-01 | Built-in browser screenshot of `docs/design/riso-sketch.html` | Light |
 

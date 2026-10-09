@@ -75,6 +75,16 @@ struct SettingsView: View {
                     Text(demoNote ?? "Made-up moments for showing the Journal, labelled Demo in their sources. They don't count toward your patterns.")
                 }
 
+                #if DEBUG
+                Section {
+                    NavigationLink("Voice effect (prototype)") { VoiceOrbPrototype() }
+                } header: {
+                    Text("Prototypes")
+                } footer: {
+                    Text("Debug builds only. Simulated sound; doesn't use the microphone.")
+                }
+                #endif
+
                 Section {
                     Text("felt air is a diary, not a medical device. It compares outdoor conditions when you used your inhaler with your I'm okay moments. It can't see indoor air and doesn't diagnose or predict attacks.")
                         .font(Theme.caption)

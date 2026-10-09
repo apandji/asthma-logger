@@ -15,7 +15,7 @@ Presenter: Pandji. Backup and watch: April. Total demo: about 5 minutes.
 - [ ] Gear (top right) → **Add a demo week to the Journal**. Check the strip fills in.
 - [ ] Tap **Rescue** once (bottom of the screen). Tap **Allow** on the Apple Health sheet. Do this now, not in front of the room.
 - [ ] Find a humid rescue moment in the demo week. Note which day it is.
-- [ ] Open `docs/gallery/private/videos/felt-air-demo.mp4` in QuickTime. Leave it paused on the first frame. (Local only, not in git.)
+- [ ] Open `docs/gallery/private/videos/felt-air-demo-final.mp4` in QuickTime. Leave it paused on the first frame. (Local only, not in git.)
 
 ## Morning of
 
@@ -65,7 +65,7 @@ The new square shows a spinner, then fills in.
 | Location denied | Log saves with no place or air | Same line. Fix later in iOS Settings → felt air → Location. |
 | Health sheet appears | Apple Health permission sheet | Tap **Allow**. Say "it asks the first time you log." |
 | Watch not connected | Watch says "saved · sends to iPhone" | Log on the phone instead. "The watch queues it and sends when it can." |
-| App crashes or hangs | — | Switch to QuickTime, play `felt-air-demo.mp4`, keep talking over it. |
+| App crashes or hangs | — | Switch to QuickTime, play `felt-air-demo-final.mp4`, keep talking over it. |
 | Demo week gone | Empty strip | Gear → **Add a demo week to the Journal**. |
 
 ## Likely questions

@@ -5,7 +5,24 @@ public struct BinDef: Sendable {
     public let bin: String
     /// Boolean bins only report their "yes" level.
     public let isBoolean: Bool
+    /// Which frames were sampled for this bin; nil = every frame. A frame outside it is missing for this
+    /// bin: it counts in neither the level nor the bin's denominators (journal tags without a reviewed note).
+    public let sampled: (@Sendable (FeatureFrame) -> Bool)?
     public let levelOf: @Sendable (FeatureFrame) -> String?
+
+    public init(bin: String, isBoolean: Bool, sampled: (@Sendable (FeatureFrame) -> Bool)? = nil,
+                levelOf: @escaping @Sendable (FeatureFrame) -> String?) {
+        self.bin = bin
+        self.isBoolean = isBoolean
+        self.sampled = sampled
+        self.levelOf = levelOf
+    }
+
+    /// The frames this bin counts: all of them, or only the sampled ones.
+    func population(_ frames: [FeatureFrame]) -> [FeatureFrame] {
+        guard let sampled else { return frames }
+        return frames.filter(sampled)
+    }
 }
 
 public enum Bins {
@@ -35,7 +52,10 @@ public enum Bins {
             return io.rawValue
         },
     ] + JournalTag.allCases.map { tag in
-        BinDef(bin: "tag_\(tag.rawValue)", isBoolean: true) { yesNo($0.tags.contains(tag)) }
+        // Only frames with a reviewed note: an unreviewed moment is missing, not "no".
+        BinDef(bin: "tag_\(tag.rawValue)", isBoolean: true, sampled: { $0.tagsSampled }) { f in
+            f.tagsSampled ? yesNo(f.tags.contains(tag)) : nil
+        }
     }
 
     public static func label(_ bin: String) -> String {

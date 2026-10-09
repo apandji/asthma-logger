@@ -10,6 +10,7 @@ fixtures/
 - Regenerate from `web/`: `npx tsx scripts/export-fixtures.ts`. Don't hand-edit.
 - `ios/AsthmaCore` tests load every `lift-*.json` and must match `expected` exactly (counts, `gated`, ordering; rates to 1e-9).
 - When a bin edge changes, bump `binSpecVersion` and regenerate.
+- Fixtures cover the shared v1 bins only. The iOS-only bins (place, indoor/outdoor, journal tags; iOS `BinSpec.version` 3) are tested in `ios/AsthmaCore/Tests` and have no web counterpart. Per-bin denominators for journal tags leave v1 rows unchanged, so these files still match.
 
 | File | What |
 |------|------|

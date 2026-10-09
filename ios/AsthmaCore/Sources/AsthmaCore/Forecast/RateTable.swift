@@ -37,13 +37,17 @@ public struct RateTable: Sendable {
             let levels = Set(frames.compactMap(def.levelOf))
             guard !levels.isEmpty else { continue }
             let nLevels = Double(levels.count)
+            // Only frames sampled for this bin count (journal tags: moments with a reviewed note).
+            let binAttacks = def.population(attacks)
+            let binBaselines = def.population(baselines)
+            let binGate = binAttacks.count >= gate.minAttacks && binBaselines.count >= gate.minBaselines
             for level in levels {
-                let a = attacks.filter { def.levelOf($0) == level }.count
-                let b = baselines.filter { def.levelOf($0) == level }.count
-                let pA = (Double(a) + k) / (Double(attacks.count) + k * nLevels)
-                let pB = (Double(b) + k) / (Double(baselines.count) + k * nLevels)
+                let a = binAttacks.filter { def.levelOf($0) == level }.count
+                let b = binBaselines.filter { def.levelOf($0) == level }.count
+                let pA = (Double(a) + k) / (Double(binAttacks.count) + k * nLevels)
+                let pB = (Double(b) + k) / (Double(binBaselines.count) + k * nLevels)
                 let e = Entry(bin: def.bin, level: level, attacksWith: a, baselinesWith: b,
-                              logLR: log(pA / pB), gated: overall && a >= gate.minAttacksInLevel)
+                              logLR: log(pA / pB), gated: overall && binGate && a >= gate.minAttacksInLevel)
                 out[e.id] = e
             }
         }

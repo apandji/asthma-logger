@@ -134,7 +134,8 @@ public enum FrameBuilder {
         conditions c: ConditionsInput,
         place: PlaceKind? = nil,
         indoorOutdoor: IndoorOutdoor? = nil,
-        tags: Set<JournalTag> = []
+        tags: Set<JournalTag> = [],
+        tagsReviewed: Bool = false
     ) -> FeatureFrame {
         FeatureFrame(
             id: id,
@@ -150,7 +151,8 @@ public enum FrameBuilder {
             heatAlert: Banding.heatAlert(isExtremeTemp: c.isExtremeTemp, alertNames: c.alertNames),
             place: place,
             indoorOutdoor: indoorOutdoor == .unknown ? nil : indoorOutdoor,
-            tags: tags
+            tags: tags,
+            tagsReviewed: tagsReviewed
         )
     }
 
@@ -163,12 +165,14 @@ public enum FrameBuilder {
         conditions: ConditionsInput,
         place: PlaceKind? = nil,
         indoorOutdoor: IndoorOutdoor? = nil,
-        tags: Set<JournalTag> = []
+        tags: Set<JournalTag> = [],
+        tagsReviewed: Bool = false
     ) -> FeatureFrame {
         let parts = calendar.dateComponents([.hour, .month], from: date)
         return frame(
             id: id, kind: kind, hourOfDay: parts.hour ?? 12, month: parts.month ?? 1,
-            conditions: conditions, place: place, indoorOutdoor: indoorOutdoor, tags: tags
+            conditions: conditions, place: place, indoorOutdoor: indoorOutdoor, tags: tags,
+            tagsReviewed: tagsReviewed
         )
     }
 }

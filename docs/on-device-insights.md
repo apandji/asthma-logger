@@ -164,6 +164,31 @@ Template narrator works with no keys and no GPU. Optional laptop Ollama path: `P
 
 ---
 
+## Voice-note tags (iOS)
+
+The model's second job on iOS is tagging a journal note. Same shape as narration: code holds the vocabulary and the rules; the model only proposes, and its answer is checked.
+
+```
+transcript ─► KeywordTagger (phrase rules + negation, always runs) ──┐
+           └► TagProposer (Foundation Models, optional) ─► TagVocabulary.validate ─┤
+                                                                                   ▼
+                                               VoiceNoteTagger.combine → suggestions (chips)
+                                                                                   ▼
+                                               TagReview: confirm / reject / add / Done
+                                                                                   ▼
+                              FeatureFrame.tags (confirmed only) + tagsReviewed → tag_* bins
+```
+
+Code: `ios/AsthmaCore/Sources/AsthmaCore/Journal/VoiceNoteTags.swift`.
+
+- **Closed list.** `JournalTag` is the vocabulary. The model gets `TagPrompt.instructions` (ids + hints) and the transcript; whatever it returns is matched exactly against ids and labels (case, spaces and punctuation ignored). Anything else is discarded, never turned into a bin.
+- **Keyword rules first.** Deterministic phrases per tag, whole words, longest match. Simple negation: “no / not / didn't / without …” turns off the next match within four words, carries across “or / nor”, stops at a clause break (punctuation, “but”); “smoke-free” counts as negated. A tag the note only mentions negated **vetoes** the model's proposal of it.
+- **Fail open.** No model, or a failed call, still returns the keyword suggestions. An empty transcript calls nothing.
+- **Suggestions are not data.** Chips stay pending until the user confirms. Done rejects whatever is left. Only confirmed tags go into the frame; a reviewed note with nothing confirmed reads “no” for every tag; an unreviewed note is missing ([predictive-engine.md §4](./predictive-engine.md#4-labels)).
+- **The transcript stops at the tagger.** The narrator still sees only the lift table. Tag rows reach it as `tag_smoke:yes` with counts and their own totals, and the template says so: “4 of the 8 times you used your inhaler and added a note, you noted smoke.”
+
+---
+
 ## What we are not scaffolding yet
 
 - Training or fine-tuning Gemma on diary text

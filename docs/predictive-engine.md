@@ -85,6 +85,8 @@ Bin edges live in code, not in a prompt. Numeric fields never go through a model
 
 Unsampled hours are **missing**, not negatives. The rate table’s denominators are sampled events only.
 
+The same rule holds inside a bin. **Journal tags** (iOS: exercise, smoke, pets…) are only known for a moment whose note the user reviewed. A moment with no note, or with suggestions never looked at, is missing for every tag bin, not “no smoke”. So a tag row’s denominators are the reviewed moments (`nAttacks` / `nBaselines` on the row), the count gate applies to those totals, and a forecast hour (which has no note) never scores on a tag. A reviewed note makes every unconfirmed tag “no” for that moment. Without this, notes written mostly on inhaler moments would inflate every tag against usual moments that rarely get one.
+
 Place for the daily forecast is a **home pin** the user sets (or the first pin they confirm). Last-attack GPS is a bad default: one trip would aim tomorrow’s card at the wrong city. Events away from home still update the rate table; they do not retarget the forecast.
 
 ---

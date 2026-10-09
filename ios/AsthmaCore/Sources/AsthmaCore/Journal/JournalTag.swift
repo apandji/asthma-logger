@@ -64,26 +64,8 @@ public enum TagExtraction {
     }
 
     /// Keyword fallback when the on-device model is unavailable. Suggestions only — the user confirms.
+    /// Same rules (and negation) as `KeywordTagger`; use `VoiceNoteTagger` for the full flow.
     public static func keywordGuess(_ text: String) -> [JournalTag] {
-        let t = " " + text.lowercased() + " "
-        let words: [JournalTag: [String]] = [
-            .exercise: ["run", "running", "jog", "gym", "workout", "soccer", "basketball", "stairs", "hike", "bike ride"],
-            .coldAir: ["cold air", "freezing", "frigid", "icy wind"],
-            .smoke: ["smoke", "smoking", "cigarette", "vape", "campfire", "fireplace", "bonfire", "wildfire"],
-            .pets: ["cat", "dog", "pet", "horse", "dander"],
-            .dust: ["dust", "vacuum", "construction", "attic"],
-            .mold: ["mold", "mould", "mildew", "musty", "damp"],
-            .cleaningProducts: ["bleach", "cleaning", "disinfectant", "spray"],
-            .strongScents: ["perfume", "cologne", "candle", "air freshener", "paint fumes"],
-            .cooking: ["cooking", "frying", "gas stove", "kitchen"],
-            .coldOrFlu: ["sick", "flu", "a cold", "covid", "sore throat", "congested"],
-            .stress: ["stress", "anxious", "anxiety", "panic", "upset"],
-            .laughingOrCrying: ["laughing", "crying", "cried"],
-        ]
-        return JournalTag.allCases.filter { tag in
-            (words[tag] ?? []).contains { w in
-                t.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: w) + #"\b"#, options: .regularExpression) != nil
-            }
-        }
+        KeywordTagger.scan(text).tags
     }
 }

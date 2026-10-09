@@ -52,7 +52,7 @@ Each one comes from the docs. Follow the link before you change anything in that
 | Air quality / pollen | **OpenAQ** (nearest station) + **AirNow** (fallback + AQ forecast) | WeatherKit has no AQ or pollen. **Pollen is a known gap** until Ambee |
 | Location | Precise; learn home / work / frequent places; infer indoor vs outdoor | Home place drives the forecast |
 | HealthKit | **Write** inhaler usage | Reads (peak flow, SpO₂, sleep…) later |
-| Apple Watch | Not in the proof of concept | |
+| Apple Watch | **Logging only**: a watchOS app with Rescue and Standard buttons. Each press goes to the iPhone over WatchConnectivity; the phone stamps the air and writes Health (when that setting is on) | No complications, no Health writes or air lookups on the watch |
 | Journaling | Voice note → on-device transcript → model extracts tags you confirm. Photos of the day, opt-in | Confirmed tags become bins |
 | Risk prediction | From *when* (hour, season), *where* (place, indoor/outdoor), and *conditions* (weather, AQ) on inhaler days vs usual days | |
 | Look | Apple-native, light and dark (follows system), New York for one headline per screen, riso inks only for data. Spec: [docs/design/visual-style.md](docs/design/visual-style.md) | Keep styling in one theme file so it can be swapped |

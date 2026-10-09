@@ -103,7 +103,8 @@ struct MomentTrendChart: View {
         let cal = Calendar.current
         let end = min(cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: event.loggedAt))!, .now.addingTimeInterval(60))
         let start = cal.date(byAdding: .day, value: -days, to: end)!
-        return all.filter { $0.loggedAt >= start && $0.loggedAt <= end }
+        // One line never mixes demo readings with real ones: plot the selected moment's kind only.
+        return all.filter { $0.loggedAt >= start && $0.loggedAt <= end && $0.isDemo == event.isDemo }
             .compactMap { e in value(of: e).map { Point(id: e.id, at: e.loggedAt, value: $0, moment: e.moment) } }
     }
 

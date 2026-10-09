@@ -33,6 +33,9 @@ final class LogEvent {
     var healthSampleID: UUID?
     var tagsRaw: [String] = []
     var note: String?
+    /// Made-up moment from Settings → Demo moments. Its own field, so a user note (voice notes) never
+    /// turns a demo moment real or the other way round.
+    var isDemoMoment: Bool = false
 
     init(moment: MomentKind, loggedAt: Date = .now, id: UUID = UUID()) {
         self.id = id
@@ -79,10 +82,11 @@ final class LogEvent {
         indoorGuessReasons = guess.reasons
     }
 
-    /// `note` value on moments added from Settings → Demo moments.
-    static let demoNote = "felt-air-demo"
+    /// How demo moments were marked before `isDemoMoment`: this exact `note`. Still read so older demo
+    /// weeks are recognised and removed.
+    static let legacyDemoNote = "felt-air-demo"
 
-    var isDemo: Bool { note == Self.demoNote }
+    var isDemo: Bool { isDemoMoment || note == Self.legacyDemoNote }
 
     /// Feature frame for insights, or nil when no outdoor value was stamped (same rule as the web prototype).
     func frame(calendar: Calendar = .current) -> FeatureFrame? {

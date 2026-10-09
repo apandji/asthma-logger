@@ -130,7 +130,7 @@ enum DemoSeeder {
             let e = LogEvent(moment: m.kind, loggedAt: m.at)
             e.conditions = m.conditions
             e.envStatus = .ready
-            e.note = LogEvent.demoNote
+            e.isDemoMoment = true
             context.insert(e)
         }
         try? context.save()
@@ -139,8 +139,8 @@ enum DemoSeeder {
 
     @discardableResult
     static func remove(in context: ModelContext) -> Int {
-        let tag = LogEvent.demoNote
-        let demo = (try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.note == tag }))) ?? []
+        // Filtered in memory: a diary holds hundreds of moments, and this also catches legacy demo moments.
+        let demo = ((try? context.fetch(FetchDescriptor<LogEvent>())) ?? []).filter(\.isDemo)
         demo.forEach(context.delete)
         try? context.save()
         return demo.count

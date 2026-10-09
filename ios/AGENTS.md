@@ -8,7 +8,7 @@ The app targets **iOS 27** and the **Foundation Models** framework, both newer t
 
 ## Targets
 
-- iOS **27.0+**, iPhone only. Test device: iPhone 15 Pro (supports Apple Intelligence).
+- iOS **27.0+** iPhone app, plus a **watchOS 27** companion for logging (`AsthmaLogWatch`). Test device: iPhone 15 Pro (supports Apple Intelligence).
 - Swift 6 language mode, strict concurrency.
 - SwiftUI, Observation (`@Observable`), SwiftData. No UIKit unless a framework forces it.
 - No third-party packages without asking (root AGENTS.md → "Ask before").
@@ -28,12 +28,15 @@ ios/
 │   │   ├── Lift/        bins, lift table, gate
 │   │   ├── Forecast/    RateTable (smoothed log-LR), RiskBander, Outlook (windows, cold start)
 │   │   ├── Narrator/    style bands, template, prompt builder, NarrationGuard (output checks)
-│   │   ├── Journal/     JournalTag (closed list), TagExtraction, VoiceNoteTags (keyword rules, model validation, TagReview)
+│   │   ├── Journal/     MomentKind (rescue / standard / okay), DemoWeek, JournalTag (closed list), TagExtraction, VoiceNoteTags (keyword rules, model validation, TagReview)
 │   │   └── Places/      visit clustering → home/work/frequent; indoor/outdoor guesser
 │   └── Tests/AsthmaCoreTests/   golden tests against ../../fixtures + unit tests
+├── Shared/              code compiled into both the app and the watch app (WatchLog)
+├── AsthmaLogWatch/      watchOS app: Rescue / Standard buttons → WatchConnectivity → phone
 └── AsthmaLog/           the app: SwiftUI + Apple frameworks
-    ├── App/             entry point, tabs (Journal, Insights), Prefs keys
-    ├── Journal/         JournalView, EventDetailView, LogService (log → locate → stamp)
+    ├── App/             entry point, tabs (Journal, Insights), Prefs keys, WatchBridge (receives watch logs)
+    ├── Onboarding/      first-run screens (photos from gitignored ios/PrivateMedia/, woven fallback)
+    ├── Journal/         JournalView (week strip, ambient field), EventDetailView, MomentTrendChart, LogService (log → locate → stamp)
     ├── Insights/        InsightsView, InsightsModel
     ├── Settings/        SettingsView (insight voice slider lives here), settings toolbar
     ├── Providers/       WeatherKit, OpenAQ, AirNow, ConditionsService (parallel, fail-open), attribution
@@ -78,9 +81,11 @@ Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web pr
 | Precise fix, motion, indoor/outdoor guess + correction | Place learning (visits → home/work) — `Places.cluster` is ready in core |
 | WeatherKit, OpenAQ, AirNow, fail-open with provenance | Pollen (Ambee) |
 | HealthKit inhaler usage write + delete | Photos |
-| Insights: lift, template + Foundation Models narration with output checks | Risograph theme |
+| Insights: lift, template + Foundation Models narration with output checks | Full visual style pass ([docs/design/visual-style.md](../docs/design/visual-style.md)) |
 | Look-ahead: 72 h WeatherKit + AirNow categories, personal windows or cold-start hazards | Notifications |
 | Settings: voice slider, model toggle, Health, auto usual moments, demo data | |
+| Apple Watch logging (Rescue / Standard → phone) | Watch complications |
+| First-run onboarding; Journal week strip with woven tiles and ambient field | |
 
 **On device** (iPhone 15 Pro, iOS 27, Xcode 27.0, 2026-10-01): builds clean with no warnings; logging a puff works and writes Inhaler Usage to Apple Health; Insights renders the template narration and the look-ahead (demo data); precise location (±13 m) stamps the log; WeatherKit, OpenAQ and AirNow all return outdoor conditions, with the Apple Weather attribution shown. Compile fix needed: `Observation` → `EnvObservation` (see "Project file" above). AirNow moved to its 2026 services (`observation/current/ziplatLong`, `forecast/current`) after the old `latLong` ones were retired. **Not yet confirmed:** Foundation Models narration (Apple Intelligence was not on), and Insights from real logs rather than demo data.
 
@@ -131,8 +136,9 @@ Mirror the target model in [docs/data-architecture.md §3](../docs/data-architec
 ## UI
 
 - Two tabs: **Journal** and **Insights**. Logging a puff is one tap from Journal and should work offline.
-- Dark, stock iOS for now: `.preferredColorScheme(.dark)`, SF Symbols, system materials, Dynamic Type.
-- **All styling goes through `Theme/`.** No hard-coded colors or fonts in views. The risograph pass later should only touch `Theme/` and a few views.
+- Apple-native, **light and dark** (follows the system): SF Symbols, system materials, Dynamic Type. Spec: [docs/design/visual-style.md](../docs/design/visual-style.md).
+- **All styling goes through `Theme/`.** No hard-coded colors or fonts in views. Colors are `Color(light:dark:)` tokens; riso inks are for data marks only.
+- **Demo moments** (Settings → Demo moments) are marked by `LogEvent.isDemoMoment`, never by `note`. They show in the Journal but never feed Insights, I'm okay sampling, or a trend line next to real readings.
 - Copy follows the "Say / Do not say" table in [docs/predictive-engine.md §2](../docs/predictive-engine.md).
 
 ## Apple-side setup checklist (owner, in Xcode / developer portal)

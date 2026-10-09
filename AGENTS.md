@@ -1,4 +1,4 @@
-# Asthma trigger log — agent guide
+# felt air (asthma trigger log) — agent guide
 
 Read this first. It covers the product, the rules that hold across both apps, and how we work. Then read the AGENTS.md in the folder you are changing (`ios/` or `web/`).
 
@@ -52,12 +52,12 @@ Each one comes from the docs. Follow the link before you change anything in that
 | Air quality / pollen | **OpenAQ** (nearest station) + **AirNow** (fallback + AQ forecast) | WeatherKit has no AQ or pollen. **Pollen is a known gap** until Ambee |
 | Location | Precise; learn home / work / frequent places; infer indoor vs outdoor | Home place drives the forecast |
 | HealthKit | **Write** inhaler usage | Reads (peak flow, SpO₂, sleep…) later |
-| Apple Watch | Not in the proof of concept | |
+| Apple Watch | **Logging only**: a watchOS app with Rescue and Standard buttons. Each press goes to the iPhone over WatchConnectivity; the phone stamps the air and writes Health (when that setting is on) | No complications, no Health writes or air lookups on the watch |
 | Journaling | Voice note → on-device transcript → model extracts tags you confirm. Photos of the day, opt-in | Confirmed tags become bins |
 | Risk prediction | From *when* (hour, season), *where* (place, indoor/outdoor), and *conditions* (weather, AQ) on inhaler days vs usual days | |
-| Look | Dark, stock iOS for now. Risograph-inspired (minimal, lightweight) later | Keep styling in one theme file so it can be swapped |
+| Look | Apple-native, light and dark (follows system), New York for one headline per screen, riso inks only for data. Spec: [docs/design/visual-style.md](docs/design/visual-style.md) | Keep styling in one theme file so it can be swapped |
 | Insight voice | Clinical → plain → poetic slider lives in **Settings**, not on the Insights screen | Only changes the on-device model's wording; the template stays plain |
-| Usual-day samples | Manual "I'm fine" button + automatic sample on app open (none in 20 h, no puff in 2 h). Visit-based sampling at home comes with place learning | Owner deferred; this is the default |
+| Usual-day samples ("I'm okay" moments) | Automatic only, no button. Now: one on app open (none in 20 h, no inhaler use in 2 h). Next: a few a day in the background at home | Background sampling needs the Always location permission: ask the owner first |
 | Pollen until Ambee | None. The bin reads `unknown` and Insights says "Pollen not included yet" | |
 | Photos | Later, opt-in, on-device only. Not in the first build | |
 
@@ -93,7 +93,9 @@ Rule of thumb: logic and tests in the cloud; anything that has to compile the ap
 ## Inspiration
 
 <!-- Fill in together: apps, references, images, people. -->
-- Risograph print: limited spot inks, visible grain, slight misregistration, off-white paper. Minimal and light. (Not yet; the first build is stock dark iOS.)
+- Apple Health: Cycle Tracking (week strip, tinted log), State of Mind (check-in with chips), Highlights (comparison cards). See [docs/design/visual-style.md](docs/design/visual-style.md).
+- Risograph print: limited spot inks and overprint, kept for data marks only. See [docs/design/riso-visual-language.md](docs/design/riso-visual-language.md).
+- Textiles: a creative-coding knitting editor (letters as cross-stitch) and a woven pattern system (two-colour weaves that get denser in steps). See [docs/design/textile-direction.md](docs/design/textile-direction.md).
 - _TODO: apps whose logging or insight UX we admire_
 - _TODO: tone references for insight copy (the web prototype has a clinical → plain → poetic slider)_
 
@@ -109,4 +111,4 @@ Rule of thumb: logic and tests in the cloud; anything that has to compile the ap
 3. Voice notes: record → on-device transcript → suggested tags → confirm
 4. Place learning: visits → home / work / frequent → confirm; forecast moves to home
 5. Photos of the day (opt-in)
-6. Risograph visual pass (`ios/AsthmaLog/Theme/`)
+6. Visual style pass per [docs/design/visual-style.md](docs/design/visual-style.md) (`ios/AsthmaLog/Theme/`, Journal, Recap)

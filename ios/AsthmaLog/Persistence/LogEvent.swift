@@ -6,7 +6,8 @@ enum EnvStatus: String {
     case pending, ready, partial, failed
 }
 
-/// One log: an inhaler puff (`attack`) or a usual-day sample (`baseline`).
+/// One moment: a rescue inhaler use (`attack`), a standard inhaler dose (`maintenance`) or a usual-moment
+/// sample (`baseline`). See `MomentKind`.
 /// Mirrors EVENT in docs/data-architecture.md; conditions are stored as JSON with full provenance.
 @Model
 final class LogEvent {
@@ -32,16 +33,24 @@ final class LogEvent {
     var healthSampleID: UUID?
     var tagsRaw: [String] = []
     var note: String?
+    /// Made-up moment from Settings → Demo moments. Its own field, so a user note (voice notes) never
+    /// turns a demo moment real or the other way round.
+    var isDemoMoment: Bool = false
 
-    init(kind: FrameKind, loggedAt: Date = .now) {
-        id = UUID()
-        kindRaw = kind.rawValue
+    init(moment: MomentKind, loggedAt: Date = .now, id: UUID = UUID()) {
+        self.id = id
+        kindRaw = moment.rawValue
         self.loggedAt = loggedAt
         envStatusRaw = EnvStatus.pending.rawValue
     }
 
+    var moment: MomentKind {
+        MomentKind(rawValue: kindRaw) ?? .rescue
+    }
+
+    /// Insights kind. Standard (maintenance) doses aren't part of patterns; `frame()` skips them.
     var kind: FrameKind {
-        FrameKind(rawValue: kindRaw) ?? .attack
+        moment.frameKind ?? .baseline
     }
 
     var envStatus: EnvStatus {
@@ -73,9 +82,15 @@ final class LogEvent {
         indoorGuessReasons = guess.reasons
     }
 
+    /// How demo moments were marked before `isDemoMoment`: this exact `note`. Still read so older demo
+    /// weeks are recognised and removed.
+    static let legacyDemoNote = "felt-air-demo"
+
+    var isDemo: Bool { isDemoMoment || note == Self.legacyDemoNote }
+
     /// Feature frame for insights, or nil when no outdoor value was stamped (same rule as the web prototype).
     func frame(calendar: Calendar = .current) -> FeatureFrame? {
-        guard let c = conditions, c.input.hasAnyValue else { return nil }
+        guard !isDemo, moment.frameKind != nil, let c = conditions, c.input.hasAnyValue else { return nil }
         return FrameBuilder.frame(
             id: id.uuidString, kind: kind, date: loggedAt, calendar: calendar, conditions: c.input,
             place: nil, indoorOutdoor: indoorOutdoor, tags: tags

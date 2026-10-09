@@ -36,6 +36,8 @@ public struct DayOutlook: Sendable, Identifiable {
     public var genericHazards: [String]
     /// Hours ahead of now when the day starts; later days are less certain.
     public var leadHours: Int
+    /// False before the sample gate: the band only reflects general hazards, not this person's pattern.
+    public var isPersonal: Bool = true
     public var id: Date { day }
 }
 
@@ -52,7 +54,7 @@ public enum Outlook {
             guard table.isPersonal else {
                 let hazards = Array(Set(dayHours.flatMap { GenericHazards.list($0.frame) })).sorted()
                 return DayOutlook(day: day, band: hazards.isEmpty ? .usual : .elevated, windows: [],
-                                  genericHazards: hazards, leadHours: lead)
+                                  genericHazards: hazards, leadHours: lead, isPersonal: false)
             }
             let windows = Array(elevatedWindows(dayHours, table: table, bander: bander)
                 .sorted { $0.peakScore > $1.peakScore }.prefix(2)).sorted { $0.start < $1.start }

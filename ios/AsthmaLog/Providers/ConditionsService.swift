@@ -37,7 +37,7 @@ struct ConditionsService {
         case .failure(let e): result.errors.append("AirNow: \(e.localizedDescription)")
         }
         if openAQKey == nil && airNowKey == nil {
-            result.errors.append("No air-quality key set — PM2.5 and ozone skipped.")
+            result.errors.append("Air quality isn't set up yet.")
         }
         return result
     }

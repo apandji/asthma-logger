@@ -196,7 +196,7 @@ enum AirSky {
 }
 
 /// Small deterministic random numbers so example values don't jump between redraws.
-struct Seeded {
+nonisolated struct Seeded {
     private var s: UInt64
     init(_ seed: Double) { s = UInt64(abs(seed)) &* 2654435761 | 1 }
     mutating func next() -> Double {

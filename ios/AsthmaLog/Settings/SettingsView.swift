@@ -78,10 +78,11 @@ struct SettingsView: View {
                 #if DEBUG
                 Section {
                     NavigationLink("Voice effect (prototype)") { VoiceOrbPrototype() }
+                    NavigationLink("Airways (prototype)") { AirwaysPrototype() }
                 } header: {
                     Text("Prototypes")
                 } footer: {
-                    Text("Debug builds only. Simulated sound; doesn't use the microphone.")
+                    Text("Debug builds only. The voice effect uses simulated sound; Airways uses example breathing scores.")
                 }
                 #endif
 

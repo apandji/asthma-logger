@@ -17,6 +17,11 @@ final class WatchBridge: NSObject, WCSessionDelegate {
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
     nonisolated func sessionDidDeactivate(_ session: WCSession) { session.activate() }
 
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        guard let log = WatchLog(userInfo: message) else { return }
+        Task { @MainActor in self.onLog?(log) }
+    }
+
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         guard let log = WatchLog(userInfo: userInfo) else { return }
         Task { @MainActor in self.onLog?(log) }

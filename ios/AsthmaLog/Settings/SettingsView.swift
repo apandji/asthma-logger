@@ -87,25 +87,13 @@ struct SettingsView: View {
     }
 
     private func addDemoWeek() {
-        removeDemo()
-        let week = DemoWeek.moments(endingAt: .now)
-        for m in week {
-            let e = LogEvent(moment: m.kind, loggedAt: m.at)
-            e.conditions = m.conditions
-            e.envStatus = .ready
-            e.note = LogEvent.demoNote
-            context.insert(e)
-        }
-        try? context.save()
-        demoNote = "Added \(week.count) demo moments."
+        let n = DemoSeeder.add(in: context)
+        demoNote = "Added \(n) demo moments."
     }
 
     private func removeDemo() {
-        let tag = LogEvent.demoNote
-        let demo = (try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.note == tag }))) ?? []
-        demo.forEach(context.delete)
-        try? context.save()
-        demoNote = demo.isEmpty ? nil : "Removed \(demo.count) demo moments."
+        let n = DemoSeeder.remove(in: context)
+        demoNote = n == 0 ? nil : "Removed \(n) demo moments."
     }
 }
 
@@ -125,4 +113,31 @@ private struct SettingsToolbar: ViewModifier {
 
 extension View {
     func settingsToolbar() -> some View { modifier(SettingsToolbar()) }
+}
+
+/// Adds or removes the labelled demo week (Settings → Demo moments, or launch with `-demoWeek` in Debug).
+enum DemoSeeder {
+    @discardableResult
+    static func add(in context: ModelContext) -> Int {
+        remove(in: context)
+        let week = DemoWeek.moments(endingAt: .now)
+        for m in week {
+            let e = LogEvent(moment: m.kind, loggedAt: m.at)
+            e.conditions = m.conditions
+            e.envStatus = .ready
+            e.note = LogEvent.demoNote
+            context.insert(e)
+        }
+        try? context.save()
+        return week.count
+    }
+
+    @discardableResult
+    static func remove(in context: ModelContext) -> Int {
+        let tag = LogEvent.demoNote
+        let demo = (try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.note == tag }))) ?? []
+        demo.forEach(context.delete)
+        try? context.save()
+        return demo.count
+    }
 }

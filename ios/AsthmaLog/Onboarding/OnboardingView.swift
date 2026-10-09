@@ -76,7 +76,7 @@ struct OnboardingView: View {
             Text("How will you log?").font(.system(.title2, design: .serif, weight: .medium))
             choice("watch", "applewatch", "Apple Watch", "Two buttons: orange for rescue, blue for standard.")
             choice("app", "iphone", "In the app", "Tap Rescue or Standard at the bottom of the screen.")
-            choice("button", "button.programmable", "felt button", "Pair it later, once you have one. The app works without it.")
+            choice("button", "dot.radiowaves.left.and.right", "felt button", "Pair it later, once you have one. The app works without it.")
             primary("Continue") { step = .location }
         }
     }
@@ -210,7 +210,14 @@ struct OnboardingBackdrop: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                if let image = UIImage(named: photo) {
+                if let image = UIImage(named: photo), image.size.height < 1000 {
+                    // Small photo (the hand): blurred to fill, sharp copy in the top half so the subject isn't under the card.
+                    Image(uiImage: image).resizable().scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height).clipped().blur(radius: 24)
+                    Image(uiImage: image).resizable().scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height * 0.55).clipped()
+                        .frame(maxHeight: .infinity, alignment: .top)
+                } else if let image = UIImage(named: photo) {
                     Image(uiImage: image).resizable().scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height).clipped()
                 } else {

@@ -3,8 +3,8 @@ import Observation
 import WatchConnectivity
 import WatchKit
 
-/// Sends each press to the phone with `transferUserInfo`, which queues and delivers even when the phone
-/// is out of reach. The phone saves the moment at the press time; it only notes the air if the moment
+/// Sends each press to the phone: straight away with `sendMessage` when it's reachable, otherwise with
+/// `transferUserInfo`, which queues and delivers once the phone is back. The phone saves the moment at the press time; it only notes the air if the moment
 /// arrives within 15 minutes.
 @Observable
 final class WatchLogger: NSObject, WCSessionDelegate {
@@ -22,7 +22,15 @@ final class WatchLogger: NSObject, WCSessionDelegate {
     func log(_ kind: WatchLog.Kind) {
         let entry = WatchLog(kind: kind)
         WKInterfaceDevice.current().play(.success)
-        WCSession.default.transferUserInfo(entry.userInfo)
+        let session = WCSession.default
+        if session.activationState == .activated && session.isReachable {
+            // Phone is nearby: deliver now. If that fails, fall back to the queued transfer.
+            session.sendMessage(entry.userInfo, replyHandler: nil) { _ in
+                WCSession.default.transferUserInfo(entry.userInfo)
+            }
+        } else {
+            session.transferUserInfo(entry.userInfo)
+        }
         let time = entry.at.formatted(date: .omitted, time: .shortened)
         let name = kind == .rescue ? "Rescue" : "Standard"
         status = WCSession.default.isReachable ? "\(name) logged · \(time)" : "\(name) saved · sends to iPhone"

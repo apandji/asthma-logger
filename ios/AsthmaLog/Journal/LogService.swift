@@ -31,13 +31,6 @@ final class LogService {
         context.insert(event)
         try? context.save()
 
-        if moment == .rescue && writeToHealth && health.isAvailable {
-            do {
-                event.healthSampleID = try await health.savePuff(at: event.loggedAt, logID: event.id)
-            } catch {
-                lastError = "Apple Health: \(error.localizedDescription)"
-            }
-        }
         if Date().timeIntervalSince(date) <= Self.freshness {
             await enrich(event)
         } else {
@@ -45,7 +38,31 @@ final class LogService {
             event.envError = "Logged on Apple Watch while your iPhone was away, so felt air couldn't note the air at that time."
         }
         try? context.save()
+
+        if moment == .rescue && writeToHealth && health.isAvailable {
+            do {
+                event.healthSampleID = try await health.savePuff(at: event.loggedAt, logID: event.id)
+            } catch {
+                lastError = "Apple Health: \(error.localizedDescription)"
+            }
+        }
+        try? context.save()
         return event
+    }
+
+    /// Moments left "noting the air" when the app was closed: retry if still fresh, otherwise say so.
+    func resumePending(in context: ModelContext) async {
+        let pending = EnvStatus.pending.rawValue
+        let stuck = (try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.envStatusRaw == pending }))) ?? []
+        for e in stuck {
+            if Date().timeIntervalSince(e.loggedAt) <= Self.freshness {
+                await enrich(e)
+            } else {
+                e.envStatus = .failed
+                e.envError = "felt air was closed before it could note the air for this moment."
+            }
+        }
+        try? context.save()
     }
 
     /// A moment logged on Apple Watch. Ignored if it already arrived (the watch can resend).

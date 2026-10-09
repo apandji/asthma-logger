@@ -20,6 +20,13 @@ struct AsthmaLogApp: App {
                 .tint(Theme.accent)
                 .task {
                     let context = container.mainContext
+                    #if DEBUG
+                    // For demos and recordings: `-demoWeek` loads the labelled demo week, `-skipOnboarding` skips first run.
+                    let args = ProcessInfo.processInfo.arguments
+                    if args.contains("-demoWeek") { DemoSeeder.add(in: context) }
+                    if args.contains("-skipOnboarding") { UserDefaults.standard.set(true, forKey: Prefs.didOnboard) }
+                    #endif
+                    await services.resumePending(in: context)
                     watch.start { log in
                         Task { await services.logFromWatch(log, in: context) }
                     }

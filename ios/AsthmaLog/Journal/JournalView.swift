@@ -63,7 +63,7 @@ struct JournalView: View {
         let recent = events.filter { $0.loggedAt >= start }
         let rescue = recent.filter { $0.moment == .rescue }.count
         let standard = recent.filter { $0.moment == .maintenance }.count
-        if recent.isEmpty { return "Your week of moments will gather here." }
+        if rescue == 0 && standard == 0 { return recent.isEmpty ? "Your week of moments will gather here." : "This week: no inhaler moments yet." }
         let r = rescue == 1 ? "1 rescue moment" : "\(rescue) rescue moments"
         let s = standard == 1 ? "1 standard dose" : "\(standard) standard doses"
         return "This week: \(r) and \(s)."
@@ -211,20 +211,17 @@ struct MomentDot: View {
 /// The key for weave inks and density.
 struct WeaveLegend: View {
     var body: some View {
-        ViewThatFits {
-            HStack(spacing: 14) { items }
-            VStack(alignment: .leading, spacing: 6) { items }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
+                key(.air, "Air")
+                key(.humidity, "Humidity")
+                key(.temperature, "Temp")
+                key(.pollen, "Pollen (later)")
+            }
+            Text("Denser weave = higher, or further from mild.")
         }
         .font(.caption)
         .foregroundStyle(Theme.secondaryText)
-    }
-
-    @ViewBuilder private var items: some View {
-        key(.air, "Air")
-        key(.humidity, "Humidity")
-        key(.temperature, "Temperature")
-        key(.pollen, "Pollen (not yet)")
-        Text("denser = higher")
     }
 
     private func key(_ f: WeaveSpec.Factor, _ label: String) -> some View {
@@ -250,29 +247,70 @@ struct MomentCard: View {
                 Text(event.loggedAt.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
                     .font(.subheadline).foregroundStyle(Theme.secondaryText)
             }
-            if !event.weave.isEmpty {
-                Text(event.weave.summary.prefix(1).uppercased() + event.weave.summary.dropFirst())
-                    .font(.title3.weight(.semibold))
-            }
             if let c = event.conditions, !c.observations.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(c.observations.prefix(5).enumerated()), id: \.offset) { _, o in
-                        Text(ObservationCopy.line(o)).font(.footnote).foregroundStyle(Theme.secondaryText)
+                VStack(spacing: 0) {
+                    factorRow(.air, "Air", value: airValue(c))
+                    factorRow(.humidity, "Humidity", value: c.best(.humidity).map { "\(Int($0.value.rounded()))%" })
+                    factorRow(.temperature, "Temperature", value: c.best(.temperature).map { "\(Int($0.value.rounded()))°F" })
+                    factorRow(.pollen, "Pollen", value: nil)
+                }
+                NavigationLink(value: event) {
+                    HStack(spacing: 4) {
+                        Text(sourceLine(c)).foregroundStyle(Theme.secondaryText)
+                        Text("Details").fontWeight(.semibold)
                     }
+                    .font(.footnote)
                 }
             } else if let err = event.envError {
                 Text(err).font(.footnote).foregroundStyle(Theme.secondaryText)
             } else if event.envStatus == .pending {
                 Text("Noting the outdoor air…").font(.footnote).foregroundStyle(Theme.secondaryText)
             }
-            NavigationLink(value: event) {
-                Text("Details and sources").font(.subheadline.weight(.semibold))
-            }
-            Text("Outdoor air near you, not indoor air, not a diagnosis.")
+            Text("Outdoor air, not indoor air. Not a diagnosis.")
                 .font(.caption2).foregroundStyle(Theme.secondaryText)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card, in: .rect(cornerRadius: 20, style: .continuous))
+    }
+
+    /// One condition: a small weave swatch, its name, the plain word, and the reading.
+    private func factorRow(_ f: WeaveSpec.Factor, _ name: String, value: String?) -> some View {
+        let level = event.weave.levels[f]
+        let word = event.weave.words[f]
+        return HStack(spacing: 12) {
+            Group {
+                if let level {
+                    WeaveSwatch(weave: WeaveSpec(levels: [f: level]), cornerRadius: 6)
+                } else {
+                    RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.secondaryText.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                }
+            }
+            .frame(width: 28, height: 28)
+            Text(name)
+            Spacer()
+            Text(word.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? (f == .pollen ? "Not yet" : "No reading"))
+                .fontWeight(.semibold)
+                .foregroundStyle(word == nil ? Theme.secondaryText : .primary)
+            if let value { Text(value).foregroundStyle(Theme.secondaryText).monospacedDigit().frame(minWidth: 44, alignment: .trailing) }
+        }
+        .font(.subheadline)
+        .padding(.vertical, 6)
+    }
+
+    private func airValue(_ c: Conditions) -> String? {
+        if let pm = c.best(.pm25) { return "PM2.5 \(Int(pm.value.rounded()))" }
+        if let aqi = c.best(.aqi) { return "AQI \(Int(aqi.value))" }
+        if let o3 = c.best(.ozone) { return "O₃ \(Int(o3.value.rounded()))" }
+        return nil
+    }
+
+    /// "Apple Weather, OpenAQ (2–6 mi) ·": the full provenance is one tap away (Details).
+    private func sourceLine(_ c: Conditions) -> String {
+        let names = Array(Set(c.observations.map(\.source))).sorted()
+        let miles = c.observations.compactMap(\.distanceKm).map { Int(($0 * 0.621371).rounded()) }
+        var line = names.joined(separator: ", ")
+        if let lo = miles.min(), let hi = miles.max() { line += lo == hi ? " (\(lo) mi)" : " (\(lo)–\(hi) mi)" }
+        return line + " ·"
     }
 }

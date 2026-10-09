@@ -84,15 +84,11 @@ struct JournalView: View {
         .padding(.horizontal, 20)
     }
 
-    /// One calm sentence about the latest outdoor air, in words. Never a judgement or a prediction.
+    /// One plain sentence about the latest air, e.g. "Good air, 63° and comfortable."
     private var airSentence: String {
-        guard let latest = events.last(where: { !$0.weave.isEmpty }) else {
-            return "Your moments will gather here, each with the air around you."
-        }
-        let w = latest.weave.words
-        let parts = [w[.air].map { "air \($0)" }, w[.humidity], w[.temperature]].compactMap { $0 }
-        let when = Calendar.current.isDateInToday(latest.loggedAt) ? "Outside today" : "At your last moment"
-        return "\(when): " + parts.joined(separator: ", ") + "."
+        guard let latest = events.last(where: { !$0.weave.isEmpty }) else { return "Nothing logged yet." }
+        let line = latest.airLine
+        return Calendar.current.isDateInToday(latest.loggedAt) ? line : "Last time: " + line.prefix(1).lowercased() + line.dropFirst()
     }
 
     /// Today's air for the ambient field: the latest moment today with a reading, else the latest one.
@@ -119,7 +115,7 @@ struct JournalView: View {
     }
 
     private var emptyState: some View {
-        Text("Tap Rescue or Standard below, or press a button on Apple Watch. Each moment is woven from the outdoor air at that time.")
+        Text("Tap Rescue or Standard below, or use the buttons on your Apple Watch.")
             .font(.subheadline)
             .foregroundStyle(Theme.secondaryText)
     }
@@ -267,7 +263,7 @@ struct MomentDot: View {
 struct WeaveKey: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Each tile is a moment, woven from the outdoor air at that time.")
+            Text("Each square is one moment. Its pattern shows the air outside at the time.")
                 .font(.subheadline).fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 8) {
                 row(.air, "Air quality")
@@ -283,7 +279,7 @@ struct WeaveKey: View {
                     }
                 }
             }
-            Text("Denser = higher. For temperature and humidity, denser means further from mild.")
+            Text("Denser means higher. For temperature and humidity, it means further from comfortable.")
                 .font(.caption).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
                 HStack(spacing: 5) { MomentDot(moment: .rescue, size: 8); Text("Rescue") }
@@ -336,7 +332,7 @@ struct MomentCard: View {
                 Divider().padding(.leading, 40)
                 factorRow(.pollen, "Pollen", value: nil)
                 Divider()
-                Text("Outdoor air near you · \(sourceLine(c))")
+                Text("Outdoors near you · \(sourceLine(c))")
                     .font(.caption).foregroundStyle(Theme.secondaryText)
                     .padding(.top, 12)
             } else if let err = event.envError {
@@ -344,7 +340,7 @@ struct MomentCard: View {
                 Text(err).font(.footnote).foregroundStyle(Theme.secondaryText).padding(.top, 12)
             } else if event.envStatus == .pending {
                 Divider()
-                Text("Noting the outdoor air…").font(.footnote).foregroundStyle(Theme.secondaryText).padding(.top, 12)
+                Text("Checking the air…").font(.footnote).foregroundStyle(Theme.secondaryText).padding(.top, 12)
             }
         }
         .padding(16)
@@ -356,7 +352,8 @@ struct MomentCard: View {
     /// One condition: a small weave swatch, its name, the plain word, and the reading.
     private func factorRow(_ f: WeaveSpec.Factor, _ name: String, value: String?) -> some View {
         let level = event.weave.levels[f]
-        let word = event.weave.words[f]
+        // Air in everyday words (good / moderate / poor), matching the headline.
+        let word = f == .air ? level.map { ["good", "moderate", "poor"][$0.rawValue] } : event.weave.words[f]
         return HStack(spacing: 12) {
             LevelMeter(level: level, ink: WeaveSwatch.ink(f))
                 .frame(width: 26)
@@ -404,5 +401,19 @@ struct LevelMeter: View {
         }
         .frame(height: 20, alignment: .bottom)
         .accessibilityHidden(true)
+    }
+}
+
+extension LogEvent {
+    /// The air at this moment as a short phrase: "Good air, 63° and comfortable."
+    var airLine: String {
+        let w = weave
+        var parts: [String] = []
+        if let air = w.levels[.air] { parts.append(["Good air", "Moderate air", "Poor air"][air.rawValue]) }
+        var tail: [String] = []
+        if let t = conditions?.best(.temperature) { tail.append("\(Int(t.value.rounded()))°") }
+        if let h = w.words[.humidity] { tail.append(h) }
+        if !tail.isEmpty { parts.append(tail.joined(separator: " and ")) }
+        return parts.isEmpty ? "No air reading." : parts.joined(separator: ", ") + "."
     }
 }

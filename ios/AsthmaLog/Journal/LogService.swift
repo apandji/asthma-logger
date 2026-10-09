@@ -35,7 +35,7 @@ final class LogService {
             await enrich(event)
         } else {
             event.envStatus = .failed
-            event.envError = "Logged on Apple Watch while your iPhone was away, so felt air couldn't note the air at that time."
+            event.envError = "Logged on Apple Watch while your iPhone was away, so there's no air reading."
         }
         try? context.save()
 
@@ -59,7 +59,7 @@ final class LogService {
                 await enrich(e)
             } else {
                 e.envStatus = .failed
-                e.envError = "felt air was closed before it could note the air for this moment."
+                e.envError = "The app closed before it could check the air."
             }
         }
         try? context.save()

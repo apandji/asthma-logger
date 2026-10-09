@@ -36,7 +36,7 @@ struct MomentTrendChart: View {
             .pickerStyle(.segmented)
 
             if points.count < 2 {
-                Text("Not enough readings around this moment yet.")
+                Text("Not enough readings yet.")
                     .font(.footnote).foregroundStyle(Theme.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: 160)
             } else {
@@ -53,7 +53,7 @@ struct MomentTrendChart: View {
             }
             .font(.caption).foregroundStyle(Theme.secondaryText)
 
-            Text("\(unitNote) Ringed: this moment. Outdoor readings captured at each moment over \(days) days; the line only joins them.")
+            Text("\(unitNote) The circled point is this moment. Dots are readings from the last \(days) days.")
                 .font(.caption2).foregroundStyle(Theme.secondaryText)
         }
         .padding(.vertical, 4)

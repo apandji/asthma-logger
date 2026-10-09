@@ -62,9 +62,9 @@ struct OnboardingView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("felt air").font(.system(size: 30, weight: .light)).tracking(1)
-            Text("felt air keeps track of the air for you, so you don't have to.")
+            Text("Breathe. We'll keep an eye on the air.")
                 .font(.system(.title2, design: .serif, weight: .medium))
-            Text("Each time you log a moment, it notes the outdoor air around you. Over time it shows which conditions turn up when breathing is harder for you.")
+            Text("Every time you use your inhaler, felt air saves the weather and air quality outside. Over time, you'll see what your hard days have in common.")
                 .font(.subheadline).foregroundStyle(.secondary)
             Text("Outdoor air only. Not medical advice.").font(.footnote).foregroundStyle(.secondary)
             primary("Get started") { step = .logging }
@@ -74,17 +74,17 @@ struct OnboardingView: View {
     private var logging: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("How will you log?").font(.system(.title2, design: .serif, weight: .medium))
-            choice("watch", "applewatch", "Apple Watch", "Two buttons: orange for rescue, blue for standard.")
-            choice("app", "iphone", "In the app", "Tap Rescue or Standard at the bottom of the screen.")
-            choice("button", "dot.radiowaves.left.and.right", "felt button", "Pair it later, once you have one. The app works without it.")
+            choice("watch", "applewatch", "Apple Watch", "Orange for rescue, blue for your daily inhaler.")
+            choice("app", "iphone", "In the app", "Two buttons at the bottom of the screen.")
+            choice("button", "dot.radiowaves.left.and.right", "felt button", "Set it up when you have one.")
             primary("Continue") { step = .location }
         }
     }
 
     private var location: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Notice the air where you are.").font(.system(.title2, design: .serif, weight: .medium))
-            Text("Your location lets felt air note the outdoor air near each moment. It stays on this iPhone; weather and air services only get the spot when felt air asks them for the air.")
+            Text("Use your location?").font(.system(.title2, design: .serif, weight: .medium))
+            Text("So we can check the air where you are. Your location stays on this phone.")
                 .font(.subheadline).foregroundStyle(.secondary)
             primary(working ? "Asking…" : "Allow location") {
                 working = true
@@ -101,17 +101,17 @@ struct OnboardingView: View {
     private var first: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let m = firstMoment {
-                Text(m.envStatus == .pending ? "Noting the air…" : "Here's the air right now.")
+                Text(m.envStatus == .pending ? "Checking the air…" : "Right now")
                     .font(.system(.title2, design: .serif, weight: .medium))
                 if !m.weave.isEmpty {
                     HStack(spacing: 14) {
                         WeaveSwatch(weave: m.weave, cornerRadius: 18).frame(width: 72, height: 72)
-                        Text(m.weave.summary.prefix(1).uppercased() + m.weave.summary.dropFirst())
+                        Text(m.airLine)
                             .font(.headline)
                     }
-                    Text("Outdoor air near you, from \(sources(m)).").font(.footnote).foregroundStyle(.secondary)
+                    Text("From \(sources(m)).").font(.footnote).foregroundStyle(.secondary)
                 } else if m.envStatus != .pending {
-                    Text("felt air couldn't note the air this time. Your moments still save; the air is added when it can be.")
+                    Text("Couldn't get the air just now. You can still log.")
                         .font(.subheadline).foregroundStyle(.secondary)
                 } else {
                     ProgressView()
@@ -119,10 +119,10 @@ struct OnboardingView: View {
                 learning
                 primary("Start") { didOnboard = true }
             } else {
-                Text("Let's note the air right now.").font(.system(.title2, design: .serif, weight: .medium))
-                Text("felt air will save this as an I'm okay moment, the kind it compares your inhaler moments with. From then on it adds these on its own.")
+                Text("Check the air now").font(.system(.title2, design: .serif, weight: .medium))
+                Text("This is saved as an \"I'm okay\" moment, a day without your inhaler to compare against. After this, felt air adds them on its own.")
                     .font(.subheadline).foregroundStyle(.secondary)
-                primary("Note the air now") {
+                primary("Check the air") {
                     let moment = LogEvent(moment: .okay)
                     context.insert(moment)
                     try? context.save()
@@ -143,7 +143,7 @@ struct OnboardingView: View {
         let rescue = real.filter { $0.moment == .rescue }.count
         let okay = real.filter { $0.moment == .okay }.count
         let gate = LiftGate.default
-        return Text("felt air is learning: \(min(rescue, gate.minAttacks)) of \(gate.minAttacks) rescue moments, \(min(okay, gate.minBaselines)) of \(gate.minBaselines) I'm okay moments.")
+        return Text("Patterns appear after \(gate.minAttacks) inhaler uses and \(gate.minBaselines) \"I'm okay\" moments. You're at \(rescue) and \(okay).")
             .font(.footnote).foregroundStyle(.secondary)
     }
 

@@ -157,7 +157,7 @@ struct MomentStrip: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            LazyHStack(alignment: .top, spacing: 20) {
+            HStack(alignment: .top, spacing: 20) {  // not Lazy: a week of tiles is cheap, and Lazy + a trailing anchor can lay out blank
                 ForEach(days) { day in
                     VStack(alignment: .leading, spacing: 10) {
                         Text(label(day.day))

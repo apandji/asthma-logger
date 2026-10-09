@@ -10,6 +10,8 @@ import WatchKit
 final class WatchLogger: NSObject, WCSessionDelegate {
     private(set) var status = "Press to log a moment"
     private var resetTask: Task<Void, Never>?
+    /// Presses not yet handed to WatchConnectivity (session still activating, or a transfer failed).
+    private var waiting: [WatchLog] = []
 
     override init() {
         super.init()
@@ -22,18 +24,33 @@ final class WatchLogger: NSObject, WCSessionDelegate {
     func log(_ kind: WatchLog.Kind) {
         let entry = WatchLog(kind: kind)
         WKInterfaceDevice.current().play(.success)
+        if WCSession.default.activationState == .activated {
+            flushWaiting()
+            send(entry)
+        } else {
+            // Right after launch the session may still be activating; transfers made now can be dropped.
+            waiting.append(entry)
+        }
+        let time = entry.at.formatted(date: .omitted, time: .shortened)
+        let name = kind == .rescue ? "Rescue" : "Standard"
+        show(WCSession.default.isReachable ? "\(name) logged · \(time)" : "\(name) saved · sends to iPhone")
+    }
+
+    private func send(_ entry: WatchLog) {
         let session = WCSession.default
-        if session.activationState == .activated && session.isReachable {
+        if session.isReachable {
             // Phone is nearby: deliver now. If that fails, fall back to the queued transfer.
-            session.sendMessage(entry.userInfo, replyHandler: nil) { _ in
+            // `@Sendable` because WatchConnectivity calls this off the main actor.
+            session.sendMessage(entry.userInfo, replyHandler: nil) { @Sendable _ in
                 WCSession.default.transferUserInfo(entry.userInfo)
             }
         } else {
             session.transferUserInfo(entry.userInfo)
         }
-        let time = entry.at.formatted(date: .omitted, time: .shortened)
-        let name = kind == .rescue ? "Rescue" : "Standard"
-        status = WCSession.default.isReachable ? "\(name) logged · \(time)" : "\(name) saved · sends to iPhone"
+    }
+
+    private func show(_ message: String) {
+        status = message
         resetTask?.cancel()
         resetTask = Task {
             try? await Task.sleep(for: .seconds(4))
@@ -41,5 +58,24 @@ final class WatchLogger: NSObject, WCSessionDelegate {
         }
     }
 
-    nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {}
+    private func flushWaiting() {
+        guard WCSession.default.activationState == .activated else { return }
+        let entries = waiting
+        waiting.removeAll()
+        entries.forEach(send)
+    }
+
+    nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        Task { @MainActor in self.flushWaiting() }
+    }
+
+    nonisolated func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
+        guard error != nil, let entry = WatchLog(userInfo: userInfoTransfer.userInfo) else { return }
+        // Keep the press instead of losing it silently. It goes again with the next press or activation,
+        // not straight away, so a transfer that keeps failing can't loop.
+        Task { @MainActor in
+            self.waiting.append(entry)
+            self.show("Couldn't reach iPhone · will retry")
+        }
+    }
 }

@@ -30,7 +30,8 @@ final class InsightsModel {
             gate = .default
             frameCount = (frames.filter { $0.kind == .attack }.count,
                           frames.filter { $0.kind == .baseline }.count,
-                          events.count - frames.count)
+                          // Only moments that could feed patterns but had no outdoor reading.
+                          events.filter { !$0.isDemo && $0.moment.frameKind != nil }.count - frames.count)
         }
         let report = Lift.compute(frames, gate: gate)
         self.report = report

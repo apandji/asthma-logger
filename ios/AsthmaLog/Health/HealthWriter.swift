@@ -8,6 +8,12 @@ final class HealthWriter {
 
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
+    /// Asked during onboarding, so the permission sheet never interrupts the first log.
+    func requestAccess() async {
+        guard isAvailable else { return }
+        try? await store.requestAuthorization(toShare: [type], read: [])
+    }
+
     /// Returns the HealthKit sample UUID so deletes stay in sync.
     func savePuff(at date: Date, logID: UUID) async throws -> UUID {
         try await store.requestAuthorization(toShare: [type], read: [])

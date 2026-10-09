@@ -27,10 +27,10 @@ struct AsthmaLogApp: App {
                     if args.contains("-skipOnboarding") { UserDefaults.standard.set(true, forKey: Prefs.didOnboard) }
                     if args.contains("-showOnboarding") { UserDefaults.standard.set(false, forKey: Prefs.didOnboard) }
                     #endif
-                    await services.resumePending(in: context)
                     watch.start { log in
                         Task { await services.logFromWatch(log, in: context) }
                     }
+                    await services.resumePending(in: context)
                 }
         }
         .modelContainer(container)
@@ -44,7 +44,6 @@ struct RootView: View {
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
-    @State private var logging: MomentKind?
     @State private var logCount = 0
 
     var body: some View {
@@ -64,7 +63,6 @@ struct RootView: View {
                 Divider().frame(height: 22)
                 logButton(.maintenance, "Standard", Theme.standard)
             }
-            .disabled(logging != nil)
             .sensoryFeedback(.success, trigger: logCount)
         }
         .fullScreenCover(isPresented: Binding(get: { !didOnboard }, set: { _ in })) {
@@ -77,15 +75,12 @@ struct RootView: View {
     }
 
     private func logButton(_ moment: MomentKind, _ title: String, _ color: Color) -> some View {
+        // The moment saves instantly; the air arrives on its tile. The button never waits on the network.
         Button {
-            logging = moment
-            Task {
-                await services.log(moment, in: context, writeToHealth: writeToHealth)
-                logging = nil
-                logCount += 1
-            }
+            logCount += 1
+            Task { _ = await services.log(moment, in: context, writeToHealth: writeToHealth) as LogEvent; return }
         } label: {
-            Label(logging == moment ? "Logging…" : title, systemImage: "plus")
+            Label(title, systemImage: "plus")
                 .font(.headline)
                 .foregroundStyle(color)
                 .frame(maxWidth: .infinity)

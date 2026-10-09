@@ -27,6 +27,7 @@ final class LogService {
     @discardableResult
     func log(_ moment: MomentKind, at date: Date = .now, id: UUID = UUID(),
              in context: ModelContext, writeToHealth: Bool) async -> LogEvent {
+        lastError = nil
         let event = LogEvent(moment: moment, loggedAt: date, id: id)
         context.insert(event)
         try? context.save()
@@ -95,7 +96,7 @@ final class LogService {
             let c = await conditions.conditions(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude)
             event.conditions = c
             event.envStatus = c.observations.isEmpty ? .failed : (c.errors.isEmpty ? .ready : .partial)
-            if c.observations.isEmpty { event.envError = c.errors.joined(separator: "\n") }
+            if c.observations.isEmpty { event.envError = "Couldn't reach the air services. Open the moment to try again." }
         } catch {
             event.envStatus = .failed
             event.envError = error.localizedDescription

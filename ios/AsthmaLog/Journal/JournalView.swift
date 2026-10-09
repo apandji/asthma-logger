@@ -45,7 +45,7 @@ struct JournalView: View {
                     }
                 }
                 .padding(.top, 4)
-                .padding(.bottom, 32)
+                .padding(.bottom, 110)  // clear the floating log bar
             }
             .background {
                 // The room takes on the selected moment's air (today's, until you pick one).

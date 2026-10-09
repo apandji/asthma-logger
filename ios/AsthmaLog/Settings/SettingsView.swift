@@ -64,7 +64,11 @@ struct SettingsView: View {
                 Section {
                     Button("Add a demo week to the Journal") { addDemoWeek() }
                     Button("Remove demo moments", role: .destructive) { removeDemo() }
-                    Button("Play onboarding demo") { dismiss(); didOnboard = false }
+                    Button("Play onboarding demo") {
+                        dismiss()
+                        // Let the sheet finish closing, or SwiftUI drops the full-screen onboarding.
+                        Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
+                    }
                 } header: {
                     Text("Demo moments")
                 } footer: {

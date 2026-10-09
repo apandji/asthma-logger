@@ -117,7 +117,7 @@ struct OnboardingView: View {
                     ProgressView()
                 }
                 learning
-                primary("Start") { didOnboard = true }
+                primary("Start") { Task { await services.health.requestAccess(); didOnboard = true } }
             } else {
                 Text("Check the air now").font(.system(.title2, design: .serif, weight: .medium))
                 Text("This is saved as an \"I'm okay\" moment, a day without your inhaler to compare against. After this, felt air adds them on its own.")
@@ -132,7 +132,7 @@ struct OnboardingView: View {
                         try? context.save()
                     }
                 }
-                secondary("Skip for now") { didOnboard = true }
+                secondary("Skip for now") { Task { await services.health.requestAccess(); didOnboard = true } }
             }
         }
     }

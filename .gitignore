@@ -25,3 +25,6 @@ ios/AsthmaLog/AsthmaLog.entitlements
 
 # Local-only gallery images (personal / third-party)
 docs/gallery/private/
+
+# Owner photos for onboarding (local only; the app falls back to a woven background without them)
+ios/PrivateMedia/

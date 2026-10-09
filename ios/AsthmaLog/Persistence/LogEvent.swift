@@ -6,7 +6,8 @@ enum EnvStatus: String {
     case pending, ready, partial, failed
 }
 
-/// One log: an inhaler puff (`attack`) or a usual-day sample (`baseline`).
+/// One moment: a rescue inhaler use (`attack`), a standard inhaler dose (`maintenance`) or a usual-moment
+/// sample (`baseline`). See `MomentKind`.
 /// Mirrors EVENT in docs/data-architecture.md; conditions are stored as JSON with full provenance.
 @Model
 final class LogEvent {
@@ -33,15 +34,20 @@ final class LogEvent {
     var tagsRaw: [String] = []
     var note: String?
 
-    init(kind: FrameKind, loggedAt: Date = .now) {
-        id = UUID()
-        kindRaw = kind.rawValue
+    init(moment: MomentKind, loggedAt: Date = .now, id: UUID = UUID()) {
+        self.id = id
+        kindRaw = moment.rawValue
         self.loggedAt = loggedAt
         envStatusRaw = EnvStatus.pending.rawValue
     }
 
+    var moment: MomentKind {
+        MomentKind(rawValue: kindRaw) ?? .rescue
+    }
+
+    /// Insights kind. Standard (maintenance) doses aren't part of patterns; `frame()` skips them.
     var kind: FrameKind {
-        FrameKind(rawValue: kindRaw) ?? .attack
+        moment.frameKind ?? .baseline
     }
 
     var envStatus: EnvStatus {
@@ -73,9 +79,14 @@ final class LogEvent {
         indoorGuessReasons = guess.reasons
     }
 
+    /// `note` value on moments added from Settings → Demo moments.
+    static let demoNote = "felt-air-demo"
+
+    var isDemo: Bool { note == Self.demoNote }
+
     /// Feature frame for insights, or nil when no outdoor value was stamped (same rule as the web prototype).
     func frame(calendar: Calendar = .current) -> FeatureFrame? {
-        guard let c = conditions, c.input.hasAnyValue else { return nil }
+        guard !isDemo, moment.frameKind != nil, let c = conditions, c.input.hasAnyValue else { return nil }
         return FrameBuilder.frame(
             id: id.uuidString, kind: kind, date: loggedAt, calendar: calendar, conditions: c.input,
             place: nil, indoorOutdoor: indoorOutdoor, tags: tags

@@ -8,6 +8,20 @@ enum Theme {
     static let ink2 = Color(light: 0x1F6FD1, dark: 0x4C9BFF)     // weather (blue)
     static let ink3 = Color(light: 0x248A3D, dark: 0x30D158)     // quiet days (system-like green)
 
+    // Moment kinds, matching the watch buttons and the SmartButton caps.
+    static let rescue = Color(light: 0xE8701F, dark: 0xFF8A3D)    // orange
+    static let standard = Color(light: 0x2B8FD6, dark: 0x4FB0F5)  // blue
+
+    // Weave inks, one per outdoor factor (docs/design/visual-style.md, textile-direction.md).
+    static let weaveAir = Color(light: 0xE2477E, dark: 0xFF5A92)
+    static let weaveHumidity = Color(light: 0x3B5BDB, dark: 0x7C93FF)
+    static let weaveTemperature = Color(light: 0xD9442B, dark: 0xFF6A4D)
+    static let weavePollen = Color(light: 0xC9A400, dark: 0xE6C02E)
+
+    /// The ambient Journal stage: soft paper in light, near-black in dark.
+    static let stage = Color(light: 0xF2F1EE, dark: 0x0B0B0D)
+    static let card = Color(light: 0xFFFFFF, dark: 0x1C1C1F)
+
     static let background = Color(uiColor: .systemGroupedBackground)
     static let surface = Color(uiColor: .secondarySystemGroupedBackground)
     static let secondaryText = Color.secondary

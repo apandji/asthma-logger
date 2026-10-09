@@ -4,6 +4,7 @@ name: AsthmaLog
 options:
   deploymentTarget:
     iOS: "27.0"
+    watchOS: "27.0"
   createIntermediateGroups: true
 configFiles:
   Debug: Config/Base.xcconfig
@@ -17,8 +18,14 @@ targets:
     platform: iOS
     sources:
       - AsthmaLog
+      - Shared
+      # Owner photos for onboarding; gitignored, so absent in fresh clones (the app falls back).
+      - path: PrivateMedia
+        optional: true
     dependencies:
       - package: AsthmaCore
+      # The watch app ships inside the iPhone app.
+      - target: AsthmaLogWatch
     settings:
       base:
         SWIFT_VERSION: "6.0"
@@ -54,3 +61,26 @@ targets:
         com.apple.developer.weatherkit: true
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+
+  # felt air on Apple Watch: two buttons that log a moment (orange rescue, blue standard).
+  AsthmaLogWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - AsthmaLogWatch
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).asthmalog.watchkitapp
+        PRODUCT_NAME: AsthmaLogWatch
+        SWIFT_VERSION: "6.0"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: felt air
+        INFOPLIST_KEY_WKApplication: YES
+        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: $(BUNDLE_ID_PREFIX).asthmalog
+        SKIP_INSTALL: YES

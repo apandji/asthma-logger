@@ -277,3 +277,41 @@ import Testing
         #expect(ForecastConditions(temperatureF: 70).isPartial)
     }
 }
+
+@Suite struct MomentTests {
+    @Test func kindsKeepStoredValuesAndOnlyRescueAndOkayFeedPatterns() {
+        #expect(MomentKind(rawValue: "attack") == .rescue)
+        #expect(MomentKind(rawValue: "baseline") == .okay)
+        #expect(MomentKind.rescue.frameKind == .attack)
+        #expect(MomentKind.okay.frameKind == .baseline)
+        #expect(MomentKind.maintenance.frameKind == nil)
+    }
+
+    @Test func weaveUsesV1BandsWithDirectionWords() {
+        let w = WeaveSpec(ConditionsInput(pm25: 20, ozonePpb: 40, temperatureF: 93, humidityPct: 80))
+        #expect(w.levels[.air] == .medium)          // PM2.5 moderate beats ozone low
+        #expect(w.levels[.temperature] == .high && w.words[.temperature] == "hot")
+        #expect(w.levels[.humidity] == .high && w.words[.humidity] == "humid")
+        #expect(w.levels[.pollen] == nil)           // no pollen source: absent, not low
+        #expect(w.summary == "Air moderate · humid · hot")
+    }
+
+    @Test func weaveFallsBackToAQIAndStaysEmptyWithoutReadings() {
+        #expect(WeaveSpec(ConditionsInput(aqi: 120)).levels[.air] == .high)
+        #expect(WeaveSpec(ConditionsInput()).isEmpty)
+        let mild = WeaveSpec(ConditionsInput(temperatureF: 70, humidityPct: 50))
+        #expect(mild.levels[.temperature] == .low && mild.levels[.humidity] == .low)
+    }
+}
+
+@Suite struct DemoWeekTests {
+    @Test func demoWeekIsLabelledAndStopsAtNow() {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
+        let now = cal.date(from: DateComponents(year: 2026, month: 10, day: 8, hour: 9))!
+        let week = DemoWeek.moments(endingAt: now, calendar: cal)
+        #expect(!week.isEmpty && week.allSatisfy { $0.at <= now })
+        #expect(week.allSatisfy { $0.conditions.observations.allSatisfy { $0.source == DemoWeek.source } })
+        #expect(week.contains { $0.kind == .rescue } && week.contains { $0.kind == .maintenance } && week.contains { $0.kind == .okay })
+        #expect(week.contains { !WeaveSpec($0.conditions.input).isEmpty })
+    }
+}

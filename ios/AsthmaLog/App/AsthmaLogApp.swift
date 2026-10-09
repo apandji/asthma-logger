@@ -1,17 +1,31 @@
+import AsthmaCore
 import SwiftData
 import SwiftUI
 
 @main
 struct AsthmaLogApp: App {
     @State private var services = LogService()
+    private let container: ModelContainer
+    private let watch = WatchBridge()
+
+    init() {
+        do { container = try ModelContainer(for: LogEvent.self) }
+        catch { fatalError("Couldn't open the journal store: \(error)") }
+    }
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(services)
                 .tint(Theme.accent)
+                .task {
+                    let context = container.mainContext
+                    watch.start { log in
+                        Task { await services.logFromWatch(log, in: context) }
+                    }
+                }
         }
-        .modelContainer(for: LogEvent.self)
+        .modelContainer(container)
     }
 }
 
@@ -21,7 +35,8 @@ struct RootView: View {
     @Environment(LogService.self) private var services
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
-    @State private var isLogging = false
+    @AppStorage(Prefs.didOnboard) private var didOnboard = false
+    @State private var logging: MomentKind?
     @State private var logCount = 0
 
     var body: some View {
@@ -33,27 +48,39 @@ struct RootView: View {
                 InsightsView()
             }
         }
-        // One tap, always reachable: floats above the tab bar. I'm okay moments are added automatically.
+        // One tap, always reachable: floats above the tab bar. Same two actions as the watch.
+        // I'm okay moments are added automatically.
         .tabViewBottomAccessory {
-            Button {
-                isLogging = true
-                Task {
-                    await services.log(.attack, in: context, writeToHealth: writeToHealth)
-                    isLogging = false
-                    logCount += 1
-                }
-            } label: {
-                Label(isLogging ? "Logging…" : "Used inhaler", systemImage: "plus")
-                    .font(.headline)
-                    .foregroundStyle(Theme.accent)
-                    .frame(maxWidth: .infinity)
+            HStack(spacing: 0) {
+                logButton(.rescue, "Rescue", Theme.rescue)
+                Divider().frame(height: 22)
+                logButton(.maintenance, "Standard", Theme.standard)
             }
-            .disabled(isLogging)
+            .disabled(logging != nil)
             .sensoryFeedback(.success, trigger: logCount)
         }
+        .fullScreenCover(isPresented: Binding(get: { !didOnboard }, set: { _ in })) {
+            OnboardingView()
+        }
         .onChange(of: scenePhase, initial: true) { _, phase in
-            guard phase == .active, autoBaseline else { return }
+            guard phase == .active, autoBaseline, didOnboard else { return }
             Task { await services.sampleUsualDayIfDue(in: context) }
+        }
+    }
+
+    private func logButton(_ moment: MomentKind, _ title: String, _ color: Color) -> some View {
+        Button {
+            logging = moment
+            Task {
+                await services.log(moment, in: context, writeToHealth: writeToHealth)
+                logging = nil
+                logCount += 1
+            }
+        } label: {
+            Label(logging == moment ? "Logging…" : title, systemImage: "plus")
+                .font(.headline)
+                .foregroundStyle(color)
+                .frame(maxWidth: .infinity)
         }
     }
 }

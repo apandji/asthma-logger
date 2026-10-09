@@ -1,4 +1,5 @@
 import AsthmaCore
+import SwiftData
 import SwiftUI
 
 struct SettingsView: View {
@@ -8,6 +9,9 @@ struct SettingsView: View {
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.useDemoData) private var demo = false
+    @Environment(\.modelContext) private var context
+    @AppStorage(Prefs.didOnboard) private var didOnboard = true
+    @State private var demoNote: String?
 
     var body: some View {
         NavigationStack {
@@ -58,6 +62,16 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Button("Add a demo week to the Journal") { addDemoWeek() }
+                    Button("Remove demo moments", role: .destructive) { removeDemo() }
+                    Button("Show onboarding again") { dismiss(); didOnboard = false }
+                } header: {
+                    Text("Demo moments")
+                } footer: {
+                    Text(demoNote ?? "Made-up moments for showing the Journal, labelled Demo in their sources. They don't count toward your patterns.")
+                }
+
+                Section {
                     Text("felt air is a diary, not a medical device. It compares outdoor conditions when you used your inhaler with your I'm okay moments. It can't see indoor air and doesn't diagnose or predict attacks.")
                         .font(Theme.caption)
                         .foregroundStyle(Theme.secondaryText)
@@ -70,6 +84,28 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private func addDemoWeek() {
+        removeDemo()
+        let week = DemoWeek.moments(endingAt: .now)
+        for m in week {
+            let e = LogEvent(moment: m.kind, loggedAt: m.at)
+            e.conditions = m.conditions
+            e.envStatus = .ready
+            e.note = LogEvent.demoNote
+            context.insert(e)
+        }
+        try? context.save()
+        demoNote = "Added \(week.count) demo moments."
+    }
+
+    private func removeDemo() {
+        let tag = LogEvent.demoNote
+        let demo = (try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.note == tag }))) ?? []
+        demo.forEach(context.delete)
+        try? context.save()
+        demoNote = demo.isEmpty ? nil : "Removed \(demo.count) demo moments."
     }
 }
 

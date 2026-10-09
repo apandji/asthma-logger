@@ -77,6 +77,7 @@ struct SettingsView: View {
                         .foregroundStyle(Theme.secondaryText)
                 }
             }
+            .tint(.green) // switches keep the system green; the app's neutral tint would make them white-on-white
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

@@ -18,7 +18,7 @@ struct WeaveSwatch: View {
             ctx.blendMode = scheme == .dark ? .screen : .multiply
             for factor in WeaveSpec.Factor.allCases {
                 guard let level = weave.levels[factor] else { continue }
-                ctx.fill(Self.weavePath(level: level, factor: factor, in: size), with: .color(Self.ink(factor).opacity(0.92)))
+                ctx.fill(Self.weavePath(level: level, factor: factor, in: size), with: .color(Self.ink(factor).opacity([0.6, 0.8, 0.95][level.rawValue])))
             }
         }
         .accessibilityElement()
@@ -40,8 +40,8 @@ struct WeaveSwatch: View {
 
     /// All the squares for one factor in a single path, rotated about the centre.
     static func weavePath(level: WeaveSpec.Level, factor: WeaveSpec.Factor, in size: CGSize) -> Path {
-        let cell: CGFloat = [10, 7, 4.8][level.rawValue]
-        let sq: CGFloat = level == .low ? 2.6 : cell / 2
+        let cell: CGFloat = [12, 7, 4.6][level.rawValue]
+        let sq: CGFloat = level == .low ? 2.2 : cell / 2
         let extent = max(size.width, size.height) * 1.5
         let offset = CGFloat(WeaveSpec.Factor.allCases.firstIndex(of: factor) ?? 0) * 0.9
         var path = Path()

@@ -15,10 +15,24 @@ struct JournalView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 28) {
                     header
-                    MomentStrip(days: week, selectedID: selectedID) { selectedID = $0 }
-                    WeaveLegend().padding(.horizontal, 20)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("This week").font(.title3.weight(.semibold))
+                            Spacer()
+                            Button { showKey = true } label: {
+                                Image(systemName: "info.circle").font(.body)
+                            }
+                            .foregroundStyle(Theme.secondaryText)
+                            .accessibilityLabel("How to read the weaves")
+                            .popover(isPresented: $showKey) { WeaveKey().presentationCompactAdaptation(.popover) }
+                        }
+                        .padding(.horizontal, 20)
+                        MomentStrip(days: week, selectedID: selected?.id) { id in
+                            withAnimation(.snappy) { selectedID = id }
+                        }
+                    }
                     if let event = selected {
                         NavigationLink(value: event) { MomentCard(event: event) }
                             .buttonStyle(.plain)
@@ -27,13 +41,20 @@ struct JournalView: View {
                         emptyState.padding(.horizontal, 20)
                     }
                     if let error = services.lastError {
-                        Text(error).font(Theme.caption).foregroundStyle(.orange).padding(.horizontal, 20)
+                        Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20)
                     }
                 }
-                .padding(.top, 8)
+                .padding(.top, 4)
                 .padding(.bottom, 32)
             }
-            .background(Theme.stage.ignoresSafeArea())
+            .background {
+                ZStack(alignment: .top) {
+                    Theme.stage
+                    AirWash(weave: events.last(where: { !$0.weave.isEmpty })?.weave ?? WeaveSpec())
+                        .frame(height: 420)
+                }
+                .ignoresSafeArea()
+            }
             .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -45,30 +66,52 @@ struct JournalView: View {
         }
     }
 
+    @State private var showKey = false
+
     // MARK: Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()).uppercased())
-                .font(.footnote.weight(.semibold))
+        VStack(alignment: .leading, spacing: 14) {
+            Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(Theme.secondaryText)
-            Text(headline)
+            Text(airSentence)
                 .font(Theme.headlineSerif)
                 .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                stat(count(.rescue), "Rescue", Theme.rescue)
+                stat(count(.maintenance), "Standard", Theme.standard)
+            }
         }
         .padding(.horizontal, 20)
     }
 
-    /// Plain counts for the week; never a judgement.
-    private var headline: String {
+    /// One calm sentence about the latest outdoor air, in words. Never a judgement or a prediction.
+    private var airSentence: String {
+        guard let latest = events.last(where: { !$0.weave.isEmpty }) else {
+            return "Your moments will gather here, each with the air around you."
+        }
+        let w = latest.weave.words
+        let parts = [w[.air].map { "air \($0)" }, w[.humidity], w[.temperature]].compactMap { $0 }
+        let when = Calendar.current.isDateInToday(latest.loggedAt) ? "Outside today" : "At your last moment"
+        return "\(when): " + parts.joined(separator: ", ") + "."
+    }
+
+    private func count(_ kind: MomentKind) -> Int {
         let start = Calendar.current.date(byAdding: .day, value: -(days - 1), to: Calendar.current.startOfDay(for: .now))!
-        let recent = events.filter { $0.loggedAt >= start }
-        let rescue = recent.filter { $0.moment == .rescue }.count
-        let standard = recent.filter { $0.moment == .maintenance }.count
-        if rescue == 0 && standard == 0 { return recent.isEmpty ? "Your week of moments will gather here." : "This week: no inhaler moments yet." }
-        let r = rescue == 1 ? "1 rescue moment" : "\(rescue) rescue moments"
-        let s = standard == 1 ? "1 standard dose" : "\(standard) standard doses"
-        return "This week: \(r) and \(s)."
+        return events.filter { $0.loggedAt >= start && $0.moment == kind }.count
+    }
+
+    private func stat(_ n: Int, _ label: String, _ color: Color) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text("\(n)").font(.headline.monospacedDigit())
+            Text(label).font(.subheadline).foregroundStyle(Theme.secondaryText)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .glassEffect(.regular, in: .capsule)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(n) \(label.lowercased()) this week")
     }
 
     private var emptyState: some View {
@@ -104,39 +147,38 @@ struct MomentDay: Identifiable {
 
 // MARK: - Strip
 
-/// This week's moments as rounded woven cards, grouped by day, starting scrolled to now.
+/// This week's moments as woven tiles, grouped by day, starting scrolled to now.
 struct MomentStrip: View {
     let days: [MomentDay]
     let selectedID: UUID?
     let onSelect: (UUID) -> Void
 
-    private let card: CGFloat = 104
+    private let tile: CGFloat = 92
 
     var body: some View {
         ScrollView(.horizontal) {
-            LazyHStack(alignment: .top, spacing: 28) {
+            LazyHStack(alignment: .top, spacing: 20) {
                 ForEach(days) { day in
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Text(label(day.day))
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Calendar.current.isDateInToday(day.day) ? Theme.accent : Theme.secondaryText)
+                            .font(.footnote.weight(Calendar.current.isDateInToday(day.day) ? .semibold : .regular))
+                            .foregroundStyle(Calendar.current.isDateInToday(day.day) ? .primary : Theme.secondaryText)
                         if day.events.isEmpty {
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .strokeBorder(Theme.secondaryText.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                                .frame(width: 44, height: card)
+                            Capsule().fill(Theme.secondaryText.opacity(0.18))
+                                .frame(width: 4, height: tile)
+                                .frame(width: 28)
                                 .accessibilityLabel("No moments")
                         } else {
-                            HStack(spacing: 10) {
+                            HStack(alignment: .top, spacing: 8) {
                                 ForEach(day.events) { event in
                                     Button { onSelect(event.id) } label: {
-                                        MomentTile(event: event, size: card, isSelected: event.id == (selectedID ?? days.last { !$0.events.isEmpty }?.events.last?.id))
+                                        MomentTile(event: event, size: tile, isSelected: event.id == selectedID)
                                     }
                                     .buttonStyle(.plain)
                                 }
                             }
                         }
                     }
-                    .id(day.day)
                 }
             }
             .scrollTargetLayout()
@@ -145,7 +187,7 @@ struct MomentStrip: View {
         .contentMargins(.horizontal, 20, for: .scrollContent)
         .defaultScrollAnchor(.trailing)
         .scrollTargetBehavior(.viewAligned)
-        .frame(height: card + 30)
+        .frame(height: tile + 62)
     }
 
     private func label(_ day: Date) -> String {
@@ -155,81 +197,105 @@ struct MomentStrip: View {
     }
 }
 
-/// One moment: its weave, a kind dot, and the time.
+/// One moment: its weave, and below it the kind and time. Selection lifts the tile and outlines it.
 struct MomentTile: View {
     let event: LogEvent
     let size: CGFloat
     let isSelected: Bool
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            switch event.envStatus {
-            case .pending:
-                RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Theme.card)
-                    .overlay { ProgressView() }
-            case .ready, .partial, .failed:
-                if event.weave.isEmpty {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Theme.card)
-                        .overlay {
-                            Text("No air\nreading").font(.caption2).multilineTextAlignment(.center)
-                                .foregroundStyle(Theme.secondaryText)
-                        }
-                } else {
-                    WeaveSwatch(weave: event.weave)
+        VStack(alignment: .leading, spacing: 7) {
+            Group {
+                switch event.envStatus {
+                case .pending:
+                    RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.card)
+                        .overlay { ProgressView() }
+                case .ready, .partial, .failed:
+                    if event.weave.isEmpty {
+                        RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.card)
+                            .overlay { Image(systemName: "wind").foregroundStyle(Theme.secondaryText) }
+                    } else {
+                        WeaveSwatch(weave: event.weave, cornerRadius: 24)
+                    }
                 }
             }
-            MomentDot(moment: event.moment)
-                .padding(10)
-            Text(event.loggedAt.formatted(date: .omitted, time: .shortened))
-                .font(.caption2.weight(.semibold))
-                .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(.thinMaterial, in: .capsule)
-                .padding(8)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .frame(width: size, height: size)
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(isSelected ? Color.primary : Color.primary.opacity(0.06), lineWidth: isSelected ? 2 : 0.5)
+            }
+            .scaleEffect(isSelected ? 1.0 : 0.94)
+            .shadow(color: .black.opacity(isSelected ? 0.18 : 0), radius: 10, y: 4)
+
+            HStack(spacing: 5) {
+                MomentDot(moment: event.moment, size: 7)
+                Text(event.loggedAt.formatted(date: .omitted, time: .shortened))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(isSelected ? .primary : Theme.secondaryText)
+            }
+            .padding(.leading, 4)
         }
-        .frame(width: size, height: size)
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(isSelected ? Color.primary : Color.primary.opacity(0.08), lineWidth: isSelected ? 2.5 : 1)
-        }
+        .animation(.snappy, value: isSelected)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(event.moment.title), \(event.loggedAt.formatted(date: .omitted, time: .shortened)), \(event.weave.isEmpty ? "no outdoor readings" : event.weave.summary)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
 /// Orange dot = rescue, blue dot = standard, open ring = I'm okay. Same colours as the watch.
 struct MomentDot: View {
     let moment: MomentKind
+    var size: CGFloat = 10
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var noColor
 
     var body: some View {
         switch moment {
-        case .rescue: Circle().fill(Theme.rescue).frame(width: 12, height: 12).overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1.5))
-        case .maintenance: Circle().fill(Theme.standard).frame(width: 12, height: 12).overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1.5))
-        case .okay: Circle().strokeBorder(Theme.secondaryText, lineWidth: 2).frame(width: 12, height: 12)
+        case .rescue: Circle().fill(Theme.rescue).frame(width: size, height: size)
+        case .maintenance:
+            // With Differentiate Without Color, standard doses are squares, not just blue.
+            RoundedRectangle(cornerRadius: noColor ? size * 0.15 : size / 2).fill(Theme.standard).frame(width: size, height: size)
+        case .okay: Circle().strokeBorder(Theme.secondaryText, lineWidth: max(1.5, size / 5)).frame(width: size, height: size)
         }
     }
 }
 
-/// The key for weave inks and density.
-struct WeaveLegend: View {
+/// How to read a weave. Opened from the info button, so the Journal stays quiet.
+struct WeaveKey: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 12) {
-                key(.air, "Air")
-                key(.humidity, "Humidity")
-                key(.temperature, "Temp")
-                key(.pollen, "Pollen (later)")
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Each tile is a moment, woven from the outdoor air at that time.")
+                .font(.subheadline).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                row(.air, "Air quality")
+                row(.humidity, "Humidity")
+                row(.temperature, "Temperature")
+                row(.pollen, "Pollen (not yet)")
             }
-            Text("Denser weave = higher, or further from mild.")
+            HStack(spacing: 10) {
+                ForEach(WeaveSpec.Level.allCases, id: \.self) { l in
+                    VStack(spacing: 4) {
+                        WeaveSwatch(weave: WeaveSpec(levels: [.air: l]), cornerRadius: 8).frame(width: 36, height: 36)
+                        Text(["Low", "Medium", "High"][l.rawValue]).font(.caption2).foregroundStyle(Theme.secondaryText)
+                    }
+                }
+            }
+            Text("Denser = higher. For temperature and humidity, denser means further from mild.")
+                .font(.caption).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                HStack(spacing: 5) { MomentDot(moment: .rescue, size: 8); Text("Rescue") }
+                HStack(spacing: 5) { MomentDot(moment: .maintenance, size: 8); Text("Standard") }
+                HStack(spacing: 5) { MomentDot(moment: .okay, size: 8); Text("I'm okay") }
+            }
+            .font(.caption)
         }
-        .font(.caption)
-        .foregroundStyle(Theme.secondaryText)
+        .padding(18)
+        .frame(width: 300)
     }
 
-    private func key(_ f: WeaveSpec.Factor, _ label: String) -> some View {
-        HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 3).fill(WeaveSwatch.ink(f)).frame(width: 10, height: 10)
-            Text(label)
+    private func row(_ f: WeaveSpec.Factor, _ label: String) -> some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 3).fill(WeaveSwatch.ink(f)).frame(width: 12, height: 12)
+            Text(label).font(.subheadline)
         }
     }
 }
@@ -241,39 +307,46 @@ struct MomentCard: View {
     let event: LogEvent
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                MomentDot(moment: event.moment)
-                Text(event.moment.title).font(.headline)
-                Spacer()
-                Text(event.loggedAt.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
-                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
-            }
-            if let c = event.conditions, !c.observations.isEmpty {
-                VStack(spacing: 0) {
-                    factorRow(.air, "Air", value: airValue(c))
-                    factorRow(.humidity, "Humidity", value: c.best(.humidity).map { "\(Int($0.value.rounded()))%" })
-                    factorRow(.temperature, "Temperature", value: c.best(.temperature).map { "\(Int($0.value.rounded()))°F" })
-                    factorRow(.pollen, "Pollen", value: nil)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        MomentDot(moment: event.moment, size: 9)
+                        Text(event.moment.title).font(.headline)
+                    }
+                    Text(event.loggedAt.formatted(.dateTime.weekday(.wide).hour().minute()))
+                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
                 }
-                Text(sourceLine(c)).font(.footnote).foregroundStyle(Theme.secondaryText)
-            } else if let err = event.envError {
-                Text(err).font(.footnote).foregroundStyle(Theme.secondaryText)
-            } else if event.envStatus == .pending {
-                Text("Noting the outdoor air…").font(.footnote).foregroundStyle(Theme.secondaryText)
-            }
-            HStack {
-                Text("See how the air changed, and every source").font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.accent)
                 Spacer()
-                Image(systemName: "chevron.right").foregroundStyle(Theme.secondaryText)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
             }
-            Text("Outdoor air, not indoor air. Not a diagnosis.")
-                .font(.caption2).foregroundStyle(Theme.secondaryText)
+            .padding(.bottom, 12)
+
+            if let c = event.conditions, !c.observations.isEmpty {
+                Divider()
+                factorRow(.air, "Air quality", value: airValue(c))
+                Divider().padding(.leading, 40)
+                factorRow(.humidity, "Humidity", value: c.best(.humidity).map { "\(Int($0.value.rounded()))%" })
+                Divider().padding(.leading, 40)
+                factorRow(.temperature, "Temperature", value: c.best(.temperature).map { "\(Int($0.value.rounded()))°F" })
+                Divider().padding(.leading, 40)
+                factorRow(.pollen, "Pollen", value: nil)
+                Divider()
+                Text("Outdoor air near you · \(sourceLine(c))")
+                    .font(.caption).foregroundStyle(Theme.secondaryText)
+                    .padding(.top, 12)
+            } else if let err = event.envError {
+                Divider()
+                Text(err).font(.footnote).foregroundStyle(Theme.secondaryText).padding(.top, 12)
+            } else if event.envStatus == .pending {
+                Divider()
+                Text("Noting the outdoor air…").font(.footnote).foregroundStyle(Theme.secondaryText).padding(.top, 12)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: .rect(cornerRadius: 20, style: .continuous))
+        .background(Theme.card, in: .rect(cornerRadius: 22, style: .continuous))
+        .contentShape(.rect(cornerRadius: 22))
     }
 
     /// One condition: a small weave swatch, its name, the plain word, and the reading.
@@ -281,23 +354,18 @@ struct MomentCard: View {
         let level = event.weave.levels[f]
         let word = event.weave.words[f]
         return HStack(spacing: 12) {
-            Group {
-                if let level {
-                    WeaveSwatch(weave: WeaveSpec(levels: [f: level]), cornerRadius: 6)
-                } else {
-                    RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.secondaryText.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                }
-            }
-            .frame(width: 28, height: 28)
+            LevelMeter(level: level, ink: WeaveSwatch.ink(f))
+                .frame(width: 26)
             Text(name)
             Spacer()
-            Text(word.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? (f == .pollen ? "Not yet" : "No reading"))
-                .fontWeight(.semibold)
-                .foregroundStyle(word == nil ? Theme.secondaryText : .primary)
-            if let value { Text(value).foregroundStyle(Theme.secondaryText).monospacedDigit().frame(minWidth: 44, alignment: .trailing) }
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(word.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? (f == .pollen ? "Not yet" : "No reading"))
+                    .foregroundStyle(word == nil ? Theme.secondaryText : .primary)
+                if let value { Text(value).font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText) }
+            }
         }
         .font(.subheadline)
-        .padding(.vertical, 6)
+        .padding(.vertical, 9)
     }
 
     private func airValue(_ c: Conditions) -> String? {
@@ -313,6 +381,45 @@ struct MomentCard: View {
         let miles = c.observations.compactMap(\.distanceKm).map { Int(($0 * 0.621371).rounded()) }
         var line = names.joined(separator: ", ")
         if let lo = miles.min(), let hi = miles.max() { line += lo == hi ? " (\(lo) mi)" : " (\(lo)–\(hi) mi)" }
-        return "From " + line
+        return line
+    }
+}
+
+/// A faint wash of the latest air's inks at the top of the Journal, like a sky. Stronger inks for
+/// higher levels; nothing when there's no reading. Decorative only.
+struct AirWash: View {
+    let weave: WeaveSpec
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        let stops = WeaveSpec.Factor.allCases.compactMap { f -> Color? in
+            guard let l = weave.levels[f] else { return nil }
+            return WeaveSwatch.ink(f).opacity([0.10, 0.18, 0.28][l.rawValue])
+        }
+        if stops.isEmpty || reduceTransparency {
+            Color.clear
+        } else {
+            LinearGradient(colors: stops + [.clear], startPoint: .topLeading, endPoint: .bottom)
+                .blur(radius: 40)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Three short bars: how many are filled is the level (low, medium, high). Dashed when there's no reading.
+struct LevelMeter: View {
+    let level: WeaveSpec.Level?
+    let ink: Color
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 3) {
+            ForEach(0..<3, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(level.map { i <= $0.rawValue } == true ? ink : Theme.secondaryText.opacity(0.22))
+                    .frame(width: 5, height: CGFloat(8 + i * 5))
+            }
+        }
+        .frame(height: 20, alignment: .bottom)
+        .accessibilityHidden(true)
     }
 }

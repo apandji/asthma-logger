@@ -17,7 +17,7 @@ struct AsthmaLogApp: App {
         WindowGroup {
             RootView()
                 .environment(services)
-                .tint(Theme.accent)
+                .tint(Theme.tint)
                 .task {
                     let context = container.mainContext
                     #if DEBUG
@@ -25,6 +25,7 @@ struct AsthmaLogApp: App {
                     let args = ProcessInfo.processInfo.arguments
                     if args.contains("-demoWeek") { DemoSeeder.add(in: context) }
                     if args.contains("-skipOnboarding") { UserDefaults.standard.set(true, forKey: Prefs.didOnboard) }
+                    if args.contains("-showOnboarding") { UserDefaults.standard.set(false, forKey: Prefs.didOnboard) }
                     #endif
                     await services.resumePending(in: context)
                     watch.start { log in

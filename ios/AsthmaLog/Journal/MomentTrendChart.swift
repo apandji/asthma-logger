@@ -95,6 +95,7 @@ struct MomentTrendChart: View {
         }
         .chartYAxis { AxisMarks(position: .leading) }
         .chartYScale(domain: .automatic(includesZero: false))
+        .animation(.smooth(duration: 0.45), value: factor)
     }
 
     /// The `days` days ending at the end of the moment's day (or now, if sooner).

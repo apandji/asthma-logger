@@ -77,12 +77,23 @@ struct SettingsView: View {
 
                 #if DEBUG
                 Section {
-                    NavigationLink("Voice effect (prototype)") { VoiceOrbPrototype() }
-                    NavigationLink("Airways (prototype)") { AirwaysPrototype() }
+                    NavigationLink("Voice effect") { VoiceOrbPrototype() }
                 } header: {
                     Text("Prototypes")
                 } footer: {
-                    Text("Debug builds only. The voice effect uses simulated sound; Airways uses example breathing scores.")
+                    Text("Debug builds only. The voice effect uses simulated sound.")
+                }
+
+                Section {
+                    prototypeLink("Airways v2 · horizon", "You're the breathing line; the air is the sky above.") { BreathHorizonPrototype() }
+                    prototypeLink("Aura", "One day as a clock, you in the middle, air in rings around you.") { AuraPrototype() }
+                    prototypeLink("Sampler", "The week as cross-stitch: denser where the air was higher.") { SamplerPrototype() }
+                    prototypeLink("Overprint", "Three riso inks as hills through the week.") { OverprintPrototype() }
+                    prototypeLink("Airways v1 · tubes", "April's first sketch: one tube per day.") { AirwaysPrototype() }
+                } header: {
+                    Text("Air visualizations")
+                } footer: {
+                    Text("Debug builds only. PM2.5 and ozone are from your moments; PM10, NO₂, pollen and breathing scores are examples.")
                 }
                 #endif
 
@@ -101,6 +112,17 @@ struct SettingsView: View {
             }
         }
     }
+
+    #if DEBUG
+    private func prototypeLink<D: View>(_ title: String, _ note: String, @ViewBuilder _ destination: @escaping () -> D) -> some View {
+        NavigationLink(destination: destination) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(note).font(.caption).foregroundStyle(Theme.secondaryText)
+            }
+        }
+    }
+    #endif
 
     private func addDemoWeek() {
         let n = DemoSeeder.add(in: context)

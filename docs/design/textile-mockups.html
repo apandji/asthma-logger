@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Textile direction mockups</title>
+<!-- Mockups for docs/design/textile-direction.md. Static; open in a browser. New York falls back to Georgia outside Apple platforms. -->
+<style>
+  body { margin: 0; padding: 32px 24px 48px; background: #E5E5EA; font-family: -apple-system, system-ui, sans-serif; color: #1c1c1e; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .intro { font-size: 14px; color: #6c6c70; margin: 0 0 28px; max-width: 760px; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: repeat(3, 360px); gap: 32px 28px; }
+  .cap { font-size: 13px; color: #6c6c70; margin: 0 0 8px; }
+  .cap b { color: #1c1c1e; font-weight: 600; }
+  svg.phone { display: block; border-radius: 46px; box-shadow: 0 0 0 1px rgba(0,0,0,.10); }
+</style>
+</head>
+<body>
+<h1>Textile direction: felt air</h1>
+<p class="intro">Stitches and fabric on brand moments and data only; lists, settings and controls stay stock iOS. Shape carries meaning (cross-stitch = used inhaler, knot = I'm okay, pink/blue backstitch = air/weather stood out, dashed = forecast). Demo numbers. Spec: textile-direction.md.</p>
+<div class="grid" id="grid"></div>
+<script>
+const NS = "http://www.w3.org/2000/svg";
+let seed = 7; const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+const T = {
+  light: { name: "light", fabric: "#EFE8DA", fabric2: "#E6DCC8", weave: "rgba(120,100,70,.055)", hole: "rgba(90,70,40,.20)",
+           app: "#F2F2F7", card: "#FFFFFF", ink: "#2A2522", text: "#1C1C1E", sec: "#6C6C70", ter: "#AEAEB2",
+           pink: "#E2477E", blue: "#2F6FC4", pinkT: "rgba(226,71,126,.10)", blueT: "rgba(47,111,196,.09)", pale: "rgba(42,37,34,.22)",
+           sheen: "rgba(255,255,255,.45)", sep: "rgba(60,60,67,.16)", glass: "rgba(255,255,255,.86)", chip: "#E9E9EE" },
+  dark:  { name: "dark", fabric: "#1F1D22", fabric2: "#2A2730", weave: "rgba(255,255,255,.035)", hole: "rgba(255,255,255,.12)",
+           app: "#000000", card: "#1C1C1E", ink: "#EDE6DA", text: "#FFFFFF", sec: "#98989F", ter: "#48484A",
+           pink: "#FF5A92", blue: "#5B9CFF", pinkT: "rgba(255,90,146,.18)", blueT: "rgba(91,156,255,.17)", pale: "rgba(237,230,218,.22)",
+           sheen: "rgba(255,255,255,.28)", sep: "rgba(84,84,88,.45)", glass: "rgba(44,44,46,.88)", chip: "#2C2C2E" },
+};
+const SF = "-apple-system,system-ui,sans-serif", NY = '"New York",ui-serif,Georgia,serif';
+
+function el(p, tag, a = {}) { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); p.appendChild(e); return e; }
+function text(p, x, y, size, str, o = {}) {
+  const lines = String(str).split("\n");
+  const e = el(p, "text", { x, y, "font-size": size, fill: o.fill, "font-family": o.serif ? NY : SF, "font-weight": o.w || 400,
+                            "text-anchor": o.anchor || "start", "letter-spacing": o.ls || 0 });
+  lines.forEach((ln, i) => {
+    const ts = el(e, "tspan", { x, dy: i ? size * (o.lh || 1.25) : 0 });
+    // inline colour runs: [[pink]] ... [[/]]
+    const parts = ln.split(/\[\[(\w+)\]\]/);
+    let color = null;
+    parts.forEach((part, j) => {
+      if (j % 2 === 1) { color = part === "end" ? null : (o.colors || {})[part]; return; }
+      if (!part) return;
+      const s = el(ts, "tspan", color ? { fill: color } : {}); s.textContent = part;
+    });
+  });
+  return e;
+}
+function fabric(p, t, x, y, w, h, fill) {
+  el(p, "rect", { x, y, width: w, height: h, fill: fill || t.fabric });
+  const g = el(p, "g", {});
+  for (let yy = y; yy < y + h; yy += 4) el(g, "line", { x1: x, y1: yy, x2: x + w, y2: yy + (rnd() - .5), stroke: t.weave, "stroke-width": 1 });
+  for (let xx = x; xx < x + w; xx += 4) el(g, "line", { x1: xx, y1: y, x2: xx + (rnd() - .5), y2: y + h, stroke: t.weave, "stroke-width": 1 });
+}
+function holes(p, t, x0, y0, cols, rows, pitch) { const g = el(p, "g", {}); for (let r = 0; r <= rows; r++) for (let c = 0; c <= cols; c++) el(g, "circle", { cx: x0 + c * pitch, cy: y0 + r * pitch, r: .9, fill: t.hole }); }
+function cross(p, t, cx, cy, s, color, o = {}) {
+  const g = el(p, "g", { transform: `rotate(${(rnd() - .5) * 8} ${cx} ${cy})`, opacity: o.op || 1 });
+  const w = s * .3, d = s / 2 - 1;
+  const legs = [[cx - d, cy - d, cx + d, cy + d], [cx + d, cy - d, cx - d, cy + d]];
+  legs.slice(0, o.half ? 1 : 2).forEach(([x1, y1, x2, y2]) => {
+    el(g, "line", { x1, y1, x2, y2, stroke: color, "stroke-width": w, "stroke-linecap": "round" });
+    el(g, "line", { x1: x1 + .6, y1: y1 + .4, x2: x2 + .6, y2: y2 + .4, stroke: t.sheen, "stroke-width": w * .28, "stroke-linecap": "round" });
+  });
+  if (o.dashed) { // forecast: a dashed outline, not a stitch
+    g.remove();
+    el(p, "rect", { x: cx - s / 2, y: cy - s / 2, width: s, height: s, rx: 3, fill: "none", stroke: color, "stroke-width": 1.5, "stroke-dasharray": "3 3" });
+  }
+}
+function knot(p, t, cx, cy, r, color) { el(p, "circle", { cx, cy, r, fill: "none", stroke: color, "stroke-width": r * .45 }); el(p, "circle", { cx: cx - r * .3, cy: cy - r * .3, r: r * .25, fill: t.sheen }); }
+function back(p, x1, y1, x2, y2, color, w = 3) { el(p, "line", { x1, y1, x2, y2, stroke: color, "stroke-width": w, "stroke-linecap": "round" }); }
+function running(p, pts, color, dash = "5 4", w = 1.6) { el(p, "path", { d: "M" + pts.map(q => q.join(",")).join(" L"), fill: "none", stroke: color, "stroke-width": w, "stroke-dasharray": dash, "stroke-linecap": "round" }); }
+function hem(p, t, y, w) { running(p, [[16, y], [w - 16, y]], t.pale, "6 5", 1.8); }
+
+const FONT = { f: [".##", "#..", "###", "#..", "#..", "#.."], e: ["...", ".#.", "#.#", "###", "#..", ".##"], l: ["#.", "#.", "#.", "#.", "#.", ".#"], t: [".#.", "###", ".#.", ".#.", ".#.", "..#"], a: ["...", "##.", "..#", ".##", "#.#", ".##"], i: ["#", ".", "#", "#", "#", "#"], r: ["...", "#.#", "##.", "#..", "#..", "#.."], " ": ["..", ".."] };
+function wordWidth(word, pitch) { let w = 0; for (const ch of word) w += (FONT[ch][0].length + 1) * pitch; return w - pitch; }
+function stitchWord(p, t, x, y, pitch, word, color) { let cx = x; for (const ch of word) { const g = FONT[ch]; g.forEach((row, r) => [...row].forEach((v, c) => { if (v === "#") cross(p, t, cx + c * pitch + pitch / 2, y + r * pitch + pitch / 2, pitch, color); })); cx += (g[0].length + 1) * pitch; } }
+
+function phone(caption, t, draw) {
+  const wrap = document.createElement("div");
+  wrap.innerHTML = `<p class="cap">${caption}</p>`;
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 360 780"); svg.setAttribute("width", "360"); svg.setAttribute("height", "780"); svg.setAttribute("class", "phone");
+  wrap.appendChild(svg); document.getElementById("grid").appendChild(wrap);
+  el(svg, "rect", { x: 0, y: 0, width: 360, height: 780, fill: t.app });
+  draw(svg);
+  text(svg, 36, 30, 15, "9:41", { fill: t.text, w: 600 });
+  el(svg, "rect", { x: 130, y: 12, width: 100, height: 28, rx: 14, fill: "#000" });
+}
+function navCircle(p, t, x, y, glyph) { el(p, "circle", { cx: x, cy: y, r: 18, fill: t.card }); text(p, x, y + 5, 15, glyph, { fill: t.text, anchor: "middle" }); }
+function floating(p, t, active) {
+  el(p, "rect", { x: 18, y: 640, width: 324, height: 50, rx: 25, fill: t.glass, stroke: t.sep });
+  text(p, 180, 671, 17, "+  Used inhaler", { fill: t.pink, w: 600, anchor: "middle" });
+  el(p, "rect", { x: 18, y: 700, width: 324, height: 58, rx: 29, fill: t.glass, stroke: t.sep });
+  el(p, "rect", { x: active === "journal" ? 24 : 182, y: 705, width: 154, height: 48, rx: 24, fill: t.chip });
+  text(p, 101, 735, 12, "Journal", { fill: active === "journal" ? t.pink : t.text, w: 600, anchor: "middle" });
+  text(p, 259, 735, 12, "Recap", { fill: active === "recap" ? t.pink : t.text, w: 600, anchor: "middle" });
+}
+
+// 1. Onboarding welcome
+phone("<b>Onboarding</b> · welcome (light)", T.light, (s) => {
+  const t = T.light; seed = 3;
+  fabric(s, t, 0, 0, 360, 780);
+  const pitch = 10, w = wordWidth("felt air", pitch);
+  stitchWord(s, t, (360 - w) / 2, 200, pitch, "felt air", t.ink);
+  el(s, "path", { d: "M 296 262 C 336 300, 344 420, 336 500 S 300 600, 250 628", fill: "none", stroke: t.pink, "stroke-width": 1.6, opacity: .7 });
+  knot(s, t, 248, 630, 5, t.pink);
+  text(s, 180, 330, 26, "felt air keeps track\nof the air for you,\nso you don't have to.", { fill: t.ink, serif: true, w: 500, anchor: "middle" });
+  text(s, 180, 450, 14, "Outdoor air only. Not medical advice.", { fill: t.sec, anchor: "middle" });
+  el(s, "rect", { x: 40, y: 660, width: 280, height: 54, rx: 27, fill: t.ink });
+  text(s, 180, 693, 17, "Get started", { fill: t.fabric, w: 600, anchor: "middle" });
+  [0, 1, 2].forEach(i => el(s, "circle", { cx: 168 + i * 12, cy: 740, r: 3.5, fill: i ? t.pale : t.ink }));
+});
+
+// 2 & 8. Journal (light, dark)
+function journal(t, caption) {
+  phone(caption, t, (s) => {
+    seed = 5;
+    fabric(s, t, 0, 0, 360, 372);
+    navCircle(s, t, 40, 72, "⚙"); navCircle(s, t, 320, 72, "▦");
+    text(s, 180, 78, 17, "Journal", { fill: t.text, w: 600, anchor: "middle" });
+    text(s, 180, 120, 20, "Today, October 3", { fill: t.text, w: 700, anchor: "middle" });
+    const days = [["S", 2, "p"], ["M", 0, ""], ["T", 1, "b"], ["W", 1, ""], ["T", 0, ""], ["F", 3, "pb"], ["S", -1, "pb"]];
+    days.forEach(([d, n, c], i) => {
+      const x = 32 + i * 49, today = i === 5, future = n < 0;
+      if (today) { el(s, "path", { d: `M${x - 5} 134 L${x + 5} 134 L${x} 140 Z`, fill: t.text }); el(s, "circle", { cx: x, cy: 154, r: 11, fill: t.text }); }
+      text(s, x, 159, 13, d, { fill: today ? t.fabric : (future ? t.ter : t.sec), w: 600, anchor: "middle" });
+      el(s, "rect", { x: x - 20, y: 174, width: 40, height: 112, rx: 20, fill: t.fabric2 });
+      running(s, [[x - 14, 182], [x - 14, 278]], t.pale, "3 4", 1);
+      if (n > 0) for (let k = 0; k < Math.min(n, 3); k++) cross(s, t, x, 200 + k * 20, 14, t.ink);
+      else if (n === 0) knot(s, t, x, 206, 4.5, t.ink);
+      const cols = []; if (c.includes("p")) cols.push(t.pink); if (c.includes("b")) cols.push(t.blue);
+      cols.forEach((col, j) => future ? running(s, [[x - 9, 262 + j * 7], [x + 9, 262 + j * 7]], col, "3 3", 2.4) : back(s, x - 9, 262 + j * 7, x + 9, 262 + j * 7, col, 3));
+    });
+    text(s, 24, 318, 22, "The air right now looks like\n[[pink]]the times you used your inhaler.", { fill: t.text, serif: true, w: 500, colors: { pink: t.pink } });
+    hem(s, t, 372, 360);
+    text(s, 24, 410, 22, "Log", { fill: t.text, w: 700 });
+    text(s, 336, 410, 15, "3 moments", { fill: t.pink, anchor: "end" });
+    el(s, "circle", { cx: 30, cy: 432, r: 4, fill: t.pink }); text(s, 40, 437, 13, "Air", { fill: t.pink, w: 600 });
+    el(s, "rect", { x: 16, y: 446, width: 328, height: 44, rx: 14, fill: t.pinkT });
+    text(s, 32, 473, 16, "Ozone", { fill: t.text }); text(s, 328, 473, 16, "High", { fill: t.pink, w: 600, anchor: "end" });
+    el(s, "circle", { cx: 30, cy: 510, r: 4, fill: t.blue }); text(s, 40, 515, 13, "Weather", { fill: t.blue, w: 600 });
+    el(s, "rect", { x: 16, y: 524, width: 328, height: 44, rx: 14, fill: t.blueT });
+    text(s, 32, 551, 16, "Humidity", { fill: t.text }); text(s, 328, 551, 16, "Humid · 84%", { fill: t.blue, w: 600, anchor: "end" });
+    el(s, "rect", { x: 16, y: 582, width: 328, height: 50, rx: 14, fill: t.card });
+    cross(s, t, 40, 607, 14, t.ink); back(s, 32, 619, 48, 619, t.pink, 2.6);
+    text(s, 62, 612, 16, "Used inhaler", { fill: t.text, w: 600 }); text(s, 172, 612, 16, "5:40 PM", { fill: t.sec });
+    text(s, 328, 612, 16, "›", { fill: t.ter, anchor: "end" });
+    floating(s, t, "journal");
+  });
+}
+journal(T.light, "<b>Journal</b> · week strip + day log (light)");
+
+// 3. Logging moment
+phone("<b>Logging</b> · the moment after one tap", T.light, (s) => {
+  const t = T.light; seed = 9;
+  el(s, "rect", { x: 0, y: 0, width: 360, height: 780, fill: "rgba(0,0,0,.25)" });
+  el(s, "rect", { x: 0, y: 120, width: 360, height: 680, rx: 34, fill: t.app });
+  el(s, "rect", { x: 160, y: 130, width: 40, height: 5, rx: 2.5, fill: t.ter });
+  fabric(s, t, 16, 150, 328, 210);
+  holes(s, t, 116, 186, 8, 6, 16);
+  cross(s, t, 180, 250, 64, t.ink, { half: true });
+  // second leg in progress: thread + needle
+  back(s, 205, 225, 182, 250, t.ink, 19);
+  el(s, "path", { d: "M 182 250 C 170 262, 150 300, 120 318", fill: "none", stroke: t.ink, "stroke-width": 1.4 });
+  el(s, "line", { x1: 205, y1: 225, x2: 236, y2: 194, stroke: "#9A9AA0", "stroke-width": 2.4, "stroke-linecap": "round" });
+  back(s, 150, 300, 210, 300, t.pink, 4);
+  back(s, 150, 312, 210, 312, t.blue, 4);
+  text(s, 180, 400, 13, "LOGGED · 5:40 PM", { fill: t.sec, w: 600, anchor: "middle", ls: .4 });
+  text(s, 180, 434, 22, "Ozone is high and it's humid\noutside right now.", { fill: t.text, serif: true, w: 500, anchor: "middle" });
+  text(s, 180, 500, 13, "Outdoor air near you · Apple Weather, OpenAQ", { fill: t.sec, anchor: "middle" });
+  text(s, 24, 548, 13, "ANYTHING GOING ON? (OPTIONAL)", { fill: t.sec, w: 600, ls: .4 });
+  const chips = ["Exercise", "Cold air", "Pets", "Smoke", "Stress", "Cleaning products"];
+  let cx = 24, cy = 566;
+  chips.forEach((c, i) => { const w = c.length * 7.6 + 28; if (cx + w > 340) { cx = 24; cy += 42; } el(s, "rect", { x: cx, y: cy, width: w, height: 32, rx: 16, fill: i === 1 ? t.ink : t.chip }); text(s, cx + w / 2, cy + 21, 14, c, { fill: i === 1 ? t.fabric : t.text, anchor: "middle" }); cx += w + 8; });
+  el(s, "rect", { x: 24, y: 690, width: 312, height: 52, rx: 26, fill: t.ink });
+  text(s, 180, 722, 17, "Done", { fill: t.fabric, w: 600, anchor: "middle" });
+});
+
+// 4. Moment detail
+phone("<b>Moment</b> · detail and sources", T.light, (s) => {
+  const t = T.light; seed = 13;
+  text(s, 20, 78, 17, "‹ Today", { fill: t.pink });
+  text(s, 180, 78, 17, "5:40 PM", { fill: t.text, w: 600, anchor: "middle" });
+  fabric(s, t, 16, 100, 328, 150);
+  el(s, "rect", { x: 16, y: 100, width: 328, height: 150, rx: 0, fill: "none" });
+  knot(s, t, 70, 176, 6, t.ink);
+  running(s, [[78, 176], [150, 170], [176, 175]], t.pale, "5 4", 1.8);
+  cross(s, t, 190, 175, 34, t.ink); back(s, 170, 204, 210, 204, t.pink, 4); back(s, 170, 214, 210, 214, t.blue, 4);
+  text(s, 70, 230, 11, "3:05 PM", { fill: t.sec, anchor: "middle" }); text(s, 190, 236, 11, "5:40 PM", { fill: t.sec, anchor: "middle" });
+  const card = (y, h) => el(s, "rect", { x: 16, y, width: 328, height: h, rx: 14, fill: t.card });
+  card(266, 88);
+  text(s, 32, 294, 16, "What", { fill: t.text }); text(s, 328, 294, 16, "Used inhaler", { fill: t.sec, anchor: "end" });
+  el(s, "line", { x1: 32, y1: 310, x2: 344, y2: 310, stroke: t.sep });
+  text(s, 32, 336, 16, "Where", { fill: t.text }); text(s, 328, 336, 16, "Probably outdoors", { fill: t.sec, anchor: "end" });
+  text(s, 24, 382, 13, "OUTDOOR CONDITIONS", { fill: t.sec, w: 600, ls: .4 });
+  card(394, 200);
+  const rows = [["Ozone high · 34 ppb", "3 mi away · 5:00 PM · OpenAQ", t.pink], ["Humid · 84%", "Modeled · 5:40 PM · Apple Weather", t.blue], ["76°F", "Modeled · 5:40 PM · Apple Weather", null], ["AQI 32 · Good · ozone", "Regional · 5:00 PM · AirNow", null]];
+  rows.forEach(([a, b, c], i) => { const y = 420 + i * 46; if (c) back(s, 32, y - 5, 44, y - 5, c, 3.4); text(s, c ? 54 : 32, y, 15, a, { fill: t.text }); text(s, c ? 54 : 32, y + 18, 12, b, { fill: t.sec }); });
+  text(s, 24, 618, 12, "Outdoor air near you, not indoor air, not a diagnosis.", { fill: t.sec });
+  text(s, 24, 640, 13, "NOTES", { fill: t.sec, w: 600, ls: .4 });
+  el(s, "rect", { x: 24, y: 652, width: 92, height: 32, rx: 16, fill: t.ink }); text(s, 70, 673, 14, "Cold air", { fill: t.fabric, anchor: "middle" });
+  el(s, "rect", { x: 124, y: 652, width: 48, height: 32, rx: 16, fill: t.chip }); text(s, 148, 673, 16, "+", { fill: t.text, anchor: "middle" });
+});
+
+// 5 & 9. Recap (light, dark)
+function recap(t, caption) {
+  phone(caption, t, (s) => {
+    seed = 11;
+    fabric(s, t, 0, 0, 360, 780);
+    el(s, "rect", { x: 140, y: 58, width: 80, height: 32, rx: 16, fill: t.card });
+    text(s, 180, 79, 14, "Recap", { fill: t.text, w: 600, anchor: "middle" });
+    text(s, 24, 132, 12, "OF THE 10 TIMES YOU USED YOUR INHALER", { fill: t.sec, w: 600, ls: .5 });
+    text(s, 24, 168, 26, "[[pink]]ozone was high 8 times[[end]], and\n[[blue]]it was humid 6.", { fill: t.ink, serif: true, w: 500, colors: { pink: t.pink, blue: t.blue } });
+    const p = 26, x0 = 24, y0 = 222;
+    holes(s, t, x0, y0, 12, 1, p);
+    for (let i = 0; i < 10; i++) cross(s, t, x0 + (i + 1) * p, y0 + p / 2, p * 0.62, t.ink);
+    for (let i = 0; i < 8; i++) back(s, x0 + (i + 1) * p - 7, y0 + p + 6, x0 + (i + 1) * p + 7, y0 + p + 6, t.pink, 3);
+    for (let i = 0; i < 6; i++) back(s, x0 + (i + 1) * p - 7, y0 + p + 13, x0 + (i + 1) * p + 7, y0 + p + 13, t.blue, 3);
+    text(s, 24, y0 + p + 40, 13, "Each × is one time you used your inhaler.", { fill: t.sec });
+    text(s, 24, y0 + p + 84, 12, "ON 24 USUAL DAYS", { fill: t.sec, w: 600, ls: .5 });
+    const y1 = y0 + p + 96;
+    holes(s, t, x0, y1, 12, 2, p);
+    const humidUsual = new Set([1, 4, 6, 9, 13, 15, 18, 20, 22]);
+    for (let i = 0; i < 24; i++) { const x = x0 + (i % 12) * p + p / 2, y = y1 + Math.floor(i / 12) * p + p / 2; knot(s, t, x, y - 2, 4, t.pale); if (humidUsual.has(i)) back(s, x - 8, y + 8, x + 8, y + 8, t.blue, 2.6); }
+    text(s, 24, y1 + 2 * p + 30, 13, "High ozone 0 of 24 · humid 9 of 24", { fill: t.sec });
+    hem(s, t, y1 + 2 * p + 56, 360);
+    const y2 = y1 + 2 * p + 92;
+    text(s, 24, y2, 12, "TODAY", { fill: t.sec, w: 600, ls: .5 });
+    text(s, 24, y2 + 28, 18, "Usual-looking until 5 PM.", { fill: t.ink, serif: true, w: 500 });
+    text(s, 24, y2 + 52, 14, "After that it looks more like the times\nyou used your inhaler.", { fill: t.sec });
+    text(s, 24, 626, 11, "Outdoor air only · not a diagnosis · Template", { fill: t.sec });
+    floating(s, t, "recap");
+  });
+}
+recap(T.light, "<b>Recap</b> · counts as a stitched sampler (light)");
+
+// 6. History
+phone("<b>History</b> · last 5 weeks as a sampler", T.light, (s) => {
+  const t = T.light; seed = 17;
+  text(s, 20, 78, 17, "‹ Journal", { fill: t.pink });
+  text(s, 180, 78, 17, "Last 5 weeks", { fill: t.text, w: 600, anchor: "middle" });
+  fabric(s, t, 16, 104, 328, 420);
+  ["M", "T", "W", "T", "F", "S", "S"].forEach((d, i) => text(s, 46 + i * 44.5, 132, 12, d, { fill: t.sec, anchor: "middle", w: 600 }));
+  const n = [2, 1, 0, 0, 0, 0, 3, 2, 0, 0, 0, 0, 1, 1, 3, 1, 2, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 2];
+  const cond = { 0: "p", 6: "pb", 14: "p", 16: "b", 7: "b", 32: "pb", 20: "p", 27: "b" };
+  n.forEach((k, i) => {
+    const cx = 46 + (i % 7) * 44.5, cy = 168 + Math.floor(i / 7) * 70;
+    el(s, "rect", { x: cx - 19, y: cy - 22, width: 38, height: 54, rx: 8, fill: t.fabric2, opacity: .7 });
+    if (k === 0) knot(s, t, cx, cy, 4, t.pale);
+    else for (let j = 0; j < Math.min(k, 3); j++) cross(s, t, cx - (Math.min(k, 3) - 1) * 6 + j * 12, cy, 11, t.ink);
+    const c = cond[i] || ""; let yy = cy + 16;
+    if (c.includes("p")) { back(s, cx - 10, yy, cx + 10, yy, t.pink, 3); yy += 7; }
+    if (c.includes("b")) back(s, cx - 10, yy, cx + 10, yy, t.blue, 3);
+    if (i === 32) el(s, "rect", { x: cx - 22, y: cy - 25, width: 44, height: 60, rx: 10, fill: "none", stroke: t.pink, "stroke-width": 2 });
+  });
+  text(s, 24, 556, 13, "× = a time you used your inhaler (up to 3 shown)\n○ = only I'm okay moments that day\npink: air stood out · blue: weather stood out", { fill: t.sec, lh: 1.5 });
+  text(s, 24, 640, 13, "Tap a day to open it in the Journal.", { fill: t.sec });
+});
+
+// 7. Looking ahead
+phone("<b>Looking ahead</b> · forecast windows in dashed stitch", T.light, (s) => {
+  const t = T.light; seed = 19;
+  text(s, 24, 96, 30, "Looking ahead", { fill: t.text, w: 700 });
+  text(s, 24, 124, 14, "Forecast for your last logged spot.\nPollen not included yet.", { fill: t.sec });
+  const X = (hr) => 64 + hr / 24 * 272;
+  [["12 AM", 0], ["noon", 12], ["12 AM", 24]].forEach(([l, hr]) => text(s, X(hr), 172, 11, l, { fill: t.sec, anchor: "middle" }));
+  const days = [["Sat", [[20, 22, "p"]], 1], ["Sun", [[12, 15, "p"], [17, 22, "pb"]], .85], ["Mon", [[17, 22, "b"]], .6]];
+  days.forEach(([d, ws, op], i) => {
+    const y = 182 + i * 64;
+    text(s, 24, y + 27, 14, d, { fill: t.text, w: 600 });
+    const g = el(s, "g", { opacity: op });
+    fabric(g, t, 64, y, 272, 40, t.fabric);
+    ws.forEach(([a, b, c]) => {
+      el(g, "rect", { x: X(a), y: y + 4, width: X(b) - X(a), height: 32, rx: 6, fill: "none", stroke: c.includes("p") ? t.pink : t.blue, "stroke-width": 1.8, "stroke-dasharray": "4 3" });
+      let yy = y + 16; if (c.includes("p")) { running(g, [[X(a) + 6, yy], [X(b) - 6, yy]], t.pink, "4 3", 2.6); yy += 9; }
+      if (c.includes("b")) running(g, [[X(a) + 6, yy], [X(b) - 6, yy]], t.blue, "4 3", 2.6);
+    });
+  });
+  el(s, "rect", { x: 16, y: 386, width: 328, height: 150, rx: 16, fill: t.card });
+  text(s, 32, 414, 13, "SUN · 5–10 PM", { fill: t.sec, w: 600, ls: .4 });
+  text(s, 32, 444, 18, "Looks more like the times you\nused your inhaler: high ozone\nand humid air.", { fill: t.text, serif: true, w: 500 });
+  text(s, 32, 518, 13, "High ozone: 8 of 10 inhaler times, 0 of 24 usual days.", { fill: t.sec });
+  text(s, 24, 566, 12, "Dashed = forecast, not yet lived. Later days fade: less certain.", { fill: t.sec });
+});
+
+journal(T.dark, "<b>Journal</b> · on knit (dark)");
+recap(T.dark, "<b>Recap</b> · on knit (dark)");
+</script>
+</body>
+</html>

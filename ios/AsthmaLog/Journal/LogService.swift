@@ -17,20 +17,63 @@ final class LogService {
 
     @discardableResult
     func log(_ kind: FrameKind, in context: ModelContext, writeToHealth: Bool) async -> LogEvent {
-        let event = LogEvent(kind: kind)
+        await log(MomentKind(kind), in: context, writeToHealth: writeToHealth)
+    }
+
+    /// Conditions are fetched for "now", so a moment that arrives late (e.g. queued on the watch while the
+    /// phone was away) is saved without them rather than stamped with the wrong air.
+    static let freshness: TimeInterval = 15 * 60
+
+    @discardableResult
+    func log(_ moment: MomentKind, at date: Date = .now, id: UUID = UUID(),
+             in context: ModelContext, writeToHealth: Bool) async -> LogEvent {
+        lastError = nil
+        let event = LogEvent(moment: moment, loggedAt: date, id: id)
         context.insert(event)
         try? context.save()
 
-        if kind == .attack && writeToHealth && health.isAvailable {
+        if Date().timeIntervalSince(date) <= Self.freshness {
+            await enrich(event)
+        } else {
+            event.envStatus = .failed
+            event.envError = "Logged on Apple Watch while your iPhone was away, so there's no air reading."
+        }
+        try? context.save()
+
+        if moment == .rescue && writeToHealth && health.isAvailable {
             do {
                 event.healthSampleID = try await health.savePuff(at: event.loggedAt, logID: event.id)
             } catch {
                 lastError = "Apple Health: \(error.localizedDescription)"
             }
         }
-        await enrich(event)
         try? context.save()
         return event
+    }
+
+    /// Moments left "noting the air" when the app was closed: retry if still fresh, otherwise say so.
+    func resumePending(in context: ModelContext) async {
+        let pending = EnvStatus.pending.rawValue
+        let stuck = (try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.envStatusRaw == pending }))) ?? []
+        for e in stuck {
+            if Date().timeIntervalSince(e.loggedAt) <= Self.freshness {
+                await enrich(e)
+            } else {
+                e.envStatus = .failed
+                e.envError = "The app closed before it could check the air."
+            }
+        }
+        try? context.save()
+    }
+
+    /// A moment logged on Apple Watch. Ignored if it already arrived (the watch can resend).
+    func logFromWatch(_ log: WatchLog, in context: ModelContext) async {
+        let id = log.id
+        let existing = FetchDescriptor<LogEvent>(predicate: #Predicate { $0.id == id })
+        if let count = try? context.fetchCount(existing), count > 0 { return }
+        let moment: MomentKind = log.kind == .rescue ? .rescue : .maintenance
+        let writeToHealth = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
+        await self.log(moment, at: log.at, id: log.id, in: context, writeToHealth: writeToHealth)
     }
 
     /// Safe to call again (Retry) on a failed or partial log. Conditions are for now, so a retry
@@ -53,7 +96,7 @@ final class LogService {
             let c = await conditions.conditions(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude)
             event.conditions = c
             event.envStatus = c.observations.isEmpty ? .failed : (c.errors.isEmpty ? .ready : .partial)
-            if c.observations.isEmpty { event.envError = c.errors.joined(separator: "\n") }
+            if c.observations.isEmpty { event.envError = "Couldn't reach the air services. Open the moment to try again." }
         } catch {
             event.envStatus = .failed
             event.envError = error.localizedDescription
@@ -79,8 +122,8 @@ final class LogService {
         recent.fetchLimit = 200
         guard let events = try? context.fetch(recent), !events.isEmpty else { return }
         let now = Date()
-        let lastBaseline = events.first { $0.kind == .baseline }?.loggedAt
-        let lastPuff = events.first { $0.kind == .attack }?.loggedAt
+        let lastBaseline = events.first { $0.moment == .okay }?.loggedAt
+        let lastPuff = events.first { $0.moment == .rescue }?.loggedAt
         if let b = lastBaseline, now.timeIntervalSince(b) < 20 * 3600 { return }
         if let p = lastPuff, now.timeIntervalSince(p) < 2 * 3600 { return }
         await log(.baseline, in: context, writeToHealth: false)

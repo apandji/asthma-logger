@@ -9,8 +9,8 @@ enum LocationError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .denied: "Location is off for Asthma Log. Turn it on in Settings → Privacy → Location Services."
-        case .unavailable: "Couldn't get a location fix."
+        case .denied: "Location is off for felt air. Turn it on in Settings → Privacy → Location Services."
+        case .unavailable: "Couldn't find where you are."
         }
     }
 }
@@ -21,8 +21,8 @@ final class LocationService {
     private var session: CLServiceSession?
     private(set) var lastFix: CLLocation?
 
-    /// Waits for a fix of ±20 m or better, or returns the best one seen when `timeout` runs out.
-    func currentLocation(timeout: Duration = .seconds(10)) async throws -> CLLocation {
+    /// Waits for a fix of ±65 m or better, or returns the best one seen when `timeout` runs out.
+    func currentLocation(timeout: Duration = .seconds(5)) async throws -> CLLocation {
         if session == nil {
             session = CLServiceSession(authorization: .whenInUse)
         }
@@ -35,7 +35,7 @@ final class LocationService {
                 }
                 if let loc = update.location {
                     box.offer(loc)
-                    if loc.horizontalAccuracy <= 20 { return }
+                    if loc.horizontalAccuracy <= 65 { return }  // indoors rarely beats ~50 m; good enough for outdoor air
                 }
             }
         }

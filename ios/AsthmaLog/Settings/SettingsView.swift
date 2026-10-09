@@ -1,4 +1,5 @@
 import AsthmaCore
+import SwiftData
 import SwiftUI
 
 struct SettingsView: View {
@@ -8,6 +9,9 @@ struct SettingsView: View {
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.useDemoData) private var demo = false
+    @Environment(\.modelContext) private var context
+    @AppStorage(Prefs.didOnboard) private var didOnboard = true
+    @State private var demoNote: String?
 
     var body: some View {
         NavigationStack {
@@ -36,12 +40,12 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("Save puffs to Apple Health", isOn: $writeToHealth)
-                    Toggle("Log a usual moment on app open", isOn: $autoBaseline)
+                    Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
+                    Toggle("Add I'm okay moments automatically", isOn: $autoBaseline)
                 } header: {
                     Text("Logging")
                 } footer: {
-                    Text("Usual moments are what your inhaler logs are compared against. When on, opening the app logs one if there's been none in 20 hours and no puff in the last 2.")
+                    Text("I'm okay moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
                 }
 
                 Section("Data sources") {
@@ -58,11 +62,26 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Text("Asthma Log is a diary, not a medical device. It compares outdoor conditions on your inhaler days with your usual days. It can't see indoor air and doesn't diagnose or predict attacks.")
+                    Button("Add a demo week to the Journal") { addDemoWeek() }
+                    Button("Remove demo moments", role: .destructive) { removeDemo() }
+                    Button("Play onboarding demo") {
+                        dismiss()
+                        // Let the sheet finish closing, or SwiftUI drops the full-screen onboarding.
+                        Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
+                    }
+                } header: {
+                    Text("Demo moments")
+                } footer: {
+                    Text(demoNote ?? "Made-up moments for showing the Journal, labelled Demo in their sources. They don't count toward your patterns.")
+                }
+
+                Section {
+                    Text("felt air is a diary, not a medical device. It compares outdoor conditions when you used your inhaler with your I'm okay moments. It can't see indoor air and doesn't diagnose or predict attacks.")
                         .font(Theme.caption)
                         .foregroundStyle(Theme.secondaryText)
                 }
             }
+            .tint(.green) // switches keep the system green; the app's neutral tint would make them white-on-white
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -70,6 +89,16 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    private func addDemoWeek() {
+        let n = DemoSeeder.add(in: context)
+        demoNote = "Added \(n) demo moments."
+    }
+
+    private func removeDemo() {
+        let n = DemoSeeder.remove(in: context)
+        demoNote = n == 0 ? nil : "Removed \(n) demo moments."
     }
 }
 
@@ -89,4 +118,31 @@ private struct SettingsToolbar: ViewModifier {
 
 extension View {
     func settingsToolbar() -> some View { modifier(SettingsToolbar()) }
+}
+
+/// Adds or removes the labelled demo week (Settings → Demo moments, or launch with `-demoWeek` in Debug).
+enum DemoSeeder {
+    @discardableResult
+    static func add(in context: ModelContext) -> Int {
+        remove(in: context)
+        let week = DemoWeek.moments(endingAt: .now)
+        for m in week {
+            let e = LogEvent(moment: m.kind, loggedAt: m.at)
+            e.conditions = m.conditions
+            e.envStatus = .ready
+            e.note = LogEvent.demoNote
+            context.insert(e)
+        }
+        try? context.save()
+        return week.count
+    }
+
+    @discardableResult
+    static func remove(in context: ModelContext) -> Int {
+        let tag = LogEvent.demoNote
+        let demo = (try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.note == tag }))) ?? []
+        demo.forEach(context.delete)
+        try? context.save()
+        return demo.count
+    }
 }

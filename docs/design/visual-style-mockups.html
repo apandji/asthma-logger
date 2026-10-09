@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual style mockups</title>
+<!-- Mockups for docs/design/visual-style.md. Static; open in a browser. New York falls back to Georgia outside Apple platforms. -->
+<style>
+  body { margin: 0; padding: 24px 16px 48px; background: #E5E5EA; font-family: -apple-system, system-ui, sans-serif; color: #1c1c1e; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .intro { font-size: 14px; color: #6c6c70; margin: 0 0 24px; max-width: 720px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 360px)); gap: 24px; margin-bottom: 32px; }
+  .cap { font-size: 13px; color: #6c6c70; margin: 0 0 8px; }
+  .ph { border-radius: 40px; padding: 14px 0 18px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+  .ny { font-family: "New York", ui-serif, Georgia, "Times New Roman", serif; }
+  .hd { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; margin: 14px 20px 6px; }
+  .hd i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .cd { border-radius: 16px; margin: 0 16px; }
+  .r { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; font-size: 16px; gap: 10px; }
+  .card { border-radius: 18px; padding: 14px 16px; margin: 0 16px 12px; }
+  .bar { height: 22px; border-radius: 999px; position: relative; overflow: hidden; }
+  .bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+  .bl { display: flex; justify-content: space-between; font-size: 13px; margin: 8px 0 4px; }
+  .eb { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .2px; }
+  .tabs { display: flex; justify-content: center; margin-top: 16px; }
+  .tabs > div { display: flex; gap: 6px; border-radius: 999px; padding: 5px; }
+  .tab { border-radius: 999px; padding: 8px 18px; font-size: 12px; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Visual style mockups</h1>
+<p class="intro">Journal (Cycle Tracking pattern: week strip + day log) and Recap (Health highlights pattern), light and dark. Spec: visual-style.md. Demo numbers.</p>
+<div class="row"><div><p class="cap">Journal · light</p><div id="jl"></div></div><div><p class="cap">Journal · dark</p><div id="jd"></div></div></div>
+<div class="row"><div><p class="cap">Recap · light</p><div id="rl"></div></div><div><p class="cap">Recap · dark</p><div id="rd"></div></div></div>
+<script>
+const T = {
+  light: { bg: "#FFFFFF", grouped: "#F2F2F7", card: "#FFFFFF", text: "#000", sec: "#6C6C70", ter: "#C7C7CC", pill: "#F2F2F7", track: "#E9E9EE",
+           sep: "rgba(60,60,67,.14)", pink: "#E8336D", blue: "#1F6FD1", pinkT: "rgba(232,51,109,.10)", blueT: "rgba(31,111,209,.09)",
+           pinkSoft: "rgba(232,51,109,.28)", blueSoft: "rgba(31,111,209,.26)", blend: "multiply", core: "#000", num: "#fff", glass: "rgba(255,255,255,.88)" },
+  dark:  { bg: "#000", grouped: "#000", card: "#1C1C1E", text: "#fff", sec: "#98989F", ter: "#48484A", pill: "#1C1C1E", track: "#2C2C2E",
+           sep: "rgba(84,84,88,.45)", pink: "#FF4F86", blue: "#4C9BFF", pinkT: "rgba(255,79,134,.18)", blueT: "rgba(76,155,255,.17)",
+           pinkSoft: "rgba(255,79,134,.38)", blueSoft: "rgba(76,155,255,.36)", blend: "screen", core: "#fff", num: "#000", glass: "rgba(44,44,46,.88)" }
+};
+
+// One moment's mark: core (dot = inhaler, ring = okay) over soft ink discs for families that stood out.
+function glyph(t, o) {
+  let s = `<svg width="34" height="34" viewBox="0 0 34 34" style="flex:none">`;
+  if (o.air) s += `<circle cx="15" cy="15.5" r="${o.air}" fill="${t.pinkSoft}" style="mix-blend-mode:${t.blend}"/>`;
+  if (o.wx) s += `<circle cx="19" cy="18.5" r="${o.wx}" fill="${t.blueSoft}" style="mix-blend-mode:${t.blend}"/>`;
+  s += o.puff ? `<circle cx="17" cy="17" r="5" fill="${t.core}"/>` : `<circle cx="17" cy="17" r="4.2" fill="none" stroke="${t.core}" stroke-width="1.7"/>`;
+  return s + `</svg>`;
+}
+
+// Week strip: capsule per day; count circle; small ink dots below (dashed = forecast).
+function week(t) {
+  const days = [["S", 2, { a: 1 }], ["M", 0, {}], ["T", 1, { b: 1 }], ["W", 2, { a: 1, b: 1 }, 1], ["T", null, { a: 1 }], ["F", null, { a: 1, b: 1 }], ["S", null, {}]];
+  let s = `<svg viewBox="0 0 330 150" width="100%">`;
+  days.forEach(([w, k, o, today], i) => {
+    const x = 24 + i * 47, future = k === null;
+    if (today) s += `<path d="M${x - 5} 6 L${x + 5} 6 L${x} 12 Z" fill="${t.text}"/><circle cx="${x}" cy="26" r="11" fill="${t.text}"/>`;
+    s += `<text x="${x}" y="30" text-anchor="middle" font-size="13" font-weight="600" fill="${today ? t.bg : (future ? t.ter : t.sec)}" font-family="-apple-system,system-ui">${w}</text>`;
+    s += `<rect x="${x - 21}" y="44" width="42" height="96" rx="21" fill="${t.pill}"/>`;
+    if (k > 0) {
+      const r = today ? 17 : 14;
+      s += `<circle cx="${x}" cy="78" r="${r}" fill="${t.core}"/><text x="${x}" y="83" text-anchor="middle" font-size="13" font-weight="600" fill="${t.num}" font-family="-apple-system,system-ui">${k}</text>`;
+    } else if (k === 0) s += `<circle cx="${x}" cy="78" r="6" fill="none" stroke="${t.sec}" stroke-width="1.6"/>`;
+    const dots = []; if (o.a) dots.push(t.pink); if (o.b) dots.push(t.blue);
+    dots.forEach((c, j) => {
+      const dx = x + (j - (dots.length - 1) / 2) * 12;
+      s += future ? `<circle cx="${dx}" cy="118" r="4.2" fill="none" stroke="${c}" stroke-width="1.6" stroke-dasharray="2 2"/>`
+                  : `<circle cx="${dx}" cy="118" r="4.5" fill="${c}"/>`;
+    });
+  });
+  return s + `</svg>`;
+}
+
+function tabs(t, active) {
+  const tab = (name, on) => `<span class="tab" style="${on ? `background:${t.pill};color:${t.pink}` : `color:${t.text}`}">${name}</span>`;
+  return `<div class="tabs"><div style="background:${t.glass};border:0.5px solid ${t.sep}">${tab("Journal", active === "j")}${tab("Recap", active === "r")}
+    <span class="tab" style="background:${t.pink};color:#fff">+ Inhaler</span></div></div>`;
+}
+
+function journal(t) {
+  const moments = [["5:40 PM", "Used inhaler", { puff: 1, air: 13, wx: 10 }], ["3:05 PM", "I'm okay", {}], ["12:30 PM", "Used inhaler", { puff: 1, air: 10 }]];
+  return `<div class="ph" style="background:${t.bg};color:${t.text}">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0 16px">
+      <span style="width:36px;height:36px;border-radius:50%;background:${t.pill};display:flex;align-items:center;justify-content:center">⚙︎</span>
+      <span style="font-size:17px;font-weight:600">Journal</span>
+      <span style="width:36px;height:36px;border-radius:50%;background:${t.pill};display:flex;align-items:center;justify-content:center">▦</span></div>
+    <p style="text-align:center;font-size:20px;font-weight:700;margin:14px 0 4px">Today, October 1</p>
+    <div style="padding:0 6px;border-bottom:0.5px solid ${t.sep}">${week(t)}</div>
+    <p class="ny" style="font-size:24px;font-weight:500;line-height:1.2;margin:16px 20px 2px">The air right now looks like <span style="color:${t.pink}">the times you used your inhaler.</span></p>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin:18px 20px 0"><span style="font-size:22px;font-weight:700">Log</span><span style="font-size:16px;color:${t.pink}">3 moments</span></div>
+    <p class="hd" style="color:${t.pink}"><i style="background:${t.pink}"></i>Air</p>
+    <div class="cd" style="background:${t.pinkT}"><div class="r"><span>Ozone</span><span style="color:${t.pink};font-weight:600">High</span></div></div>
+    <p class="hd" style="color:${t.blue}"><i style="background:${t.blue}"></i>Weather</p>
+    <div class="cd" style="background:${t.blueT}"><div class="r"><span>Humidity</span><span style="color:${t.blue};font-weight:600">Humid · 84%</span></div>
+      <div class="r" style="border-top:0.5px solid ${t.sep}"><span>Temperature</span><span style="color:${t.sec}">84°F</span></div></div>
+    <p class="hd" style="color:${t.sec}"><i style="background:${t.sec}"></i>Notes</p>
+    <div class="cd" style="background:${t.pill}"><div class="r"><span>Anything going on?</span><span style="color:${t.pink};font-size:22px;line-height:1">+</span></div></div>
+    <p class="hd" style="color:${t.sec}"><i style="background:${t.sec}"></i>Moments</p>
+    <div class="cd" style="background:${t.pill}">${moments.map((m, i) => `<div class="r" style="${i ? `border-top:0.5px solid ${t.sep}` : ""}">${glyph(t, m[2])}
+      <span style="flex:1"><b style="font-weight:600">${m[1]}</b> <span style="color:${t.sec}">${m[0]}</span></span><span style="color:${t.ter}">›</span></div>`).join("")}
+      <div class="r" style="border-top:0.5px solid ${t.sep}"><span style="color:${t.pink}">+ I'm okay</span></div></div>
+    ${tabs(t, "j")}</div>`;
+}
+
+function compare(t, label, color, a, n, b, m) {
+  return `<div class="card" style="background:${t.card}">
+    <p style="font-size:13px;font-weight:600;color:${color};margin:0 0 8px">${label}</p>
+    <div class="bl"><span>Times you used your inhaler</span><b style="font-weight:600">${a} of ${n}</b></div>
+    <div class="bar" style="background:${t.track}"><i style="width:${a / n * 100}%;background:${color}"></i></div>
+    <div class="bl" style="color:${t.sec}"><span>Usual days</span><b style="font-weight:600">${b} of ${m}</b></div>
+    <div class="bar" style="background:${t.track}"><i style="width:${b / m * 100}%;background:${t.sec};opacity:.55"></i></div></div>`;
+}
+
+function recap(t) {
+  return `<div class="ph" style="background:${t.grouped};color:${t.text}">
+    <div style="text-align:center;margin:4px 0 6px"><span style="background:${t.card};border-radius:999px;padding:6px 14px;font-size:14px;font-weight:600">Recap</span></div>
+    <svg viewBox="0 0 200 116" width="100%" style="max-height:132px;display:block;margin:0 auto 4px">
+      <circle cx="90" cy="50" r="38" fill="${t.pinkSoft}" style="mix-blend-mode:${t.blend}"/>
+      <circle cx="114" cy="72" r="32" fill="${t.blueSoft}" style="mix-blend-mode:${t.blend}"/></svg>
+    <p class="eb" style="color:${t.sec};margin:0 20px 6px">Of the 10 times you used your inhaler</p>
+    <p class="ny" style="font-size:30px;font-weight:500;line-height:1.18;margin:0 20px 16px"><span style="color:${t.pink}">ozone was high 8 times</span>, and <span style="color:${t.blue}">it was humid 6.</span></p>
+    ${compare(t, "Ozone high", t.pink, 8, 10, 0, 24)}
+    ${compare(t, "Humid", t.blue, 6, 10, 9, 24)}
+    <div class="card" style="background:${t.card}"><p style="font-size:13px;font-weight:600;color:${t.sec};margin:0 0 3px">Today</p>
+      <p style="font-size:16px;font-weight:600;margin:0 0 2px">Usual-looking until 5 PM</p>
+      <p style="font-size:14px;color:${t.sec};margin:0">After that, the air looks more like the times you used your inhaler.</p></div>
+    <p style="font-size:12px;color:${t.sec};margin:4px 20px 0">Outdoor air only, not a diagnosis.</p>
+    ${tabs(t, "r")}</div>`;
+}
+
+document.getElementById("jl").innerHTML = journal(T.light);
+document.getElementById("jd").innerHTML = journal(T.dark);
+document.getElementById("rl").innerHTML = recap(T.light);
+document.getElementById("rd").innerHTML = recap(T.dark);
+</script>
+</body>
+</html>

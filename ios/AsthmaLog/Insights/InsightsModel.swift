@@ -12,6 +12,7 @@ final class InsightsModel {
     private(set) var isLoadingForecast = false
     private(set) var usingDemo = false
     private(set) var frameCount = (attacks: 0, baselines: 0, skipped: 0)
+    private(set) var progress: GateProgress?
 
     private var table: RateTable?
     private var bander: RiskBander?
@@ -29,10 +30,12 @@ final class InsightsModel {
             gate = .default
             frameCount = (frames.filter { $0.kind == .attack }.count,
                           frames.filter { $0.kind == .baseline }.count,
-                          events.count - frames.count)
+                          // Only moments that could feed patterns but had no outdoor reading.
+                          events.filter { !$0.isDemo && $0.moment.frameKind != nil }.count - frames.count)
         }
         let report = Lift.compute(frames, gate: gate)
         self.report = report
+        progress = GateProgress(nAttacks: report.nAttacks, nBaselines: report.nBaselines, gate: gate)
         let table = RateTable(frames: frames, gate: gate)
         self.table = table
         bander = RiskBander(table: table, baselineFrames: frames)

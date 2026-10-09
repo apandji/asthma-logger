@@ -159,3 +159,20 @@ public enum Lift {
         return String(format: "%.1f", tenths)
     }
 }
+
+/// How far a diary is from the overall sample gate. Before it's met there is no personal pattern,
+/// so screens show this progress instead of a headline.
+public struct GateProgress: Sendable, Equatable {
+    public var attacks: Int
+    public var minAttacks: Int
+    public var baselines: Int
+    public var minBaselines: Int
+    public var isMet: Bool { attacks >= minAttacks && baselines >= minBaselines }
+
+    public init(nAttacks: Int, nBaselines: Int, gate: LiftGate) {
+        attacks = nAttacks
+        minAttacks = gate.minAttacks
+        baselines = nBaselines
+        minBaselines = gate.minBaselines
+    }
+}

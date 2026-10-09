@@ -13,9 +13,15 @@ struct EventDetailView: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("What", value: event.kind == .attack ? "Inhaler puff" : "Usual moment")
+                MomentTrendChart(event: event)
+            } header: {
+                Text("How the air changed")
+            }
+
+            Section {
+                LabeledContent("What", value: event.moment.title)
                 LabeledContent("When", value: event.loggedAt.formatted(date: .abbreviated, time: .shortened))
-                if event.kind == .attack {
+                if event.moment == .rescue {
                     LabeledContent("Apple Health", value: event.healthSampleID == nil ? "Not saved" : "Saved")
                 }
             }
@@ -83,7 +89,7 @@ struct EventDetailView: View {
                 Text("Outdoor conditions")
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Outdoor air near you — not indoor air, not a diagnosis.")
+                    Text("Outdoor air near you. Not indoor air, and not a diagnosis.")
                     WeatherAttributionView()
                 }
             }
@@ -91,8 +97,10 @@ struct EventDetailView: View {
             Section {
                 Button("Delete log", role: .destructive) {
                     Task {
-                        await services.delete(event, in: context)
                         dismiss()
+                        // Delete after the screen has gone, so nothing reads a deleted moment.
+                        try? await Task.sleep(for: .milliseconds(400))
+                        await services.delete(event, in: context)
                     }
                 }
             }

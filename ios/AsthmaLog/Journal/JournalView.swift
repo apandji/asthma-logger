@@ -48,12 +48,10 @@ struct JournalView: View {
                 .padding(.bottom, 32)
             }
             .background {
-                ZStack(alignment: .top) {
-                    Theme.stage
-                    AirWash(weave: events.last(where: { !$0.weave.isEmpty })?.weave ?? WeaveSpec())
-                        .frame(height: 420)
-                }
-                .ignoresSafeArea()
+                // The room takes on the selected moment's air (today's, until you pick one).
+                AmbientField(weave: selected.map { $0.weave.isEmpty ? todayWeave : $0.weave } ?? todayWeave)
+                    .ignoresSafeArea()
+                    .animation(.easeInOut(duration: 0.8), value: selected?.id)
             }
             .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
             .toolbar {
@@ -95,6 +93,12 @@ struct JournalView: View {
         let parts = [w[.air].map { "air \($0)" }, w[.humidity], w[.temperature]].compactMap { $0 }
         let when = Calendar.current.isDateInToday(latest.loggedAt) ? "Outside today" : "At your last moment"
         return "\(when): " + parts.joined(separator: ", ") + "."
+    }
+
+    /// Today's air for the ambient field: the latest moment today with a reading, else the latest one.
+    private var todayWeave: WeaveSpec {
+        let today = events.last { Calendar.current.isDateInToday($0.loggedAt) && !$0.weave.isEmpty }
+        return (today ?? events.last { !$0.weave.isEmpty })?.weave ?? WeaveSpec()
     }
 
     private func count(_ kind: MomentKind) -> Int {
@@ -345,7 +349,7 @@ struct MomentCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: .rect(cornerRadius: 22, style: .continuous))
+        .frostedCard()
         .contentShape(.rect(cornerRadius: 22))
     }
 
@@ -382,27 +386,6 @@ struct MomentCard: View {
         var line = names.joined(separator: ", ")
         if let lo = miles.min(), let hi = miles.max() { line += lo == hi ? " (\(lo) mi)" : " (\(lo)–\(hi) mi)" }
         return line
-    }
-}
-
-/// A faint wash of the latest air's inks at the top of the Journal, like a sky. Stronger inks for
-/// higher levels; nothing when there's no reading. Decorative only.
-struct AirWash: View {
-    let weave: WeaveSpec
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    var body: some View {
-        let stops = WeaveSpec.Factor.allCases.compactMap { f -> Color? in
-            guard let l = weave.levels[f] else { return nil }
-            return WeaveSwatch.ink(f).opacity([0.10, 0.18, 0.28][l.rawValue])
-        }
-        if stops.isEmpty || reduceTransparency {
-            Color.clear
-        } else {
-            LinearGradient(colors: stops + [.clear], startPoint: .topLeading, endPoint: .bottom)
-                .blur(radius: 40)
-                .accessibilityHidden(true)
-        }
     }
 }
 

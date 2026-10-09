@@ -20,7 +20,9 @@ struct JournalView: View {
                     MomentStrip(days: week, selectedID: selectedID) { selectedID = $0 }
                     WeaveLegend().padding(.horizontal, 20)
                     if let event = selected {
-                        MomentCard(event: event).padding(.horizontal, 16)
+                        NavigationLink(value: event) { MomentCard(event: event) }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 16)
                     } else if events.isEmpty {
                         emptyState.padding(.horizontal, 20)
                     }
@@ -254,17 +256,17 @@ struct MomentCard: View {
                     factorRow(.temperature, "Temperature", value: c.best(.temperature).map { "\(Int($0.value.rounded()))°F" })
                     factorRow(.pollen, "Pollen", value: nil)
                 }
-                NavigationLink(value: event) {
-                    HStack(spacing: 4) {
-                        Text(sourceLine(c)).foregroundStyle(Theme.secondaryText)
-                        Text("Details").fontWeight(.semibold)
-                    }
-                    .font(.footnote)
-                }
+                Text(sourceLine(c)).font(.footnote).foregroundStyle(Theme.secondaryText)
             } else if let err = event.envError {
                 Text(err).font(.footnote).foregroundStyle(Theme.secondaryText)
             } else if event.envStatus == .pending {
                 Text("Noting the outdoor air…").font(.footnote).foregroundStyle(Theme.secondaryText)
+            }
+            HStack {
+                Text("See how the air changed, and every source").font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.accent)
+                Spacer()
+                Image(systemName: "chevron.right").foregroundStyle(Theme.secondaryText)
             }
             Text("Outdoor air, not indoor air. Not a diagnosis.")
                 .font(.caption2).foregroundStyle(Theme.secondaryText)
@@ -311,6 +313,6 @@ struct MomentCard: View {
         let miles = c.observations.compactMap(\.distanceKm).map { Int(($0 * 0.621371).rounded()) }
         var line = names.joined(separator: ", ")
         if let lo = miles.min(), let hi = miles.max() { line += lo == hi ? " (\(lo) mi)" : " (\(lo)–\(hi) mi)" }
-        return line + " ·"
+        return "From " + line
     }
 }

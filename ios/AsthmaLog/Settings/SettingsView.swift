@@ -64,7 +64,7 @@ struct SettingsView: View {
                 Section {
                     Button("Add a demo week to the Journal") { addDemoWeek() }
                     Button("Remove demo moments", role: .destructive) { removeDemo() }
-                    Button("Show onboarding again") { dismiss(); didOnboard = false }
+                    Button("Play onboarding demo") { dismiss(); didOnboard = false }
                 } header: {
                     Text("Demo moments")
                 } footer: {

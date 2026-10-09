@@ -13,6 +13,12 @@ struct EventDetailView: View {
     var body: some View {
         Form {
             Section {
+                MomentTrendChart(event: event)
+            } header: {
+                Text("How the air changed")
+            }
+
+            Section {
                 LabeledContent("What", value: event.moment.title)
                 LabeledContent("When", value: event.loggedAt.formatted(date: .abbreviated, time: .shortened))
                 if event.moment == .rescue {

@@ -104,18 +104,24 @@ public enum Lift {
         var rows: [LiftRow] = []
 
         for def in bins {
+            // Denominators are the frames sampled for this bin: every frame for v1 bins, only frames
+            // with a reviewed note for journal tags. Unsampled frames are missing, not negatives.
+            let binAttacks = def.population(attacks)
+            let binBaselines = def.population(baselines)
+            let bA = binAttacks.count
+            let bB = binBaselines.count
             let levels = Set(frames.compactMap(def.levelOf)).sorted()
             for level in levels {
                 if def.isBoolean && level == "no" { continue }
-                let aWith = attacks.filter { def.levelOf($0) == level }.count
-                let bWith = baselines.filter { def.levelOf($0) == level }.count
-                let aRate = rate(aWith, nA)
-                let bRate = rate(bWith, nB)
+                let aWith = binAttacks.filter { def.levelOf($0) == level }.count
+                let bWith = binBaselines.filter { def.levelOf($0) == level }.count
+                let aRate = rate(aWith, bA)
+                let bRate = rate(bWith, bB)
                 let lift: Double = bRate <= 0 ? (aWith > 0 ? .infinity : 1) : aRate / bRate
-                let gated = nA >= gate.minAttacks && nB >= gate.minBaselines
+                let gated = bA >= gate.minAttacks && bB >= gate.minBaselines
                     && aWith >= gate.minAttacksInLevel && lift > LiftGate.minLift
                 rows.append(LiftRow(bin: def.bin, level: level, attacksWith: aWith, baselinesWith: bWith,
-                                    nAttacks: nA, nBaselines: nB, attackRate: aRate, baselineRate: bRate,
+                                    nAttacks: bA, nBaselines: bB, attackRate: aRate, baselineRate: bRate,
                                     lift: lift, gated: gated))
             }
         }

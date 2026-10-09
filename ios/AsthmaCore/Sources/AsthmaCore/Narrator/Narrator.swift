@@ -10,7 +10,16 @@ public struct NarratorRow: Codable, Sendable, Equatable {
     /// Infinite lift is sent as 99.
     public var lift: Double
     public var gated: Bool
+    /// Set only when this row counts a subset of moments (journal tags: moments with a reviewed note).
+    /// Nil means the row's totals are the table's `nAttacks` / `nBaselines`.
+    public var nAttacks: Int? = nil
+    public var nBaselines: Int? = nil
     public var id: String { "\(bin):\(level)" }
+
+    /// True when the row's totals differ from the table's (journal-tag rows).
+    public var isSubset: Bool { nAttacks != nil || nBaselines != nil }
+    public func attacksTotal(_ input: NarratorInput) -> Int { nAttacks ?? input.nAttacks }
+    public func baselinesTotal(_ input: NarratorInput) -> Int { nBaselines ?? input.nBaselines }
 }
 
 /// Everything the language model is allowed to see: the table, never the diary or coordinates.
@@ -27,12 +36,15 @@ public struct NarratorInput: Codable, Sendable, Equatable {
         nAttacks = report.nAttacks
         nBaselines = report.nBaselines
         season = report.seasonHint
+        let nA = report.nAttacks, nB = report.nBaselines
         rows = source.map {
-            NarratorRow(bin: $0.bin, level: $0.level, attacksWith: $0.attacksWith, baselinesWith: $0.baselinesWith,
-                        attackRate: $0.attackRate, baselineRate: $0.baselineRate,
-                        lift: $0.lift.isFinite ? $0.lift : 99, gated: $0.gated)
+            let subset = $0.nAttacks != nA || $0.nBaselines != nB
+            return NarratorRow(bin: $0.bin, level: $0.level, attacksWith: $0.attacksWith, baselinesWith: $0.baselinesWith,
+                               attackRate: $0.attackRate, baselineRate: $0.baselineRate,
+                               lift: $0.lift.isFinite ? $0.lift : 99, gated: $0.gated,
+                               nAttacks: subset ? $0.nAttacks : nil, nBaselines: subset ? $0.nBaselines : nil)
         }
-        rules = Narrator.rules
+        rules = Narrator.rules + (rows.contains(where: \.isSubset) ? [Narrator.subsetRule] : [])
         self.styleScore = max(0, min(100, styleScore))
     }
 }
@@ -66,6 +78,10 @@ public enum Narrator {
         "Outdoor air only — not indoor, not a diagnosis.",
     ]
 
+    /// Added when a row has its own nAttacks / nBaselines (journal tags count only moments with a note).
+    public static let subsetRule =
+        "A row with its own nAttacks and nBaselines counts only moments with a journal note; use that row's totals."
+
     public static let caveat =
         "Outdoor air only — not a medical diagnosis. Comparison to your usual logged days, not a prediction."
 
@@ -79,10 +95,14 @@ public enum Narrator {
             return NarratorOutput(headline: headline, caveat: caveat, drivers: [], source: .template)
         }
         // Plain counts, no ratio: "8 of the 10 times you used your inhaler, ozone was high. …"
-        var headline = "\(top.attacksWith) of the \(input.nAttacks) times you used your inhaler, \(clause(top.bin, top.level))."
+        // Journal-tag rows count only moments with a reviewed note, and say so.
+        let nA = top.attacksTotal(input), nB = top.baselinesTotal(input)
+        let uses = top.isSubset ? "times you used your inhaler and added a note" : "times you used your inhaler"
+        let usual = top.isSubset ? "On usual days with a note" : "On usual days"
+        var headline = "\(top.attacksWith) of the \(nA) \(uses), \(clause(top.bin, top.level))."
         headline += top.baselinesWith == 0
-            ? " On usual days, that never happened (0 of \(input.nBaselines))."
-            : " On usual days, that only happened \(top.baselinesWith) of \(input.nBaselines) times."
+            ? " \(usual), that never happened (0 of \(nB))."
+            : " \(usual), that only happened \(top.baselinesWith) of \(nB) times."
         if gated.count > 1 {
             headline += " Also common: \(clause(gated[1].bin, gated[1].level))."
         }
@@ -126,8 +146,8 @@ public enum Narrator {
         let style = NarratorStyle(score: input.styleScore)
         let example = (input.rows.first(where: \.gated) ?? input.rows.first).map {
             NarratorStyle.ExampleFacts(binLabel: Bins.label($0.bin), level: $0.level, clause: clause($0.bin, $0.level),
-                                       attacksWith: $0.attacksWith, nAttacks: input.nAttacks,
-                                       baselinesWith: $0.baselinesWith, nBaselines: input.nBaselines)
+                                       attacksWith: $0.attacksWith, nAttacks: $0.attacksTotal(input),
+                                       baselinesWith: $0.baselinesWith, nBaselines: $0.baselinesTotal(input))
         }
         let instructions = ([
             "You write one honest insight for an asthma inhaler diary.",
@@ -179,6 +199,8 @@ public enum NarrationGuard {
     static func allowedNumbers(_ input: NarratorInput) -> Set<String> {
         var s: Set<String> = [String(input.nAttacks), String(input.nBaselines)]
         for r in input.rows {
+            s.insert(String(r.attacksTotal(input)))
+            s.insert(String(r.baselinesTotal(input)))
             s.insert(String(r.attacksWith))
             s.insert(String(r.baselinesWith))
             let f = Lift.format(r.lift)

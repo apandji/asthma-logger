@@ -28,7 +28,7 @@ ios/
 │   │   ├── Lift/        bins, lift table, gate
 │   │   ├── Forecast/    RateTable (smoothed log-LR), RiskBander, Outlook (windows, cold start)
 │   │   ├── Narrator/    style bands, template, prompt builder, NarrationGuard (output checks)
-│   │   ├── Journal/     JournalTag (closed list), TagExtraction
+│   │   ├── Journal/     JournalTag (closed list), TagExtraction, VoiceNoteTags (keyword rules, model validation, TagReview)
 │   │   └── Places/      visit clustering → home/work/frequent; indoor/outdoor guesser
 │   └── Tests/AsthmaCoreTests/   golden tests against ../../fixtures + unit tests
 └── AsthmaLog/           the app: SwiftUI + Apple frameworks
@@ -74,7 +74,7 @@ Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web pr
 
 | Built | Not yet |
 |-------|---------|
-| Log a puff / usual moment, offline-first | Voice notes (Speech + tag suggestions UI) |
+| Log a puff / usual moment, offline-first | Voice notes (Speech + tag suggestions UI). Core logic is in `AsthmaCore/Journal/VoiceNoteTags.swift`; the app still needs a `TagProposer` on Foundation Models, the chips, and `tagsReviewed` on `LogEvent` |
 | Precise fix, motion, indoor/outdoor guess + correction | Place learning (visits → home/work) — `Places.cluster` is ready in core |
 | WeatherKit, OpenAQ, AirNow, fail-open with provenance | Pollen (Ambee) |
 | HealthKit inhaler usage write + delete | Photos |
@@ -113,7 +113,7 @@ No iOS API says "indoors", so this is a guess with a confidence level: `likelyIn
 
 ### Journaling: voice, photos, language
 - **Voice note**: record → transcribe on device (Speech framework, on-device recognition only) → Foundation Models extracts tags with guided generation (`@Generable`).
-- **Tags are a closed list** in `AsthmaCore`, e.g. exercise, cold air, smoke, pets, cleaning products, cold/flu, stress, strong scents. The model picks from the list and never makes up values. The user confirms tags as chips; only confirmed tags become bins.
+- **Tags are a closed list** in `AsthmaCore`, e.g. exercise, cold air, smoke, pets, cleaning products, cold/flu, stress, strong scents. The model picks from the list and never makes up values. The user confirms tags as chips; only confirmed tags become bins. Wire the model as a `TagProposer` and run `VoiceNoteTagger.suggest`: it validates the answer, applies keyword rules and negation, and fails open. Keep a `TagReview` per note and stamp it with `FeatureFrame.apply(_:)`; a moment without a reviewed note is missing for tag bins, not "no" ([docs/on-device-insights.md](../docs/on-device-insights.md#voice-note-tags-ios)).
 - **Photos** (opt-in, per day, limited library access is fine): read time and location metadata, plus on-device Vision scene labels (outdoors, park, fire/smoke, animals, gym), to suggest tags and fill in where the user was. Nothing leaves the device.
 - Keep the audio and transcript; the transcript is what the user can edit.
 

@@ -58,12 +58,19 @@ FSR (optional)    3V3 ── FSR ── A1 ── 10 kΩ ── GND
 
 Put each button across the breadboard's middle gap so its two legs are on different rows.
 
-**Flash it**
+**Flash it (once)**
 
-1. Arduino IDE › Boards Manager: install **esp32 by Espressif** (3.x).
-2. Tools › Board: **Arduino Nano ESP32**. Tools › Port: the board's USB port.
-3. Open `hardware/felt-button/felt-button.ino` and Upload.
-4. Open the Serial Monitor at 115200. You should see `felt button ready`. Press each button: it prints `press cap=1` or `cap=2` and the LED flashes warm or teal.
+Plug the board into the Mac with a data USB-C cable and run:
+
+```bash
+hardware/felt-button/upload.sh
+```
+
+It installs the board package if needed (**Arduino ESP32 Boards**, tested with 2.0.18-arduino.5), compiles, and uploads. Or, in the Arduino IDE: Tools › Board › **Arduino Nano ESP32**, pick the port, open `felt-button.ino`, Upload.
+
+The program is saved in the board's flash memory, so it stays there after you unplug it and runs every time the board gets power. A USB power bank is enough; the Mac and the IDE are only needed to change the code. If an upload can't find the board, double-tap its reset button (the LED pulses green) and run it again.
+
+**Check it**: open the Serial Monitor at 115200 (the script prints the command). You should see `felt button ready`. Press each button: it prints `press cap=1` or `cap=2` and the LED flashes warm or teal.
 
 The LED blinks blue slowly while it's waiting for the phone and stops once connected.
 

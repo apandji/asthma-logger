@@ -7,7 +7,8 @@
 //   Teal (standard) button:   D3 ── button ── GND
 //   Optional FSR:             3V3 ── FSR ── A1 ── 10 kΩ ── GND   (then set USE_FSR to true)
 //
-// Arduino IDE: Boards Manager → "esp32" by Espressif (3.x) or "Arduino ESP32 Boards", board "Arduino Nano ESP32".
+// Arduino IDE: Boards Manager → "Arduino ESP32 Boards" (tested with 2.0.18-arduino.5), board "Arduino Nano ESP32".
+// Or skip the IDE: plug the board in and run hardware/felt-button/upload.sh.
 
 #include <BLEDevice.h>
 #include <BLEServer.h>

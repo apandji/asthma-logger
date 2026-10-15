@@ -7,6 +7,7 @@ struct AsthmaLogApp: App {
     @State private var services = LogService()
     private let container: ModelContainer
     private let watch = WatchBridge()
+    @State private var button = ButtonLink()
 
     init() {
         do { container = try ModelContainer(for: LogEvent.self) }
@@ -17,6 +18,7 @@ struct AsthmaLogApp: App {
         WindowGroup {
             RootView()
                 .environment(services)
+                .environment(button)
                 .tint(Theme.tint)
                 .task {
                     let context = container.mainContext
@@ -29,6 +31,9 @@ struct AsthmaLogApp: App {
                     #endif
                     watch.start { log in
                         Task { await services.logFromWatch(log, in: context) }
+                    }
+                    button.start { packet, received in
+                        Task { await services.logFromButton(packet, receivedAt: received, in: context) }
                     }
                     await services.resumePending(in: context)
                 }

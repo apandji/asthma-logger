@@ -53,6 +53,8 @@ targets:
         NSHealthShareUsageDescription: Reads nothing yet. Required by Apple Health alongside saving.
         NSMicrophoneUsageDescription: Record a short voice note about how you're feeling.
         NSSpeechRecognitionUsageDescription: Turns your voice note into text on this iPhone.
+        NSBluetoothAlwaysUsageDescription: Connects to your felt button so a press logs a moment, even when the app is closed.
+        UIBackgroundModes: [bluetooth-central]
         OPENAQ_API_KEY: $(OPENAQ_API_KEY)
         AIRNOW_API_KEY: $(AIRNOW_API_KEY)
     entitlements:

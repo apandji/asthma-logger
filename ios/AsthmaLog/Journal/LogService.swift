@@ -26,6 +26,7 @@ final class LogService {
 
     @discardableResult
     func log(_ moment: MomentKind, at date: Date = .now, id: UUID = UUID(),
+             lateNote: String = "Logged on Apple Watch while your iPhone was away, so there's no air reading.",
              in context: ModelContext, writeToHealth: Bool) async -> LogEvent {
         lastError = nil
         let event = LogEvent(moment: moment, loggedAt: date, id: id)
@@ -36,7 +37,7 @@ final class LogService {
             await enrich(event)
         } else {
             event.envStatus = .failed
-            event.envError = "Logged on Apple Watch while your iPhone was away, so there's no air reading."
+            event.envError = lateNote
         }
         try? context.save()
 
@@ -74,6 +75,16 @@ final class LogService {
         let moment: MomentKind = log.kind == .rescue ? .rescue : .maintenance
         let writeToHealth = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
         await self.log(moment, at: log.at, id: log.id, in: context, writeToHealth: writeToHealth)
+    }
+
+    /// A press on the felt button. `ButtonLink` has already dropped resends; the press time comes
+    /// from the button (it can queue presses while the phone is away).
+    func logFromButton(_ packet: ButtonPacket, receivedAt: Date, in context: ModelContext) async {
+        let moment: MomentKind = packet.cap == .rescue ? .rescue : .maintenance
+        let writeToHealth = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
+        await log(moment, at: packet.pressedAt(receivedAt: receivedAt),
+                  lateNote: "Pressed on your felt button while your iPhone was away, so there's no air reading.",
+                  in: context, writeToHealth: writeToHealth)
     }
 
     /// Safe to call again (Retry) on a failed or partial log. Conditions are for now, so a retry

@@ -90,6 +90,8 @@ public struct Conditions: Codable, Sendable, Equatable {
     public var alerts: [ConditionAlert]
     public var errors: [String]
     public var fetchedAt: Date
+    /// Apple Weather's description at the time ("Rain", "Mostly Cloudy"). Nil on older moments.
+    public var weatherCondition: String?
 
     public init(observations: [EnvObservation] = [], alerts: [ConditionAlert] = [], errors: [String] = [], fetchedAt: Date = Date()) {
         self.observations = observations

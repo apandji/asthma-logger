@@ -61,13 +61,15 @@ public struct WeaveSpec: Sendable, Equatable {
         var levels: [Factor: Level] = [:]
         var words: [Factor: String] = [:]
 
-        // Air: the worse of PM2.5 and ozone; AQI only when neither concentration is known.
+        // Air: the worst of PM2.5, ozone and the official AQI. A station can sit just under a cut-off
+        // while AirNow's AQI (a NowCast over hours) is over it; the worse one wins.
         let bands = [Banding.pm25(c.pm25), Banding.ozone(ppb: c.ozonePpb)].filter { $0 != .unknown }
-        if let worst = bands.max(by: { Self.rank($0) < Self.rank($1) }) {
-            levels[.air] = Self.level(worst)
-        } else if let aqi = c.aqi {
-            levels[.air] = aqi <= 50 ? .low : aqi <= 100 ? .medium : .high
+        var air: Level? = bands.max(by: { Self.rank($0) < Self.rank($1) }).map(Self.level)
+        if let aqi = c.aqi {
+            let fromAQI: Level = aqi <= 50 ? .low : aqi <= 100 ? .medium : .high
+            air = max(air ?? fromAQI, fromAQI)
         }
+        levels[.air] = air
         if let l = levels[.air] { words[.air] = ["low", "moderate", "high"][l.rawValue] }
 
         switch Banding.humidity(c.humidityPct) {

@@ -68,3 +68,20 @@ import Testing
         #expect(no2.measuresNO2 && !no2.measuresOzone)
     }
 }
+
+@Suite struct WeaveAirTests {
+    @Test func officialAQIWinsWhenWorseThanTheStation() {
+        // PM2.5 just under the cut-off, but AirNow's AQI says unhealthy for sensitive groups.
+        let w = WeaveSpec(ConditionsInput(pm25: 11.8, ozonePpb: 6, aqi: 112))
+        #expect(w.levels[.air] == .high)
+    }
+
+    @Test func stationWinsWhenWorseThanAQI() {
+        let w = WeaveSpec(ConditionsInput(pm25: 40, aqi: 30))
+        #expect(w.levels[.air] == .high)
+    }
+
+    @Test func aqiAloneStillWorks() {
+        #expect(WeaveSpec(ConditionsInput(aqi: 75)).levels[.air] == .medium)
+    }
+}

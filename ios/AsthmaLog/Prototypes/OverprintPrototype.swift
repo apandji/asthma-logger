@@ -17,7 +17,7 @@ struct OverprintPrototype: View {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Three inks, one week").font(Theme.headlineSerif)
-                    Text("Each colour is one kind of air, printed as hills: taller where it was higher. Your inhaler moments are along the top.")
+                    Text("Each color is one kind of air, printed as hills: taller where it was higher. Your inhaler moments are along the top.")
                         .font(.subheadline).foregroundStyle(Theme.secondaryText)
                 }
                 .padding(.horizontal, 20)

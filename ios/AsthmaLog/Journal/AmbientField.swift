@@ -1,14 +1,14 @@
 import AsthmaCore
 import SwiftUI
 
-/// A moment's outdoor conditions as a soft colour field, like a sky.
+/// A moment's outdoor conditions as a soft color field, like a sky.
 ///
-/// Two styles (Settings › Design crit › Colour field):
+/// Two styles (Settings › Design crit › Color field):
 /// - Weather (default), in layers:
 ///   - Base: temperature is the hue (blue cold → green mild → gold warm → red hot) under the light of
 ///     the hour (indigo night, rose dawn and dusk); humidity is the softness (dry crisp and saturated,
 ///     humid paler and softer).
-///   - On top, each pollutant and pollen type adds its own colour, faint when low and fuller when high,
+///   - On top, each pollutant and pollen type adds its own color, faint when low and fuller when high,
 ///     like Apple Card picking up hues: PM2.5 slate, PM10 sand, NO₂ rust, ozone icy cyan; tree green,
 ///     grass gold, weed violet. Unknown values add nothing.
 /// - Inks: the original look, one riso ink per factor.
@@ -19,7 +19,7 @@ struct AmbientField: View {
     var temperatureF: Double? = nil
     /// When the moment happened: the light changes with the hour (night indigo, dawn and dusk rose).
     var date: Date? = nil
-    /// Per-pollutant readings for the colour layers.
+    /// Per-pollutant readings for the color layers.
     var conditions: Conditions? = nil
     /// Demo pollen, when switched on in Design crit (pollen isn't connected yet).
     var pollen: PollenSample? = nil
@@ -105,7 +105,7 @@ struct AmbientField: View {
     }
 }
 
-/// The colour layers on top of the sky: one per pollutant and pollen type, at a strength from its level.
+/// The color layers on top of the sky: one per pollutant and pollen type, at a strength from its level.
 struct AirLayers {
     struct Layer {
         let name: String
@@ -115,7 +115,7 @@ struct AirLayers {
         var fraction: Double = 0.5
         var smooth = false
 
-        /// Colour strength. Steps: one strength per level. Smooth: rises with the amount inside the
+        /// Color strength. Steps: one strength per level. Smooth: rises with the amount inside the
         /// level's own range, never reaching the next level's, so the jump between levels stays clear.
         var amount: Double {
             guard smooth else { return [0.14, 0.36, 0.6][level.rawValue] }
@@ -178,7 +178,7 @@ struct AirLayers {
     }
 }
 
-/// The weather colour language, shared by the field and its legend.
+/// The weather color language, shared by the field and its legend.
 enum WeatherColor {
     /// Blue (cold) → sky → sage (mild) → amber (warm) → red (hot), by °F.
     /// Spread so ordinary days differ: 45° sky blue, 55° teal, 63° green, 70° gold, 78° orange, 88° red.

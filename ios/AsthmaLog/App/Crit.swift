@@ -45,7 +45,7 @@ enum Crit {
             switch self {
             case .quietTab: "Quiet tab"
             case .dot: "Dot by the time"
-            case .glow: "Colour glow, no label"
+            case .glow: "Color glow, no label"
             case .boldTab: "Bold tab"
             }
         }
@@ -86,7 +86,7 @@ enum Crit {
         static let key = "crit.insightsState"
     }
 
-    /// How strongly each pollutant / pollen colour shows: one step per level, or rising smoothly with
+    /// How strongly each pollutant / pollen color shows: one step per level, or rising smoothly with
     /// the amount inside its level (never into the next level's range).
     enum LayerStrength: String, CaseIterable, Identifiable {
         case steps, smooth

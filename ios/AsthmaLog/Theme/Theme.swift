@@ -8,7 +8,7 @@ enum Theme {
     static let ink2 = Color(light: 0x1F6FD1, dark: 0x4C9BFF)     // weather (blue)
     static let ink3 = Color(light: 0x248A3D, dark: 0x30D158)     // quiet days (system-like green)
 
-    /// Chrome (buttons, links, toolbar). Neutral, so colour is reserved for data.
+    /// Chrome (buttons, links, toolbar). Neutral, so color is reserved for data.
     static let tint = Color.primary
 
     // Moment kinds, matching the watch buttons and the SmartButton caps.
@@ -27,7 +27,7 @@ enum Theme {
 
     static let background = Color(uiColor: .systemGroupedBackground)
     static let surface = Color(uiColor: .secondarySystemGroupedBackground)
-    // A step above the system grey: it has to clear WCAG AA over frosted glass on the colour field.
+    // A step above the system grey: it has to clear WCAG AA over frosted glass on the color field.
     static let secondaryText = Color(light: 0x4A4A52, dark: 0xC2C2CC)
 
     static let elevated = accent
@@ -84,7 +84,7 @@ struct Chip: View {
 
 extension Color {
     /// A color that follows light / dark mode, from 0xRRGGBB values.
-    /// `nonisolated`: UIKit resolves dynamic colours off the main thread (e.g. while Swift Charts draws),
+    /// `nonisolated`: UIKit resolves dynamic colors off the main thread (e.g. while Swift Charts draws),
     /// so this closure must not be main-actor isolated or the app traps.
     nonisolated init(light: UInt32, dark: UInt32) {
         @Sendable func ui(_ hex: UInt32) -> UIColor {

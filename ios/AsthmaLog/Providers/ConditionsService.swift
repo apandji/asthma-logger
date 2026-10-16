@@ -26,6 +26,7 @@ struct ConditionsService {
         case .success(let v):
             result.observations += v.observations
             result.alerts += v.alerts
+            result.weatherCondition = v.condition
         case .failure(let e): result.errors.append("Apple Weather: \(e.localizedDescription)")
         }
         switch await aq {

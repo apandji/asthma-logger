@@ -4,7 +4,7 @@ import SwiftData
 import SwiftUI
 import TipKit
 
-/// The Journal: one moment at a time. The colour field and the header follow the moment you're on
+/// The Journal: one moment at a time. The color field and the header follow the moment you're on
 /// (swipe sideways between them; a new moment slides in as soon as it's logged, from the +, the felt
 /// button or the watch). Pinch a moment open for everything about it; pinch in and the moments shrink
 /// into dots on a calendar with the full list. Turn sideways for the Data view.
@@ -163,7 +163,7 @@ struct JournalView: View {
         }
     }
 
-    /// Touch and hold, then move: name whatever colour is under the finger.
+    /// Touch and hold, then move: name whatever color is under the finger.
     private var skyGesture: some Gesture {
         LongPressGesture(minimumDuration: 0.3)
             .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
@@ -255,7 +255,7 @@ struct JournalView: View {
                             .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
                             .contentTransition(.opacity)
                     }
-                    Text(m.weave.isEmpty ? "No air reading." : m.airLine)
+                    Text(m.weave.isEmpty ? "No air reading." : m.headline)
                         .font(.system(.title, design: .serif, weight: .medium))
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
@@ -388,7 +388,7 @@ struct JournalView: View {
     }
 }
 
-/// Orange dot = rescue, blue dot = standard, open ring = I'm okay. Same colours as the watch.
+/// Orange dot = rescue, blue dot = standard, open ring = I'm okay. Same colors as the watch.
 struct MomentDot: View {
     let moment: MomentKind
     var size: CGFloat = 10
@@ -503,6 +503,21 @@ struct MomentCard: View {
 }
 
 extension LogEvent {
+    /// The Journal headline: leads with whatever stands out. Air first when it isn't good; otherwise
+    /// the weather. "Moderate air, 88° and humid." / "Rain, 61° and humid." / "Mild and comfortable, 61°."
+    var headline: String {
+        let w = weave
+        if let air = w.levels[.air], air != .low { return airLine }
+        let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
+        let humidity = w.words[.humidity]
+        if let sky = conditions?.weatherCondition {
+            return [sky, [temp, humidity].compactMap { $0 }.joined(separator: " and ")].filter { !$0.isEmpty }.joined(separator: ", ") + "."
+        }
+        let feel = [w.words[.temperature]?.capitalized, humidity].compactMap { $0 }.joined(separator: " and ")
+        let line = [feel.isEmpty ? nil : feel, temp].compactMap { $0 }.joined(separator: ", ")
+        return line.isEmpty ? airLine : line + "."
+    }
+
     /// The air at this moment as a short phrase: "Good air, 63° and comfortable."
     var airLine: String {
         let w = weave

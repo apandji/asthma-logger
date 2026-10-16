@@ -41,10 +41,10 @@ struct SettingsView: View {
                     Picker("Header", selection: $critHeader) {
                         ForEach(Crit.Header.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Colour field", selection: $critField) {
+                    Picker("Color field", selection: $critField) {
                         ForEach(Crit.FieldStyle.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Colour strength", selection: $critStrength) {
+                    Picker("Color strength", selection: $critStrength) {
                         ForEach(Crit.LayerStrength.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Pollen (demo)", selection: $demoPollen) {

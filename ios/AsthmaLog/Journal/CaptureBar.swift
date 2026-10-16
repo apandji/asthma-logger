@@ -200,10 +200,10 @@ struct CaptureControl: View {
         .accessibilityAction(named: "Log standard") { logged += 1; onLog(.maintenance) }
     }
 
-    /// The + that becomes a bead riding up the track with your finger, coloured by the zone it's in.
+    /// The + that becomes a bead riding up the track with your finger, colored by the zone it's in.
     private var knob: some View {
         ZStack {
-            // Fills with the zone's colour as you pull up.
+            // Fills with the zone's color as you pull up.
             ZStack(alignment: .bottom) {
                 Color.clear
                 Rectangle()

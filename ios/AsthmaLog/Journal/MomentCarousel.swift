@@ -40,7 +40,7 @@ struct MomentCarousel: View {
 }
 
 /// One moment. Card style: frosted glass with a quiet tab. Open style: no card, just the map in a
-/// feathered circle on the colour field with the kind, time and voice note beneath it.
+/// feathered circle on the color field with the kind, time and voice note beneath it.
 struct FolderCard: View {
     let event: LogEvent
     let isCurrent: Bool
@@ -164,7 +164,7 @@ struct FolderCard: View {
         }
     }
 
-    /// The folder tab: bold (solid colour) or quiet (the card's own glass, a dot and a grey label).
+    /// The folder tab: bold (solid color) or quiet (the card's own glass, a dot and a grey label).
     private var tab: some View {
         HStack {
             Spacer()

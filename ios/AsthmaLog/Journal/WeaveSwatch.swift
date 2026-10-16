@@ -2,7 +2,7 @@ import AsthmaCore
 import SwiftUI
 
 /// A moment's outdoor conditions as overprinted density weaves: one ink per factor, sparse dots (low),
-/// checker (medium) or fine weave (high), each at its own angle so layers stay distinct without colour.
+/// checker (medium) or fine weave (high), each at its own angle so layers stay distinct without color.
 /// Overlap darkens on light paper (multiply) and glows on night (screen). Spec: docs/design/textile-direction.md.
 struct WeaveSwatch: View {
     let weave: WeaveSpec

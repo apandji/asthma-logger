@@ -224,7 +224,7 @@ enum Sparkle {
     }
 }
 
-/// Rescue = five-petal flower (shape pack 14), standard = sparkle (19). Shape differs, not just colour.
+/// Rescue = five-petal flower (shape pack 14), standard = sparkle (19). Shape differs, not just color.
 struct MomentGlyph: View {
     let moment: MomentKind
     let size: CGFloat

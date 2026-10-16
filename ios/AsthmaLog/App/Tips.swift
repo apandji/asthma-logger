@@ -30,6 +30,6 @@ enum AppTips {
 
 struct SkyTip: Tip {
     var title: Text { Text("Hold to read the sky") }
-    var message: Text? { Text("Drag to see what each colour is.") }
+    var message: Text? { Text("Drag to see what each color is.") }
     var image: Image? { Image(systemName: "hand.point.up.left") }
 }

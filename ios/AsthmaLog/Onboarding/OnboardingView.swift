@@ -314,7 +314,7 @@ struct OnboardingView: View {
     }
 }
 
-/// Waiting for the first press: soft rings pulse outward. On sync, a solid disc in the pressed cap's colour.
+/// Waiting for the first press: soft rings pulse outward. On sync, a solid disc in the pressed cap's color.
 struct SyncPulse: View {
     let synced: Bool
     let cap: ButtonPacket.Cap?

@@ -1,10 +1,10 @@
 import AsthmaCore
 import SwiftUI
 
-/// Touch and hold the sky to explore it: whatever colour is under your finger is named, with its
+/// Touch and hold the sky to explore it: whatever color is under your finger is named, with its
 /// reading and one line of plain help. The sky is the legend. Positions match AmbientField's mesh:
 /// the top band is the base (temperature + humidity), the middle bands are the pollutant and pollen
-/// layers, each sitting where its colour is drawn.
+/// layers, each sitting where its color is drawn.
 struct SkyProbe: Equatable {
     /// "NO₂"
     let name: String
@@ -23,14 +23,14 @@ struct SkyProbe: Equatable {
 }
 
 enum SkyExplorer {
-    /// Where each layer's colour sits in the field (unit coordinates), same as AmbientField's mesh points.
+    /// Where each layer's color sits in the field (unit coordinates), same as AmbientField's mesh points.
     static let anchors: [(name: String, x: Double, y: Double)] = [
         ("PM2.5", 0, 0.3), ("NO₂", 0.33, 0.26), ("Ozone", 0.67, 0.3), ("PM10", 1, 0.26),
         ("Tree pollen", 0, 0.56), ("Weed pollen", 0.33, 0.6), ("Grass pollen", 0.67, 0.56), ("PM2.5", 1, 0.6),
     ]
 
     static func probe(at p: CGPoint, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
-                      temperatureF: Double?, pollen: PollenSample?) -> SkyProbe {
+                      temperatureF: Double?, pollen: PollenSample?) -> SkyProbe? {
         let present = Dictionary(layers.all.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
         if p.y > 0.16 && p.y < 0.82 {
             let nearest = anchors.filter { present[$0.name] != nil }
@@ -42,13 +42,14 @@ enum SkyExplorer {
                                 level: layer.level, note: note(layer.name), color: layer.color, intensity: position)
             }
         }
-        // The base: temperature and humidity.
+        // The top of the sky is the weather at that moment. Elsewhere, no layer under the finger: no label.
+        guard p.y <= 0.3 else { return nil }
         let humidity = conditions?.best(.humidity)?.value
         let detail = [humidity.map { "\(Int($0.rounded()))% humidity" }, weave.words[.humidity]].compactMap { $0 }.joined(separator: ", ")
-        return SkyProbe(name: "Sky", kind: weave.words[.temperature].map { $0.capitalized } ?? "Outside",
+        return SkyProbe(name: "Weather",
+                        kind: conditions?.weatherCondition ?? weave.words[.temperature].map { $0.capitalized } ?? "",
                         value: temperatureF.map { "\(Int($0.rounded()))" } ?? "–", unit: "°F", level: nil,
-                        note: detail.isEmpty ? "Colour is temperature. Softness is humidity." : detail + ". Colour is temperature, softness is humidity.",
-                        color: .white, intensity: 0)
+                        note: detail.isEmpty ? "" : detail + ".", color: .white, intensity: 0)
     }
 
     /// The number and its unit, apart, so the number can be set large.
@@ -152,7 +153,9 @@ struct SkyProbeOverlay: View {
                     }
                 }
             }
-            Text(probe.note).font(.caption).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+            if !probe.note.isEmpty {
+                Text(probe.note).font(.caption).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(12)
         .glassEffect(.regular, in: .rect(cornerRadius: 16))

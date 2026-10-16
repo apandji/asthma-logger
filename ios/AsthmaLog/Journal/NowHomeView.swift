@@ -132,8 +132,28 @@ struct NowHomeView: View {
                 if let p = away ?? here { await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here") }
             }
             // A new moment brings the playhead back to now.
-            .onChange(of: events.last?.id) { _, _ in withAnimation(.smooth(duration: 0.6)) { focusTime = nil } }
+            .onChange(of: events.last?.id) { _, _ in
+                withAnimation(.smooth(duration: 0.6)) { focusTime = nil }
+                announce(events.last)
+            }
         }
+    }
+
+    /// "Rescue logged · Undo" for a moment that just arrived from the felt button or the watch. The +
+    /// shows its own toast, so the same moment is never announced twice.
+    private func announce(_ e: LogEvent?) {
+        guard let e, e.moment != .okay, Date().timeIntervalSince(e.loggedAt) < 120, toast?.id != e.id else { return }
+        withAnimation(.snappy) { toast = e }
+        Task {
+            try? await Task.sleep(for: .seconds(4))
+            if toast?.id == e.id { withAnimation(.snappy) { toast = nil } }
+        }
+    }
+
+    /// A moment logged in the last couple of minutes: Now shows it, not the live reading.
+    private var justNow: LogEvent? {
+        guard let m = moments.last, now.timeIntervalSince(m.loggedAt) < 120 else { return nil }
+        return m
     }
 
     // MARK: What the playhead is on
@@ -156,12 +176,22 @@ struct NowHomeView: View {
         Group {
             switch focus {
             case .now:
-                ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true,
-                            byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
-                    Circle().fill(.white).frame(width: 8, height: 8)
-                    Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
+                if let j = justNow {
+                    // Just logged: the moment's own reading, in the present.
+                    ScaleHeader(title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
+                                reserveTwoLines: true, byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
+                        MomentDot(moment: j.moment, size: 8)
+                        Text(["Just now", j.moment == .rescue ? "Rescue" : "Standard", j.placeName ?? here?.place].compactMap { $0 }.joined(separator: " · "))
+                    }
+                    .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { focusTime = j.loggedAt; expanded = true } }
+                } else {
+                    ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true,
+                                byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
+                        Circle().fill(.white).frame(width: 8, height: 8)
+                        Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
+                    }
+                    .onTapGesture { showInsights = true }
                 }
-                .onTapGesture { showInsights = true }
             case .moment(let m):
                 ScaleHeader(title: m.pastStatement, reserveTwoLines: true, reserveByline: true, compact: true) {
                     MomentDot(moment: m.moment, size: 8)
@@ -251,10 +281,18 @@ struct NowHomeView: View {
     @ViewBuilder private var sky: some View {
         switch focus {
         case .now:
-            NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
-                   pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
-                   mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
-                .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
+            if let j = justNow, !j.weave.isEmpty {
+                NowSky(conditions: j.conditions, weave: j.weave, date: j.loggedAt,
+                       pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
+                       mapID: j.latitude == nil ? "here" : j.id.uuidString,
+                       coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) })
+                    .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { focusTime = j.loggedAt; expanded = true } }
+            } else {
+                NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
+                       pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
+                       mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
+                    .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
+            }
         case .moment(let m):
             NowSky(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
                    pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason), probing: $probing,

@@ -115,6 +115,14 @@ struct JournalView: View {
         // A new moment (from anywhere) slides into view.
         .onChange(of: events.last?.id) { _, id in
             guard let id, let e = events.last, e.moment != .okay, Date().timeIntervalSince(e.loggedAt) < 120 else { return }
+            // The felt button and the watch log without the +, so the toast comes from here.
+            if toast?.id != e.id {
+                withAnimation(.snappy) { toast = e }
+                Task {
+                    try? await Task.sleep(for: .seconds(4))
+                    if toast?.id == e.id { withAnimation(.snappy) { toast = nil } }
+                }
+            }
             withAnimation(.smooth(duration: 0.6)) {
                 overview = false
                 showDays = false

@@ -99,15 +99,14 @@ struct MomentDetailsView: View {
     private func air(_ c: Conditions) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Air").font(.headline).padding(.bottom, 6)
-            airRow("PM2.5", c.best(.pm25), level: c.best(.pm25).map { band(Banding.pm25($0.value)) } ?? nil, ink: WeatherColor.pm25)
-            Divider()
-            airRow("PM10", c.best(.pm10), level: c.best(.pm10).map { band(Banding.pm10($0.value)) } ?? nil, ink: WeatherColor.pm10)
-            Divider()
-            airRow("Ozone", c.best(.ozone), level: c.best(.ozone).map { band(Banding.ozone(ppb: $0.value)) } ?? nil, ink: WeatherColor.ozone)
-            Divider()
-            airRow("NO₂", c.best(.no2), level: c.best(.no2).map { band(Banding.no2(ppb: $0.value)) } ?? nil, ink: WeatherColor.no2)
-            Divider()
-            airRow("AQI", c.best(.aqi), level: c.best(.aqi).map { $0.value <= 50 ? .low : $0.value <= 100 ? .medium : .high })
+            let rows = airRows(c)
+            if rows.isEmpty {
+                Text("No air readings from nearby monitors.").font(.subheadline).foregroundStyle(Theme.secondaryText).padding(.vertical, 8)
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
+                if i > 0 { Divider() }
+                airRowBody(r.name, r.obs, level: r.level, ink: r.ink)
+            }
             Divider()
             if let pollen {
                 ForEach(Array(pollen.kinds.enumerated()), id: \.offset) { k, kind in
@@ -141,7 +140,12 @@ struct MomentDetailsView: View {
         .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
     }
 
-    private func airRow(_ name: String, _ o: EnvObservation?, level: WeaveSpec.Level?, ink: Color = WeaveSwatch.ink(.air)) -> some View {
+    /// Only pollutants with a reading get a row: a missing monitor isn't a value worth a line.
+    @ViewBuilder private func airRow(_ name: String, _ o: EnvObservation?, level: WeaveSpec.Level?, ink: Color = WeaveSwatch.ink(.air)) -> some View {
+        if o != nil { airRowBody(name, o, level: level, ink: ink) }
+    }
+
+    private func airRowBody(_ name: String, _ o: EnvObservation?, level: WeaveSpec.Level?, ink: Color) -> some View {
         HStack(spacing: 12) {
             LevelIndicator(level: level, ink: ink, style: style).frame(minWidth: 30)
             Text(name)
@@ -152,6 +156,22 @@ struct MomentDetailsView: View {
             }
         }
         .font(.subheadline).padding(.vertical, 8)
+    }
+
+    struct AirRow { let name: String; let obs: EnvObservation; let level: WeaveSpec.Level?; let ink: Color }
+
+    /// Pollutants with a reading, in a fixed order. Built step by step so the type checker stays quick.
+    private func airRows(_ c: Conditions) -> [AirRow] {
+        var rows: [AirRow] = []
+        if let o = c.best(.pm25) { rows.append(AirRow(name: "PM2.5", obs: o, level: band(Banding.pm25(o.value)), ink: WeatherColor.pm25)) }
+        if let o = c.best(.pm10) { rows.append(AirRow(name: "PM10", obs: o, level: band(Banding.pm10(o.value)), ink: WeatherColor.pm10)) }
+        if let o = c.best(.ozone) { rows.append(AirRow(name: "Ozone", obs: o, level: band(Banding.ozone(ppb: o.value)), ink: WeatherColor.ozone)) }
+        if let o = c.best(.no2) { rows.append(AirRow(name: "NO₂", obs: o, level: band(Banding.no2(ppb: o.value)), ink: WeatherColor.no2)) }
+        if let o = c.best(.aqi) {
+            let l: WeaveSpec.Level = o.value <= 50 ? .low : o.value <= 100 ? .medium : .high
+            rows.append(AirRow(name: "AQI", obs: o, level: l, ink: WeaveSwatch.ink(.air)))
+        }
+        return rows
     }
 
     private func band(_ b: PollutantBand) -> WeaveSpec.Level? {

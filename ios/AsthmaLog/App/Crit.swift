@@ -96,4 +96,18 @@ enum Crit {
     }
 
     static let performanceHUD = "crit.performanceHUD"
+
+    /// Three gesture models for the Journal, to compare in a crit.
+    enum Gestures: String, CaseIterable, Identifiable {
+        case axis, zoom, quiet
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .axis: "A · One axis (swipe)"
+            case .zoom: "B · Zoom through time (pinch)"
+            case .quiet: "C · Quiet (timeline and tap)"
+            }
+        }
+        static let key = "crit.gestures"
+    }
 }

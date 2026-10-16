@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var demoNote: String?
     @State private var tutorialNote: String?
     @AppStorage(Crit.performanceHUD) private var perfHUD = false
+    @AppStorage(Crit.Gestures.key) private var critGestures = Crit.Gestures.zoom
     @AppStorage(LevelStyle.key) private var levelStyle = LevelStyle.signal
     @AppStorage(Crit.Header.key) private var critHeader = Crit.Header.moment
     @AppStorage(Crit.CardStyle.key) private var critCard = Crit.CardStyle.panel
@@ -39,6 +40,9 @@ struct SettingsView: View {
                     }
                     if let tutorialNote {
                         Text(tutorialNote).font(.footnote).foregroundStyle(Theme.secondaryText)
+                    }
+                    Picker("Gestures", selection: $critGestures) {
+                        ForEach(Crit.Gestures.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Header", selection: $critHeader) {
                         ForEach(Crit.Header.allCases) { Text($0.title).tag($0) }

@@ -20,6 +20,12 @@ struct JournalView: View {
     /// The moment opened in place (panel style): the sky gives way to its map and details.
     @State private var expanded: LogEvent?
     @State private var overview = false
+    /// The "days" scale of the zoom (gesture model B).
+    @State private var showDays = false
+    /// Live pinch for model B: the current scale follows the fingers until release.
+    @State private var pinchScale: CGFloat = 1
+    @State private var zoomingIn = false
+    @AppStorage(Crit.Gestures.key) private var gestures = Crit.Gestures.zoom
     /// First-use tips, one at a time: pull to log, then moments.
     @State private var tips = TipGroup(.ordered) { PullToLogTip(); MomentsTip(); SkyTip() }
     @State private var probePoint: CGPoint?
@@ -42,14 +48,14 @@ struct JournalView: View {
             ambient
                 // The + and Insights live on the home only, not on pushed pages.
                 .safeAreaInset(edge: .bottom) {
-                    if !overview && expanded == nil { CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, spot: spot) }
+                    if !overview && !showDays && expanded == nil { CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, spot: spot) }
                 }
                 .overlay(alignment: .trailing) {
                     if insightsEntry == .edgeTab && !overview { InsightEdgeTab { showInsights = true } }
                 }
                 // Tutorial: dim everything the current tip isn't about.
                 .overlay {
-                    if expanded == nil && !overview, let ids = spotlightIDs {
+                    if expanded == nil && !overview && !showDays, let ids = spotlightIDs {
                         SpotlightDim(holes: ids.compactMap { spot.frames[$0] })
                     }
                 }
@@ -72,6 +78,7 @@ struct JournalView: View {
             guard let id, let e = events.last, e.moment != .okay, Date().timeIntervalSince(e.loggedAt) < 120 else { return }
             withAnimation(.smooth(duration: 0.6)) {
                 overview = false
+                showDays = false
                 selectedID = id
             }
         }
@@ -82,16 +89,71 @@ struct JournalView: View {
     private var ambient: some View {
         VStack(alignment: .leading, spacing: 0) {
             if expanded == nil { topBar }
-            if overview {
-                MomentsOverview(events: Array(events), namespace: morph, open: { e in
-                    withAnimation(.spring(duration: 0.55, bounce: 0.15)) { selectedID = e.id; overview = false }
-                }, close: { withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } })
-                .transition(.opacity)
-            } else {
-                if let e = expanded {
+            Group {
+                if overview {
+                    MomentsOverview(events: Array(events), namespace: morph, open: { e in
+                        withAnimation(.spring(duration: 0.55, bounce: 0.15)) { selectedID = e.id; overview = false; showDays = false }
+                    }, close: { withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } })
+                } else if showDays {
+                    DaysView(events: cards, selectedID: selected?.id, pollenSeason: pollenSeason) { e in
+                        zoomingIn = true
+                        withAnimation(.spring(duration: 0.5, bounce: 0.12)) { selectedID = e.id; showDays = false }
+                    }
+                } else if let e = expanded {
                     MomentDetailsView(event: e, mapNamespace: mapZoom, onClose: collapse)
-                        .transition(.opacity)
                 } else {
+                    momentLevel
+                }
+            }
+            .id(levelKey)
+            // Model B: the level follows the fingers (smaller and fainter pinching in, larger pinching out)
+            // and the next one settles in from the opposite size.
+            .scaleEffect(liveScale)
+            .opacity(liveOpacity)
+            .transition(.asymmetric(insertion: .scale(scale: zoomingIn ? 0.86 : 1.14).combined(with: .opacity),
+                                    removal: .opacity))
+            .sensoryFeedback(.impact(flexibility: .soft), trigger: levelKey)
+            if let error = services.lastError {
+                Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20).padding(.top, 8)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .simultaneousGesture(skyGesture, isEnabled: momentStyle != .panel)
+        .overlay {
+            if let probePoint, let probe {
+                SkyProbeOverlay(point: CGPoint(x: probePoint.x - ambientFrame.minX, y: probePoint.y - ambientFrame.minY),
+                                probe: probe, width: ambientFrame.width)
+                    .transition(.opacity)
+            }
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { ambientFrame = $0 }
+        .sensoryFeedback(.selection, trigger: probe?.name)
+        .sensoryFeedback(.impact(weight: .light), trigger: probePoint == nil)
+        .simultaneousGesture(zoomGesture)
+        .background {
+            if momentStyle == .panel {
+                // The sky lives in its panel; the page is black.
+                Color.black.ignoresSafeArea()
+            } else {
+            // The room takes on the moment you're on.
+            AmbientField(weave: fieldWeave,
+                         temperatureF: selected?.conditions?.best(.temperature)?.value ?? now?.temp,
+                         date: selected?.loggedAt ?? .now,
+                         conditions: selected?.conditions,
+                         pollen: DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason))
+                .ignoresSafeArea()
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { fieldFrame = $0 }
+                .animation(.easeInOut(duration: 0.8), value: selected?.id)
+            }
+        }
+    }
+
+    /// The moment scale: header, the moment's sky and the timeline.
+    @ViewBuilder private var momentLevel: some View {
+        VStack(alignment: .leading, spacing: 0) {
                 header.transition(.opacity)
                     .opacity(probe == nil && !panelProbing ? 1 : 0.4)  // step aside while you explore the sky
                     .animation(.easeOut(duration: 0.2), value: probe == nil && !panelProbing)
@@ -118,47 +180,44 @@ struct JournalView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                 }
-                }
-                if let error = services.lastError {
-                    Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20).padding(.top, 8)
-                }
-                Spacer(minLength: 0)
-            }
         }
-        .padding(.bottom, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .contentShape(Rectangle())
-        .simultaneousGesture(skyGesture, isEnabled: momentStyle != .panel)
-        .overlay {
-            if let probePoint, let probe {
-                SkyProbeOverlay(point: CGPoint(x: probePoint.x - ambientFrame.minX, y: probePoint.y - ambientFrame.minY),
-                                probe: probe, width: ambientFrame.width)
-                    .transition(.opacity)
+    }
+
+    private var levelKey: String {
+        overview ? "month" : showDays ? "days" : expanded != nil ? "detail" : "moment"
+    }
+
+    private var liveScale: CGFloat { gestures == .zoom ? min(1.25, max(0.75, pinchScale)) : 1 }
+    private var liveOpacity: Double { gestures == .zoom ? 1 - min(0.55, abs(Double(pinchScale) - 1) * 1.6) : 1 }
+
+    /// Model B: one pinch through the scales, detail ⇄ moment ⇄ days ⇄ month.
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { v in
+                guard gestures == .zoom else { return }
+                pinchScale = v.magnification
             }
-        }
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { ambientFrame = $0 }
-        .sensoryFeedback(.selection, trigger: probe?.name)
-        .sensoryFeedback(.impact(weight: .light), trigger: probePoint == nil)
-        .simultaneousGesture(
-            MagnifyGesture().onEnded { v in
-                if v.magnification < 0.85 && !overview && expanded == nil { zoomOut() }
-                else if v.magnification > 1.15 && overview { withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } }
+            .onEnded { v in
+                guard gestures == .zoom else { return }
+                let m = v.magnification
+                withAnimation(.spring(duration: 0.4, bounce: 0.15)) { pinchScale = 1 }
+                if m < 0.82 { zoom(by: -1) } else if m > 1.18 { zoom(by: 1) }
             }
-        )
-        .background {
-            if momentStyle == .panel {
-                // The sky lives in its panel; the page is black.
-                Color.black.ignoresSafeArea()
-            } else {
-            // The room takes on the moment you're on.
-            AmbientField(weave: fieldWeave,
-                         temperatureF: selected?.conditions?.best(.temperature)?.value ?? now?.temp,
-                         date: selected?.loggedAt ?? .now,
-                         conditions: selected?.conditions,
-                         pollen: DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason))
-                .ignoresSafeArea()
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { fieldFrame = $0 }
-                .animation(.easeInOut(duration: 0.8), value: selected?.id)
+    }
+
+    /// -1 zooms out (detail → moment → days → month), +1 zooms in.
+    private func zoom(by step: Int) {
+        zoomingIn = step > 0
+        MomentsTip().invalidate(reason: .actionPerformed)
+        withAnimation(.spring(duration: 0.5, bounce: 0.12)) {
+            switch (levelKey, step) {
+            case ("detail", -1): expanded = nil
+            case ("moment", -1): showDays = true
+            case ("days", -1): showDays = false; overview = true
+            case ("month", 1): overview = false; showDays = true
+            case ("days", 1): showDays = false
+            case ("moment", 1): if let e = selected { expanded = e }
+            default: break
             }
         }
     }
@@ -196,10 +255,12 @@ struct JournalView: View {
     }
 
     private func expand(_ e: LogEvent) {
+        zoomingIn = true
         withAnimation(.spring(duration: 0.6, bounce: 0.12)) { expanded = e }
     }
 
     private func collapse() {
+        zoomingIn = false
         withAnimation(.spring(duration: 0.55, bounce: 0.1)) { expanded = nil }
     }
 

@@ -19,6 +19,13 @@ struct MomentPager: View {
 
     private var current: LogEvent? { events.first { $0.id == selectedID } ?? events.last }
 
+    private func step(_ by: Int) {
+        guard let i = events.firstIndex(where: { $0.id == current?.id }) else { return }
+        let j = max(0, min(events.count - 1, i + by))
+        guard j != i else { return }
+        withAnimation(.easeInOut(duration: 0.3)) { selectedID = events[j].id }
+    }
+
     /// Snapshot the maps either side of the current moment, so scrubbing never waits on one.
     private func prefetchNeighbours() async {
         guard let i = events.firstIndex(where: { $0.id == current?.id }) else { return }
@@ -33,7 +40,8 @@ struct MomentPager: View {
             ZStack {
                 if let e = current {
                     SkyPanel(event: e, pollen: DemoPollen.sample(at: e.loggedAt, season: pollenSeason),
-                             zoom: zoom, mapNamespace: mapNamespace, probing: $probing, onOpen: { onOpen(e) }, onOverview: onOverview)
+                             zoom: zoom, mapNamespace: mapNamespace, probing: $probing, onOpen: { onOpen(e) }, onOverview: onOverview,
+                             onStep: step)
                         .id(e.id)
                         .transition(.opacity)
                 }
@@ -202,10 +210,13 @@ struct SkyPanel: View {
     @Binding var probing: Bool
     let onOpen: () -> Void
     let onOverview: () -> Void
+    /// Swipe sideways on the sky: -1 for the previous moment, +1 for the next.
+    var onStep: (Int) -> Void = { _ in }
 
     @State private var point: CGPoint?
+    @State private var drag: CGSize = .zero
+    @AppStorage(Crit.Gestures.key) private var gestures = Crit.Gestures.zoom
     @State private var probe: SkyProbe?
-    @State private var pinch: CGFloat = 1
     @State private var pulse: Task<Void, Never>?
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
 
@@ -251,17 +262,12 @@ struct SkyPanel: View {
                 }
             }
             .contentShape(Rectangle())
-            .scaleEffect(pinch)
+            // The sky follows a swipe a little, then settles on the next moment.
+            .offset(x: drag.width * 0.45, y: gestures == .axis ? min(0, drag.height) * 0.3 : 0)
+            .opacity(1 - min(0.5, abs(drag.width) / 600))
             .onTapGesture(perform: onOpen)
-            .gesture(explore(size))
-            .simultaneousGesture(
-                MagnifyGesture()
-                    .onChanged { v in pinch = min(1.08, max(0.94, v.magnification)) }
-                    .onEnded { v in
-                        withAnimation(.snappy) { pinch = 1 }
-                        if v.magnification > 1.08 { onOpen() } else if v.magnification < 0.85 { onOverview() }
-                    }
-            )
+            // Hold still first to read the sky; move straight away to swipe.
+            .gesture(explore(size).exclusively(before: swipe))
         }
         .padding(.horizontal, 8)
         .task { await PlaceNames.lookUp(event) }
@@ -294,6 +300,25 @@ struct SkyPanel: View {
                 stopPulse()
                 withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil }
                 probing = false
+            }
+    }
+
+    /// A (one axis): sideways for other moments, up for details. B (zoom): sideways only. C: none.
+    private var swipe: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { v in
+                guard gestures != .quiet else { return }
+                drag = v.translation
+            }
+            .onEnded { v in
+                defer { withAnimation(.spring(duration: 0.35, bounce: 0.2)) { drag = .zero } }
+                guard gestures != .quiet else { return }
+                let dx = v.predictedEndTranslation.width, dy = v.predictedEndTranslation.height
+                if abs(dx) > abs(dy), abs(dx) > 90 {
+                    onStep(dx < 0 ? 1 : -1)   // swipe left = later, like turning a page
+                } else if gestures == .axis, dy < -120, abs(dy) > abs(dx) {
+                    onOpen()
+                }
             }
     }
 

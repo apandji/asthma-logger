@@ -50,7 +50,6 @@ struct MomentDetailsView: View {
             pull = y
             if y < -90 { onClose?() }   // pull down past the top to go back
         }
-        .simultaneousGesture(MagnifyGesture().onEnded { v in if v.magnification < 0.85 { onClose?() } })
         .background(Color.black.ignoresSafeArea())
         .task { await loadAround() }
     }

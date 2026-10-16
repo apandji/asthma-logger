@@ -17,13 +17,12 @@ struct ScaleHeader<Kicker: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) { kicker }
                 .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-                .lineLimit(1).minimumScaleFactor(0.8)
+                .lineLimit(1).truncationMode(.middle)  // fixed size: a long place name clips, the type never shrinks
             let hasByline = byline != nil || reserveByline
             Text(title)
                 .font(.system(compact ? .title2 : .title, design: .serif, weight: .medium))
                 // With a byline the block keeps a fixed height instead, so the byline hugs the title.
                 .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines && !hasByline)
-                .minimumScaleFactor(0.85)
                 .contentTransition(.opacity)
             if hasByline {
                 // felt air's own voice, marked with the sparkle so it reads as the app thinking, not data.

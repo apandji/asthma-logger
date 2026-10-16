@@ -55,11 +55,12 @@ struct JournalView: View {
     var body: some View {
         NavigationStack {
             ambient
-                // The + and Insights live on the home only, not on pushed pages.
-                // The + and Insights stay put on every scale, over everything.
+                // One column of glass controls on the right edge, the same on every scale and over
+                // everything: Insights and Settings at the top, the + at the bottom. The left is for words.
                 .overlay(alignment: .bottom) {
                     CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, spot: spot)
                 }
+                .overlay(alignment: .topTrailing) { topRail }
                 .overlay(alignment: .trailing) {
                     if insightsEntry == .edgeTab && !overview { InsightEdgeTab { showInsights = true } }
                 }
@@ -116,7 +117,6 @@ struct JournalView: View {
 
     private var ambient: some View {
         VStack(alignment: .leading, spacing: 0) {
-            topBar
             Group {
                 if overview {
                     MomentsOverview(events: Array(events), namespace: morph,
@@ -184,6 +184,7 @@ struct JournalView: View {
     @ViewBuilder private var momentLevel: some View {
         VStack(alignment: .leading, spacing: 0) {
                 header.transition(.opacity)
+                    .padding(.trailing, 60)  // clear the glass column
                     .opacity(probe == nil && !panelProbing ? 1 : 0.4)  // step aside while you explore the sky
                     .animation(.easeOut(duration: 0.2), value: probe == nil && !panelProbing)
                 Spacer(minLength: 4)
@@ -364,26 +365,21 @@ struct JournalView: View {
     }
 
     /// A standard ••• menu, top right: All moments and Settings.
-    private var topBar: some View {
-        HStack(spacing: 10) {
-            Spacer()
+    private var topRail: some View {
+        VStack(spacing: 10) {
             if insightsEntry == .topBar {
                 InsightsRingButton(open: { showInsights = true }, size: 44, bubbleBelow: true)
             }
-            Menu {
-                Button(overview ? "Back to moments" : "All moments", systemImage: overview ? "rectangle.stack" : "calendar") {
-                    overview ? withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } : zoomOut()
-                }
-                Button("Settings", systemImage: "gearshape") { showSettings = true }
-            } label: {
-                Image(systemName: "ellipsis")
+            Button { showSettings = true } label: {
+                Image(systemName: "gearshape")
                     .font(.body.weight(.semibold))
                     .frame(width: 44, height: 44)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
-            .accessibilityLabel("More")
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
         }
-        .padding(.horizontal, 16)
+        .padding(.trailing, 16)
         .padding(.top, 2)
     }
 

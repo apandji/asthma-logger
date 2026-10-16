@@ -51,7 +51,7 @@ struct FolderCard: View {
 
     @State private var pinch: CGFloat = 1
     @AppStorage(Crit.CardMarker.key) private var marker = Crit.CardMarker.quietTab
-    @AppStorage(Crit.CardStyle.key) private var cardStyle = Crit.CardStyle.open
+    @AppStorage(Crit.CardStyle.key) private var cardStyle = Crit.CardStyle.panel
     @AppStorage(Crit.Header.key) private var headerStyle = Crit.Header.moment
 
     private var kindWord: String {
@@ -62,7 +62,7 @@ struct FolderCard: View {
         Group {
             switch cardStyle {
             case .card: card.matchedTransitionSource(id: event.id, in: zoom)
-            case .open: open
+            case .open, .panel: open
             }
         }
         .contentShape(Rectangle())

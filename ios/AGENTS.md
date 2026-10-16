@@ -136,15 +136,16 @@ Mirror the target model in [docs/data-architecture.md §3](../docs/data-architec
 ## UI
 
 - **No tab bar.** The Journal is one surface; everything else is a gesture (as of Oct 16, 2026):
-  - **Sideways swipe:** moments, one at a time. The header and the colour field follow the moment you're on. A newly logged moment (+, felt button, watch) slides into view.
+  - **Pages of moments:** each moment is its own contained sky on a black page (fades to black at the top and edges), with the map faint and inactive inside it and page dots below. Swipe for other moments; the header follows. A newly logged moment (+, felt button, watch) slides into view. Older styles (floating circle, card) are crit options.
   - **+ (bottom right):** press and pull up. A short pull logs **Rescue**, all the way up logs **Standard**, letting go low cancels. Haptics per zone, Undo toast.
   - **Insights:** a ring button by the + fills while learning; when there's a pattern a speech bubble offers it. Opens as a sheet (swipe down to close).
   - **Tap or pinch a moment open:** `MomentDetailsView`, weather first. **Pinch in:** the moments shrink into dots on a month calendar with the full list (`MomentsOverview`, shared `matchedGeometryEffect` ids).
   - **Turn sideways:** the Data view (`AirChartsView(wide:)`, hourly temperature / humidity / PM2.5 with inhaler moments marked).
-  - **Touch and hold the sky:** move your finger to name each colour (layer, level, reading, one line of plain help), with a haptic tick per layer. The sky is the legend; there's no separate key.
+  - **Touch and hold the sky:** paging pauses; move your finger to name each colour (name, reading set large with its unit, amount bars and level, one plain line). A steady haptic pulse quickens and strengthens as the reading nears high. The sky is the legend; there's no separate key.
   - **••• (top right):** a menu with All moments and Settings. First-use hints are TipKit tips, one at a time.
 - Logging should always work offline and never wait on the network.
 - **Colour field = a layered sky.** Base: temperature is the hue (blue cold → green mild → gold warm → red hot) under the light of the hour (indigo night, rose dawn and dusk); humidity is the softness (dry crisp, humid pale). On top, one colour per pollutant and pollen type, faint when low and fuller when high: PM2.5 slate, PM10 sand, NO₂ rust, ozone icy cyan, tree green, grass gold, weed violet (`AirLayers`). Still, no idle motion. `WeatherColor` holds the palette; `FieldLegend` explains it with this moment's levels.
+- **Copy:** short, concrete, plain. No flourishes ("Breathe…"), no paired abstractions, no semicolons in UI text. Say what happens ("This press only pairs the button, it isn't logged").
 - **Look: Apple chrome, felt air character.** System pieces for chrome (TipKit tips, a ••• menu, glass buttons); the character lives in the colour field and the moment (map in a feathered circle). Avoid decorative effects that don't carry data.
 - **Design crit switches** (Settings › Design crit, Debug only; `App/Crit.swift`): header, colour field, colour strength (steps / smooth within level), demo pollen, moment style (no card / card), card label, Good / OK / Not good style, Insights entry and state, + pull order. Add new open design questions here as switches instead of forking views, and keep the default as the current proposal.
 - **Demo pollen** (`Providers/DemoPollen.swift`) is display-only: realistic Midwest seasons, labelled "Demo" wherever shown, never in frames, Insights or patterns.

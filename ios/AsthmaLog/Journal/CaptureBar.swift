@@ -354,8 +354,8 @@ struct InsightsRingButton: View {
 
     private var bubble: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("felt air noticed something").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
-            Text(model.narration?.headline ?? "Your inhaler days have something in common. Take a look.")
+            Text("New pattern").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+            Text(model.narration?.headline ?? "Your inhaler days have something in common.")
                 .font(.subheadline).lineLimit(3)
         }
         .padding(12)

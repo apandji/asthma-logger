@@ -199,7 +199,7 @@ struct MomentDetailsView: View {
     @ViewBuilder private var aroundChart: some View {
         if let h = around, h.temperature.count > 1 || h.pm25.count > 1 {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Around this moment").font(.headline)
+                Text("6 hours either side").font(.headline)
                 if h.temperature.count > 1 { mini("Temperature °F", h.temperature, WeaveSwatch.ink(.temperature)) }
                 if h.pm25.count > 1 { mini("PM2.5 µg/m³", h.pm25, WeaveSwatch.ink(.air)) }
             }

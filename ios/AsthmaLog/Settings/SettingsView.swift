@@ -16,7 +16,7 @@ struct SettingsView: View {
     @State private var demoNote: String?
     @AppStorage(LevelStyle.key) private var levelStyle = LevelStyle.signal
     @AppStorage(Crit.Header.key) private var critHeader = Crit.Header.moment
-    @AppStorage(Crit.CardStyle.key) private var critCard = Crit.CardStyle.open
+    @AppStorage(Crit.CardStyle.key) private var critCard = Crit.CardStyle.panel
     @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
     @AppStorage(Crit.CardMarker.key) private var critMarker = Crit.CardMarker.quietTab
     @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather

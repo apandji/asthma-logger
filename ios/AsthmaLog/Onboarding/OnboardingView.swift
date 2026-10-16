@@ -6,7 +6,7 @@ import SwiftUI
 
 /// First run: welcome → press your felt button to sync → your location and the air there, on a map
 /// (the location prompt appears right after the press, no extra screen) → motion and Apple Health →
-/// "felt air learns over time". No account. Each permission is asked when it's about to be used.
+/// "It gets better with time". No account. Each permission is asked when it's about to be used.
 /// Photos come from the owner's Figma (local only; woven fallback without).
 struct OnboardingView: View {
     @Environment(LogService.self) private var services
@@ -92,9 +92,9 @@ struct OnboardingView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("felt air").font(.system(size: 30, weight: .light)).tracking(1)
-            Text("Breathe. We'll keep an eye on the air.")
+            Text("Your inhaler, and the air around it.")
                 .font(.system(.title2, design: .serif, weight: .medium))
-            Text("Every time you use your inhaler, felt air saves the weather and air quality outside. Over time, you'll see what your hard days have in common.")
+            Text("Each time you use your inhaler, felt air saves the outdoor air and weather. After a few weeks you can see what your harder days share.")
                 .font(.subheadline).foregroundStyle(.secondary)
             Text("Outdoor air only. Not medical advice.").font(.footnote).foregroundStyle(.secondary)
             primary("Get started") {
@@ -116,7 +116,7 @@ struct OnboardingView: View {
                     Text(syncStatus).font(.subheadline).foregroundStyle(.secondary)
                 }
             }
-            Text("Orange is for your rescue inhaler, teal for your daily one. This first press only connects it; it isn't saved as inhaler use.")
+            Text("Orange is rescue. Teal is your daily inhaler. This press only pairs the button, it isn't logged.")
                 .font(.footnote).foregroundStyle(.secondary)
             secondary("I don't have a button") {
                 button.endSync()
@@ -146,13 +146,13 @@ struct OnboardingView: View {
                     tierRow(m, .temperature, "Temperature", m.conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°F" })
                     tierRow(m, .humidity, "Humidity", m.conditions?.best(.humidity).map { "\(Int($0.value.rounded()))%" })
                 }
-                Text("Outdoors, from \(sources(m)). Saved as your first calm moment: a time without your inhaler, so there's something to compare the hard times with.")
+                Text("Outdoors · \(sources(m)). Saved as a calm moment, so later inhaler days have something to compare with.")
                     .font(.footnote).foregroundStyle(.secondary)
                 WeatherAttributionView()
                 primary("Continue") { step = .health }
             } else if fix == nil && !locating {
-                Text("No location, no problem").font(.system(.title2, design: .serif, weight: .medium))
-                Text("felt air can still save your moments. Turn on location later in Settings to see the air.")
+                Text("No location").font(.system(.title2, design: .serif, weight: .medium))
+                Text("You can still log. Turn on location in Settings to add the air.")
                     .font(.subheadline).foregroundStyle(.secondary)
                 primary("Continue") { step = .health }
             } else {
@@ -161,7 +161,7 @@ struct OnboardingView: View {
                     Text(fix == nil ? "Finding you…" : "Checking the air…")
                         .font(.system(.title2, design: .serif, weight: .medium))
                 }
-                Text("We check the air where you are each time you log. Your location stays on this phone.")
+                Text("felt air checks the air where you are when you log. Your location stays on this iPhone.")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
         }
@@ -169,7 +169,7 @@ struct OnboardingView: View {
 
     private var health: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Two more, both optional").font(.system(.title2, design: .serif, weight: .medium))
+            Text("Two optional permissions").font(.system(.title2, design: .serif, weight: .medium))
             permission("figure.walk", "Motion & Fitness",
                        "Walking, driving or still helps guess if you were indoors or out.", done: askedMotion) {
                 Task { _ = await services.motion.recent(); askedMotion = true }
@@ -184,8 +184,8 @@ struct OnboardingView: View {
 
     private var learn: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("felt air learns over time").font(.system(.title2, design: .serif, weight: .medium))
-            Text("Each press saves the air around it. felt air also notes calm moments on its own. Once there are enough of both, it shows which conditions turn up more on your inhaler days, and flags days ahead that look like them.")
+            Text("It gets better with time").font(.system(.title2, design: .serif, weight: .medium))
+            Text("Each press saves the air at that moment. felt air also saves calm moments on its own. With enough of both, Insights shows which conditions come up more on your inhaler days, and flags days ahead that look similar.")
                 .font(.subheadline).foregroundStyle(.secondary)
             learning
             primary("Start") {

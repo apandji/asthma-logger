@@ -60,9 +60,15 @@ enum Crit {
     }
 
     enum CardStyle: String, CaseIterable, Identifiable {
-        case card, open
+        case panel, card, open
         var id: String { rawValue }
-        var title: String { self == .card ? "Card" : "No card (floating)" }
+        var title: String {
+            switch self {
+            case .panel: "Contained sky (pages)"
+            case .card: "Card"
+            case .open: "No card (floating)"
+            }
+        }
         static let key = "crit.cardStyle"
     }
 

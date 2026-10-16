@@ -6,10 +6,20 @@ import SwiftUI
 /// the top band is the base (temperature + humidity), the middle bands are the pollutant and pollen
 /// layers, each sitting where its colour is drawn.
 struct SkyProbe: Equatable {
-    let title: String
+    /// "NO₂"
+    let name: String
+    /// "Traffic exhaust" — what it is, in two or three words.
+    let kind: String
+    /// "3.1"
     let value: String
-    let help: String
+    /// "ppb"
+    let unit: String
+    let level: WeaveSpec.Level?
+    /// One plain line.
+    let note: String
     let color: Color
+    /// 0 (clean) … 1 (high and rising): drives the haptic pulse.
+    let intensity: Double
 }
 
 enum SkyExplorer {
@@ -22,76 +32,122 @@ enum SkyExplorer {
     static func probe(at p: CGPoint, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
                       temperatureF: Double?, pollen: PollenSample?) -> SkyProbe {
         let present = Dictionary(layers.all.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
-        if p.y > 0.16 && p.y < 0.78 {
+        if p.y > 0.16 && p.y < 0.82 {
             let nearest = anchors.filter { present[$0.name] != nil }
                 .min { hypot($0.x - p.x, ($0.y - p.y) * 1.6) < hypot($1.x - p.x, ($1.y - p.y) * 1.6) }
             if let a = nearest, hypot(a.x - p.x, (a.y - p.y) * 1.6) < 0.45, let layer = present[a.name] {
-                return SkyProbe(title: "\(layer.name) · \(Tier(layer.level).word)",
-                                value: value(layer.name, conditions, pollen) ?? "",
-                                help: help(layer.name, pollen), color: layer.color)
+                let (v, unit) = reading(layer.name, conditions, pollen)
+                let position = (Double(layer.level.rawValue) + max(0, min(1, layer.fraction))) / 3
+                return SkyProbe(name: layer.name, kind: kind(layer.name, pollen), value: v, unit: unit,
+                                level: layer.level, note: note(layer.name), color: layer.color, intensity: position)
             }
         }
         // The base: temperature and humidity.
-        var parts: [String] = []
-        if let t = temperatureF { parts.append("\(Int(t.rounded()))°" + (weave.words[.temperature].map { ", \($0)" } ?? "")) }
-        if let h = conditions?.best(.humidity)?.value { parts.append("\(Int(h.rounded()))% humidity" + (weave.words[.humidity].map { ", \($0)" } ?? "")) }
-        return SkyProbe(title: "The sky", value: parts.joined(separator: " · "),
-                        help: "Its hue is the temperature; its softness is the humidity.", color: .white)
+        let humidity = conditions?.best(.humidity)?.value
+        let detail = [humidity.map { "\(Int($0.rounded()))% humidity" }, weave.words[.humidity]].compactMap { $0 }.joined(separator: ", ")
+        return SkyProbe(name: "Sky", kind: weave.words[.temperature].map { $0.capitalized } ?? "Outside",
+                        value: temperatureF.map { "\(Int($0.rounded()))" } ?? "–", unit: "°F", level: nil,
+                        note: detail.isEmpty ? "Colour is temperature. Softness is humidity." : detail + ". Colour is temperature, softness is humidity.",
+                        color: .white, intensity: 0)
     }
 
-    private static func value(_ name: String, _ c: Conditions?, _ pollen: PollenSample?) -> String? {
-        func obs(_ s: Signal) -> String? { c?.best(s).map { ObservationCopy.value($0) } }
+    /// The number and its unit, apart, so the number can be set large.
+    private static func reading(_ name: String, _ c: Conditions?, _ pollen: PollenSample?) -> (String, String) {
+        func obs(_ s: Signal) -> (String, String) {
+            guard let o = c?.best(s) else { return ("–", "") }
+            let rounded = o.value.rounded()
+            let n = rounded == o.value || abs(o.value) >= 10 ? String(Int(rounded)) : String(format: "%.1f", o.value)
+            return (n, o.unit)
+        }
         switch name {
-        case "PM2.5": return obs(.pm25) ?? c?.best(.aqi).map { "AQI \(Int($0.value))" }
+        case "PM2.5":
+            if c?.best(.pm25) != nil { return obs(.pm25) }
+            return c?.best(.aqi).map { (String(Int($0.value)), "AQI") } ?? ("–", "")
         case "PM10": return obs(.pm10)
         case "NO₂": return obs(.no2)
         case "Ozone": return obs(.ozone)
-        case "Tree pollen": return pollen.map { "\($0.tree.count) grains/m³ · demo" }
-        case "Grass pollen": return pollen.map { "\($0.grass.count) grains/m³ · demo" }
-        case "Weed pollen": return pollen.map { "\($0.weed.count) grains/m³ · demo" }
-        default: return nil
+        case "Tree pollen": return (pollen.map { "\($0.tree.count)" } ?? "–", "grains/m³")
+        case "Grass pollen": return (pollen.map { "\($0.grass.count)" } ?? "–", "grains/m³")
+        case "Weed pollen": return (pollen.map { "\($0.weed.count)" } ?? "–", "grains/m³")
+        default: return ("–", "")
         }
     }
 
-    private static func help(_ name: String, _ pollen: PollenSample?) -> String {
+    private static func kind(_ name: String, _ pollen: PollenSample?) -> String {
         switch name {
-        case "PM2.5": "Fine particles from smoke, traffic and cooking."
-        case "PM10": "Coarser dust and grit from roads, building work and dry ground."
-        case "NO₂": "A gas from traffic exhaust and gas stoves."
-        case "Ozone": "Forms in sunlight from traffic fumes, highest on hot afternoons."
-        case "Tree pollen": "From trees like \(pollen?.tree.species ?? "oak"), mostly in spring."
-        case "Grass pollen": "Mostly late spring and early summer."
-        case "Weed pollen": "Mostly \(pollen?.weed.species.lowercased() ?? "ragweed"), which peaks in late summer."
+        case "PM2.5": "Fine particles"
+        case "PM10": "Dust"
+        case "NO₂": "Traffic exhaust"
+        case "Ozone": "Sunlit smog"
+        case "Tree pollen": pollen?.tree.species ?? "Trees"
+        case "Grass pollen": "Grasses"
+        case "Weed pollen": pollen?.weed.species ?? "Weeds"
         default: ""
         }
     }
+
+    private static func note(_ name: String) -> String {
+        switch name {
+        case "PM2.5": "Smoke, exhaust, cooking."
+        case "PM10": "Road dust, building sites, dry soil."
+        case "NO₂": "Cars and gas stoves."
+        case "Ozone": "Builds on sunny afternoons."
+        case "Tree pollen": "Mostly spring."
+        case "Grass pollen": "Late spring into summer."
+        case "Weed pollen": "Late summer into fall."
+        default: ""
+        }
+    }
+
+
 }
 
-/// The glow under your finger and the label above it.
+/// The glow under your finger and a small, structured label: what it is, the reading set large with
+/// its unit, the amount bars and level, and one plain line.
 struct SkyProbeOverlay: View {
     let point: CGPoint
     let probe: SkyProbe
     let width: CGFloat
+    @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             Circle()
                 .fill(RadialGradient(colors: [probe.color.opacity(0.55), probe.color.opacity(0.15), .clear],
-                                     center: .center, startRadius: 0, endRadius: 90))
-                .frame(width: 180, height: 180)
+                                     center: .center, startRadius: 0, endRadius: 80))
+                .frame(width: 160, height: 160)
                 .blur(radius: 6)
                 .position(point)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(probe.title).font(.subheadline.weight(.semibold))
-                if !probe.value.isEmpty { Text(probe.value).font(.caption.monospacedDigit()) }
-                Text(probe.help).font(.caption).foregroundStyle(Theme.secondaryText)
-            }
-            .padding(12)
-            .frame(width: 230, alignment: .leading)
-            .glassEffect(.regular, in: .rect(cornerRadius: 16))
-            .position(x: min(max(point.x, 131), width - 131), y: max(70, point.y - 110))
+            label
+                .frame(width: 224, alignment: .leading)
+                .position(x: min(max(point.x, 124), width - 124), y: max(64, point.y - 104))
         }
         .allowsHitTesting(false)
         .animation(.interactiveSpring(duration: 0.2), value: point)
+    }
+
+    private var label: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(probe.name).font(.subheadline.weight(.semibold))
+                Text(probe.kind).font(.caption).foregroundStyle(Theme.secondaryText)
+                Spacer(minLength: 0)
+            }
+            HStack(alignment: .lastTextBaseline, spacing: 4) {
+                Text(probe.value).font(.system(.title, design: .rounded, weight: .semibold)).monospacedDigit()
+                Text(probe.unit).font(.caption).foregroundStyle(Theme.secondaryText).lineLimit(1).fixedSize()
+                Spacer(minLength: 8)
+                if let level = probe.level {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        LevelIndicator(level: level, ink: probe.color, style: .signal)
+                        Text(Tier(level).word).font(.caption2.weight(.semibold))
+                    }
+                }
+            }
+            Text(probe.note).font(.caption).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .contentTransition(.numericText())
     }
 }

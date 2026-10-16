@@ -22,6 +22,8 @@ struct JournalView: View {
     @State private var probePoint: CGPoint?
     @State private var probe: SkyProbe?
     @State private var fieldFrame: CGRect = .zero
+    @State private var panelProbing = false
+    @AppStorage(Crit.CardStyle.key) private var momentStyle = Crit.CardStyle.panel
     @State private var ambientFrame: CGRect = .zero
     @State private var showInsights = false
     @State private var showSettings = false
@@ -76,15 +78,21 @@ struct JournalView: View {
                 .transition(.opacity)
             } else {
                 header.transition(.opacity)
-                    .opacity(probe == nil ? 1 : 0.15)  // step aside while you explore the sky
-                    .animation(.easeOut(duration: 0.2), value: probe == nil)
+                    .opacity(probe == nil && !panelProbing ? 1 : 0.15)  // step aside while you explore the sky
+                    .animation(.easeOut(duration: 0.2), value: probe == nil && !panelProbing)
                 Spacer(minLength: 12)
                 if cards.isEmpty {
                     emptyState.padding(.horizontal, 20)
                 } else {
-                    MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, morph: morph,
-                                   onOverview: zoomOut) { opened = $0 }
-                        .frame(height: 380)
+                    if momentStyle == .panel {
+                        MomentPager(events: cards, selectedID: $selectedID, zoom: zoom, pollenSeason: pollenSeason,
+                                    onOpen: { opened = $0 }, onOverview: zoomOut, probing: $panelProbing)
+                            .frame(maxHeight: 520)
+                    } else {
+                        MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, morph: morph,
+                                       onOverview: zoomOut) { opened = $0 }
+                            .frame(height: 380)
+                    }
                     TipView(tips.currentTip as? MomentsTip)
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
@@ -101,7 +109,7 @@ struct JournalView: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
-        .simultaneousGesture(skyGesture)
+        .simultaneousGesture(skyGesture, isEnabled: momentStyle != .panel)
         .overlay {
             if let probePoint, let probe {
                 SkyProbeOverlay(point: CGPoint(x: probePoint.x - ambientFrame.minX, y: probePoint.y - ambientFrame.minY),
@@ -110,7 +118,7 @@ struct JournalView: View {
             }
         }
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { ambientFrame = $0 }
-        .sensoryFeedback(.selection, trigger: probe?.title)
+        .sensoryFeedback(.selection, trigger: probe?.name)
         .sensoryFeedback(.impact(weight: .light), trigger: probePoint == nil)
         .simultaneousGesture(
             MagnifyGesture().onEnded { v in
@@ -119,6 +127,10 @@ struct JournalView: View {
             }
         )
         .background {
+            if momentStyle == .panel {
+                // The sky lives in its panel; the page is black.
+                Color.black.ignoresSafeArea()
+            } else {
             // The room takes on the moment you're on.
             AmbientField(weave: fieldWeave,
                          temperatureF: selected?.conditions?.best(.temperature)?.value ?? now?.temp,
@@ -128,6 +140,7 @@ struct JournalView: View {
                 .ignoresSafeArea()
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { fieldFrame = $0 }
                 .animation(.easeInOut(duration: 0.8), value: selected?.id)
+            }
         }
     }
 
@@ -202,7 +215,7 @@ struct JournalView: View {
                     Text(momentWhen(m))
                         .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
                         .contentTransition(.opacity)
-                    Text(m.weave.isEmpty ? "No air reading for this one." : m.airLine)
+                    Text(m.weave.isEmpty ? "No air reading." : m.airLine)
                         .font(.system(.title, design: .serif, weight: .medium))
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
@@ -322,7 +335,7 @@ struct JournalView: View {
     }
 
     private var emptyState: some View {
-        Text("Press + and pull up to log, or use your felt button or Apple Watch.")
+        Text("Pull up on + to log. The felt button and Apple Watch work too.")
             .font(.subheadline)
             .foregroundStyle(Theme.secondaryText)
     }

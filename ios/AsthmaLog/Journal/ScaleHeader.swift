@@ -16,24 +16,33 @@ struct ScaleHeader<Kicker: View>: View {
     /// A step smaller, for two-sentence titles that have to fit two lines.
     var compact = false
     @ViewBuilder let kicker: Kicker
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) { kicker }
-                .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                .font(Theme.kicker).foregroundStyle(Theme.secondaryText)
                 .lineLimit(1).truncationMode(.middle)  // fixed size: a long place name clips, the type never shrinks
-            let hasByline = byline != nil || reserveByline
-            Text(title)
-                .font(.system(compact ? .title2 : .title, design: .serif, weight: .medium))
-                // Two lines, always: the byline sits in the same place whatever the title says.
-                .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)
                 .contentTransition(.opacity)
+            let hasByline = byline != nil || reserveByline
+            // The sentence: New York, a touch tight, and it blurs between readings instead of cutting.
+            ZStack(alignment: .topLeading) {
+                Text(title)
+                    .font(compact ? Theme.serifTitle : Theme.serifTitleLarge)
+                    .kerning(Theme.serifKerning)
+                    // Two lines, always: the byline sits in the same place whatever the title says.
+                    .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)
+                    .id(title)
+                    .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
+            }
+            .animation(Theme.smooth, value: title)
             if hasByline {
                 // felt air's own voice, marked with the sparkle so it reads as the app thinking, not data.
                 let tint = bylineTint ?? Theme.secondaryText
                 Button { onByline?() } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "sparkles").font(.caption)
+                            .symbolEffect(.bounce, value: byline)
                         Text(byline ?? " ").lineLimit(2).multilineTextAlignment(.leading)
                         if onByline != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.7) }
                     }
@@ -42,9 +51,10 @@ struct ScaleHeader<Kicker: View>: View {
                     .padding(.horizontal, onByline == nil ? 0 : 12).padding(.vertical, onByline == nil ? 0 : 7)
                     .background { if onByline != nil { Capsule().fill(tint.opacity(0.14)).overlay(Capsule().strokeBorder(tint.opacity(0.35))) } }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .disabled(onByline == nil)
                 .contentTransition(.opacity)
+                .animation(Theme.smooth, value: bylineTint)
                 .opacity(byline == nil ? 0 : 1)
                 .accessibilityHint(onByline == nil ? "" : "Opens Insights")
             }

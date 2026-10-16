@@ -42,12 +42,42 @@ enum Theme {
     static let padding: CGFloat = 16
     static let spacing: CGFloat = 12
 
+    // MARK: Type. One serif voice (New York) for the sentence, SF for everything else.
+    /// The small line above a title: type, time, place.
+    static let kicker = Font.subheadline.weight(.medium)
+    /// The sentence. Medium, never bold; tracked a touch tight (`Theme.serifKerning`).
+    static let serifTitle = Font.system(.title2, design: .serif, weight: .medium)
+    static let serifTitleLarge = Font.system(.title, design: .serif, weight: .medium)
+    static let serifKerning: CGFloat = -0.4
+    /// Numbers that change in place (counts, times).
+    static let figures = Font.system(.title3, design: .serif, weight: .medium)
+
+    // MARK: Motion. Three springs, used everywhere, so the whole app moves with one hand.
+    /// Small things settling: pills, chips, dots. Quick, a hint of bounce.
+    static let snap = Animation.snappy(duration: 0.24, extraBounce: 0.06)
+    /// Content changing: headers, skies, pages. No bounce.
+    static let smooth = Animation.smooth(duration: 0.45)
+    /// Things arriving: toasts, tiles, sheets. A little lift.
+    static let lift = Animation.spring(duration: 0.55, bounce: 0.22)
+
     static let headline = Font.system(.title3, design: .rounded).weight(.semibold)
     /// The one New York sentence per screen (the insight headline). Never bold.
     static let headlineSerif = Font.system(.title3, design: .serif, weight: .medium)
     static let body = Font.body
     static let caption = Font.caption
     static let number = Font.system(.body, design: .rounded).monospacedDigit()
+}
+
+/// Press feedback for anything tappable that isn't a system button: a small, quick scale and dim,
+/// off with Reduce Motion.
+struct PressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(Theme.snap, value: configuration.isPressed)
+    }
 }
 
 /// A rounded surface block used by Insights.

@@ -14,6 +14,7 @@ struct NowTimeline: View {
     /// Swiping on past the end of the forecast reveals Insights.
     var onPastEnd: () -> Void = {}
     @State private var pastEndArmed = true
+    @State private var settle = false
 
     @State private var position = ScrollPosition(edge: .trailing)
     @State private var centerX: CGFloat = 0
@@ -74,7 +75,7 @@ struct NowTimeline: View {
                             if isDay {
                                 let label = cal.isDateInToday(t) ? "Today" : cal.isDateInTomorrow(t) ? "Tomorrow"
                                     : t.formatted(.dateTime.weekday(.abbreviated).day())
-                                ctx.draw(Text(label).font(.caption2).foregroundStyle(ink.opacity(t > now ? 0.3 : 0.45)),
+                                ctx.draw(Text(label).font(.caption2.weight(.medium)).tracking(0.3).foregroundStyle(ink.opacity(t > now ? 0.3 : 0.45)),
                                          at: CGPoint(x: x(t) + dayWidth / 2, y: axis + 26))
                             }
                             t = cal.date(byAdding: .hour, value: 6, to: t)!
@@ -145,14 +146,18 @@ struct NowTimeline: View {
                 Button(action: stepBack) {
                     Text(focusTime == nil ? "Now" : current.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
                         .font(.caption.weight(.semibold).monospacedDigit())
+                        .tracking(0.2)
                         .foregroundStyle(Theme.paper(paper))
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(ink, in: Capsule())
                         .contentTransition(.numericText())
-                        .animation(.snappy(duration: 0.2), value: focusTime == nil)
+                        .animation(Theme.snap, value: focusTime == nil)
                         .fixedSize()
+                        // A small settle each time the playhead lands on a moment.
+                        .scaleEffect(settle ? 1.07 : 1)
+                        .animation(Theme.snap, value: settle)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .offset(y: axis - 17 - 30)
                 .accessibilityLabel("Previous moment")
             }
@@ -168,16 +173,21 @@ struct NowTimeline: View {
                         .frame(width: 34, height: 28)
                         .glassEffect(.regular.interactive(), in: .capsule)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .padding(.horizontal, 12)
                 .offset(y: axis - 17 - 30)
                 .transition(.scale(scale: 0.8).combined(with: .opacity))
                 .accessibilityLabel("Jump to now")
             }
         }
-        .animation(.snappy(duration: 0.25), value: focusTime == nil)
+        .animation(Theme.snap, value: focusTime == nil)
         .padding(.top, 24)
         .sensoryFeedback(.selection, trigger: currentMoment?.id)
+        .onChange(of: currentMoment?.id) { _, id in
+            guard id != nil else { return }
+            settle = true
+            Task { try? await Task.sleep(for: .milliseconds(140)); settle = false }
+        }
         .onChange(of: focusTime) { _, t in
             if !dragging, abs(x(t ?? now) - centerX) > 1 { withAnimation(.smooth) { position.scrollTo(x: x(t ?? now)) } }
         }

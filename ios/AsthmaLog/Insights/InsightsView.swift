@@ -85,12 +85,13 @@ struct InsightsView: View {
                             .multilineTextAlignment(.center)
                         Image(systemName: "chevron.right").font(.caption.weight(.bold)).opacity(0.6)
                     }
-                    .font(.system(.title3, design: .serif, weight: .medium))
+                    .font(Theme.figures).kerning(Theme.serifKerning)
                     .foregroundStyle(.primary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
             } else if let p = model.progress {
-                Text(needs(p)).font(.system(.title3, design: .serif, weight: .medium)).multilineTextAlignment(.center)
+                Text(needs(p)).font(Theme.figures).kerning(Theme.serifKerning).multilineTextAlignment(.center)
+                    .contentTransition(.numericText())
             }
         }
         .frame(maxWidth: .infinity)
@@ -107,6 +108,8 @@ struct InsightsView: View {
 
     // MARK: Tiles
 
+    @State private var tilesShown = false
+
     private var tiles: some View {
         HStack(spacing: 10) {
             NavigationLink(value: Page.profile) {
@@ -117,7 +120,11 @@ struct InsightsView: View {
             }
             Button { showDoctor = true } label: { tile("tablecells", "For your doctor", "Table") }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
+        // The tiles lift in after the ring, one after another.
+        .opacity(tilesShown ? 1 : 0)
+        .offset(y: tilesShown ? 0 : 14)
+        .onAppear { withAnimation(Theme.lift.delay(0.35)) { tilesShown = true } }
         .sheet(isPresented: $showDoctor) { DoctorSheet(events: Array(events)) }
     }
 
@@ -355,6 +362,7 @@ struct LearningRing: View {
     var forcedLearned = false
     var size: CGFloat = 140
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shownAt: Date?
 
     var body: some View {
         let a = progress.map { min(1, Double($0.attacks) / Double(max(1, $0.minAttacks))) } ?? 0
@@ -363,24 +371,32 @@ struct LearningRing: View {
         let done = fill >= 1
         VStack(spacing: 16) {
             ZStack {
+                // The ring draws itself in over 1.4 s when the page opens (at once with Reduce Motion).
+                TimelineView(.animation(minimumInterval: 1 / 60, paused: shownAt.map { Date().timeIntervalSince($0) > 1.6 } ?? true)) { frame in
                 Canvas { ctx, size in
                     let n = 72
+                    let elapsed = shownAt.map { frame.date.timeIntervalSince($0) } ?? 0
+                    let eased = reduceMotion ? 1 : 1 - pow(1 - min(1, elapsed / 1.4), 3)
+                    let drawn = fill * eased
                     let c = CGPoint(x: size.width / 2, y: size.height / 2), radius = size.width / 2 - 6
                     for i in 0..<n {
                         let t = Double(i) / Double(n)
                         let ang = t * 2 * .pi - .pi / 2
                         let p = CGPoint(x: c.x + radius * cos(ang), y: c.y + radius * sin(ang))
-                        let on = t < fill
+                        let on = t < drawn
                         let r: CGFloat = on ? 3.4 : 1.6
                         // Rescue orange into standard blue as it fills; the rest is faint grain.
                         let ink = on ? Theme.rescue.mix(with: Theme.standard, by: t) : Theme.secondaryText.opacity(0.35)
                         ctx.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)), with: .color(ink))
                     }
                 }
+                }
                 Image(systemName: done ? "sparkles" : "sparkle").font(.system(size: size * 0.2, weight: .semibold))
                     .symbolEffect(.pulse, isActive: done && !reduceMotion)
+                    .symbolEffect(.bounce, value: done)
             }
             .frame(width: size, height: size)
+            .onAppear { shownAt = .now }
             if let p = progress, !done {
                 HStack(spacing: 32) {
                     count("Rescue moments", p.attacks, p.minAttacks, Theme.rescue)
@@ -395,7 +411,7 @@ struct LearningRing: View {
 
     private func count(_ label: String, _ n: Int, _ goal: Int, _ ink: Color) -> some View {
         VStack(spacing: 2) {
-            Text("\(min(n, goal)) of \(goal)").font(.system(.title3, design: .serif, weight: .medium)).monospacedDigit()
+            Text("\(min(n, goal)) of \(goal)").font(Theme.figures).monospacedDigit().contentTransition(.numericText())
             HStack(spacing: 5) {
                 Circle().fill(ink).frame(width: 6, height: 6)
                 Text(label)

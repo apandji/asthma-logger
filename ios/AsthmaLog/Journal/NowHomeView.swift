@@ -18,6 +18,7 @@ struct NowHomeView: View {
     @State private var chosen = SavedPlace.load(SavedPlace.chosenKey)
     @State private var showPlaces = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The full air details, opened from the pin.
     @State private var pinDetails: LogEvent?
 
@@ -47,10 +48,12 @@ struct NowHomeView: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .opacity(probing ? 0.4 : 1)
-                    .animation(.easeOut(duration: 0.2), value: probing)
-                sky
+                    .animation(Theme.smooth, value: probing)
+                // One sky at a time; the next settles in with a breath, not a cut.
+                ZStack { sky.id(focusKey).transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.985))) }
+                    .animation(Theme.smooth, value: focusKey)
                     .frame(maxHeight: .infinity)
-                .padding(.top, 4)
+                    .padding(.top, 4)
                 NowTimeline(moments: moments, hours: hours, now: now, focusTime: $focusTime, onPastEnd: { showInsights = true })
                     .frame(height: 104)
                     .padding(.bottom, 84)  // clear the +
@@ -79,7 +82,7 @@ struct NowHomeView: View {
                 }
             }
             .sheet(isPresented: $showInsights) {
-                InsightsView().presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper))
+                InsightsView().presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper)).presentationCornerRadius(32)
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showPlaces) { PlacePicker(chosen: $chosen).presentationDetents([.medium, .large]) }
@@ -131,10 +134,10 @@ struct NowHomeView: View {
     /// shows its own toast, so the same moment is never announced twice.
     private func announce(_ e: LogEvent?) {
         guard let e, e.moment != .okay, Date().timeIntervalSince(e.loggedAt) < 120, toast?.id != e.id else { return }
-        withAnimation(.snappy) { toast = e }
+        withAnimation(Theme.lift) { toast = e }
         Task {
             try? await Task.sleep(for: .seconds(4))
-            if toast?.id == e.id { withAnimation(.snappy) { toast = nil } }
+            if toast?.id == e.id { withAnimation(Theme.smooth) { toast = nil } }
         }
     }
 
@@ -147,6 +150,15 @@ struct NowHomeView: View {
     // MARK: What the playhead is on
 
     private enum Focus { case now, moment(LogEvent), hour(NowHour) }
+
+    /// What the sky is showing, as a key, so a change can animate as one move.
+    private var focusKey: String {
+        switch focus {
+        case .now: justNow.map { "just-\($0.id)" } ?? "now"
+        case .moment(let m): "m-\(m.id)"
+        case .hour(let h): "h-\(h.date.timeIntervalSinceReferenceDate)"
+        }
+    }
 
     private var focus: Focus {
         guard let t = focusTime else { return .now }
@@ -197,7 +209,7 @@ struct NowHomeView: View {
             }
         }
         .padding(.top, 2)
-        .animation(.easeInOut(duration: 0.25), value: focusTime)
+        .animation(Theme.smooth, value: focusKey)
     }
 
     /// Tap to read the air somewhere else.
@@ -209,7 +221,7 @@ struct NowHomeView: View {
             }
             .foregroundStyle(chosen == nil ? Theme.secondaryText : Theme.tint)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .accessibilityLabel("Change place")
     }
 
@@ -325,7 +337,7 @@ struct NowHomeView: View {
         HStack(spacing: 10) {
             Button { showSettings = true } label: { railIcon("gearshape") }.accessibilityLabel("Settings")
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
         .padding(.leading, 16)
         .padding(.bottom, 16)
     }

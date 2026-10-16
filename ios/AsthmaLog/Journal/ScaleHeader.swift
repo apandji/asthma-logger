@@ -18,18 +18,23 @@ struct ScaleHeader<Kicker: View>: View {
             HStack(spacing: 7) { kicker }
                 .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
                 .lineLimit(1).minimumScaleFactor(0.8)
+            let hasByline = byline != nil || reserveByline
             Text(title)
                 .font(.system(compact ? .title2 : .title, design: .serif, weight: .medium))
-                .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)
+                // With a byline the block keeps a fixed height instead, so the byline hugs the title.
+                .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines && !hasByline)
                 .minimumScaleFactor(0.85)
                 .contentTransition(.opacity)
-            if byline != nil || reserveByline {
-                Text(byline ?? " ")
+            if hasByline {
+                // felt air's own voice, marked with the sparkle so it reads as the app thinking, not data.
+                Label { Text(byline ?? " ") } icon: { Image(systemName: "sparkles").font(.caption).padding(.top, 2) }
                     .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                    .lineLimit(2, reservesSpace: true)
+                    .lineLimit(2)
                     .contentTransition(.opacity)
+                    .opacity(byline == nil ? 0 : 1)
             }
         }
+        .frame(minHeight: (byline != nil || reserveByline) ? (compact ? 108 : 118) : 0, alignment: .top)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, 20)
         .padding(.trailing, JournalView.railAxis + 30)  // clear the glass column

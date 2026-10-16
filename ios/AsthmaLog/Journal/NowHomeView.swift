@@ -148,7 +148,7 @@ struct NowHomeView: View {
                 // The look-ahead: what the forecast says, then how it compares (or that we're still learning).
                 ScaleHeader(title: h.statement, reserveTwoLines: true, byline: sentence, compact: true) {
                     Image(systemName: "arrow.right").font(.caption2.weight(.bold))
-                    Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour()))\(here?.place.map { " · \($0)" } ?? "")")
+                    Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour().minute()))\(here?.place.map { " · \($0)" } ?? "")")
                 }
                 .onTapGesture { showInsights = true }
             }

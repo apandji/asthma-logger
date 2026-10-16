@@ -28,6 +28,7 @@ struct AmbientField: View {
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
     @AppStorage(Crit.LayerSpread.key) private var spread = Crit.LayerSpread.vibe
+    @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
 
     var body: some View {
         if reduceTransparency {
@@ -43,19 +44,25 @@ struct AmbientField: View {
     // MARK: Weather
 
     private var weatherField: some View {
-        let base = Theme.stage
+        // Linen: ink on paper. Light colors wash out on an off-white page, so the sky is laid down fuller
+        // (near-opaque), a touch darker, more saturated, and the layers overprint harder, like riso inks.
+        let linen = paper == .linen
+        let base = linen ? Theme.linen : Theme.stage
         let humidity = weave.words[.humidity]
         var sky = WeatherColor.light(WeatherColor.temperature(temperatureF ?? WeatherColor.fallbackTemp(weave)), at: date)
-        if humidity == "humid" { sky = sky.mix(with: .white, by: 0.16) }
-        let strength = scheme == .dark ? 0.75 : 0.66
+        if humidity == "humid" { sky = sky.mix(with: .white, by: linen ? 0.08 : 0.16) }
+        if linen { sky = sky.mix(with: Color(red: 0.16, green: 0.14, blue: 0.2), by: 0.14) }
+        let strength = linen ? 0.96 : (scheme == .dark ? 0.75 : 0.66)
+        let overprint = linen ? 1.5 : 1.0
 
         let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
         func tint(_ c: Color, _ layer: AirLayers.Layer?) -> Color {
             guard let layer else { return c }
-            return c.mix(with: layer.color, by: layer.amount)
+            return c.mix(with: layer.color, by: min(0.9, layer.amount * overprint))
         }
-        let mid = sky.mix(with: base, by: 0.3)
-        let low = sky.mix(with: base, by: 0.55)
+        // On linen the sky holds its color further down the field instead of fading to the paper.
+        let mid = sky.mix(with: base, by: linen ? 0.12 : 0.3)
+        let low = sky.mix(with: base, by: linen ? 0.3 : 0.55)
         // Rows: sky · pollutants · pollen · ground.
         let points: [SIMD2<Float>] = [
             [0, 0], [0.33, 0], [0.67, 0], [1, 0],
@@ -66,7 +73,7 @@ struct AmbientField: View {
         // Vibe: every layer is folded into every point, so the air is a haze over the whole place and no
         // color can be read as a position. A little unevenness per point keeps it from going flat.
         func haze(_ c: Color, _ weight: Double) -> Color {
-            layers.all.reduce(c) { $0.mix(with: $1.color, by: min(0.85, $1.amount * 0.7 * weight)) }
+            layers.all.reduce(c) { $0.mix(with: $1.color, by: min(0.85, $1.amount * 0.7 * weight * overprint)) }
         }
         let middle: [Color] = spread == .spots
             ? [tint(mid, layers.pm25), tint(mid, layers.no2), tint(mid, layers.ozone), tint(mid, layers.pm10),
@@ -78,8 +85,8 @@ struct AmbientField: View {
 
         return MeshGradient(width: 4, height: 4, points: points, colors: colors, background: base)
             // Humidity is the softness: dry crisp and saturated, humid paler.
-            .saturation(humidity == "dry" ? 1.15 : humidity == "humid" ? 0.8 : 1)
-            .contrast(humidity == "dry" ? 1.06 : 1)
+            .saturation((humidity == "dry" ? 1.15 : humidity == "humid" ? 0.8 : 1) * (linen ? 1.3 : 1))
+            .contrast((humidity == "dry" ? 1.06 : 1) * (linen ? 1.08 : 1))
             .accessibilityHidden(true)
     }
 

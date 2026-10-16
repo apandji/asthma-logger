@@ -283,13 +283,21 @@ struct NowHomeView: View {
         switch focus {
         case .now:
             if let j = justNow {
-                // The ripple fires the instant the log lands; the live sky stands in until its air arrives.
-                NowSky(conditions: j.conditions ?? here?.conditions, weave: j.weave.isEmpty ? (here?.weave ?? WeaveSpec()) : j.weave, date: j.loggedAt,
-                       pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
-                       mapID: j.latitude == nil ? "here" : j.id.uuidString,
-                       coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
-                       captureInk: j.moment == .rescue ? Theme.rescue : Theme.standard)
-                    .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { focusTime = j.loggedAt; expanded = true } }
+                // The new moment's sky wipes in from the + behind the ripple; the live sky stays beneath.
+                ZStack {
+                    NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
+                           pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: .constant(false),
+                           mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
+                        .allowsHitTesting(false)
+                    NowSky(conditions: j.conditions ?? here?.conditions, weave: j.weave.isEmpty ? (here?.weave ?? WeaveSpec()) : j.weave, date: j.loggedAt,
+                           pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
+                           mapID: j.latitude == nil ? "here" : j.id.uuidString,
+                           coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
+                           captureInk: j.moment == .rescue ? Theme.rescue : Theme.standard)
+                        .modifier(CaptureReveal())
+                        .id(j.id)
+                }
+                .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { focusTime = j.loggedAt; expanded = true } }
             } else {
                 NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
                        pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
@@ -488,7 +496,7 @@ struct NowSky: View {
                         .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
                         .saturation(0)
                         .blendMode(.screen)
-                        .opacity(point == nil ? 0.45 : 0.75)
+                        .opacity(point == nil ? 0.7 : 0.85)
                         .frame(width: size.width, height: size.height)
                         .clipped()
                         .allowsHitTesting(false)

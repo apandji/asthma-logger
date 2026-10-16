@@ -49,6 +49,8 @@ struct MomentPager: View {
                              zoom: zoom, mapNamespace: mapNamespace, probing: $probing, onOpen: { onOpen(e) }, onOverview: onOverview,
                              onStep: step)
                         .id(e.id)
+                        // A fresh log wipes in from the + behind its ripple; otherwise a cross-fade.
+                        .modifier(CaptureRevealIf(on: Date().timeIntervalSince(e.loggedAt) < 20))
                         .transition(.opacity)
                 }
             }
@@ -251,7 +253,7 @@ struct SkyPanel: View {
                         .matchedGeometryEffect(id: "map-\(event.id)", in: mapNamespace)
                         .saturation(0)
                         .blendMode(.screen)
-                        .opacity(point == nil ? 0.45 : 0.75)
+                        .opacity(point == nil ? 0.7 : 0.85)
                         .frame(width: size.width, height: size.height)
                         .clipped()
                         .allowsHitTesting(false)
@@ -390,5 +392,12 @@ struct AnchorReport: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+struct CaptureRevealIf: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        if on { content.modifier(CaptureReveal()) } else { content }
     }
 }

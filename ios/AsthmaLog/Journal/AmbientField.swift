@@ -27,6 +27,7 @@ struct AmbientField: View {
     @Environment(\.colorScheme) private var scheme
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
+    @AppStorage(Crit.LayerSpread.key) private var spread = Crit.LayerSpread.vibe
 
     var body: some View {
         if reduceTransparency {
@@ -62,12 +63,18 @@ struct AmbientField: View {
             [0, 0.56], [0.33, 0.6], [0.67, 0.56], [1, 0.6],
             [0, 1], [0.33, 1], [0.67, 1], [1, 1],
         ]
-        let colors: [Color] = [
-            sky, sky, sky, sky,
-            tint(mid, layers.pm25), tint(mid, layers.no2), tint(mid, layers.ozone), tint(mid, layers.pm10),
-            tint(low, layers.tree), tint(low, layers.weed), tint(low, layers.grass), tint(low, layers.pm25),
-            base, base, base, base,
-        ].enumerated().map { $0.offset < 12 ? $0.element.opacity(strength) : $0.element }
+        // Vibe: every layer is folded into every point, so the air is a haze over the whole place and no
+        // color can be read as a position. A little unevenness per point keeps it from going flat.
+        func haze(_ c: Color, _ weight: Double) -> Color {
+            layers.all.reduce(c) { $0.mix(with: $1.color, by: min(0.85, $1.amount * 0.7 * weight)) }
+        }
+        let middle: [Color] = spread == .spots
+            ? [tint(mid, layers.pm25), tint(mid, layers.no2), tint(mid, layers.ozone), tint(mid, layers.pm10),
+               tint(low, layers.tree), tint(low, layers.weed), tint(low, layers.grass), tint(low, layers.pm25)]
+            : [haze(mid, 1.0), haze(mid, 1.15), haze(mid, 0.9), haze(mid, 1.05),
+               haze(low, 1.1), haze(low, 0.95), haze(low, 1.2), haze(low, 1.0)]
+        let colors: [Color] = ([sky, sky, sky, sky] + middle + [base, base, base, base])
+            .enumerated().map { $0.offset < 12 ? $0.element.opacity(strength) : $0.element }
 
         return MeshGradient(width: 4, height: 4, points: points, colors: colors, background: base)
             // Humidity is the softness: dry crisp and saturated, humid paler.
@@ -329,8 +336,8 @@ struct SkyGrain: View {
         let breath = reduceMotion || !responds ? 0.0 : time.timeIntervalSinceReferenceDate
         return Canvas(rendersAsynchronously: true) { ctx, size in
             let cosA = cos(angle), sinA = sin(angle)
-            let centre = rippleFromCapture ? CGPoint(x: size.width - 24, y: size.height + 40) : CGPoint(x: size.width / 2, y: size.height * 0.55)
-            let radius = wave.map { CGFloat($0) * hypot(size.width, size.height) * (rippleFromCapture ? 1.1 : 0.6) }
+            let centre = rippleFromCapture ? CaptureReveal.origin(in: size) : CGPoint(x: size.width / 2, y: size.height * 0.55)
+            let radius = wave.map { rippleFromCapture ? CaptureReveal.radius(CGFloat($0), in: size) : CGFloat($0) * hypot(size.width, size.height) * 0.6 }
             let sweeps = sweeps && !rippleFromCapture
             let strong: CGFloat = rippleFromCapture ? 1.6 : 1
             let fade = wave.map { 1 - $0 } ?? 0
@@ -391,5 +398,27 @@ struct SkyGrain: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// A fresh log wipes the new sky in from the +: a circle grows from the button's spot over the same
+/// 1.6 s as the grain's ripple, so the ring is the wavefront and the new sky is what it leaves behind.
+struct CaptureReveal: ViewModifier {
+    @State private var t: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The + sits below the sky's bottom-right corner (under the timeline).
+    static func origin(in size: CGSize) -> CGPoint { CGPoint(x: size.width - 36, y: size.height + 150) }
+    static func radius(_ t: CGFloat, in size: CGSize) -> CGFloat { t * hypot(size.width, size.height) * 1.1 }
+
+    func body(content: Content) -> some View {
+        content
+            .mask {
+                GeometryReader { g in
+                    let r = reduceMotion ? Self.radius(1, in: g.size) : Self.radius(t, in: g.size)
+                    Circle().frame(width: 2 * r, height: 2 * r).position(Self.origin(in: g.size))
+                }
+            }
+            .onAppear { withAnimation(.linear(duration: 1.6)) { t = 1 } }
     }
 }

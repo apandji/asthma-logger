@@ -1,5 +1,6 @@
 import AsthmaCore
 import SwiftUI
+import TipKit
 import UIKit
 
 /// The Journal's moments: one contained sky (the moment you're on) above a history track. Drag the
@@ -19,6 +20,8 @@ struct MomentPager: View {
     /// The zoom's anchor: this sky flies to its day's tile in Days and its square in the month.
     var anchorStore: AnchorFrames? = nil
     var anchorHidden = false
+    var momentsTip: MomentsTip? = nil
+    var skyTip: SkyTip? = nil
 
     private var current: LogEvent? { events.first { $0.id == selectedID } ?? events.last }
 
@@ -52,11 +55,13 @@ struct MomentPager: View {
             .modifier(SpotIf(id: "sky", spot: spot))
             .animation(.easeInOut(duration: 0.35), value: current?.id)
             .modifier(AnchorReport(key: "moment", store: anchorStore, hidden: anchorHidden))
+            .popoverTip(skyTip, arrowEdge: .bottom)
             .task(id: current?.id) { await prefetchNeighbours() }
 
             TimelineTrack(events: events, selectedID: $selectedID)
                 .frame(height: 104)
                 .modifier(SpotIf(id: "track", spot: spot))
+                .popoverTip(momentsTip, arrowEdge: .bottom)
         }
     }
 }
@@ -263,12 +268,9 @@ struct SkyPanel: View {
                 }
             }
             .contentShape(Rectangle())
-            // The sky follows a swipe a little, then settles on the next moment.
-            .offset(x: drag.width * 0.45, y: gestures == .axis ? min(0, drag.height) * 0.3 : 0)
-            .opacity(1 - min(0.5, abs(drag.width) / 600))
             .onTapGesture(perform: onOpen)
-            // Hold still first to read the sky; move straight away to swipe.
-            .gesture(explore(size).exclusively(before: swipe))
+            // Drag across the sky to read it, straight away. Moving through time is the timeline's job.
+            .gesture(explore(size))
         }
         .padding(.horizontal, 8)
         .task { await PlaceNames.lookUp(event) }
@@ -283,10 +285,8 @@ struct SkyPanel: View {
     /// Touch and hold, then move: name what's under the finger, with a steady haptic pulse that
     /// quickens and strengthens as the reading nears high.
     private func explore(_ size: CGSize) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.3)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                guard case .second(true, let drag?) = value else { return }
+        DragGesture(minimumDistance: 4)
+            .onChanged { drag in
                 if !probing { probing = true; SkyTip().invalidate(reason: .actionPerformed); startPulse() }
                 let unit = CGPoint(x: drag.location.x / size.width, y: drag.location.y / size.height)
                 let layers = AirLayers(conditions: event.conditions, weave: event.weave, pollen: pollen,
@@ -301,25 +301,6 @@ struct SkyPanel: View {
                 stopPulse()
                 withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil }
                 probing = false
-            }
-    }
-
-    /// A (one axis): sideways for other moments, up for details. B (zoom): sideways only. C: none.
-    private var swipe: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { v in
-                guard gestures != .quiet else { return }
-                drag = v.translation
-            }
-            .onEnded { v in
-                defer { withAnimation(.spring(duration: 0.35, bounce: 0.2)) { drag = .zero } }
-                guard gestures != .quiet else { return }
-                let dx = v.predictedEndTranslation.width, dy = v.predictedEndTranslation.height
-                if abs(dx) > abs(dy), abs(dx) > 90 {
-                    onStep(dx < 0 ? 1 : -1)   // swipe left = later, like turning a page
-                } else if gestures == .axis, dy < -120, abs(dy) > abs(dx) {
-                    onOpen()
-                }
             }
     }
 

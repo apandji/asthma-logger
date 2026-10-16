@@ -11,7 +11,7 @@ struct PullToLogTip: Tip {
 
 struct MomentsTip: Tip {
     var title: Text { Text("Drag the timeline") }
-    var message: Text? { Text("Each dot is a moment. Tap or pinch the sky for details, pinch closed for the calendar.") }
+    var message: Text? { Text("Each dot is a moment. Tap the sky for details. Hold the dots on the right to zoom out.") }
     var image: Image? { Image(systemName: "hand.draw") }
 }
 
@@ -29,7 +29,7 @@ enum AppTips {
 }
 
 struct SkyTip: Tip {
-    var title: Text { Text("Hold to read the sky") }
-    var message: Text? { Text("Drag to see what each color is.") }
+    var title: Text { Text("Drag across the sky") }
+    var message: Text? { Text("Your finger reads each color as it passes.") }
     var image: Image? { Image(systemName: "hand.point.up.left") }
 }

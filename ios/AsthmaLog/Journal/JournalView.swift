@@ -56,8 +56,9 @@ struct JournalView: View {
         NavigationStack {
             ambient
                 // The + and Insights live on the home only, not on pushed pages.
-                .safeAreaInset(edge: .bottom) {
-                    if !overview && !showDays && expanded == nil { CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, spot: spot) }
+                // The + and Insights stay put on every scale, over everything.
+                .overlay(alignment: .bottom) {
+                    CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, spot: spot)
                 }
                 .overlay(alignment: .trailing) {
                     if insightsEntry == .edgeTab && !overview { InsightEdgeTab { showInsights = true } }
@@ -115,7 +116,7 @@ struct JournalView: View {
 
     private var ambient: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if expanded == nil { topBar }
+            topBar
             Group {
                 if overview {
                     MomentsOverview(events: Array(events), namespace: morph,
@@ -192,23 +193,17 @@ struct JournalView: View {
                     if momentStyle == .panel {
                         MomentPager(events: cards, selectedID: $selectedID, zoom: zoom, mapNamespace: mapZoom,
                                     pollenSeason: pollenSeason, onOpen: expand, onOverview: zoomOut, probing: $panelProbing,
-                                    spot: spot, anchorStore: gestures == .zoom ? anchorStore : nil, anchorHidden: flight != nil)
+                                    spot: spot, anchorStore: gestures == .zoom ? anchorStore : nil, anchorHidden: flight != nil,
+                                    momentsTip: tips.currentTip as? MomentsTip, skyTip: tips.currentTip as? SkyTip)
                             .frame(maxHeight: 520)
                     } else {
                         MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, morph: morph,
                                        onOverview: zoomOut) { opened = $0 }
                             .frame(height: 380)
                     }
-                    TipView(tips.currentTip as? MomentsTip)
-                        .spotlightTarget("momentsTip", spot)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                    TipView(tips.currentTip as? SkyTip)
-                        .spotlightTarget("skyTip", spot)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
                 }
         }
+        .padding(.bottom, 84)  // clear the + bar
     }
 
     private var levelKey: String {
@@ -340,8 +335,8 @@ struct JournalView: View {
     private var spotlightIDs: [String]? {
         switch tips.currentTip {
         case is PullToLogTip: ["plus"]
-        case is MomentsTip: ["track", "momentsTip"]
-        case is SkyTip: ["sky", "skyTip"]
+        case is MomentsTip: ["track"]
+        case is SkyTip: ["sky"]
         default: nil
         }
     }
@@ -402,32 +397,19 @@ struct JournalView: View {
             switch headerStyle {
             case .moment:
                 if let m = selected {
-                    // Fixed footprint, text at the bottom: an invisible copy reserves room for a two-line
-                    // headline and a place, and the real lines stack together just above the sky. Scrubbing
-                    // between short and long moments never moves anything below, and nothing floats apart.
-                    ZStack(alignment: .bottomLeading) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(" ").font(.subheadline)
-                            Text(" \n ").font(.system(.title, design: .serif, weight: .medium))
-                            Text(" ").font(.subheadline)
-                        }
-                        .hidden()
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 7) {
-                                MomentDot(moment: m.moment, size: 8)
-                                Text(momentWhen(m))
-                                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-                            }
-                            Text(m.weave.isEmpty ? "No air reading." : m.headline)
-                                .font(.system(.title, design: .serif, weight: .medium))
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.85)
-                            if let place = m.placeName {
-                                Text(place).font(.subheadline).foregroundStyle(Theme.secondaryText).lineLimit(1)
-                            }
-                        }
-                        .contentTransition(.opacity)
+                    // The details line never moves: type, time and place on one line. The statement sits
+                    // under it with two lines reserved, so a one- or two-line statement shifts nothing.
+                    HStack(spacing: 7) {
+                        MomentDot(moment: m.moment, size: 8)
+                        Text([momentWhen(m), m.placeName].compactMap { $0 }.joined(separator: " · "))
+                            .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                            .lineLimit(1).minimumScaleFactor(0.8)
                     }
+                    Text(m.weave.isEmpty ? "No air reading." : m.headline)
+                        .font(.system(.title, design: .serif, weight: .medium))
+                        .lineLimit(2, reservesSpace: true)
+                        .minimumScaleFactor(0.85)
+                        .contentTransition(.opacity)
                 } else {
                     nowLines
                 }
@@ -480,7 +462,7 @@ struct JournalView: View {
         let cal = Calendar.current
         let time = m.loggedAt.formatted(date: .omitted, time: .shortened)
         let day = cal.isDateInToday(m.loggedAt) ? "Today" : cal.isDateInYesterday(m.loggedAt) ? "Yesterday"
-            : m.loggedAt.formatted(.dateTime.weekday(.wide))
+            : m.loggedAt.formatted(.dateTime.weekday(.abbreviated))
         let kind = m.moment == .rescue ? "Rescue" : m.moment == .maintenance ? "Standard" : "I'm okay"
         return "\(kind) · \(day), \(time)"
     }

@@ -286,7 +286,7 @@ struct MomentsOverview: View {
                 .frostedCard()
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 40)
+            .padding(.bottom, 120)  // clear the + bar
         }
         .scrollIndicators(.hidden)
     }

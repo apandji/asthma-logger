@@ -51,6 +51,7 @@ struct JournalView: View {
     @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.topBar
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
     @AppStorage(Crit.Header.key) private var headerStyle = Crit.Header.moment
+    @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
 
     private let days = 7
 
@@ -106,6 +107,7 @@ struct JournalView: View {
                 }
                 .sheet(isPresented: $showSettings) { SettingsView() }
                 .toolbar(.hidden, for: .navigationBar)
+                .environment(\.colorScheme, paper == .linen ? .light : .dark)
                 .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
                 .navigationDestination(item: $opened) { e in
                     MomentDetailsView(event: e)
@@ -182,8 +184,8 @@ struct JournalView: View {
 
         .background {
             if momentStyle == .panel {
-                // The sky lives in its panel; the page is black paper with a faint riso grain.
-                ZStack { Color.black; SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
+                // The sky lives in its panel; the page is paper (black or linen) with a faint riso grain.
+                ZStack { Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
             } else {
             // The room takes on the moment you're on.
             AmbientField(weave: fieldWeave,

@@ -25,6 +25,7 @@ struct SettingsView: View {
     @AppStorage(Crit.SkyTexture.key) private var critTexture = Crit.SkyTexture.dots
     @AppStorage(Crit.SkyReading.key) private var critReading = Crit.SkyReading.strata
     @AppStorage(Crit.LayerSpread.key) private var critSpread = Crit.LayerSpread.vibe
+    @AppStorage(Crit.Paper.key) private var critPaper = Crit.Paper.black
     @AppStorage(Crit.CardMarker.key) private var critMarker = Crit.CardMarker.quietTab
     @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
@@ -56,6 +57,9 @@ struct SettingsView: View {
                     }
                     Picker("Sky reading", selection: $critReading) {
                         ForEach(Crit.SkyReading.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Paper", selection: $critPaper) {
+                        ForEach(Crit.Paper.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Layer spread", selection: $critSpread) {
                         ForEach(Crit.LayerSpread.allCases) { Text($0.title).tag($0) }

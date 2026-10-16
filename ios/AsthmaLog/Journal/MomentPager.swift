@@ -265,7 +265,7 @@ struct SkyPanel: View {
                 }
 
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && captureInk == nil, band: band, sweeps: reading == .strata,
+                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && captureInk == nil, band: band, sweeps: reading == .strata,
                              rippleInk: captureInk ?? .white, rippleFromCapture: captureInk != nil)
                 }
                 if let point, let probe {
@@ -304,6 +304,11 @@ struct SkyPanel: View {
             }
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpen)
+            .overlay {
+                Button(action: onOpen) { Color.clear.frame(width: 48, height: 48).contentShape(Circle()) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Air details")
+            }
             // Drag across the sky to read it, straight away. Moving through time is the timeline's job.
             .gesture(explore(size))
         }

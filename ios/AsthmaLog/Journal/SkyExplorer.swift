@@ -131,6 +131,21 @@ enum SkyExplorer {
         }
     }
 
+    /// One symbol per layer, shared by the scale and the label so they read as the same thing.
+    static func icon(_ name: String) -> String {
+        switch name {
+        case "Weather": "cloud.sun.fill"
+        case "PM2.5", "Air": "smoke.fill"
+        case "PM10": "wind"
+        case "NO₂": "car.fill"
+        case "Ozone": "sun.haze.fill"
+        case "Tree pollen": "tree.fill"
+        case "Grass pollen": "leaf.fill"
+        case "Weed pollen": "allergens"
+        default: "circle.fill"
+        }
+    }
+
     private static func kind(_ name: String, _ pollen: PollenSample?) -> String {
         switch name {
         case "PM2.5": "Fine particles"
@@ -177,14 +192,14 @@ struct SkyProbeOverlay: View {
             if showsGlow, let band {
                 // One regional reading: the layer lights up edge to edge, not a spot.
                 Rectangle()
-                    .fill(LinearGradient(colors: [.clear, probe.levelInk.opacity(0.4), probe.levelInk.opacity(0.4), .clear],
+                    .fill(LinearGradient(colors: [.clear, probe.color.opacity(0.4), probe.color.opacity(0.4), .clear],
                                          startPoint: .top, endPoint: .bottom))
                     .frame(width: width, height: band.upperBound - band.lowerBound)
                     .blur(radius: 8)
                     .position(x: width / 2, y: (band.lowerBound + band.upperBound) / 2)
             } else if showsGlow {
             Circle()
-                .fill(RadialGradient(colors: [probe.levelInk.opacity(0.5), probe.levelInk.opacity(0.15), .clear],
+                .fill(RadialGradient(colors: [probe.color.opacity(0.5), probe.color.opacity(0.15), .clear],
                                      center: .center, startRadius: 0, endRadius: 80))
                 .frame(width: 160, height: 160)
                 .blur(radius: 6)
@@ -206,7 +221,7 @@ struct SkyProbeOverlay: View {
     private var label: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(probe.name).font(.subheadline.weight(.semibold))
+                Label(probe.name, systemImage: SkyExplorer.icon(probe.name)).font(.subheadline.weight(.semibold))
                 Text(probe.kind).font(.caption).foregroundStyle(Theme.secondaryText)
                 Spacer(minLength: 0)
             }
@@ -216,7 +231,7 @@ struct SkyProbeOverlay: View {
                 Spacer(minLength: 8)
                 if let level = probe.level {
                     VStack(alignment: .trailing, spacing: 2) {
-                        LevelIndicator(level: level, ink: probe.levelInk, style: .signal)
+                        LevelIndicator(level: level, ink: probe.color, style: .signal)
                         Text(Tier(level).word).font(.caption2.weight(.semibold))
                     }
                 }
@@ -249,7 +264,8 @@ struct StrataScale: View {
             dot(name: "Weather", level: nil, amount: 0.25, on: probe?.name == "Weather")
                 .position(x: 0, y: weatherBottom / 2)
             ForEach(Array(stack.enumerated()), id: \.offset) { i, layer in
-                dot(name: layer.name, level: layer.level, amount: layer.empty ? 0 : layer.amount, on: probe?.name == layer.name)
+                dot(name: layer.name, level: layer.level, amount: layer.empty ? 0 : (Double(layer.level.rawValue) + layer.fraction) / 3,
+                    on: probe?.name == layer.name)
                     .position(x: 0, y: weatherBottom + each * (CGFloat(i) + 0.5))
             }
         }
@@ -257,21 +273,18 @@ struct StrataScale: View {
         .allowsHitTesting(false)
     }
 
+    /// An icon per layer: size says how much of it there is, color says which layer (its own ink, the
+    /// same one it paints the sky with). The one being read is full-strength and ringed; its name lives
+    /// in the label, not here.
     private func dot(name: String, level: WeaveSpec.Level?, amount: Double, on: Bool) -> some View {
-        let ink: Color = switch level { case .low?: Verdict.green; case .medium?: Verdict.yellow; case .high?: Verdict.red; case nil: .white }
-        let size = 4 + 12 * CGFloat(amount)
-        return HStack(spacing: 8) {
-            if on {
-                Text(name).font(.caption.weight(.semibold)).foregroundStyle(.white)
-                    .fixedSize().transition(.move(edge: .trailing).combined(with: .opacity))
-            }
-            Circle()
-                .fill(on ? ink : ink.opacity(0.55))
-                .frame(width: on ? size + 6 : size, height: on ? size + 6 : size)
-                .overlay { if on { Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5) } }
-                .frame(width: 22, height: 22)
-        }
-        .fixedSize()
-        .animation(.snappy(duration: 0.2), value: on)
+        let ink: Color = name == "Weather" ? .primary : WeatherColor.ink(for: name)
+        let size = 11 + 11 * CGFloat(amount)
+        return Image(systemName: SkyExplorer.icon(name))
+            .font(.system(size: on ? size + 3 : size, weight: .semibold))
+            .foregroundStyle(on ? ink : ink.opacity(0.6))
+            .frame(width: 30, height: 30)
+            .background { if on { Circle().strokeBorder(ink.opacity(0.9), lineWidth: 1.5) } }
+            .animation(.snappy(duration: 0.2), value: on)
+            .accessibilityLabel(name)
     }
 }

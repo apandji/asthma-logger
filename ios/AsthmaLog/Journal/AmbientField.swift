@@ -197,6 +197,20 @@ struct AirLayers {
 
 /// The weather color language, shared by the field and its legend.
 enum WeatherColor {
+    /// Each layer's own ink, by name: the color it paints the sky with, the scale and the grain.
+    static func ink(for name: String) -> Color {
+        switch name {
+        case "PM2.5", "Air": pm25
+        case "PM10": pm10
+        case "NO₂": no2
+        case "Ozone": ozone
+        case "Tree pollen": pollen[0]
+        case "Grass pollen": pollen[1]
+        case "Weed pollen": pollen[2]
+        default: .white
+        }
+    }
+
     /// Blue (cold) → sky → sage (mild) → amber (warm) → red (hot), by °F.
     /// Spread so ordinary days differ: 45° sky blue, 55° teal, 63° green, 70° gold, 78° orange, 88° red.
     static let stops: [(f: Double, color: Color)] = [

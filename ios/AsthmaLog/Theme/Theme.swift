@@ -23,6 +23,10 @@ enum Theme {
 
     /// The ambient Journal stage: soft paper in light, near-black in dark.
     static let stage = Color(light: 0xF2F1EE, dark: 0x0B0B0D)
+    /// Warm off-white paper for the linen look (Design crit › Paper).
+    static let linen = Color(light: 0xF3EEE4, dark: 0xF3EEE4)
+    /// The page color for the chosen paper.
+    static func paper(_ p: Crit.Paper) -> Color { p == .linen ? linen : .black }
     static let card = Color(light: 0xFFFFFF, dark: 0x1C1C1F)
 
     static let background = Color(uiColor: .systemGroupedBackground)

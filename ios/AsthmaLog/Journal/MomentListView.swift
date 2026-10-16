@@ -229,6 +229,7 @@ struct MomentsOverview: View {
     /// Opens on the anchor's month, so its square exists for the zoom to land in.
     @State private var month: Date
     @State private var day: Date?
+    @State private var showDoctor = false
 
     init(events: [LogEvent], namespace: Namespace.ID, anchorStore: AnchorFrames? = nil, anchorHidden: Bool = false,
          anchorDay: Date? = nil, anchorMoment: LogEvent? = nil,
@@ -252,6 +253,13 @@ struct MomentsOverview: View {
                 Text("·")
                 stat(.maintenance, "Standard")
             }
+            // What you take to the doctor: every inhaler moment with the air at the time.
+            Button { showDoctor = true } label: {
+                Label("Table for your doctor", systemImage: "tablecells").font(.subheadline.weight(.medium))
+            }
+            .buttonStyle(.bordered).buttonBorderShape(.capsule)
+            .padding(.horizontal, 20)
+            .sheet(isPresented: $showDoctor) { DoctorSheet(events: events) }
             list
         }
     }

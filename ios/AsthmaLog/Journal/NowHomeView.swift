@@ -489,7 +489,7 @@ struct NowSky: View {
                         .allowsHitTesting(false)
                 }
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band)
+                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band, sweeps: reading == .strata)
                 }
                 if let point, let probe {
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false, band: band).transition(.opacity)

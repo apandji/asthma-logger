@@ -300,6 +300,8 @@ struct SkyGrain: View {
     var inviting = true
     /// Strata: the band (in points) being read. The swell then runs the full width of the band.
     var band: ClosedRange<CGFloat>? = nil
+    /// Strata: the ripple is a horizontal wave sweeping down through the layers, not a ring.
+    var sweeps = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let spacing: CGFloat = 10
@@ -366,8 +368,10 @@ struct SkyGrain: View {
                             color = ink.opacity(0.35 + 0.6 * Double(t))
                         }
                     } else if let radius {
-                        // Dots near the wavefront swell and go white, then settle back.
-                        let d = abs(hypot(x - centre.x, y - centre.y) - radius)
+                        // Dots near the wavefront swell and go white, then settle back. The front is a ring
+                        // from the centre (blob) or a line sweeping top to bottom (strata).
+                        let d = sweeps ? abs(y - radius / 0.6 / hypot(size.width, size.height) * size.height)
+                                       : abs(hypot(x - centre.x, y - centre.y) - radius)
                         if d < 36 {
                             let t = (1 - d / 36) * fade
                             r += t * t * 2.4

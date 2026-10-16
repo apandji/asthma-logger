@@ -3,15 +3,16 @@ import SwiftData
 import SwiftUI
 
 /// The Journal, in two modes (switch at the top):
-/// - Ambient: the day's outdoor conditions as a soft colour field, one sentence, and today's moments.
-///   Tap anywhere for the details, each condition as Good / OK / Not good.
+/// - Ambient: the outdoor conditions as a soft colour field, one sentence, and this week's moments as
+///   cards you swipe through. Pinch a card for everything about it, leading with the weather.
 /// - Data: temperature, humidity and air as scrollable hourly line charts, with inhaler moments marked.
 /// Logging lives in the tab bar accessory, on Apple Watch, and on the felt button.
 struct JournalView: View {
     @Environment(LogService.self) private var services
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @State private var selectedID: UUID?
-    @State private var showDetails = false
+    @State private var opened: LogEvent?
+    @Namespace private var zoom
     @AppStorage("journalMode") private var mode = Mode.ambient
 
     enum Mode: String { case ambient, data }
@@ -49,12 +50,9 @@ struct JournalView: View {
                 }
             }
             .settingsToolbar()
-            .sheet(isPresented: $showDetails) {
-                if let event = selected {
-                    DetailsSheet(event: event)
-                        .presentationDetents([.medium, .large])
-                        .presentationBackground(.ultraThinMaterial)
-                }
+            .navigationDestination(item: $opened) { e in
+                MomentDetailsView(event: e)
+                    .navigationTransition(.zoom(sourceID: e.id, in: zoom))
             }
         }
     }
@@ -64,67 +62,37 @@ struct JournalView: View {
     private var ambient: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Spacer(minLength: 24)
-            if events.isEmpty {
+            Spacer(minLength: 16)
+            if cards.isEmpty {
                 emptyState.padding(.horizontal, 20)
             } else {
-                todayMoments
+                MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom) { opened = $0 }
+                    .frame(height: 400)
+                Text("Pinch a card for details")
+                    .font(.footnote).foregroundStyle(Theme.secondaryText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 10)
             }
             if let error = services.lastError {
                 Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20).padding(.top, 8)
             }
-            Text("Tap anywhere for details")
-                .font(.footnote).foregroundStyle(Theme.secondaryText)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 18)
-                .padding(.bottom, 120)  // clear the floating log bar
+            Spacer(minLength: 0)
         }
         .padding(.top, 8)
+        .padding(.bottom, 110)  // clear the floating log bar
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .contentShape(Rectangle())
-        .onTapGesture { if selected != nil { showDetails = true } }
         .background {
-            // The room takes on the selected moment's air (today's, until you pick one).
+            // The room takes on the current card's air (today's, until you swipe).
             AmbientField(weave: selected.map { $0.weave.isEmpty ? todayWeave : $0.weave } ?? todayWeave)
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 0.8), value: selected?.id)
         }
     }
 
-    /// Today's moments as quiet glass chips; tapping one tints the room with its air and opens it.
-    private var todayMoments: some View {
-        let today = events.filter { Calendar.current.isDateInToday($0.loggedAt) && $0.moment != .okay }
-        return VStack(alignment: .leading, spacing: 10) {
-            Text(today.isEmpty ? "No inhaler use today" : "Today")
-                .font(.footnote.weight(.semibold)).foregroundStyle(Theme.secondaryText)
-                .padding(.horizontal, 20)
-            if !today.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(today) { e in
-                            Button {
-                                withAnimation(.snappy) { selectedID = e.id }
-                                showDetails = true
-                            } label: {
-                                HStack(spacing: 6) {
-                                    MomentDot(moment: e.moment, size: 8)
-                                    Text(e.loggedAt.formatted(date: .omitted, time: .shortened))
-                                        .font(.subheadline.monospacedDigit())
-                                }
-                                .padding(.horizontal, 12).padding(.vertical, 8)
-                                .glassEffect(.regular, in: .capsule)
-                                .overlay(Capsule().strokeBorder(.primary.opacity(e.id == selected?.id ? 0.5 : 0), lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("\(e.moment.title) at \(e.loggedAt.formatted(date: .omitted, time: .shortened))")
-                        }
-                    }
-                }
-                .scrollIndicators(.hidden)
-                .contentMargins(.horizontal, 20, for: .scrollContent)
-                .defaultScrollAnchor(.trailing)
-            }
-        }
+    /// This week's inhaler moments, oldest first (the newest starts in the middle).
+    private var cards: [LogEvent] {
+        let start = Calendar.current.date(byAdding: .day, value: -(days - 1), to: Calendar.current.startOfDay(for: .now))!
+        return events.filter { $0.loggedAt >= start && $0.moment != .okay }
     }
 
     // MARK: Header
@@ -313,47 +281,5 @@ extension LogEvent {
         if let h = w.words[.humidity] { tail.append(h) }
         if !tail.isEmpty { parts.append(tail.joined(separator: " and ")) }
         return parts.isEmpty ? "No air reading." : parts.joined(separator: ", ") + "."
-    }
-}
-
-/// Opened by tapping the ambient Journal: the moment's conditions as tiers, a switcher for the tier
-/// style (for comparing in review), and a link to everything about the moment.
-struct DetailsSheet: View {
-    let event: LogEvent
-    @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    MomentCard(event: event, showsChevron: false)
-                    NavigationLink(value: event) {
-                        Label("Everything about this moment", systemImage: "chevron.right")
-                            .labelStyle(.titleOnly)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
-                }
-                .padding(16)
-            }
-            .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
-            .navigationTitle(event.moment == .okay ? "Conditions" : event.moment.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Picker("Level style", selection: $style) {
-                            ForEach(LevelStyle.allCases) { s in
-                                Text(s.title).tag(s)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                    }
-                    .accessibilityLabel("Level style")
-                }
-            }
-        }
     }
 }

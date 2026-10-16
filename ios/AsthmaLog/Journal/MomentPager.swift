@@ -2,10 +2,10 @@ import AsthmaCore
 import SwiftUI
 import UIKit
 
-/// The Journal's moments as pages, each its own contained sky on a black page: the colour field fades
-/// to black at the top and the edges, the map sits inside it faint and inactive, and small dots below
-/// show where you are. Swipe for other moments. Touch and hold the sky to explore it (paging pauses
-/// while you do); pinch it open for the details, pinch it closed for the calendar.
+/// The Journal's moments: one contained sky (the moment you're on) above a history track. Drag the
+/// track to move through time; the moment nearest the centre marker becomes current, with a haptic tick
+/// as you pass each one, and it settles on the nearest moment when you let go. Tap a dot to jump.
+/// Only one sky is drawn at a time (it cross-fades), which keeps it smooth.
 struct MomentPager: View {
     let events: [LogEvent]
     @Binding var selectedID: UUID?
@@ -15,27 +15,141 @@ struct MomentPager: View {
     let onOverview: () -> Void
     @Binding var probing: Bool
 
-    var body: some View {
-        VStack(spacing: 14) {
-            ScrollView(.horizontal) {
-                LazyHStack(spacing: 0) {
-                    ForEach(events) { e in
-                        SkyPanel(event: e, pollen: DemoPollen.sample(at: e.loggedAt, season: pollenSeason),
-                                 zoom: zoom, probing: $probing, onOpen: { onOpen(e) }, onOverview: onOverview)
-                            .containerRelativeFrame(.horizontal)
-                            .id(e.id)
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $selectedID)
-            .defaultScrollAnchor(.trailing)
-            .scrollIndicators(.hidden)
-            .scrollDisabled(probing)
+    private var current: LogEvent? { events.first { $0.id == selectedID } ?? events.last }
 
-            PageDots(count: events.count, index: events.firstIndex { $0.id == selectedID } ?? events.count - 1)
+    var body: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                if let e = current {
+                    SkyPanel(event: e, pollen: DemoPollen.sample(at: e.loggedAt, season: pollenSeason),
+                             zoom: zoom, probing: $probing, onOpen: { onOpen(e) }, onOverview: onOverview)
+                        .id(e.id)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.35), value: current?.id)
+
+            TimelineTrack(events: events, selectedID: $selectedID)
+                .frame(height: 58)
         }
+    }
+}
+
+/// History as a track: ticks every 6 hours (taller at midnight, with the day), moments as dots.
+/// A fixed centre marker reads the moment under it.
+struct TimelineTrack: View {
+    let events: [LogEvent]
+    @Binding var selectedID: UUID?
+
+    @State private var position = ScrollPosition(edge: .trailing)
+    /// The track point under the centre marker (content offset, thanks to the half-width padding).
+    @State private var centerX: CGFloat = 0
+    @State private var width: CGFloat = 0
+    @State private var dragging = false
+
+    private let dayWidth: CGFloat = 64
+    private let cal = Calendar.current
+
+    private var start: Date {
+        cal.startOfDay(for: events.first?.loggedAt ?? .now)
+    }
+    private var end: Date {
+        cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: .now))!
+    }
+    private var contentWidth: CGFloat { CGFloat(end.timeIntervalSince(start) / 86_400) * dayWidth }
+
+    private func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(start) / 86_400) * dayWidth }
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 0) {
+            // Half-width padding at both ends, so any moment (even the first or last) can sit under the marker.
+            Color.clear.frame(width: width / 2)
+            ZStack(alignment: .topLeading) {
+                Canvas { ctx, size in
+                    // Ticks.
+                    var t = start
+                    while t <= end {
+                        let isDay = cal.component(.hour, from: t) == 0
+                        let px = x(t)
+                        var p = Path()
+                        p.move(to: CGPoint(x: px, y: isDay ? 18 : 26))
+                        p.addLine(to: CGPoint(x: px, y: 34))
+                        ctx.stroke(p, with: .color(.white.opacity(isDay ? 0.45 : 0.18)), lineWidth: 1)
+                        if isDay {
+                            let label = cal.isDateInToday(t) ? "Today" : t.formatted(.dateTime.weekday(.abbreviated).day())
+                            ctx.draw(Text(label).font(.caption2).foregroundStyle(.white.opacity(0.5)),
+                                     at: CGPoint(x: px + 4, y: 46), anchor: .leading)
+                        }
+                        t = cal.date(byAdding: .hour, value: 6, to: t)!
+                    }
+                    // Baseline.
+                    var line = Path()
+                    line.move(to: CGPoint(x: 0, y: 34)); line.addLine(to: CGPoint(x: size.width, y: 34))
+                    ctx.stroke(line, with: .color(.white.opacity(0.12)), lineWidth: 1)
+                }
+                .frame(width: contentWidth, height: 58)
+
+                ForEach(events) { e in
+                    let on = e.id == selectedID
+                    Circle()
+                        .fill(e.moment == .rescue ? Theme.rescue : Theme.standard)
+                        .frame(width: on ? 11 : 7, height: on ? 11 : 7)
+                        .overlay(Circle().strokeBorder(.white, lineWidth: on ? 2 : 0))
+                        .position(x: x(e.loggedAt), y: 10)
+                        .onTapGesture { select(e, scroll: true) }
+                }
+            }
+            .frame(width: contentWidth, height: 58)
+            Color.clear.frame(width: width / 2)
+            }
+        }
+        .scrollIndicators(.hidden)
+        .scrollPosition($position)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, cx in
+            centerX = cx
+            guard dragging, let nearest = nearest(to: cx), nearest.id != selectedID else { return }
+            selectedID = nearest.id
+        }
+        .onScrollPhaseChange { old, phase in
+            dragging = phase == .interacting || phase == .decelerating
+            // Snap only after a real drag, not when the track settles at launch.
+            if phase == .idle, old == .interacting || old == .decelerating, let n = nearest(to: centerX) { select(n, scroll: true) }
+        }
+        .overlay {
+            // The centre marker.
+            Capsule().fill(.white).frame(width: 2, height: 30).offset(y: -6).allowsHitTesting(false)
+        }
+        .sensoryFeedback(.selection, trigger: selectedID)
+        .onChange(of: selectedID) { _, id in
+            // Moved from elsewhere (a new log, the calendar): bring it under the marker.
+            if !dragging, let e = events.first(where: { $0.id == id }), abs(x(e.loggedAt) - centerX) > 1 {
+                withAnimation(.smooth) { position.scrollTo(x: x(e.loggedAt)) }
+            }
+        }
+        // Once the width is known, start on the current moment (the newest by default).
+        .task(id: width) {
+            guard width > 0 else { return }
+            try? await Task.sleep(for: .milliseconds(80))   // let the content lay out first
+            if let e = events.first(where: { $0.id == selectedID }) ?? events.last { position.scrollTo(x: x(e.loggedAt)) }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("History")
+        .accessibilityAdjustableAction { dir in
+            guard let i = events.firstIndex(where: { $0.id == selectedID }) ?? events.indices.last else { return }
+            let j = dir == .increment ? min(events.count - 1, i + 1) : max(0, i - 1)
+            select(events[j], scroll: true)
+        }
+    }
+
+    private func nearest(to cx: CGFloat) -> LogEvent? {
+        events.min { abs(x($0.loggedAt) - cx) < abs(x($1.loggedAt) - cx) }
+    }
+
+    private func select(_ e: LogEvent, scroll: Bool) {
+        selectedID = e.id
+        if scroll { withAnimation(.smooth(duration: 0.35)) { position.scrollTo(x: x(e.loggedAt)) } }
     }
 }
 
@@ -64,9 +178,8 @@ struct SkyPanel: View {
                 if event.latitude != nil {
                     MomentMap(event: event)
                         .frame(width: size.width * 0.62, height: size.width * 0.62)
-                        .saturation(0)
-                        .opacity(0.22)
-                        .blendMode(.screen)
+                        .saturation(0.35)
+                        .opacity(0.5)
                         .mask(EllipticalGradient(colors: [.black, .clear], center: .center,
                                                  startRadiusFraction: 0.1, endRadiusFraction: 0.5))
                         .matchedTransitionSource(id: event.id, in: zoom) { $0.clipShape(RoundedRectangle(cornerRadius: 200)) }
@@ -76,17 +189,25 @@ struct SkyPanel: View {
                         .matchedTransitionSource(id: event.id, in: zoom)
                 }
                 if let point, let probe {
-                    SkyProbeOverlay(point: point, probe: probe, width: size.width)
+                    // The glow belongs to the sky, so it fades with it.
+                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false)
                         .transition(.opacity)
                 }
             }
             .frame(width: size.width, height: size.height)
             // Self-contained: fades to black at the edges, and most of all toward the top.
             .mask {
-                EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.58),
-                                   startRadiusFraction: 0, endRadiusFraction: 0.62)
-                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.38)],
+                EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),
+                                   startRadiusFraction: 0, endRadiusFraction: 0.7)
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.26)],
                                          startPoint: .top, endPoint: .bottom))
+            }
+            // The label sits above the fade, always fully legible.
+            .overlay {
+                if let point, let probe {
+                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: false)
+                        .transition(.opacity)
+                }
             }
             .contentShape(Rectangle())
             .scaleEffect(pinch)
@@ -161,28 +282,5 @@ struct SkyPanel: View {
     private func stopPulse() {
         pulse?.cancel()
         pulse = nil
-    }
-}
-
-/// Small page dots like iOS: a window of up to seven, the current one bright, the far ones smaller.
-struct PageDots: View {
-    let count: Int
-    let index: Int
-
-    var body: some View {
-        let window = 7
-        let start = max(0, min(index - window / 2, count - window))
-        let range = start..<min(count, start + window)
-        HStack(spacing: 7) {
-            ForEach(Array(range), id: \.self) { i in
-                let edge = (i == range.lowerBound && start > 0) || (i == range.upperBound - 1 && range.upperBound < count)
-                Circle()
-                    .fill(.white.opacity(i == index ? 0.95 : 0.3))
-                    .frame(width: edge ? 4 : 7, height: edge ? 4 : 7)
-            }
-        }
-        .animation(.snappy, value: index)
-        .accessibilityElement()
-        .accessibilityLabel("Moment \(index + 1) of \(count)")
     }
 }

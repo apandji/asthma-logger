@@ -108,19 +108,27 @@ struct SkyProbeOverlay: View {
     let point: CGPoint
     let probe: SkyProbe
     let width: CGFloat
+    var showsGlow = true
+    var showsLabel = true
     @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
 
     var body: some View {
         ZStack(alignment: .topLeading) {
+            if showsGlow {
             Circle()
                 .fill(RadialGradient(colors: [probe.color.opacity(0.55), probe.color.opacity(0.15), .clear],
                                      center: .center, startRadius: 0, endRadius: 80))
                 .frame(width: 160, height: 160)
                 .blur(radius: 6)
                 .position(point)
-            label
-                .frame(width: 224, alignment: .leading)
-                .position(x: min(max(point.x, 124), width - 124), y: max(64, point.y - 104))
+            }
+            if showsLabel {
+                // Above the finger, or below it when there's no room above.
+                label
+                    .frame(width: 224, alignment: .leading)
+                    .position(x: min(max(point.x, 124), width - 124),
+                              y: point.y > 150 ? point.y - 104 : point.y + 104)
+            }
         }
         .allowsHitTesting(false)
         .animation(.interactiveSpring(duration: 0.2), value: point)

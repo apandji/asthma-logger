@@ -136,7 +136,7 @@ Mirror the target model in [docs/data-architecture.md §3](../docs/data-architec
 ## UI
 
 - **No tab bar.** The Journal is one surface; everything else is a gesture (as of Oct 16, 2026):
-  - **Pages of moments:** each moment is its own contained sky on a black page (fades to black at the top and edges), with the map faint and inactive inside it and page dots below. Swipe for other moments; the header follows. A newly logged moment (+, felt button, watch) slides into view. Older styles (floating circle, card) are crit options.
+  - **One sky and a timeline:** the moment you're on is a contained sky on a black page (fades to black at the top and edges), with its map muted inside it. Below it, a history track (ticks every 6 hours, days labelled, moments as orange / blue dots) scrolls under a fixed centre marker: drag it to move through time, it snaps to the nearest moment, tap a dot to jump. Only one sky is drawn, so it stays smooth. The header follows the moment. A newly logged moment (+, felt button, watch) slides into view. Older styles (floating circle, card) are crit options.
   - **+ (bottom right):** press and pull up. A short pull logs **Rescue**, all the way up logs **Standard**, letting go low cancels. Haptics per zone, Undo toast.
   - **Insights:** a ring button by the + fills while learning; when there's a pattern a speech bubble offers it. Opens as a sheet (swipe down to close).
   - **Tap or pinch a moment open:** `MomentDetailsView`, weather first. **Pinch in:** the moments shrink into dots on a month calendar with the full list (`MomentsOverview`, shared `matchedGeometryEffect` ids).

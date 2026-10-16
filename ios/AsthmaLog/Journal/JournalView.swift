@@ -78,7 +78,7 @@ struct JournalView: View {
                 .transition(.opacity)
             } else {
                 header.transition(.opacity)
-                    .opacity(probe == nil && !panelProbing ? 1 : 0.15)  // step aside while you explore the sky
+                    .opacity(probe == nil && !panelProbing ? 1 : 0.4)  // step aside while you explore the sky
                     .animation(.easeOut(duration: 0.2), value: probe == nil && !panelProbing)
                 Spacer(minLength: 12)
                 if cards.isEmpty {
@@ -212,9 +212,12 @@ struct JournalView: View {
             switch headerStyle {
             case .moment:
                 if let m = selected {
-                    Text(momentWhen(m))
-                        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-                        .contentTransition(.opacity)
+                    HStack(spacing: 7) {
+                        MomentDot(moment: m.moment, size: 8)
+                        Text(momentWhen(m))
+                            .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                            .contentTransition(.opacity)
+                    }
                     Text(m.weave.isEmpty ? "No air reading." : m.airLine)
                         .font(.system(.title, design: .serif, weight: .medium))
                         .fixedSize(horizontal: false, vertical: true)

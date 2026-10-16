@@ -10,9 +10,9 @@ struct PullToLogTip: Tip {
 }
 
 struct MomentsTip: Tip {
-    var title: Text { Text("Swipe for other moments") }
-    var message: Text? { Text("Tap or pinch open for details. Pinch closed for the calendar.") }
-    var image: Image? { Image(systemName: "hand.pinch") }
+    var title: Text { Text("Drag the timeline") }
+    var message: Text? { Text("Each dot is a moment. Tap or pinch the sky for details, pinch closed for the calendar.") }
+    var image: Image? { Image(systemName: "hand.draw") }
 }
 
 enum AppTips {

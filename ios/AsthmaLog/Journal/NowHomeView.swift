@@ -476,6 +476,8 @@ struct NowSky: View {
     @State private var pulse: Task<Void, Never>?
     @State private var rippleAt: Date?
     @State private var rippleInk: Color = .white
+    /// The dent under the finger, 0 up, 1 pressed.
+    @State private var press: CGFloat = 0
     @AppStorage("sky.touched") private var touched = false
     @AppStorage(Crit.SkyReading.key) private var reading = Crit.SkyReading.strata
     /// Strata: the band (points) under the finger.
@@ -500,6 +502,10 @@ struct NowSky: View {
                         .frame(width: size.width, height: size.height)
                         .clipped()
                         .allowsHitTesting(false)
+                    // You are here: the map is centred on the place.
+                    Circle().fill(captureInk ?? Theme.standard).frame(width: 12, height: 12)
+                        .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                        .shadow(color: .black.opacity(0.5), radius: 3)
                 }
                 if texture != .plain {
                     SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && rippleInk == .white, band: band, sweeps: reading == .strata,
@@ -511,6 +517,9 @@ struct NowSky: View {
             }
             .frame(width: size.width, height: size.height)
             .drawingGroup()
+            // Pressing in: the surface dents under the finger.
+            .distortionEffect(ShaderLibrary.dent(.float2(point ?? .zero), .float(150), .float(press)),
+                              maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: point != nil)
             .onAppear { rippleInk = captureInk ?? .white; rippleAt = .now }
             // Every new sky (a moment, a forecast hour, now) ripples once; a fresh log ripples in its color.
             .onChange(of: date) { _, _ in rippleInk = captureInk ?? .white; rippleAt = .now }
@@ -526,6 +535,14 @@ struct NowSky: View {
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: false).transition(.opacity)
                 }
             }
+            // The strata, as a scale on the right edge.
+            .overlay(alignment: .trailing) {
+                if reading == .strata {
+                    StrataScale(layers: AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth),
+                                probe: probe, height: size.height)
+                        .padding(.trailing, 18)
+                }
+            }
             .contentShape(Rectangle())
             .gesture(explore(size))
         }
@@ -536,7 +553,7 @@ struct NowSky: View {
     private func explore(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { drag in
-                if !probing { probing = true; touched = true; startPulse() }
+                if !probing { probing = true; touched = true; startPulse(); withAnimation(.snappy(duration: 0.25)) { press = 1 } }
                 let unit = CGPoint(x: drag.location.x / size.width, y: drag.location.y / size.height)
                 let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
                 withAnimation(.easeOut(duration: 0.12)) {
@@ -554,7 +571,7 @@ struct NowSky: View {
             }
             .onEnded { _ in
                 stopPulse()
-                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil }
+                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil; press = 0 }
                 probing = false
             }
     }

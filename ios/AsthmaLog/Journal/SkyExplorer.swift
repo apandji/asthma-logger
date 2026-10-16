@@ -73,19 +73,23 @@ enum SkyExplorer {
     /// Strata: the sky as a core sample. Weather on top, then each present layer as a horizontal band
     /// down the field. Only the finger's height matters; left-right says nothing, because every layer is
     /// one regional reading, not a spot on the map. Returns the probe and its band (unit y).
-    static func strata(at y: Double, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
-                       temperatureF: Double?, pollen: PollenSample?) -> (probe: SkyProbe, band: ClosedRange<Double>)? {
-        // Worst on top, just under the weather: the band nearest your eye is the one that matters most
-        // today. Ties keep a fixed order so the stack doesn't shuffle between similar skies.
+    /// The layers in reading order: worst on top, just under the weather, so the band nearest your eye is
+    /// the one that matters most today. Ties keep a fixed order so the stack doesn't shuffle between skies.
+    static func stack(_ layers: AirLayers) -> [AirLayers.Layer] {
         let order = ["Ozone", "PM2.5", "PM10", "NO₂", "Tree pollen", "Grass pollen", "Weed pollen"]
         let present = Dictionary(layers.readable.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
-        let stack = order.compactMap { present[$0] }.enumerated().sorted { a, b in
+        return order.compactMap { present[$0] }.enumerated().sorted { a, b in
             let la = a.element.level.rawValue, lb = b.element.level.rawValue
             if la != lb { return la > lb }
             if a.element.empty != b.element.empty { return !a.element.empty }
             if a.element.fraction != b.element.fraction { return a.element.fraction > b.element.fraction }
             return a.offset < b.offset
         }.map(\.element)
+    }
+
+    static func strata(at y: Double, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
+                       temperatureF: Double?, pollen: PollenSample?) -> (probe: SkyProbe, band: ClosedRange<Double>)? {
+        let stack = stack(layers)
         let top = 0.14, bottom = 0.86
         let weatherBottom = stack.isEmpty ? bottom : top + (bottom - top) / Double(stack.count + 1)
         if y < weatherBottom {
@@ -224,5 +228,50 @@ struct SkyProbeOverlay: View {
         .padding(12)
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
         .contentTransition(.numericText())
+    }
+}
+
+/// The strata, as a column of riso dots on the right edge of the sky: weather on top, then one dot per
+/// layer in reading order. Each dot's size is how much of that layer there is now; its ink is its level.
+/// The one under the finger grows and names itself. The scale is the legend and the affordance: it shows
+/// there's something to read and which way to slide.
+struct StrataScale: View {
+    let layers: AirLayers
+    let probe: SkyProbe?
+    let height: CGFloat
+
+    var body: some View {
+        let stack = SkyExplorer.stack(layers)
+        let top = 0.14 * height, bottom = 0.86 * height
+        let weatherBottom = stack.isEmpty ? bottom : top + (bottom - top) / CGFloat(stack.count + 1)
+        let each = (bottom - weatherBottom) / CGFloat(max(1, stack.count))
+        ZStack(alignment: .topTrailing) {
+            dot(name: "Weather", level: nil, amount: 0.25, on: probe?.name == "Weather")
+                .position(x: 0, y: weatherBottom / 2)
+            ForEach(Array(stack.enumerated()), id: \.offset) { i, layer in
+                dot(name: layer.name, level: layer.level, amount: layer.empty ? 0 : layer.amount, on: probe?.name == layer.name)
+                    .position(x: 0, y: weatherBottom + each * (CGFloat(i) + 0.5))
+            }
+        }
+        .frame(width: 0, height: height)
+        .allowsHitTesting(false)
+    }
+
+    private func dot(name: String, level: WeaveSpec.Level?, amount: Double, on: Bool) -> some View {
+        let ink: Color = switch level { case .low?: Verdict.green; case .medium?: Verdict.yellow; case .high?: Verdict.red; case nil: .white }
+        let size = 4 + 12 * CGFloat(amount)
+        return HStack(spacing: 8) {
+            if on {
+                Text(name).font(.caption.weight(.semibold)).foregroundStyle(.white)
+                    .fixedSize().transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+            Circle()
+                .fill(on ? ink : ink.opacity(0.55))
+                .frame(width: on ? size + 6 : size, height: on ? size + 6 : size)
+                .overlay { if on { Circle().strokeBorder(.white.opacity(0.9), lineWidth: 1.5) } }
+                .frame(width: 22, height: 22)
+        }
+        .fixedSize()
+        .animation(.snappy(duration: 0.2), value: on)
     }
 }

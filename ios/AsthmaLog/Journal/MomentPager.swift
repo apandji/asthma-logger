@@ -229,6 +229,7 @@ struct SkyPanel: View {
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var rippleAt: Date?
+    @State private var press: CGFloat = 0
     @AppStorage("sky.touched") private var touched = false
     @AppStorage(Crit.SkyReading.key) private var reading = Crit.SkyReading.strata
     /// Logged seconds ago: the ripple takes the moment's color and runs from the +.
@@ -257,6 +258,10 @@ struct SkyPanel: View {
                         .frame(width: size.width, height: size.height)
                         .clipped()
                         .allowsHitTesting(false)
+                    // You were here.
+                    Circle().fill(event.moment == .rescue ? Theme.rescue : Theme.standard).frame(width: 12, height: 12)
+                        .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                        .shadow(color: .black.opacity(0.5), radius: 3)
                 }
 
                 if texture != .plain {
@@ -272,6 +277,8 @@ struct SkyPanel: View {
             .frame(width: size.width, height: size.height)
             // One offscreen pass for the sky, map and glow, instead of a pass per mask.
             .drawingGroup()
+            .distortionEffect(ShaderLibrary.dent(.float2(point ?? .zero), .float(150), .float(press)),
+                              maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: point != nil)
             .onAppear { rippleAt = .now }
             // Self-contained: fades to black at every edge, most of all toward the top.
             .mask {
@@ -286,6 +293,13 @@ struct SkyPanel: View {
                 if let point, let probe {
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: false)
                         .transition(.opacity)
+                }
+            }
+            .overlay(alignment: .trailing) {
+                if reading == .strata {
+                    StrataScale(layers: AirLayers(conditions: event.conditions, weave: event.weave, pollen: pollen, smooth: strengthStyle == .smooth),
+                                probe: probe, height: size.height)
+                        .padding(.trailing, 18)
                 }
             }
             .contentShape(Rectangle())
@@ -311,7 +325,7 @@ struct SkyPanel: View {
     private func explore(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { drag in
-                if !probing { probing = true; touched = true; SkyTip().invalidate(reason: .actionPerformed); startPulse() }
+                if !probing { probing = true; touched = true; SkyTip().invalidate(reason: .actionPerformed); startPulse(); withAnimation(.snappy(duration: 0.25)) { press = 1 } }
                 let unit = CGPoint(x: drag.location.x / size.width, y: drag.location.y / size.height)
                 let layers = AirLayers(conditions: event.conditions, weave: event.weave, pollen: pollen,
                                        smooth: strengthStyle == .smooth)
@@ -330,7 +344,7 @@ struct SkyPanel: View {
             }
             .onEnded { _ in
                 stopPulse()
-                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil }
+                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil; press = 0 }
                 probing = false
             }
     }

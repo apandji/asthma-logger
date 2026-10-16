@@ -336,9 +336,11 @@ struct SkyGrain: View {
         let breath = reduceMotion || !responds ? 0.0 : time.timeIntervalSinceReferenceDate
         return Canvas(rendersAsynchronously: true) { ctx, size in
             let cosA = cos(angle), sinA = sin(angle)
-            let centre = rippleFromCapture ? CaptureReveal.origin(in: size) : CGPoint(x: size.width / 2, y: size.height * 0.55)
+            // A new sky's ripple starts at the pin (the map is centred on the place): "you are here", then
+            // the air around it. A fresh log's starts at the +.
+            let centre = rippleFromCapture ? CaptureReveal.origin(in: size) : CGPoint(x: size.width / 2, y: size.height / 2)
             let radius = wave.map { rippleFromCapture ? CaptureReveal.radius(CGFloat($0), in: size) : CGFloat($0) * hypot(size.width, size.height) * 0.6 }
-            let sweeps = sweeps && !rippleFromCapture
+            let sweeps = false  // the ring from the pin says more than a sweep did; kept as a flag for the crit
             let strong: CGFloat = rippleFromCapture ? 1.6 : 1
             let fade = wave.map { 1 - $0 } ?? 0
             let diag = hypot(size.width, size.height)

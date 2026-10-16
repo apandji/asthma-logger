@@ -281,21 +281,15 @@ struct NowHomeView: View {
         switch focus {
         case .now:
             if let j = justNow {
-                // The new moment's sky wipes in from the + behind the ripple; the live sky stays beneath.
-                ZStack {
-                    NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
-                           pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: .constant(false),
-                           mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
-                        .allowsHitTesting(false)
-                    NowSky(conditions: j.conditions ?? here?.conditions, weave: j.weave.isEmpty ? (here?.weave ?? WeaveSpec()) : j.weave, date: j.loggedAt,
-                           pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
-                           mapID: j.latitude == nil ? "here" : j.id.uuidString,
-                           coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
-                           captureInk: j.moment == .rescue ? Theme.rescue : Theme.standard, onPin: { pinDetails = j })
-                        .modifier(CaptureReveal())
-                        .id(j.id)
-                }
-                .onTapGesture { pinDetails = j }
+                // Just logged: the map alone first, then a scan from the pin in the inhaler's ink, and the
+                // particles appear where it has passed.
+                NowSky(conditions: j.conditions ?? here?.conditions, weave: j.weave.isEmpty ? (here?.weave ?? WeaveSpec()) : j.weave, date: j.loggedAt,
+                       pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
+                       mapID: j.latitude == nil ? "here" : j.id.uuidString,
+                       coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
+                       captureInk: j.moment == .rescue ? Theme.rescueSoft : Theme.standardSoft, onPin: { pinDetails = j })
+                    .id(j.id)
+                    .onTapGesture { pinDetails = j }
             } else {
                 NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
                        pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
@@ -514,7 +508,7 @@ struct NowSky: View {
                         .clipped()
                         .allowsHitTesting(false)
                     // You are here: the map is centred on the place.
-                    Circle().fill((captureInk ?? Theme.standard).opacity(0.85)).frame(width: 7, height: 7)
+                    Circle().fill((captureInk ?? Theme.standard).opacity(0.9)).frame(width: 7, height: 7)
                         .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.2).frame(width: 13, height: 13))
                         .shadow(color: .black.opacity(0.25), radius: 2)
                 }
@@ -522,7 +516,7 @@ struct NowSky: View {
                               selected: row.flatMap { $0 > 0 ? $0 - 1 : nil },
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
-                              rippleInk: rippleInk, rippleFromCapture: rippleInk != .white)
+                              rippleInk: rippleInk, scan: rippleInk != .white)
             }
             .frame(width: size.width, height: size.height)
             .drawingGroup()
@@ -627,7 +621,9 @@ struct ParticleField: View {
     var rippleAt: Date? = nil
     var inviting = true
     var rippleInk: Color = .white
-    var rippleFromCapture = false
+    /// A scan: the ring runs out from the pin in the inhaler's ink and the particles exist only where it
+    /// has already passed. Before it, the map alone.
+    var scan = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let spacing: CGFloat = 8
@@ -645,7 +641,8 @@ struct ParticleField: View {
     private func canvas(at time: Date) -> some View {
         var age = rippleAt.map { time.timeIntervalSince($0) } ?? rippleSeconds
         if inviting, age >= rippleSeconds { age = age.truncatingRemainder(dividingBy: rippleEvery) }
-        let wave = (animated && !reduceMotion && age < rippleSeconds) ? age / rippleSeconds : nil
+        let seconds = scan ? 2.2 : rippleSeconds
+        let wave = (animated && !reduceMotion && age < seconds) ? age / seconds : nil
         let breath = (animated && !reduceMotion) ? time.timeIntervalSinceReferenceDate : 0
         // Odds per layer: a floor so any present layer shows, rising with amount; capped so the map shows.
         var weights = particles.map { $0.1 > 0 ? 0.03 + 0.2 * $0.1 : 0 }
@@ -653,9 +650,10 @@ struct ParticleField: View {
         if total > 0.6 { weights = weights.map { $0 * 0.6 / total } }
         let cumulative = weights.reduce(into: [Double]()) { $0.append(($0.last ?? 0) + $1) }
         return Canvas(rendersAsynchronously: true) { ctx, size in
-            let centre = rippleFromCapture ? CaptureReveal.origin(in: size) : CGPoint(x: size.width / 2, y: size.height / 2)
-            let radius = wave.map { rippleFromCapture ? CaptureReveal.radius(CGFloat($0), in: size) : CGFloat($0) * hypot(size.width, size.height) * 0.6 }
-            let fade = wave.map { 1 - $0 } ?? 0
+            // Every ripple starts at the pin: the place, then the air around it.
+            let centre = CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = wave.map { CGFloat($0) * hypot(size.width, size.height) * 0.6 }
+            let fade = wave.map { scan ? 1 : 1 - $0 } ?? 0
             let cols = Int(size.width / spacing) + 1, rows = Int(size.height / spacing) + 1
             for i in 0..<cols {
                 for j in 0..<rows {
@@ -664,6 +662,9 @@ struct ParticleField: View {
                     let u = Double(h & 0xFFFF) / 65535, jx = Double((h >> 16) & 0xFF) / 255, jy = Double((h >> 24) & 0xFF) / 255
                     let x = (CGFloat(i) + 0.2 + 0.6 * jx) * spacing, y = (CGFloat(j) + 0.2 + 0.6 * jy) * spacing
                     let k = cumulative.firstIndex { u < $0 }
+                    let dist = hypot(x - centre.x, y - centre.y)
+                    // The scan: nothing exists ahead of the ring yet.
+                    if scan, let radius, dist > radius + 8 { continue }
                     var r: CGFloat, color: Color
                     if let k {
                         let amount = CGFloat(particles[k].1)
@@ -677,12 +678,13 @@ struct ParticleField: View {
                         color = Color.black.opacity(0.18)
                     }
                     if let radius {
-                        let d = abs(hypot(x - centre.x, y - centre.y) - radius)
-                        let width = rippleFromCapture ? 58.0 : 36.0
+                        let d = abs(dist - radius)
+                        let width = scan ? 44.0 : 36.0
                         if d < width {
                             let t = (1 - d / width) * fade
-                            r += t * t * 2.2
-                            if k == nil { color = rippleInk.opacity(0.15 + 0.6 * Double(t)) }
+                            r += t * t * (scan ? 2.6 : 2.2)
+                            // The front wears the ink; in a scan, even the particles take it as they're born.
+                            if k == nil || scan { color = rippleInk.opacity(0.2 + 0.7 * Double(t)).mix(with: color, by: scan && k != nil ? 0.4 : 0) }
                         }
                     }
                     ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)), with: .color(color))

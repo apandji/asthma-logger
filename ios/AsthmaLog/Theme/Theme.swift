@@ -14,6 +14,9 @@ enum Theme {
     // Moment kinds, matching the watch buttons and the SmartButton caps.
     static let rescue = Color(light: 0xE8701F, dark: 0xFF8A3D)    // orange
     static let standard = Color(light: 0x2B8FD6, dark: 0x4FB0F5)  // blue
+    /// The same two, softened: for the scan ripple, so they don't compete with the particles' inks.
+    static let rescueSoft = Color(light: 0xF2B48C, dark: 0xFFC9A3)
+    static let standardSoft = Color(light: 0x9CCBEA, dark: 0xB4DCF7)
 
     // Weave inks, one per outdoor factor (docs/design/visual-style.md, textile-direction.md).
     static let weaveAir = Color(light: 0xE2477E, dark: 0xFF5A92)

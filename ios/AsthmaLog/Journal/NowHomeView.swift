@@ -493,6 +493,8 @@ struct NowSky: View {
             .frame(width: size.width, height: size.height)
             .drawingGroup()
             .onAppear { rippleAt = .now }
+            // Every new sky (a moment, a forecast hour, now) ripples once.
+            .onChange(of: date) { _, _ in rippleAt = .now }
             .mask {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),
                                    startRadiusFraction: 0, endRadiusFraction: 0.7)

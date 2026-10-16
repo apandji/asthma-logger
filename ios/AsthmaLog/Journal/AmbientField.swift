@@ -343,7 +343,7 @@ struct SkyGrain: View {
             let fade = wave.map { 1 - $0 } ?? 0
             let diag = hypot(size.width, size.height)
             let n = Int(diag / spacing) + 2
-            let rest: CGFloat = 1.5
+            let rest: CGFloat = 0.9   // small, so the map reads through
             let ink = ink ?? .white
             // A turned grid, big enough to cover the corners.
             for i in -n...n {
@@ -355,31 +355,20 @@ struct SkyGrain: View {
                     // Printed, not plotted: each dot a little different.
                     let wobble = CGFloat((i &* 73 &+ j &* 151) & 7) / 7
                     var r = rest * (0.7 + 0.5 * wobble)
-                    var color = Color.black.opacity(0.32)
+                    var color = Color.black.opacity(0.26)
                     if breath > 0 {
                         // A slow swell drifting across the field, like breathing.
                         let phase = breath * 1.1 + Double(x + y) / 90
                         let b = CGFloat(0.5 + 0.5 * sin(phase))
-                        r += 0.6 * b
-                        color = Color.black.opacity(0.24 + 0.16 * Double(b))
+                        r += 0.35 * b
+                        color = Color.black.opacity(0.2 + 0.12 * Double(b))
                     }
-                    if responds, let band, point != nil {
-                        // The whole layer answers: strongest at the band's centre, fading to its edges.
-                        let mid = (band.lowerBound + band.upperBound) / 2, half = max(1, (band.upperBound - band.lowerBound) / 2)
-                        let d = abs(y - mid) / half
-                        if d < 1 {
-                            let t = 1 - d * d
-                            r += t * (1.0 + 1.8 * CGFloat(intensity)) * 1.6
-                            color = ink.opacity(0.3 + 0.55 * Double(t))
-                        }
-                    } else if responds, let p = point {
-                        let d = hypot(x - p.x, y - p.y)
-                        if d < reach {
-                            let t = 1 - d / reach                 // 1 at the finger, 0 at the edge
-                            let swell = t * t * (1.2 + 2.2 * CGFloat(intensity))
-                            r += swell * 2.2
-                            color = ink.opacity(0.35 + 0.6 * Double(t))
-                        }
+                    if responds, point != nil {
+                        // Reading a layer: every dot in the field becomes that layer, the same everywhere.
+                        // Size and ink say how much of it there is, never where. The finger only chose which.
+                        let amount = CGFloat(intensity)
+                        r += (0.5 + 2.6 * amount) * (0.75 + 0.5 * wobble)
+                        color = ink.opacity(0.3 + 0.55 * Double(amount))
                     } else if let radius {
                         // Dots near the wavefront swell and go white, then settle back. The front is a ring
                         // from the centre (blob) or a line sweeping top to bottom (strata).

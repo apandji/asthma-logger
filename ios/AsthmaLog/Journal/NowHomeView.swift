@@ -506,7 +506,7 @@ struct NowSky: View {
                              rippleInk: rippleInk, rippleFromCapture: rippleInk != .white)
                 }
                 if let point, let probe {
-                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false, band: band).transition(.opacity)
+                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: texture == .plain, showsLabel: false, band: band).transition(.opacity)
                 }
             }
             .frame(width: size.width, height: size.height)

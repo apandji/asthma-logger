@@ -265,7 +265,7 @@ struct SkyPanel: View {
                 }
                 if let point, let probe {
                     // The glow belongs to the sky, so it fades with it.
-                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false, band: band)
+                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: texture == .plain, showsLabel: false, band: band)
                         .transition(.opacity)
                 }
             }

@@ -126,6 +126,7 @@ struct NowHomeView: View {
                 if let p = away ?? here { await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here") }
             }
             // A new moment brings the playhead back to now.
+            .sensoryFeedback(.impact(weight: .medium, intensity: 0.9), trigger: inFuture)
             .onChange(of: events.last?.id) { _, _ in
                 withAnimation(.smooth(duration: 0.6)) { focusTime = nil }
                 announce(events.last)
@@ -153,6 +154,9 @@ struct NowHomeView: View {
     // MARK: What the playhead is on
 
     private enum Focus { case now, moment(LogEvent), hour(NowHour) }
+
+    /// Whether the playhead is ahead of now. Crossing it gives one firmer haptic.
+    private var inFuture: Bool { if case .hour = focus { true } else { false } }
 
     /// What the sky is showing, as a key, so a change can animate as one move.
     private var focusKey: String {
@@ -203,7 +207,7 @@ struct NowHomeView: View {
             case .hour(let h):
                 // The look-ahead: what the forecast says, then how it compares (or that we're still learning).
                 ScaleHeader(title: h.statement, reserveTwoLines: true,
-                            byline: outlook(at: h.date).text, bylineTint: outlook(at: h.date).tint, onByline: { showInsights = true }, compact: true) {
+                            byline: outlook(at: h.date).text, bylineTint: outlook(at: h.date).tint, onByline: { showInsights = true }, compact: true, italic: true) {
                     Image(systemName: "arrow.right").font(.caption2.weight(.bold))
                     Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour().minute())) ·")
                     placeChip
@@ -318,7 +322,7 @@ struct NowHomeView: View {
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
                    pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
-                   mapID: mapID, coordinate: forecastCoordinate)
+                   mapID: mapID, coordinate: forecastCoordinate, sketch: true)
         }
     }
 
@@ -492,6 +496,9 @@ struct NowSky: View {
     var captureInk: Color? = nil
     /// Tapping the pin opens the full air details for this place and time.
     var onPin: (() -> Void)? = nil
+    /// A forecast: drawn as a sketch of itself. Hollow particles, a paler map, no pin, since you aren't
+    /// there yet.
+    var sketch = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var probe: SkyProbe?
@@ -519,20 +526,22 @@ struct NowSky: View {
                         .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
                         .saturation(0)
                         .blendMode(paper == .linen ? .multiply : .screen)
-                        .opacity(0.75)
+                        .opacity(sketch ? 0.4 : 0.75)
                         .frame(width: size.width, height: size.height)
                         .clipped()
                         .allowsHitTesting(false)
-                    // You are here: the map is centred on the place.
-                    Circle().fill((captureInk ?? Theme.standard).opacity(0.9)).frame(width: 7, height: 7)
-                        .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.2).frame(width: 13, height: 13))
-                        .shadow(color: .black.opacity(0.25), radius: 2)
+                    // You are here: the map is centred on the place. Not in a forecast: you aren't there yet.
+                    if !sketch {
+                        Circle().fill((captureInk ?? Theme.standard).opacity(0.9)).frame(width: 7, height: 7)
+                            .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.2).frame(width: 13, height: 13))
+                            .shadow(color: .black.opacity(0.25), radius: 2)
+                    }
                 }
                 ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
                               selected: row.flatMap { $0 > 0 ? $0 - 1 : nil },
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
-                              rippleInk: rippleInk, scan: rippleInk != .white)
+                              rippleInk: rippleInk, scan: rippleInk != .white, hollow: sketch)
             }
             .frame(width: size.width, height: size.height)
             .drawingGroup()
@@ -640,6 +649,8 @@ struct ParticleField: View {
     /// A scan: the ring runs out from the pin in the inhaler's ink and the particles exist only where it
     /// has already passed. Before it, the map alone.
     var scan = false
+    /// A sketch: particles drawn as rings, not dots. The forecast's look.
+    var hollow = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let spacing: CGFloat = 8
@@ -703,7 +714,12 @@ struct ParticleField: View {
                             if k == nil || scan { color = rippleInk.opacity(0.2 + 0.7 * Double(t)).mix(with: color, by: scan && k != nil ? 0.4 : 0) }
                         }
                     }
-                    ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)), with: .color(color))
+                    let dot = Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r))
+                    if hollow, k != nil, r > 1.4 {
+                        ctx.stroke(dot, with: .color(color), lineWidth: 1)
+                    } else {
+                        ctx.fill(dot, with: .color(color))
+                    }
                 }
             }
         }

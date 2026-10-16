@@ -16,6 +16,8 @@ struct ScaleHeader<Kicker: View>: View {
     var onByline: (() -> Void)? = nil
     /// A step smaller, for two-sentence titles that have to fit two lines.
     var compact = false
+    /// Not yet: the forecast's sentence is set in italic.
+    var italic = false
     @ViewBuilder let kicker: Kicker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -31,6 +33,7 @@ struct ScaleHeader<Kicker: View>: View {
             ZStack(alignment: .topLeading) {
                 Text(title)
                     .font(compact ? Theme.serifTitle : Theme.serifTitleLarge)
+                    .italic(italic)
                     .kerning(Theme.serifKerning)
                     // Two lines, always: the byline sits in the same place whatever the title says.
                     .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)

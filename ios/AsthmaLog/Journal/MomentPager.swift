@@ -51,7 +51,6 @@ struct MomentPager: View {
             .modifier(SpotIf(id: "sky", spot: spot))
             .animation(.easeInOut(duration: 0.35), value: current?.id)
             .modifier(AnchorIf(namespace: anchor))
-            .modifier(SpotIf(id: "anchor", spot: spot))
             .task(id: current?.id) { await prefetchNeighbours() }
 
             TimelineTrack(events: events, selectedID: $selectedID)
@@ -120,10 +119,7 @@ struct TimelineTrack: View {
                     // Moments on the axis. The current one is enlarged and ringed.
                     ForEach(events) { e in
                         let on = e.id == currentID
-                        Circle()
-                            .fill(e.moment == .rescue ? Theme.rescue : Theme.standard)
-                            .frame(width: on ? 14 : 8, height: on ? 14 : 8)
-                            .overlay(Circle().strokeBorder(.black.opacity(0.6), lineWidth: on ? 0 : 1))
+                        MomentSwatch(event: e, size: on ? 16 : 11, ringWidth: on ? 2.5 : 1.8)
                             .background {
                                 if on {
                                     Circle().fill(.white).frame(width: 22, height: 22)

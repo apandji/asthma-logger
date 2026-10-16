@@ -12,6 +12,21 @@ struct DaysView: View {
     var spot: SpotlightFrames? = nil
     let open: (LogEvent) -> Void
 
+    /// Starts on the current moment's day, so the anchor's tile is on screen from the first frame.
+    @State private var scrolledDay: Date?
+
+    init(events: [LogEvent], selectedID: UUID?, pollenSeason: DemoPollen.Season, anchor: Namespace.ID? = nil,
+         spot: SpotlightFrames? = nil, open: @escaping (LogEvent) -> Void) {
+        self.events = events
+        self.selectedID = selectedID
+        self.pollenSeason = pollenSeason
+        self.anchor = anchor
+        self.spot = spot
+        self.open = open
+        let day = events.first { $0.id == selectedID }?.loggedAt ?? events.last?.loggedAt ?? .now
+        _scrolledDay = State(initialValue: Calendar.current.startOfDay(for: day))
+    }
+
     private var days: [(day: Date, moments: [LogEvent])] {
         let cal = Calendar.current
         let grouped = Dictionary(grouping: events) { cal.startOfDay(for: $0.loggedAt) }
@@ -30,7 +45,7 @@ struct DaysView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Days").font(.system(.title, design: .serif, weight: .medium))
                     .padding(.horizontal, 4).padding(.bottom, 4)
                 ForEach(days, id: \.day) { d in
@@ -43,14 +58,15 @@ struct DaysView: View {
                                          conditions: t.conditions, pollen: DemoPollen.sample(at: t.loggedAt, season: pollenSeason))
                                 .frame(width: 84, height: 84)
                                 .clipShape(.rect(cornerRadius: 20, style: .continuous))
+                                // One pass per tile; cheap to scroll.
+                                .drawingGroup()
                                 .modifier(AnchorIf(namespace: isCurrent ? anchor : nil))
-                                .modifier(SpotIf(id: isCurrent ? "anchor" : "day-\(d.day.timeIntervalSince1970)", spot: isCurrent ? spot : nil))
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(dayLabel(d.day)).font(.subheadline.weight(.semibold))
                                 Text(t.weave.isEmpty ? "No air reading." : t.headline)
                                     .font(.footnote).foregroundStyle(Theme.secondaryText).lineLimit(2)
-                                HStack(spacing: 4) {
-                                    ForEach(d.moments) { MomentDot(moment: $0.moment, size: 7) }
+                                HStack(spacing: 5) {
+                                    ForEach(d.moments) { MomentSwatch(event: $0, size: 12) }
                                 }
                             }
                             Spacer(minLength: 0)
@@ -65,8 +81,10 @@ struct DaysView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
+            .scrollTargetLayout()
         }
         .defaultScrollAnchor(.bottom)
+        .scrollPosition(id: $scrolledDay, anchor: .center)
         .scrollIndicators(.hidden)
     }
 

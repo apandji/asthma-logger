@@ -20,13 +20,13 @@ struct JournalView: View {
     /// The zoom's anchor: the current moment's sky, its day tile, its month square.
     @Namespace private var anchorNS
     @State private var gaugeLabelVisible = false
+    /// True while a finger is on the gauge: it widens and shows every level's name.
+    @State private var gaugeActive = false
     /// The moment opened in place (panel style): the sky gives way to its map and details.
     @State private var expanded: LogEvent?
     @State private var overview = false
     /// The "days" scale of the zoom (gesture model B).
     @State private var showDays = false
-    /// Live pinch for model B: the current scale follows the fingers until release.
-    @State private var pinchScale: CGFloat = 1
     @State private var zoomingIn = false
     @AppStorage(Crit.Gestures.key) private var gestures = Crit.Gestures.zoom
     /// First-use tips, one at a time: pull to log, then moments.
@@ -117,9 +117,6 @@ struct JournalView: View {
             .id(levelKey)
             // Model B: the level follows the fingers (smaller and fainter pinching in, larger pinching out)
             // and the next one settles in from the opposite size.
-            // Zoom around the anchor, not the middle of the screen.
-            .scaleEffect(liveScale, anchor: anchorPoint)
-            .opacity(liveOpacity)
             // Only the anchor moves between levels (shared geometry); everything else just fades.
             .transition(.opacity)
             .sensoryFeedback(.impact(flexibility: .soft), trigger: levelKey)
@@ -142,7 +139,7 @@ struct JournalView: View {
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { ambientFrame = $0 }
         .sensoryFeedback(.selection, trigger: probe?.name)
         .sensoryFeedback(.impact(weight: .light), trigger: probePoint == nil)
-        .simultaneousGesture(zoomGesture)
+
         .background {
             if momentStyle == .panel {
                 // The sky lives in its panel; the page is black.
@@ -197,80 +194,62 @@ struct JournalView: View {
         overview ? "month" : showDays ? "days" : expanded != nil ? "detail" : "moment"
     }
 
-    private var liveScale: CGFloat { gestures == .zoom ? min(1.3, max(0.7, pinchScale)) : 1 }
-    /// Everything but the anchor fades a little as you pinch; the anchor carries you to the next level.
-    private var liveOpacity: Double { gestures == .zoom ? 1 - min(0.35, abs(Double(pinchScale) - 1) * 1.0) : 1 }
-
-    /// The anchor's centre, as a unit point of the Journal, for scaling around it.
-    private var anchorPoint: UnitPoint {
-        guard let a = spot.frames["anchor"], ambientFrame.width > 0, ambientFrame.height > 0 else { return .center }
-        return UnitPoint(x: (a.midX - ambientFrame.minX) / ambientFrame.width, y: (a.midY - ambientFrame.minY) / ambientFrame.height)
-    }
-
     /// Levels top to bottom on the gauge: widest view first.
     private static let levels = ["month", "days", "moment", "detail"]
     private static let levelNames = ["Month", "Days", "Moment", "Details"]
     private var levelIndex: Int { Self.levels.firstIndex(of: levelKey) ?? 2 }
-    /// Where the live pinch is heading, if it has gone far enough to show.
-    private var pinchTarget: Int? {
-        guard gestures == .zoom else { return nil }
-        if pinchScale < 0.92 { return max(0, levelIndex - 1) }
-        if pinchScale > 1.08 { return min(3, levelIndex + 1) }
-        return nil
-    }
 
-    /// A depth gauge on the right: Month · Days · Moment · Details. The current level is bright; while you
-    /// pinch, the level you're heading to lights up with its name. Tap a dot to jump there.
+    /// A depth gauge on the right: Month · Days · Moment · Details, top to bottom. Hold it and slide up
+    /// or down to move through the levels (a haptic tick at each); tap a level to jump. Like the letter
+    /// index at the side of Contacts.
     private var depthGauge: some View {
-        VStack(alignment: .trailing, spacing: 14) {
+        let row: CGFloat = 34
+        return VStack(alignment: .trailing, spacing: 0) {
             ForEach(0..<4, id: \.self) { i in
                 let isCurrent = i == levelIndex
-                let isTarget = i == pinchTarget
                 HStack(spacing: 8) {
-                    if (gaugeLabelVisible && isCurrent) || isTarget {
+                    if gaugeActive || (gaugeLabelVisible && isCurrent) {
                         Text(Self.levelNames[i])
-                            .font(.caption.weight(.semibold))
+                            .font(.caption.weight(isCurrent ? .bold : .medium))
+                            .foregroundStyle(isCurrent ? .black : .white.opacity(0.85))
                             .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(.white.opacity(isTarget ? 0.9 : 0.75), in: Capsule())
-                            .foregroundStyle(.black)
+                            .background(isCurrent ? AnyShapeStyle(.white) : AnyShapeStyle(.clear), in: Capsule())
                             .transition(.opacity.combined(with: .move(edge: .trailing)))
                     }
                     Circle()
-                        .fill(.white.opacity(isCurrent ? 0.95 : isTarget ? 0.7 : 0.25))
-                        .frame(width: isCurrent ? 9 : 6, height: isCurrent ? 9 : 6)
-                        .frame(width: 14, height: 14)
+                        .fill(.white.opacity(isCurrent ? 0.95 : 0.3))
+                        .frame(width: isCurrent ? 10 : 6, height: isCurrent ? 10 : 6)
+                        .frame(width: 18, height: row)
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { zoom(by: i - levelIndex) }
+                .frame(height: row)
                 .accessibilityElement()
                 .accessibilityLabel(Self.levelNames[i])
                 .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
+                .accessibilityAction { zoom(by: i - levelIndex) }
             }
         }
-        .padding(.trailing, 10)
-        .animation(.snappy(duration: 0.25), value: pinchTarget)
+        .padding(.vertical, 8).padding(.leading, gaugeActive ? 10 : 6).padding(.trailing, 6)
+        .background {
+            if gaugeActive { Capsule().fill(.black.opacity(0.55)).overlay(Capsule().strokeBorder(.white.opacity(0.15))) }
+        }
+        .contentShape(Rectangle().inset(by: -16))
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { v in
+                    if !gaugeActive { withAnimation(.snappy(duration: 0.2)) { gaugeActive = true } }
+                    let i = max(0, min(3, Int((v.location.y - 8) / row)))
+                    if i != levelIndex { zoom(by: i - levelIndex) }
+                }
+                .onEnded { _ in withAnimation(.snappy(duration: 0.25)) { gaugeActive = false } }
+        )
+        .padding(.trailing, 8)
         .animation(.snappy(duration: 0.25), value: levelIndex)
         .animation(.easeOut(duration: 0.3), value: gaugeLabelVisible)
         .task(id: levelKey) {
             gaugeLabelVisible = true
-            try? await Task.sleep(for: .seconds(1.4))
+            try? await Task.sleep(for: .seconds(1.2))
             gaugeLabelVisible = false
         }
-    }
-
-    /// Model B: one pinch through the scales, detail ⇄ moment ⇄ days ⇄ month.
-    private var zoomGesture: some Gesture {
-        MagnifyGesture()
-            .onChanged { v in
-                guard gestures == .zoom else { return }
-                pinchScale = v.magnification
-            }
-            .onEnded { v in
-                guard gestures == .zoom else { return }
-                let m = v.magnification
-                withAnimation(.spring(duration: 0.4, bounce: 0.15)) { pinchScale = 1 }
-                if m < 0.82 { zoom(by: -1) } else if m > 1.18 { zoom(by: 1) }
-            }
     }
 
     /// Negative zooms out (detail → moment → days → month), positive zooms in; jumps several levels at once.
@@ -279,7 +258,7 @@ struct JournalView: View {
         zoomingIn = step > 0
         MomentsTip().invalidate(reason: .actionPerformed)
         let target = max(0, min(3, levelIndex + step))
-        withAnimation(.spring(duration: 0.55, bounce: 0.1)) {
+        withAnimation(.smooth(duration: 0.45)) {
             overview = target == 0
             showDays = target == 1
             expanded = target == 3 ? selected : nil
@@ -374,22 +353,32 @@ struct JournalView: View {
             switch headerStyle {
             case .moment:
                 if let m = selected {
-                    HStack(spacing: 7) {
-                        MomentDot(moment: m.moment, size: 8)
-                        Text(momentWhen(m))
-                            .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-                            .contentTransition(.opacity)
-                    }
-                    // Fixed footprint: two headline lines and one place line are always reserved, so
-                    // scrubbing between short and long moments never moves the sky or the timeline.
-                    Text(m.weave.isEmpty ? "No air reading." : m.headline)
-                        .font(.system(.title, design: .serif, weight: .medium))
-                        .lineLimit(2, reservesSpace: true)
-                        .minimumScaleFactor(0.85)
+                    // Fixed footprint, text at the bottom: an invisible copy reserves room for a two-line
+                    // headline and a place, and the real lines stack together just above the sky. Scrubbing
+                    // between short and long moments never moves anything below, and nothing floats apart.
+                    ZStack(alignment: .bottomLeading) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(" ").font(.subheadline)
+                            Text(" \n ").font(.system(.title, design: .serif, weight: .medium))
+                            Text(" ").font(.subheadline)
+                        }
+                        .hidden()
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 7) {
+                                MomentDot(moment: m.moment, size: 8)
+                                Text(momentWhen(m))
+                                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                            }
+                            Text(m.weave.isEmpty ? "No air reading." : m.headline)
+                                .font(.system(.title, design: .serif, weight: .medium))
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.85)
+                            if let place = m.placeName {
+                                Text(place).font(.subheadline).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                            }
+                        }
                         .contentTransition(.opacity)
-                    Text(m.placeName ?? " ")
-                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
+                    }
                 } else {
                     nowLines
                 }

@@ -168,9 +168,9 @@ struct MonthCalendar: View {
                         dot(m)
                     }
                 }
-                .frame(height: 5)
+                .frame(height: 9)
             }
-            .frame(maxWidth: .infinity, minHeight: 40)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .background(isSel ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 10))
             .background {
                 if let anchorDay, cal.isDate(anchorDay, inSameDayAs: d) {
@@ -184,7 +184,6 @@ struct MonthCalendar: View {
                     }
                     .clipShape(.rect(cornerRadius: 10, style: .continuous))
                     .modifier(AnchorIf(namespace: anchor))
-                    .modifier(SpotIf(id: "anchor", spot: spot))
                 }
             }
         }
@@ -194,7 +193,7 @@ struct MonthCalendar: View {
     }
 
     @ViewBuilder private func dot(_ m: LogEvent) -> some View {
-        let c = Circle().fill(m.moment == .rescue ? Theme.rescue : Theme.standard).frame(width: 6, height: 6)
+        let c = MomentSwatch(event: m, size: 9, ringWidth: 1.5)
         if let namespace { c.matchedGeometryEffect(id: m.id, in: namespace) } else { c }
     }
 
@@ -224,8 +223,23 @@ struct MomentsOverview: View {
     let open: (LogEvent) -> Void
     let close: () -> Void
 
-    @State private var month = Calendar.current.dateInterval(of: .month, for: .now)!.start
+    /// Opens on the anchor's month, so its square exists for the zoom to land in.
+    @State private var month: Date
     @State private var day: Date?
+
+    init(events: [LogEvent], namespace: Namespace.ID, anchor: Namespace.ID? = nil, anchorDay: Date? = nil,
+         spot: SpotlightFrames? = nil, anchorMoment: LogEvent? = nil,
+         open: @escaping (LogEvent) -> Void, close: @escaping () -> Void) {
+        self.events = events
+        self.namespace = namespace
+        self.anchor = anchor
+        self.anchorDay = anchorDay
+        self.spot = spot
+        self.anchorMoment = anchorMoment
+        self.open = open
+        self.close = close
+        _month = State(initialValue: Calendar.current.dateInterval(of: .month, for: anchorDay ?? .now)!.start)
+    }
 
     var body: some View {
         ScrollView {

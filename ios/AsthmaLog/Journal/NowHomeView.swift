@@ -148,9 +148,10 @@ struct NowHomeView: View {
         if let p = model.progress, !p.isMet {
             let needRescue = max(0, p.minAttacks - p.attacks), needCalm = max(0, p.minBaselines - p.baselines)
             var parts: [String] = []
-            if needRescue > 0 { parts.append("\(needRescue) more rescue moment\(needRescue == 1 ? "" : "s")") }
-            if needCalm > 0 { parts.append("\(needCalm) more calm day\(needCalm == 1 ? "" : "s")") }
-            return parts.joined(separator: " and ").prefix(1).uppercased() + parts.joined(separator: " and ").dropFirst() + " before felt air can compare."
+            if needCalm > 0 { parts.append("\(needCalm) calm day\(needCalm == 1 ? "" : "s")") }
+            if needRescue > 0 { parts.append("\(needRescue) rescue moment\(needRescue == 1 ? "" : "s")") }
+            // "14 calm days and 1 rescue moment to go." Short enough for two lines.
+            return parts.joined(separator: " and ") + " to go before felt air can compare."
         }
         if let here { return here.statement }
         return "Checking the air near you…"

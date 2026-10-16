@@ -17,8 +17,6 @@ struct SettingsView: View {
     @State private var tutorialNote: String?
     @AppStorage(Crit.performanceHUD) private var perfHUD = false
     @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
-    @AppStorage(Crit.SkyTexture.key) private var critTexture = Crit.SkyTexture.dots
-    @AppStorage(Crit.Paper.key) private var critPaper = Crit.Paper.black
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
 
     var body: some View {
@@ -33,12 +31,6 @@ struct SettingsView: View {
                     }
                     if let tutorialNote {
                         Text(tutorialNote).font(.footnote).foregroundStyle(Theme.secondaryText)
-                    }
-                    Picker("Paper", selection: $critPaper) {
-                        ForEach(Crit.Paper.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Sky surface", selection: $critTexture) {
-                        ForEach(Crit.SkyTexture.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Pollen (demo)", selection: $demoPollen) {
                         ForEach(DemoPollen.Season.allCases) { Text($0.title).tag($0) }

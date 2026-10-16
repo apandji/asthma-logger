@@ -49,10 +49,10 @@ struct ScaleHeader<Kicker: View>: View {
                         Text(byline ?? " ").lineLimit(2).multilineTextAlignment(.leading)
                         if onByline != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.7) }
                     }
-                    .font(.subheadline.weight(bylineTint == nil ? .regular : .medium))
+                    .font(bylineTint == nil ? .subheadline : .system(size: 17, design: .serif))
                     .foregroundStyle(tint)
-                    .padding(.horizontal, onByline == nil ? 0 : 12).padding(.vertical, onByline == nil ? 0 : 7)
-                    .background { if onByline != nil { Capsule().fill(tint.opacity(0.14)).overlay(Capsule().strokeBorder(tint.opacity(0.35))) } }
+                    .padding(.horizontal, onByline == nil ? 0 : 13).padding(.vertical, onByline == nil ? 0 : 8)
+                    .background { if onByline != nil { Capsule().fill(tint.opacity(bylineTint == nil ? 0.1 : 0.16)) } }
                 }
                 .buttonStyle(PressStyle())
                 .disabled(onByline == nil)

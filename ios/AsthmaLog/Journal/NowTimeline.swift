@@ -6,6 +6,8 @@ import SwiftUI
 /// into this evening or tomorrow, and it snaps to a moment when one is close.
 struct NowTimeline: View {
     let moments: [LogEvent]
+    /// Baseline moments (felt air's own checks): small ticks, so the comparison is visible.
+    var baselines: [Date] = []
     let hours: [NowHour]
     /// The clock, passed in so the track creeps forward while you watch.
     let now: Date
@@ -62,6 +64,12 @@ struct NowTimeline: View {
                         var nowTick = Path()
                         nowTick.move(to: CGPoint(x: x(now), y: axis - 12)); nowTick.addLine(to: CGPoint(x: x(now), y: axis + 12))
                         ctx.stroke(nowTick, with: .color(ink.opacity(0.6)), lineWidth: 1.5)
+                        // Baseline checks: a short, faint tick just under the axis.
+                        for b in baselines {
+                            var p = Path()
+                            p.move(to: CGPoint(x: x(b), y: axis + 3)); p.addLine(to: CGPoint(x: x(b), y: axis + 9))
+                            ctx.stroke(p, with: .color(ink.opacity(0.35)), lineWidth: 1.5)
+                        }
                         // Ticks every 6 h, day names beneath.
                         var t = start
                         while t <= end {
@@ -81,13 +89,25 @@ struct NowTimeline: View {
                     }
                     .frame(width: contentWidth, height: height)
 
-                    ForEach(moments) { e in
-                        let on = e.id == currentMoment?.id
-                        MomentSwatch(event: e, size: on ? 13 : 8, ringWidth: on ? 2 : 1.2)
-                            .background { if on { Circle().fill(ink).frame(width: 18, height: 18) } }
-                            .position(x: x(e.loggedAt), y: axis)
-                            .animation(.snappy(duration: 0.2), value: on)
-                            .onTapGesture { go(to: e.loggedAt) }
+                    // Moments within ten minutes share one swatch with a count, so a busy hour is one mark.
+                    ForEach(clusters, id: \.first!.id) { group in
+                        let e = group.last!
+                        let on = group.contains { $0.id == currentMoment?.id }
+                        ZStack(alignment: .topTrailing) {
+                            MomentSwatch(event: e, size: on ? 13 : 8, ringWidth: on ? 2 : 1.2)
+                                .background { if on { Circle().fill(ink).frame(width: 18, height: 18) } }
+                            if group.count > 1 {
+                                Text("\(group.count)")
+                                    .font(.system(size: 9, weight: .bold).monospacedDigit())
+                                    .foregroundStyle(Theme.paper(paper))
+                                    .padding(.horizontal, 3).padding(.vertical, 1)
+                                    .background(ink, in: Capsule())
+                                    .offset(x: 9, y: -9)
+                            }
+                        }
+                        .position(x: x(e.loggedAt), y: axis)
+                        .animation(Theme.snap, value: on)
+                        .onTapGesture { go(to: e.loggedAt) }
                     }
                 }
                 .frame(width: contentWidth, height: height)
@@ -201,6 +221,16 @@ struct NowTimeline: View {
         let past = moments.filter { $0.loggedAt < current - 60 }
         guard let target = past.last else { return }
         go(to: target.loggedAt)
+    }
+
+    /// Moments grouped within ten minutes of each other, oldest first.
+    private var clusters: [[LogEvent]] {
+        var out: [[LogEvent]] = []
+        for m in moments {
+            if let last = out.last?.last, m.loggedAt.timeIntervalSince(last.loggedAt) < 10 * 60 { out[out.count - 1].append(m) }
+            else { out.append([m]) }
+        }
+        return out
     }
 
     private func go(to t: Date?) {

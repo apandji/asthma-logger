@@ -54,7 +54,8 @@ struct NowHomeView: View {
                     .animation(Theme.smooth, value: focusKey)
                     .frame(maxHeight: .infinity)
                     .padding(.top, 4)
-                NowTimeline(moments: moments, hours: hours, now: now, focusTime: $focusTime, onPastEnd: { showInsights = true })
+                NowTimeline(moments: moments, baselines: events.filter { $0.moment == .okay }.map(\.loggedAt),
+                            hours: hours, now: now, focusTime: $focusTime, onPastEnd: { showInsights = true })
                     .frame(height: 104)
                     .padding(.bottom, 84)  // clear the +
             }
@@ -394,11 +395,14 @@ nonisolated enum AirWords {
         let feel = weave.words[.humidity] ?? weave.words[.temperature]
         let weather = [temp, feel].compactMap { $0 }.joined(separator: " and ")
         let air = weave.levels[.air].map { ["clear", "a bit hazy", "heavy"][$0.rawValue] }
-        var parts: [String] = []
-        if !weather.isEmpty { parts.append("\(it) \(weather).") }
-        if let air { parts.append("The air \(verb) \(air).") }
-        // One sentence per line: weather, then air.
-        return parts.isEmpty ? "No air reading." : parts.joined(separator: "\n")
+        // One sentence: "It's 54° and humid, with clear air."
+        _ = verb
+        switch (weather.isEmpty, air) {
+        case (false, let air?): return "\(it) \(weather), with \(air) air."
+        case (false, nil): return "\(it) \(weather)."
+        case (true, let air?): return "\(it.replacingOccurrences(of: "It's", with: "The air is").replacingOccurrences(of: "It was", with: "The air was").replacingOccurrences(of: "It will be", with: "The air will be")) \(air)."
+        case (true, nil): return "No air reading."
+        }
     }
 }
 
@@ -645,9 +649,9 @@ struct ParticleField: View {
         let wave = (animated && !reduceMotion && age < seconds) ? age / seconds : nil
         let breath = (animated && !reduceMotion) ? time.timeIntervalSinceReferenceDate : 0
         // Odds per layer: a floor so any present layer shows, rising with amount; capped so the map shows.
-        var weights = particles.map { $0.1 > 0 ? 0.03 + 0.2 * $0.1 : 0 }
+        var weights = particles.map { $0.1 > 0 ? 0.012 + 0.09 * $0.1 : 0 }
         let total = weights.reduce(0, +)
-        if total > 0.6 { weights = weights.map { $0 * 0.6 / total } }
+        if total > 0.3 { weights = weights.map { $0 * 0.3 / total } }
         let cumulative = weights.reduce(into: [Double]()) { $0.append(($0.last ?? 0) + $1) }
         return Canvas(rendersAsynchronously: true) { ctx, size in
             // Every ripple starts at the pin: the place, then the air around it.
@@ -668,7 +672,7 @@ struct ParticleField: View {
                     var r: CGFloat, color: Color
                     if let k {
                         let amount = CGFloat(particles[k].1)
-                        r = 0.9 + 1.5 * amount
+                        r = 0.8 + 2.6 * amount
                         let dim = selected != nil && selected != k
                         color = particles[k].0.opacity(dim ? 0.15 : 0.9)
                         if selected == k { r *= 1.6 }

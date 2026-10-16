@@ -125,9 +125,9 @@ struct MonthCalendar: View {
     /// When set, each dot shares its id with the moment's card on the Journal, so cards shrink into dots.
     var namespace: Namespace.ID? = nil
     /// The zoom anchor: the current moment's day square.
-    var anchor: Namespace.ID? = nil
+    var anchorStore: AnchorFrames? = nil
+    var anchorHidden = false
     var anchorDay: Date? = nil
-    var spot: SpotlightFrames? = nil
     /// The moment whose sky fills the anchor square.
     var anchorMoment: LogEvent? = nil
 
@@ -183,7 +183,7 @@ struct MonthCalendar: View {
                         }
                     }
                     .clipShape(.rect(cornerRadius: 10, style: .continuous))
-                    .modifier(AnchorIf(namespace: anchor))
+                    .modifier(AnchorReport(key: "month", store: anchorStore, hidden: anchorHidden))
                 }
             }
         }
@@ -216,9 +216,9 @@ struct MonthCalendar: View {
 struct MomentsOverview: View {
     let events: [LogEvent]
     let namespace: Namespace.ID
-    var anchor: Namespace.ID? = nil
+    var anchorStore: AnchorFrames? = nil
+    var anchorHidden = false
     var anchorDay: Date? = nil
-    var spot: SpotlightFrames? = nil
     var anchorMoment: LogEvent? = nil
     let open: (LogEvent) -> Void
     let close: () -> Void
@@ -227,14 +227,14 @@ struct MomentsOverview: View {
     @State private var month: Date
     @State private var day: Date?
 
-    init(events: [LogEvent], namespace: Namespace.ID, anchor: Namespace.ID? = nil, anchorDay: Date? = nil,
-         spot: SpotlightFrames? = nil, anchorMoment: LogEvent? = nil,
+    init(events: [LogEvent], namespace: Namespace.ID, anchorStore: AnchorFrames? = nil, anchorHidden: Bool = false,
+         anchorDay: Date? = nil, anchorMoment: LogEvent? = nil,
          open: @escaping (LogEvent) -> Void, close: @escaping () -> Void) {
         self.events = events
         self.namespace = namespace
-        self.anchor = anchor
+        self.anchorStore = anchorStore
+        self.anchorHidden = anchorHidden
         self.anchorDay = anchorDay
-        self.spot = spot
         self.anchorMoment = anchorMoment
         self.open = open
         self.close = close
@@ -257,7 +257,7 @@ struct MomentsOverview: View {
                 .font(.subheadline)
 
                 MonthCalendar(month: $month, events: events, selected: $day, namespace: namespace,
-                              anchor: anchor, anchorDay: anchorDay, spot: spot, anchorMoment: anchorMoment)
+                              anchorStore: anchorStore, anchorHidden: anchorHidden, anchorDay: anchorDay, anchorMoment: anchorMoment)
                     .padding(14)
                     .frostedCard()
 

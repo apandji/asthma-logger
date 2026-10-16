@@ -8,20 +8,20 @@ struct DaysView: View {
     let events: [LogEvent]
     let selectedID: UUID?
     let pollenSeason: DemoPollen.Season
-    var anchor: Namespace.ID? = nil
-    var spot: SpotlightFrames? = nil
+    var anchorStore: AnchorFrames? = nil
+    var anchorHidden = false
     let open: (LogEvent) -> Void
 
     /// Starts on the current moment's day, so the anchor's tile is on screen from the first frame.
     @State private var scrolledDay: Date?
 
-    init(events: [LogEvent], selectedID: UUID?, pollenSeason: DemoPollen.Season, anchor: Namespace.ID? = nil,
-         spot: SpotlightFrames? = nil, open: @escaping (LogEvent) -> Void) {
+    init(events: [LogEvent], selectedID: UUID?, pollenSeason: DemoPollen.Season, anchorStore: AnchorFrames? = nil,
+         anchorHidden: Bool = false, open: @escaping (LogEvent) -> Void) {
         self.events = events
         self.selectedID = selectedID
         self.pollenSeason = pollenSeason
-        self.anchor = anchor
-        self.spot = spot
+        self.anchorStore = anchorStore
+        self.anchorHidden = anchorHidden
         self.open = open
         let day = events.first { $0.id == selectedID }?.loggedAt ?? events.last?.loggedAt ?? .now
         _scrolledDay = State(initialValue: Calendar.current.startOfDay(for: day))
@@ -60,7 +60,7 @@ struct DaysView: View {
                                 .clipShape(.rect(cornerRadius: 20, style: .continuous))
                                 // One pass per tile; cheap to scroll.
                                 .drawingGroup()
-                                .modifier(AnchorIf(namespace: isCurrent ? anchor : nil))
+                                .modifier(AnchorReport(key: isCurrent ? "days" : nil, store: anchorStore, hidden: anchorHidden))
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(dayLabel(d.day)).font(.subheadline.weight(.semibold))
                                 Text(t.weave.isEmpty ? "No air reading." : t.headline)

@@ -17,8 +17,14 @@ struct JournalView: View {
     @Namespace private var zoom
     @Namespace private var morph
     @Namespace private var mapZoom
-    /// The zoom's anchor: the current moment's sky, its day tile, its month square.
-    @Namespace private var anchorNS
+    /// The zoom's anchor frames, and the flying copy of the sky that travels between them.
+    @State private var anchorStore = AnchorFrames()
+    @State private var flight: Flight?
+    struct Flight: Equatable {
+        let moment: LogEvent
+        var rect: CGRect
+        var radius: CGFloat
+    }
     @State private var gaugeLabelVisible = false
     /// True while a finger is on the gauge: it widens and shows every level's name.
     @State private var gaugeActive = false
@@ -59,6 +65,21 @@ struct JournalView: View {
                 .overlay(alignment: .trailing) {
                     if gestures == .zoom && !cards.isEmpty { depthGauge }
                 }
+                // The flying sky: global coordinates, on top of everything, never part of layout.
+                .overlay {
+                    GeometryReader { _ in
+                        if let f = flight {
+                            AmbientField(weave: f.moment.weave, temperatureF: f.moment.conditions?.best(.temperature)?.value,
+                                         date: f.moment.loggedAt, conditions: f.moment.conditions,
+                                         pollen: DemoPollen.sample(at: f.moment.loggedAt, season: pollenSeason))
+                                .frame(width: f.rect.width, height: f.rect.height)
+                                .clipShape(.rect(cornerRadius: f.radius, style: .continuous))
+                                .position(x: f.rect.midX, y: f.rect.midY)
+                        }
+                    }
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+                }
                 // Tutorial: dim everything the current tip isn't about.
                 .overlay {
                     if expanded == nil && !overview && !showDays, let ids = spotlightIDs {
@@ -98,13 +119,13 @@ struct JournalView: View {
             Group {
                 if overview {
                     MomentsOverview(events: Array(events), namespace: morph,
-                                    anchor: gestures == .zoom ? anchorNS : nil, anchorDay: selected?.loggedAt, spot: spot,
-                                    anchorMoment: selected, open: { e in
+                                    anchorStore: gestures == .zoom ? anchorStore : nil, anchorHidden: flight != nil,
+                                    anchorDay: selected?.loggedAt, anchorMoment: selected, open: { e in
                         withAnimation(.spring(duration: 0.55, bounce: 0.15)) { selectedID = e.id; overview = false; showDays = false }
                     }, close: { withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } })
                 } else if showDays {
                     DaysView(events: cards, selectedID: selected?.id, pollenSeason: pollenSeason,
-                             anchor: gestures == .zoom ? anchorNS : nil, spot: spot) { e in
+                             anchorStore: gestures == .zoom ? anchorStore : nil, anchorHidden: flight != nil) { e in
                         zoomingIn = true
                         withAnimation(.spring(duration: 0.5, bounce: 0.12)) { selectedID = e.id; showDays = false }
                     }
@@ -171,7 +192,7 @@ struct JournalView: View {
                     if momentStyle == .panel {
                         MomentPager(events: cards, selectedID: $selectedID, zoom: zoom, mapNamespace: mapZoom,
                                     pollenSeason: pollenSeason, onOpen: expand, onOverview: zoomOut, probing: $panelProbing,
-                                    spot: spot, anchor: gestures == .zoom ? anchorNS : nil)
+                                    spot: spot, anchorStore: gestures == .zoom ? anchorStore : nil, anchorHidden: flight != nil)
                             .frame(maxHeight: 520)
                     } else {
                         MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, morph: morph,
@@ -253,15 +274,43 @@ struct JournalView: View {
     }
 
     /// Negative zooms out (detail → moment → days → month), positive zooms in; jumps several levels at once.
+    /// Between Moment, Days and Month a copy of the current sky flies from the old anchor to the new one
+    /// (drawn on top, so it never affects layout); Moment ⇄ Details uses the map's own zoom.
     private func zoom(by step: Int) {
         guard step != 0 else { return }
         zoomingIn = step > 0
         MomentsTip().invalidate(reason: .actionPerformed)
+        let fromKey = levelKey
         let target = max(0, min(3, levelIndex + step))
+        let toKey = Self.levels[target]
+        let flies = gestures == .zoom && fromKey != "detail" && toKey != "detail"
+        if flies, let m = selected, let from = anchorStore.frames[fromKey] {
+            flight = Flight(moment: m, rect: from, radius: Self.anchorRadius(fromKey))
+        }
         withAnimation(.smooth(duration: 0.45)) {
             overview = target == 0
             showDays = target == 1
             expanded = target == 3 ? selected : nil
+        }
+        guard flight != nil else { return }
+        Task {
+            try? await Task.sleep(for: .milliseconds(50))   // let the new scale lay out and report its anchor
+            if let to = anchorStore.frames[toKey] {
+                withAnimation(.smooth(duration: 0.45)) {
+                    flight?.rect = to
+                    flight?.radius = Self.anchorRadius(toKey)
+                }
+                try? await Task.sleep(for: .milliseconds(470))
+            }
+            flight = nil
+        }
+    }
+
+    private static func anchorRadius(_ key: String) -> CGFloat {
+        switch key {
+        case "moment": 36
+        case "days": 20
+        default: 10
         }
     }
 

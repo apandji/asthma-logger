@@ -16,8 +16,9 @@ struct MomentPager: View {
     let onOverview: () -> Void
     @Binding var probing: Bool
     var spot: SpotlightFrames? = nil
-    /// The zoom's anchor: this sky becomes its day's tile in Days and its square in the month.
-    var anchor: Namespace.ID? = nil
+    /// The zoom's anchor: this sky flies to its day's tile in Days and its square in the month.
+    var anchorStore: AnchorFrames? = nil
+    var anchorHidden = false
 
     private var current: LogEvent? { events.first { $0.id == selectedID } ?? events.last }
 
@@ -50,7 +51,7 @@ struct MomentPager: View {
             }
             .modifier(SpotIf(id: "sky", spot: spot))
             .animation(.easeInOut(duration: 0.35), value: current?.id)
-            .modifier(AnchorIf(namespace: anchor))
+            .modifier(AnchorReport(key: "moment", store: anchorStore, hidden: anchorHidden))
             .task(id: current?.id) { await prefetchNeighbours() }
 
             TimelineTrack(events: events, selectedID: $selectedID)
@@ -360,10 +361,24 @@ struct SpotIf: ViewModifier {
     }
 }
 
-/// Marks the zoom anchor (shared geometry across the zoom levels) when there's a namespace.
-struct AnchorIf: ViewModifier {
-    let namespace: Namespace.ID?
+/// Where each scale's anchor sits on screen, for the zoom's flying sky. A plain class on purpose:
+/// writing a frame never re-renders anything (the Days list scrolls without redrawing the Journal).
+final class AnchorFrames {
+    var frames: [String: CGRect] = [:]
+}
+
+/// Reports a scale's anchor frame (and hides it while the flying copy is on its way to it).
+struct AnchorReport: ViewModifier {
+    let key: String?
+    let store: AnchorFrames?
+    var hidden = false
     func body(content: Content) -> some View {
-        if let namespace { content.matchedGeometryEffect(id: "zoom-anchor", in: namespace) } else { content }
+        if let key, let store {
+            content
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { store.frames[key] = $0 }
+                .opacity(hidden ? 0 : 1)
+        } else {
+            content
+        }
     }
 }

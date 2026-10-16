@@ -457,9 +457,11 @@ struct NowSky: View {
     var coordinate: (Double, Double)? = nil
     var mapNamespace: Namespace.ID? = nil
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
+    @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var point: CGPoint?
     @State private var probe: SkyProbe?
     @State private var pulse: Task<Void, Never>?
+    @State private var rippleAt: Date?
 
     private var temperature: Double? { conditions?.best(.temperature)?.value }
 
@@ -480,12 +482,16 @@ struct NowSky: View {
                         .clipped()
                         .allowsHitTesting(false)
                 }
+                if texture != .plain {
+                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt)
+                }
                 if let point, let probe {
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false).transition(.opacity)
                 }
             }
             .frame(width: size.width, height: size.height)
             .drawingGroup()
+            .onAppear { rippleAt = .now }
             .mask {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),
                                    startRadiusFraction: 0, endRadiusFraction: 0.7)

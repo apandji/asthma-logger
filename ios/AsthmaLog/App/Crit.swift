@@ -60,6 +60,20 @@ enum Crit {
         static let key = "crit.fieldStyle"
     }
 
+    /// The sky's surface: plain, a riso grain, or grain that swells under the finger.
+    enum SkyTexture: String, CaseIterable, Identifiable {
+        case plain, grain, dots
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .plain: "Plain"
+            case .grain: "Riso grain (still)"
+            case .dots: "Riso grain, answers touch"
+            }
+        }
+        static let key = "crit.skyTexture"
+    }
+
     enum CardStyle: String, CaseIterable, Identifiable {
         case panel, card, open
         var id: String { rawValue }

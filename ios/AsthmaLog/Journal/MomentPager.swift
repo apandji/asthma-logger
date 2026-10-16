@@ -225,6 +225,8 @@ struct SkyPanel: View {
     @State private var probe: SkyProbe?
     @State private var pulse: Task<Void, Never>?
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
+    @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
+    @State private var rippleAt: Date?
 
     var body: some View {
         GeometryReader { geo in
@@ -247,6 +249,9 @@ struct SkyPanel: View {
                         .allowsHitTesting(false)
                 }
 
+                if texture != .plain {
+                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt)
+                }
                 if let point, let probe {
                     // The glow belongs to the sky, so it fades with it.
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false)
@@ -256,6 +261,7 @@ struct SkyPanel: View {
             .frame(width: size.width, height: size.height)
             // One offscreen pass for the sky, map and glow, instead of a pass per mask.
             .drawingGroup()
+            .onAppear { rippleAt = .now }
             // Self-contained: fades to black at every edge, most of all toward the top.
             .mask {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),

@@ -271,3 +271,85 @@ nonisolated struct Seeded {
         return Double(s >> 11) / Double(1 << 53)
     }
 }
+
+/// Riso grain over the sky: a halftone of tiny ink dots on a slightly turned grid. At rest it's a
+/// print texture; under a finger the dots swell and take the ink of the layer being read, so the sky
+/// reads as a surface that answers touch.
+struct SkyGrain: View {
+    /// Where the finger is, in the sky's own coordinates.
+    var point: CGPoint? = nil
+    /// The ink of the layer under the finger.
+    var ink: Color? = nil
+    /// 0 clean … 1 high: how far the dots swell.
+    var intensity: Double = 0
+    /// Static grain only, no response.
+    var responds = true
+    /// When the sky appeared: a wave runs out through the dots, once, to say "touch me".
+    var rippleAt: Date? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let spacing: CGFloat = 10
+    private let angle: CGFloat = 12 * .pi / 180
+    private let reach: CGFloat = 80
+    private let rippleSeconds = 1.6
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: !rippling)) { frame in
+            grain(at: frame.date)
+        }
+    }
+
+    private var rippling: Bool {
+        guard responds, !reduceMotion, let rippleAt else { return false }
+        return Date().timeIntervalSince(rippleAt) < rippleSeconds
+    }
+
+    private func grain(at time: Date) -> some View {
+        // The wavefront: a ring that grows from the centre and fades as it goes.
+        let age = rippleAt.map { time.timeIntervalSince($0) } ?? rippleSeconds
+        let wave = (responds && !reduceMotion && age < rippleSeconds) ? age / rippleSeconds : nil
+        return Canvas(rendersAsynchronously: true) { ctx, size in
+            let cosA = cos(angle), sinA = sin(angle)
+            let centre = CGPoint(x: size.width / 2, y: size.height * 0.55)
+            let radius = wave.map { CGFloat($0) * hypot(size.width, size.height) * 0.6 }
+            let fade = wave.map { 1 - $0 } ?? 0
+            let diag = hypot(size.width, size.height)
+            let n = Int(diag / spacing) + 2
+            let rest: CGFloat = 1.0
+            let ink = ink ?? .white
+            // A turned grid, big enough to cover the corners.
+            for i in -n...n {
+                for j in -n...n {
+                    let gx = CGFloat(i) * spacing, gy = CGFloat(j) * spacing
+                    let x = size.width / 2 + gx * cosA - gy * sinA
+                    let y = size.height / 2 + gx * sinA + gy * cosA
+                    guard x > -4, y > -4, x < size.width + 4, y < size.height + 4 else { continue }
+                    // Printed, not plotted: each dot a little different.
+                    let wobble = CGFloat((i &* 73 &+ j &* 151) & 7) / 7
+                    var r = rest * (0.7 + 0.5 * wobble)
+                    var color = Color.black.opacity(0.22)
+                    if responds, let p = point {
+                        let d = hypot(x - p.x, y - p.y)
+                        if d < reach {
+                            let t = 1 - d / reach                 // 1 at the finger, 0 at the edge
+                            let swell = t * t * (1.2 + 2.2 * CGFloat(intensity))
+                            r += swell * 2.2
+                            color = ink.opacity(0.35 + 0.6 * Double(t))
+                        }
+                    } else if let radius {
+                        // Dots near the wavefront swell and go white, then settle back.
+                        let d = abs(hypot(x - centre.x, y - centre.y) - radius)
+                        if d < 36 {
+                            let t = (1 - d / 36) * fade
+                            r += t * t * 2.4
+                            color = Color.white.opacity(0.15 + 0.6 * Double(t))
+                        }
+                    }
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)), with: .color(color))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}

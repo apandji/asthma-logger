@@ -141,10 +141,10 @@ struct JournalView: View {
         return selected.map { $0.weave.isEmpty ? todayWeave : $0.weave } ?? todayWeave
     }
 
-    /// This week's inhaler moments, oldest first (the newest starts in the middle).
+    /// Every inhaler moment, oldest first (the newest starts in the middle). The row is your history;
+    /// the calendar is for jumping around.
     private var cards: [LogEvent] {
-        let start = Calendar.current.date(byAdding: .day, value: -(days - 1), to: Calendar.current.startOfDay(for: .now))!
-        return events.filter { $0.loggedAt >= start && $0.moment != .okay }
+        events.filter { $0.moment != .okay }
     }
 
     // MARK: Header

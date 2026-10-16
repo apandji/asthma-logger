@@ -26,7 +26,7 @@ struct AmbientField: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var scheme
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
-    @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.steps
+    @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
 
     var body: some View {
         if reduceTransparency {
@@ -152,7 +152,20 @@ struct AirLayers {
         if let v = c?.best(.pm10)?.value, let l = level(Banding.pm10(v)) { pm10 = layer("PM10", WeatherColor.pm10, l, v) }
         if let v = c?.best(.no2)?.value, let l = level(Banding.no2(ppb: v)) { no2 = layer("NO₂", WeatherColor.no2, l, v) }
         if let v = c?.best(.ozone)?.value, let l = level(Banding.ozone(ppb: v)) { ozone = layer("Ozone", WeatherColor.ozone, l, v) }
-        // No per-pollutant readings (older moments, AQI only): the overall air level drives the PM2.5 layer.
+        // AirNow's official AQI wins when it says the air is worse than the nearest station's reading
+        // (the station can sit just under a cut-off while the AQI, a NowCast over hours, is over it).
+        // Its main pollutant takes the bump; otherwise PM2.5.
+        if let aqi = c?.best(.aqi) {
+            let l: WeaveSpec.Level = aqi.value <= 50 ? .low : aqi.value <= 100 ? .medium : .high
+            let f = (aqi.value - [0, 51, 101][l.rawValue]) / [50.0, 49, 99][l.rawValue]
+            let isOzone = (aqi.category ?? "").localizedCaseInsensitiveContains("ozone")
+            if isOzone {
+                if ozone == nil || ozone!.level < l { ozone = Layer(name: "Ozone", color: WeatherColor.ozone, level: l, fraction: f, smooth: smooth) }
+            } else if pm25 == nil || pm25!.level < l {
+                pm25 = Layer(name: "PM2.5", color: WeatherColor.pm25, level: l, fraction: f, smooth: smooth)
+            }
+        }
+        // No per-pollutant readings and no AQI (older moments): the overall air level drives the PM2.5 layer.
         if pm25 == nil && pm10 == nil && no2 == nil && ozone == nil, let air = weave.levels[.air] {
             pm25 = Layer(name: "Air", color: WeatherColor.pm25, level: air, smooth: smooth)
         }

@@ -10,7 +10,7 @@ struct FieldLegend: View {
     var conditions: Conditions? = nil
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
     @AppStorage("legend.expanded") private var expanded = false
-    @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.steps
+    @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
 
     var body: some View {
         if style == .weather {

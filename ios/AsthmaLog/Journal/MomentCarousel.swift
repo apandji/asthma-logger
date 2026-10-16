@@ -241,20 +241,42 @@ struct MomentMap: View {
 
 enum MapSnapshots {
     private static let cache = NSCache<NSString, UIImage>()
+    /// One snapshot at a time: run concurrently, MKMapSnapshotter sometimes ignores the requested
+    /// dark appearance and returns a light map.
+    private static let queue = SnapshotQueue()
 
     static func image(for event: LogEvent, size: CGSize, dark: Bool) async -> UIImage? {
         guard let lat = event.latitude, let lon = event.longitude, size.width > 1, size.height > 1 else { return nil }
-        let key = "\(event.id)-\(dark)-\(Int(size.width))x\(Int(size.height))" as NSString
+        let key = "\(event.id)-\(dark ? "dark" : "light")-\(Int(size.width))x\(Int(size.height))" as NSString
         if let hit = cache.object(forKey: key) { return hit }
         let options = MKMapSnapshotter.Options()
         options.camera = MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: lat, longitude: lon),
                                      fromDistance: 1_400, pitch: 40, heading: 0)
         options.size = size
         options.pointOfInterestFilter = .excludingAll
-        options.traitCollection = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
-        guard let snap = try? await MKMapSnapshotter(options: options).start() else { return nil }
-        cache.setObject(snap.image, forKey: key)
-        return snap.image
+        options.preferredConfiguration = MKStandardMapConfiguration(emphasisStyle: .muted)
+        options.traitCollection = UITraitCollection(traitsFrom: [
+            UITraitCollection(userInterfaceStyle: dark ? .dark : .light),
+            UITraitCollection(displayScale: 3),
+        ])
+        guard let image = await queue.run(options) else { return nil }
+        cache.setObject(image, forKey: key)
+        return image
+    }
+}
+
+/// Runs snapshots one after another (on the main actor, where the options are made).
+@MainActor final class SnapshotQueue {
+    private var tail: Task<UIImage?, Never>?
+
+    func run(_ options: MKMapSnapshotter.Options) async -> UIImage? {
+        let previous = tail
+        let task = Task<UIImage?, Never> {
+            _ = await previous?.value
+            return try? await MKMapSnapshotter(options: options).start().image
+        }
+        tail = task
+        return await task.value
     }
 }
 

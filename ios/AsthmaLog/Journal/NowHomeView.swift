@@ -37,8 +37,6 @@ struct NowHomeView: View {
     @State private var probing = false
     /// The clock. Ticks so "now" creeps along the track while you watch.
     @State private var now = Date()
-    /// A moment's details, in place, with the timeline still under it.
-    @State private var expanded = false
     @Namespace private var mapZoom
     @State private var tips = TipGroup(.ordered) { PullToLogTip() }
     @Namespace private var month
@@ -52,18 +50,8 @@ struct NowHomeView: View {
                 header
                     .opacity(probing ? 0.4 : 1)
                     .animation(.easeOut(duration: 0.2), value: probing)
-                Group {
-                    if expanded, case .moment(let m) = focus {
-                        MomentDetailsView(event: m, onClose: { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = false } }, airOnly: true)
-                            .id(m.id)
-                            // Tap the table to go back to the sky.
-                            .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = false } }
-                            .transition(.opacity)
-                    } else {
-                        sky.transition(.opacity)
-                    }
-                }
-                .frame(maxHeight: .infinity)
+                sky
+                    .frame(maxHeight: .infinity)
                 .padding(.top, 4)
                 NowTimeline(moments: moments, hours: hours, now: now, focusTime: $focusTime)
                     .frame(height: 104)
@@ -132,10 +120,7 @@ struct NowHomeView: View {
                     now = Date()
                 }
             }
-            // Scrubbing off a moment while its details are open closes them.
-            .onChange(of: focusTime) { _, _ in
-                if expanded, case .moment = focus {} else if expanded { withAnimation(.easeOut(duration: 0.25)) { expanded = false } }
-            }
+
             .task(id: events.count) {
                 try? await Task.sleep(for: .seconds(1.2))
                 guard !Task.isCancelled else { return }
@@ -195,7 +180,7 @@ struct NowHomeView: View {
                         MomentDot(moment: j.moment, size: 8)
                         Text(["Just now", j.moment == .rescue ? "Rescue" : "Standard", j.placeName ?? here?.place].compactMap { $0 }.joined(separator: " · "))
                     }
-                    .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { focusTime = j.loggedAt; expanded = true } }
+                    .onTapGesture { pinDetails = j }
                 } else {
                     ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true,
                                 byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
@@ -306,7 +291,7 @@ struct NowHomeView: View {
                         .modifier(CaptureReveal())
                         .id(j.id)
                 }
-                .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { focusTime = j.loggedAt; expanded = true } }
+                .onTapGesture { pinDetails = j }
             } else {
                 NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
                        pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
@@ -318,7 +303,7 @@ struct NowHomeView: View {
                    pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason), probing: $probing,
                    mapID: m.id.uuidString, coordinate: m.latitude.flatMap { lat in m.longitude.map { (lat, $0) } },
                    mapNamespace: mapZoom, onPin: { pinDetails = m })
-                .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = true } }
+                .onTapGesture { pinDetails = m }
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
                    pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,

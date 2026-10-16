@@ -87,26 +87,31 @@ enum SkyExplorer {
         }.map(\.element)
     }
 
+    /// The bands (unit y), weather first: a compact stack of equal rows centred in the sky, so the icons
+    /// on the scale sit evenly whatever the count. Touches above or below the stack read its ends.
+    static func bands(count layers: Int, height: Double) -> [ClosedRange<Double>] {
+        let n = layers + 1
+        let row = min(0.11, 0.72 / Double(n))      // ~44 pt of a 400 pt sky, tighter when there are many
+        let start = 0.5 - row * Double(n) / 2
+        return (0..<n).map { (start + row * Double($0))...(start + row * Double($0 + 1)) }
+    }
+
     static func strata(at y: Double, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
                        temperatureF: Double?, pollen: PollenSample?) -> (probe: SkyProbe, band: ClosedRange<Double>)? {
         let stack = stack(layers)
-        let top = 0.14, bottom = 0.86
-        let weatherBottom = stack.isEmpty ? bottom : top + (bottom - top) / Double(stack.count + 1)
-        if y < weatherBottom {
+        let bands = bands(count: stack.count, height: 1)
+        let i = max(0, min(bands.count - 1, bands.firstIndex { $0.contains(y) } ?? (y < bands[0].lowerBound ? 0 : bands.count - 1)))
+        if i == 0 {
             guard let w = probe(at: CGPoint(x: 0.5, y: 0.1), layers: layers, conditions: conditions, weave: weave,
                                 temperatureF: temperatureF, pollen: pollen) else { return nil }
-            return (w, 0...weatherBottom)
+            return (w, bands[0])
         }
-        let each = (bottom - weatherBottom) / Double(max(1, stack.count))
-        let i = min(stack.count - 1, Int((min(y, bottom - 0.001) - weatherBottom) / each))
-        guard i >= 0, i < stack.count else { return nil }
-        let layer = stack[i]
+        let layer = stack[i - 1]
         let (v, unit) = reading(layer.name, conditions, pollen)
         let position = (Double(layer.level.rawValue) + max(0, min(1, layer.fraction))) / 3
         let p = SkyProbe(name: layer.name, kind: kind(layer.name, pollen), value: v, unit: unit,
                          level: layer.level, note: note(layer.name), color: layer.color, intensity: position)
-        let start = weatherBottom + each * Double(i)
-        return (p, start...(i == stack.count - 1 ? 1 : start + each))
+        return (p, bands[i])
     }
 
     /// The number and its unit, apart, so the number can be set large.
@@ -257,16 +262,14 @@ struct StrataScale: View {
 
     var body: some View {
         let stack = SkyExplorer.stack(layers)
-        let top = 0.14 * height, bottom = 0.86 * height
-        let weatherBottom = stack.isEmpty ? bottom : top + (bottom - top) / CGFloat(stack.count + 1)
-        let each = (bottom - weatherBottom) / CGFloat(max(1, stack.count))
+        let mids = SkyExplorer.bands(count: stack.count, height: 1).map { CGFloat($0.lowerBound + $0.upperBound) / 2 * height }
         ZStack(alignment: .topTrailing) {
             dot(name: "Weather", level: nil, amount: 0.25, on: probe?.name == "Weather")
-                .position(x: 0, y: weatherBottom / 2)
+                .position(x: 0, y: mids[0])
             ForEach(Array(stack.enumerated()), id: \.offset) { i, layer in
                 dot(name: layer.name, level: layer.level, amount: layer.empty ? 0 : (Double(layer.level.rawValue) + layer.fraction) / 3,
                     on: probe?.name == layer.name)
-                    .position(x: 0, y: weatherBottom + each * (CGFloat(i) + 0.5))
+                    .position(x: 0, y: mids[i + 1])
             }
         }
         .frame(width: 0, height: height)

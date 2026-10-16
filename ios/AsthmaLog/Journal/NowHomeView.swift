@@ -267,7 +267,8 @@ nonisolated enum AirWords {
         var parts: [String] = []
         if !weather.isEmpty { parts.append("\(it) \(weather).") }
         if let air { parts.append("The air \(verb) \(air).") }
-        return parts.isEmpty ? "No air reading." : parts.joined(separator: " ")
+        // One sentence per line: weather, then air.
+        return parts.isEmpty ? "No air reading." : parts.joined(separator: "\n")
     }
 }
 

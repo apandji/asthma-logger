@@ -21,8 +21,8 @@ struct ScaleHeader<Kicker: View>: View {
             let hasByline = byline != nil || reserveByline
             Text(title)
                 .font(.system(compact ? .title2 : .title, design: .serif, weight: .medium))
-                // With a byline the block keeps a fixed height instead, so the byline hugs the title.
-                .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines && !hasByline)
+                // Two lines, always: the byline sits in the same place whatever the title says.
+                .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)
                 .contentTransition(.opacity)
             if hasByline {
                 // felt air's own voice, marked with the sparkle so it reads as the app thinking, not data.
@@ -33,7 +33,7 @@ struct ScaleHeader<Kicker: View>: View {
                     .opacity(byline == nil ? 0 : 1)
             }
         }
-        .frame(minHeight: (byline != nil || reserveByline) ? (compact ? 108 : 118) : 0, alignment: .top)
+
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, 20)
         .padding(.trailing, JournalView.railAxis + 30)  // clear the glass column

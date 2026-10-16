@@ -255,13 +255,16 @@ struct JournalView: View {
                             .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
                             .contentTransition(.opacity)
                     }
+                    // Fixed footprint: two headline lines and one place line are always reserved, so
+                    // scrubbing between short and long moments never moves the sky or the timeline.
                     Text(m.weave.isEmpty ? "No air reading." : m.headline)
                         .font(.system(.title, design: .serif, weight: .medium))
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(2, reservesSpace: true)
+                        .minimumScaleFactor(0.85)
                         .contentTransition(.opacity)
-                    if let place = m.placeName {
-                        Text(place).font(.subheadline).foregroundStyle(Theme.secondaryText)
-                    }
+                    Text(m.placeName ?? " ")
+                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                        .lineLimit(1)
                 } else {
                     nowLines
                 }

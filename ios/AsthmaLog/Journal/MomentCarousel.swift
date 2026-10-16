@@ -259,18 +259,28 @@ enum MapSnapshots {
     /// dark appearance and returns a light map.
     private static let queue = SnapshotQueue()
 
-    private static func key(_ event: LogEvent, _ size: CGSize, _ dark: Bool, _ scale: CGFloat) -> NSString {
-        "\(event.id)-\(dark ? "dark" : "light")-\(Int(size.width))x\(Int(size.height))@\(scale)" as NSString
+    private static func key(_ id: String, _ size: CGSize, _ dark: Bool, _ scale: CGFloat) -> NSString {
+        "\(id)-\(dark ? "dark" : "light")-\(Int(size.width))x\(Int(size.height))@\(scale)" as NSString
     }
 
     /// A map that's already drawn, without waiting: lets a view show it on its first frame.
     static func cached(for event: LogEvent, size: CGSize, dark: Bool, scale: CGFloat = 3) -> UIImage? {
-        cache.object(forKey: key(event, size, dark, scale))
+        cached(id: event.id.uuidString, size: size, dark: dark, scale: scale)
+    }
+
+    static func cached(id: String, size: CGSize, dark: Bool, scale: CGFloat = 3) -> UIImage? {
+        cache.object(forKey: key(id, size, dark, scale))
     }
 
     static func image(for event: LogEvent, size: CGSize, dark: Bool, scale: CGFloat = 3) async -> UIImage? {
-        guard let lat = event.latitude, let lon = event.longitude, size.width > 1, size.height > 1 else { return nil }
-        let key = key(event, size, dark, scale)
+        guard let lat = event.latitude, let lon = event.longitude else { return nil }
+        return await image(id: event.id.uuidString, latitude: lat, longitude: lon, size: size, dark: dark, scale: scale)
+    }
+
+    /// Any spot, keyed by `id` (a moment's id, or "here" for the live location).
+    static func image(id: String, latitude lat: Double, longitude lon: Double, size: CGSize, dark: Bool, scale: CGFloat = 3) async -> UIImage? {
+        guard size.width > 1, size.height > 1 else { return nil }
+        let key = key(id, size, dark, scale)
         if let hit = cache.object(forKey: key) { return hit }
         if let running = inFlight[key] { return await running.value }
         let options = MKMapSnapshotter.Options()
@@ -289,6 +299,31 @@ enum MapSnapshots {
         inFlight[key] = nil
         if let image { cache.setObject(image, forKey: key) }
         return image
+    }
+}
+
+/// The map under a sky that has no moment behind it (right now, or a forecast hour).
+struct PlaceMap: View {
+    let id: String
+    let latitude: Double
+    let longitude: Double
+    @State private var image: UIImage?
+
+    var body: some View {
+        let shown = image ?? MapSnapshots.cached(id: id, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale)
+        GeometryReader { geo in
+            if let shown {
+                Image(uiImage: shown).resizable().scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height).clipped()
+                    .transition(.opacity)
+            }
+        }
+        .task(id: id) {
+            guard shown == nil else { return }
+            image = await MapSnapshots.image(id: id, latitude: latitude, longitude: longitude,
+                                             size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale)
+        }
+        .animation(.easeInOut(duration: 0.25), value: image != nil)
     }
 }
 

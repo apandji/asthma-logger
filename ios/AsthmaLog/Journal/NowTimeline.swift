@@ -7,6 +7,8 @@ import SwiftUI
 struct NowTimeline: View {
     let moments: [LogEvent]
     let hours: [NowHour]
+    /// The clock, passed in so the track creeps forward while you watch.
+    let now: Date
     /// Nil is now.
     @Binding var focusTime: Date?
 
@@ -21,13 +23,13 @@ struct NowTimeline: View {
     private let cal = Calendar.current
 
     private var start: Date {
-        cal.startOfDay(for: min(moments.first?.loggedAt ?? .now, cal.date(byAdding: .day, value: -3, to: .now)!))
+        cal.startOfDay(for: min(moments.first?.loggedAt ?? now, cal.date(byAdding: .day, value: -3, to: now)!))
     }
-    private var end: Date { cal.date(byAdding: .day, value: 2, to: cal.startOfDay(for: .now))! }
+    private var end: Date { cal.date(byAdding: .day, value: 2, to: cal.startOfDay(for: now))! }
     private var contentWidth: CGFloat { CGFloat(end.timeIntervalSince(start) / 86_400) * dayWidth }
     private func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(start) / 86_400) * dayWidth }
     private func time(at x: CGFloat) -> Date { start.addingTimeInterval(Double(x / dayWidth) * 86_400) }
-    private var current: Date { focusTime ?? .now }
+    private var current: Date { focusTime ?? now }
     private var currentMoment: LogEvent? {
         moments.first { abs($0.loggedAt.timeIntervalSince(current)) < 20 * 60 }
     }
@@ -48,11 +50,11 @@ struct NowTimeline: View {
                         }
                         // Axis.
                         var line = Path()
-                        line.move(to: CGPoint(x: 0, y: axis)); line.addLine(to: CGPoint(x: x(.now), y: axis))
+                        line.move(to: CGPoint(x: 0, y: axis)); line.addLine(to: CGPoint(x: x(now), y: axis))
                         ctx.stroke(line, with: .color(.white.opacity(0.12)), lineWidth: 1)
                         // Now: a short bright tick.
                         var nowTick = Path()
-                        nowTick.move(to: CGPoint(x: x(.now), y: axis - 12)); nowTick.addLine(to: CGPoint(x: x(.now), y: axis + 12))
+                        nowTick.move(to: CGPoint(x: x(now), y: axis - 12)); nowTick.addLine(to: CGPoint(x: x(now), y: axis + 12))
                         ctx.stroke(nowTick, with: .color(.white.opacity(0.6)), lineWidth: 1.5)
                         // Ticks every 6 h, day names beneath.
                         var t = start
@@ -65,7 +67,7 @@ struct NowTimeline: View {
                             if isDay {
                                 let label = cal.isDateInToday(t) ? "Today" : cal.isDateInTomorrow(t) ? "Tomorrow"
                                     : t.formatted(.dateTime.weekday(.abbreviated).day())
-                                ctx.draw(Text(label).font(.caption2).foregroundStyle(.white.opacity(t > .now ? 0.3 : 0.45)),
+                                ctx.draw(Text(label).font(.caption2).foregroundStyle(.white.opacity(t > now ? 0.3 : 0.45)),
                                          at: CGPoint(x: x(t) + dayWidth / 2, y: axis + 26))
                             }
                             t = cal.date(byAdding: .hour, value: 6, to: t)!
@@ -98,7 +100,11 @@ struct NowTimeline: View {
             centerX = cx
             guard dragging else { return }
             let t = time(at: cx)
-            focusTime = abs(t.timeIntervalSinceNow) < 15 * 60 ? nil : t
+            if abs(t.timeIntervalSince(now)) < 15 * 60 { focusTime = nil }
+            else if t < now {
+                // Behind now there's nothing between moments, so the playhead reads the nearest one.
+                focusTime = moments.min { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }?.loggedAt
+            } else { focusTime = t }
         }
         .onScrollPhaseChange { old, phase in
             dragging = phase == .interacting || phase == .decelerating
@@ -106,7 +112,7 @@ struct NowTimeline: View {
             if phase == .idle, old == .interacting || old == .decelerating {
                 if let m = moments.min(by: { abs(x($0.loggedAt) - centerX) < abs(x($1.loggedAt) - centerX) }),
                    abs(x(m.loggedAt) - centerX) < 10 { go(to: m.loggedAt) }
-                else if abs(x(.now) - centerX) < 10 { go(to: nil) }
+                else if abs(x(now) - centerX) < 10 || time(at: centerX) < now { go(to: focusTime) }
             }
         }
         .overlay(alignment: .top) {
@@ -129,13 +135,15 @@ struct NowTimeline: View {
         .padding(.top, 24)
         .sensoryFeedback(.selection, trigger: currentMoment?.id)
         .onChange(of: focusTime) { _, t in
-            if !dragging, abs(x(t ?? .now) - centerX) > 1 { withAnimation(.smooth) { position.scrollTo(x: x(t ?? .now)) } }
+            if !dragging, abs(x(t ?? now) - centerX) > 1 { withAnimation(.smooth) { position.scrollTo(x: x(t ?? now)) } }
         }
         .task(id: viewport) {
             guard viewport > 0 else { return }
             try? await Task.sleep(for: .milliseconds(80))
             position.scrollTo(x: x(current))
         }
+        // Sitting on now, the playhead keeps up with the clock.
+        .onChange(of: now) { _, n in if focusTime == nil, !dragging { position.scrollTo(x: x(n)) } }
         .accessibilityElement()
         .accessibilityLabel("Timeline")
         .accessibilityValue(focusTime == nil ? "Now" : current.formatted(date: .abbreviated, time: .shortened))
@@ -143,6 +151,6 @@ struct NowTimeline: View {
 
     private func go(to t: Date?) {
         focusTime = t
-        withAnimation(.smooth(duration: 0.35)) { position.scrollTo(x: x(t ?? .now)) }
+        withAnimation(.smooth(duration: 0.35)) { position.scrollTo(x: x(t ?? now)) }
     }
 }

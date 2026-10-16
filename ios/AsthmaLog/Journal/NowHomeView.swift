@@ -25,6 +25,11 @@ struct NowHomeView: View {
     @State private var openDay: Date?
     @State private var toast: LogEvent?
     @State private var probing = false
+    /// The clock. Ticks so "now" creeps along the track while you watch.
+    @State private var now = Date()
+    /// A moment's details, in place, with the timeline still under it.
+    @State private var expanded = false
+    @Namespace private var mapZoom
     @State private var tips = TipGroup(.ordered) { PullToLogTip() }
     @Namespace private var month
 
@@ -37,10 +42,18 @@ struct NowHomeView: View {
                 header
                     .opacity(probing ? 0.4 : 1)
                     .animation(.easeOut(duration: 0.2), value: probing)
-                sky
-                    .frame(maxHeight: .infinity)
-                    .padding(.top, 4)
-                NowTimeline(moments: moments, hours: hours, focusTime: $focusTime)
+                Group {
+                    if expanded, case .moment(let m) = focus {
+                        MomentDetailsView(event: m, mapNamespace: mapZoom, onClose: { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = false } })
+                            .id(m.id)
+                            .transition(.opacity)
+                    } else {
+                        sky.transition(.opacity)
+                    }
+                }
+                .frame(maxHeight: .infinity)
+                .padding(.top, 4)
+                NowTimeline(moments: moments, hours: hours, now: now, focusTime: $focusTime)
                     .frame(height: 104)
                     .padding(.bottom, 84)  // clear the +
             }
@@ -77,6 +90,16 @@ struct NowHomeView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .task { await load() }
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(30))
+                    now = Date()
+                }
+            }
+            // Scrubbing off a moment while its details are open closes them.
+            .onChange(of: focusTime) { _, _ in
+                if expanded, case .moment = focus {} else if expanded { withAnimation(.easeOut(duration: 0.25)) { expanded = false } }
+            }
             .task(id: events.count) {
                 try? await Task.sleep(for: .seconds(1.2))
                 guard !Task.isCancelled else { return }
@@ -91,15 +114,16 @@ struct NowHomeView: View {
 
     // MARK: What the playhead is on
 
-    private enum Focus { case now, moment(LogEvent), hour(NowHour), gap(Date) }
+    private enum Focus { case now, moment(LogEvent), hour(NowHour) }
 
     private var focus: Focus {
         guard let t = focusTime else { return .now }
         if let m = moments.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }),
            abs(m.loggedAt.timeIntervalSince(t)) < 20 * 60 { return .moment(m) }
-        if t > .now, let h = hours.min(by: { abs($0.date.timeIntervalSince(t)) < abs($1.date.timeIntervalSince(t)) }) { return .hour(h) }
-        if abs(t.timeIntervalSinceNow) < 30 * 60 { return .now }
-        return .gap(t)
+        if t > now, let h = hours.min(by: { abs($0.date.timeIntervalSince(t)) < abs($1.date.timeIntervalSince(t)) }) { return .hour(h) }
+        // Behind now there's nothing between moments: the nearest one stands in.
+        if t < now, let m = moments.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }) { return .moment(m) }
+        return .now
     }
 
     // MARK: Header
@@ -108,26 +132,23 @@ struct NowHomeView: View {
         Group {
             switch focus {
             case .now:
-                ScaleHeader(title: sentence, reserveTwoLines: true) {
+                ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true, byline: sentence) {
                     Circle().fill(.white).frame(width: 8, height: 8)
                     Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
                 }
                 .onTapGesture { showInsights = true }
             case .moment(let m):
-                ScaleHeader(title: m.statement, reserveTwoLines: true) {
+                ScaleHeader(title: m.pastStatement, reserveTwoLines: true, reserveByline: true) {
                     MomentDot(moment: m.moment, size: 8)
                     Text(m.detailsLine)
                 }
             case .hour(let h):
-                ScaleHeader(title: h.statement, reserveTwoLines: true) {
+                // The look-ahead: what the forecast says, then how it compares (or that we're still learning).
+                ScaleHeader(title: h.statement, reserveTwoLines: true, byline: sentence) {
                     Image(systemName: "arrow.right").font(.caption2.weight(.bold))
                     Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour()))\(here?.place.map { " · \($0)" } ?? "")")
                 }
-            case .gap(let t):
-                ScaleHeader(title: "Nothing logged.", reserveTwoLines: true) {
-                    Text(t.formatted(.dateTime.weekday(.abbreviated).hour()))
-                    Text("· no reading for this hour")
-                }
+                .onTapGesture { showInsights = true }
             }
         }
         .padding(.top, 2)
@@ -153,8 +174,7 @@ struct NowHomeView: View {
             // "14 calm days and 1 rescue moment to go." Short enough for two lines.
             return parts.joined(separator: " and ") + " to go before felt air can compare."
         }
-        if let here { return here.statement }
-        return "Checking the air near you…"
+        return "Still learning your days."
     }
 
     private static func when(_ d: Date) -> String {
@@ -170,22 +190,22 @@ struct NowHomeView: View {
     @ViewBuilder private var sky: some View {
         switch focus {
         case .now:
-            NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: .now,
-                   pollen: DemoPollen.sample(at: .now, season: pollenSeason), probing: $probing)
-                .onTapGesture { openDay = Calendar.current.startOfDay(for: .now) }
+            NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
+                   pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
+                   mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
+                .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
         case .moment(let m):
             NowSky(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
-                   pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason), probing: $probing)
+                   pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason), probing: $probing,
+                   mapID: m.id.uuidString, coordinate: m.latitude.flatMap { lat in m.longitude.map { (lat, $0) } },
+                   mapNamespace: mapZoom)
                 .id(m.id)
-                .onTapGesture { openDay = Calendar.current.startOfDay(for: m.loggedAt) }
+                .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = true } }
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
-                   pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing)
+                   pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
+                   mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
                 .id(h.date)
-        case .gap(let t):
-            NowSky(conditions: nil, weave: WeaveSpec(), date: t, pollen: nil, probing: $probing)
-                .opacity(0.35)
-                .onTapGesture { openDay = Calendar.current.startOfDay(for: t) }
         }
     }
 
@@ -226,12 +246,32 @@ struct NowReading {
     let place: String?
     let conditions: Conditions
     var weave: WeaveSpec { WeaveSpec(conditions.input) }
-    var statement: String {
-        let temp = conditions.best(.temperature).map { "\(Int($0.value.rounded()))°" }
-        let w = weave.words[.temperature]?.capitalized
-        let air = weave.levels[.air].map { ["Good air", "OK air", "Not great air"][$0.rawValue] }
-        return [[w, temp].compactMap { $0 }.joined(separator: ", "), air].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ") + "."
+    /// "It's 62° and comfortable. The air is clear."
+    var statement: String { AirWords.sentence(tense: .present, weave: weave, conditions: conditions) }
+}
+
+/// One voice across past, present and forecast: "It was… / It's… / It will be…".
+nonisolated enum AirWords {
+    enum Tense { case past, present, future }
+
+    /// "It was 51° and comfortable. The air was a bit hazy." / "It's… The air is…" / "It will be… The air will be…"
+    static func sentence(tense: Tense, weave: WeaveSpec, conditions: Conditions?) -> String {
+        let verb = switch tense { case .past: "was"; case .present: "is"; case .future: "will be" }
+        let it = switch tense { case .past: "It was"; case .present: "It's"; case .future: "It will be" }
+        let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
+        let feel = weave.words[.humidity] ?? weave.words[.temperature]
+        let weather = [temp, feel].compactMap { $0 }.joined(separator: " and ")
+        let air = weave.levels[.air].map { ["clear", "a bit hazy", "heavy"][$0.rawValue] }
+        var parts: [String] = []
+        if !weather.isEmpty { parts.append("\(it) \(weather).") }
+        if let air { parts.append("The air \(verb) \(air).") }
+        return parts.isEmpty ? "No air reading." : parts.joined(separator: " ")
     }
+}
+
+extension LogEvent {
+    /// "It was 51° and comfortable. The air was a bit hazy."
+    var pastStatement: String { AirWords.sentence(tense: .past, weave: weave, conditions: conditions) }
 }
 
 /// One forecast hour, shown with the same sky as a logged moment. Apple Weather for temperature and
@@ -242,11 +282,8 @@ struct NowHour: Identifiable, Sendable {
     let conditions: Conditions
     var id: Date { date }
     var weave: WeaveSpec { WeaveSpec(conditions.input) }
-    var statement: String {
-        let temp = conditions.best(.temperature).map { "\(Int($0.value.rounded()))°" }
-        let w = conditions.best(.humidity).map { $0.value >= 70 ? "humid" : $0.value <= 30 ? "dry" : "comfortable" }
-        return [temp, w].compactMap { $0 }.joined(separator: " and ") + ", forecast."
-    }
+    /// "It will be 78° and humid. The air will be a bit hazy."
+    var statement: String { AirWords.sentence(tense: .future, weave: weave, conditions: conditions) }
 
     static let source = "Forecast"
     /// Typical PM2.5 (µg/m³) and ozone (ppb) for each AirNow category, so the sky can color it.
@@ -282,6 +319,10 @@ struct NowSky: View {
     let date: Date
     let pollen: PollenSample?
     @Binding var probing: Bool
+    /// The place under the sky; drifts as you drag, like the Journal's panel.
+    var mapID: String = "here"
+    var coordinate: (Double, Double)? = nil
+    var mapNamespace: Namespace.ID? = nil
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
     @State private var point: CGPoint?
     @State private var probe: SkyProbe?
@@ -294,6 +335,18 @@ struct NowSky: View {
             let size = geo.size
             ZStack {
                 AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen)
+                if let (lat, lon) = coordinate {
+                    PlaceMap(id: mapID, latitude: lat, longitude: lon)
+                        .frame(width: size.width * 1.6, height: size.height)
+                        .offset(x: point.map { (0.5 - $0.x / size.width) * size.width * 0.5 } ?? 0)
+                        .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
+                        .saturation(0)
+                        .blendMode(.screen)
+                        .opacity(point == nil ? 0.45 : 0.75)
+                        .frame(width: size.width, height: size.height)
+                        .clipped()
+                        .allowsHitTesting(false)
+                }
                 if let point, let probe {
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false).transition(.opacity)
                 }
@@ -392,4 +445,13 @@ struct DaySheet: View {
 
 extension Date: @retroactive Identifiable {
     public var id: TimeInterval { timeIntervalSinceReferenceDate }
+}
+
+/// Shares the map with the details view when there's a namespace to share it in.
+struct MapZoomSource: ViewModifier {
+    let id: String
+    let namespace: Namespace.ID?
+    func body(content: Content) -> some View {
+        if let namespace { content.matchedGeometryEffect(id: "map-\(id)", in: namespace) } else { content }
+    }
 }

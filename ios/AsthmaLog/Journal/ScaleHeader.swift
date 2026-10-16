@@ -6,6 +6,9 @@ struct ScaleHeader<Kicker: View>: View {
     let title: String
     /// Statements can run to two lines; reserving both keeps the content below from jumping.
     var reserveTwoLines = false
+    /// One quiet line under the title, with its space kept so it can come and go without a jump.
+    var byline: String? = nil
+    var reserveByline = false
     @ViewBuilder let kicker: Kicker
 
     var body: some View {
@@ -18,6 +21,12 @@ struct ScaleHeader<Kicker: View>: View {
                 .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)
                 .minimumScaleFactor(0.85)
                 .contentTransition(.opacity)
+            if byline != nil || reserveByline {
+                Text(byline ?? " ")
+                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    .lineLimit(2, reservesSpace: true)
+                    .contentTransition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, 20)

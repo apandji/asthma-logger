@@ -75,9 +75,17 @@ enum SkyExplorer {
     /// one regional reading, not a spot on the map. Returns the probe and its band (unit y).
     static func strata(at y: Double, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
                        temperatureF: Double?, pollen: PollenSample?) -> (probe: SkyProbe, band: ClosedRange<Double>)? {
+        // Worst on top, just under the weather: the band nearest your eye is the one that matters most
+        // today. Ties keep a fixed order so the stack doesn't shuffle between similar skies.
         let order = ["Ozone", "PM2.5", "PM10", "NO₂", "Tree pollen", "Grass pollen", "Weed pollen"]
         let present = Dictionary(layers.readable.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
-        let stack = order.compactMap { present[$0] }
+        let stack = order.compactMap { present[$0] }.enumerated().sorted { a, b in
+            let la = a.element.level.rawValue, lb = b.element.level.rawValue
+            if la != lb { return la > lb }
+            if a.element.empty != b.element.empty { return !a.element.empty }
+            if a.element.fraction != b.element.fraction { return a.element.fraction > b.element.fraction }
+            return a.offset < b.offset
+        }.map(\.element)
         let top = 0.14, bottom = 0.86
         let weatherBottom = stack.isEmpty ? bottom : top + (bottom - top) / Double(stack.count + 1)
         if y < weatherBottom {

@@ -120,18 +120,40 @@ struct NowTimeline: View {
                 Capsule().fill(.white).frame(width: 3, height: 34)
                     .shadow(color: .black.opacity(0.5), radius: 2)
                     .offset(y: axis - 17)
-                Text(focusTime == nil ? "Now" : current.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
-                    .font(.caption.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(.white, in: Capsule())
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.2), value: focusTime == nil)
-                    .fixedSize()
-                    .offset(y: axis - 17 - 30)
+                    .allowsHitTesting(false)
+                // The pill is a button: tap it to step back through your moments, newest first.
+                Button(action: stepBack) {
+                    Text(focusTime == nil ? "Now" : current.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(.white, in: Capsule())
+                        .contentTransition(.numericText())
+                        .animation(.snappy(duration: 0.2), value: focusTime == nil)
+                        .fixedSize()
+                }
+                .buttonStyle(.plain)
+                .offset(y: axis - 17 - 30)
+                .accessibilityLabel("Previous moment")
             }
-            .allowsHitTesting(false)
+            .frame(maxWidth: .infinity)
         }
+        // Off now: a way straight back, at the right end of the track.
+        .overlay(alignment: .topTrailing) {
+            if focusTime != nil {
+                Button { go(to: nil) } label: {
+                    Label("Now", systemImage: "arrow.uturn.forward")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 12)
+                .offset(y: axis - 17 - 30)
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: focusTime == nil)
         .padding(.top, 24)
         .sensoryFeedback(.selection, trigger: currentMoment?.id)
         .onChange(of: focusTime) { _, t in
@@ -147,6 +169,13 @@ struct NowTimeline: View {
         .accessibilityElement()
         .accessibilityLabel("Timeline")
         .accessibilityValue(focusTime == nil ? "Now" : current.formatted(date: .abbreviated, time: .shortened))
+    }
+
+    /// From now, the newest moment; from a moment, the one before it. From the forecast, the newest moment.
+    private func stepBack() {
+        let past = moments.filter { $0.loggedAt < current - 60 }
+        guard let target = past.last else { return }
+        go(to: target.loggedAt)
     }
 
     private func go(to t: Date?) {

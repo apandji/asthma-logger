@@ -138,19 +138,21 @@ struct NowTimeline: View {
             }
             .frame(maxWidth: .infinity)
         }
-        // Off now: a way straight back, at the right end of the track.
-        .overlay(alignment: .topTrailing) {
+        // Off now: an icon that points back to now, on the side now is on (right while you're in the
+        // past, left while you're in the forecast).
+        .overlay(alignment: current < now ? .topTrailing : .topLeading) {
             if focusTime != nil {
                 Button { go(to: nil) } label: {
-                    Label("Now", systemImage: "arrow.uturn.forward")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10).padding(.vertical, 5)
+                    Image(systemName: current < now ? "chevron.right.2" : "chevron.left.2")
+                        .font(.caption.weight(.bold))
+                        .frame(width: 34, height: 28)
                         .glassEffect(.regular.interactive(), in: .capsule)
                 }
                 .buttonStyle(.plain)
-                .padding(.trailing, 12)
+                .padding(.horizontal, 12)
                 .offset(y: axis - 17 - 30)
                 .transition(.scale(scale: 0.8).combined(with: .opacity))
+                .accessibilityLabel("Jump to now")
             }
         }
         .animation(.snappy(duration: 0.25), value: focusTime == nil)

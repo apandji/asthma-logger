@@ -70,7 +70,7 @@ It installs the board package if needed (**Arduino ESP32 Boards**, tested with 2
 
 The program is saved in the board's flash memory, so it stays there after you unplug it and runs every time the board gets power. A USB power bank is enough; the Mac and the IDE are only needed to change the code. If an upload can't find the board, double-tap its reset button (the LED pulses green) and run it again.
 
-**Check it**: open the Serial Monitor at 115200 (the script prints the command). You should see `felt button ready`. Press each button: it prints `press cap=1` or `cap=2` and the LED flashes warm or teal.
+**Check it**: open the Serial Monitor at 115200 (the script prints the command). You should see `felt button ready`. Press each button: it prints `press cap=1` or `cap=2` and the LED flashes warm or teal. No buttons yet? Type `r` (rescue) or `s` (standard) in the Serial Monitor, or touch a jumper from D2 or D3 to GND.
 
 The LED blinks blue slowly while it's waiting for the phone and stops once connected.
 

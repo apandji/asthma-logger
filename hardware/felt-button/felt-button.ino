@@ -210,6 +210,13 @@ void setup() {
 void loop() {
   readButtons();
 
+  // Test without wiring: type r (rescue) or s (standard) in the Serial Monitor.
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == 'r' || c == 'R') press(CAP_RESCUE, 0);
+    if (c == 's' || c == 'S') press(CAP_STANDARD, 0);
+  }
+
   unsigned long now = millis();
   // Give the phone a moment to subscribe after connecting, then resend anything not yet acked.
   if (connected && now - connectedAt > 1500 && now - lastResend > RESEND_MS && pending() > 0) {

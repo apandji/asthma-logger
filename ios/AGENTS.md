@@ -170,6 +170,8 @@ Record new crit feedback here, dated, and move items out when they're resolved (
 
 ## Apple-side setup checklist (owner, in Xcode / developer portal)
 
+For a teammate building under their own membership (own Team ID and bundle prefix, WeatherKit by hand), follow [docs/teammate-setup.md](../docs/teammate-setup.md): it is the source of truth for setup. This list is what the owner checks when a change touches signing.
+
 Agents: when a change needs one of these, call it out in the PR.
 
 - [ ] Signing team selected for the AsthmaLog target

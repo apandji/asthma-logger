@@ -76,6 +76,8 @@ These must mean the same thing in both apps. Change one → update `docs/`, `fix
 
 ## How we work
 
+**Setting up on your own Mac and Apple Developer account:** [docs/teammate-setup.md](docs/teammate-setup.md) is the source of truth. Read it before building; don't duplicate its steps elsewhere.
+
 The owner is new to Swift and works by describing what they want. So:
 
 - **Small, demoable steps.** One feature per branch/PR, each ending in something you can see on the phone.

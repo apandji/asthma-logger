@@ -452,7 +452,7 @@ struct NowSky: View {
     let date: Date
     let pollen: PollenSample?
     @Binding var probing: Bool
-    /// The place under the sky; drifts as you drag, like the Journal's panel.
+    /// The place under the sky, pinned.
     var mapID: String = "here"
     var coordinate: (Double, Double)? = nil
     var mapNamespace: Namespace.ID? = nil
@@ -472,9 +472,10 @@ struct NowSky: View {
             ZStack {
                 AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen)
                 if let (lat, lon) = coordinate {
+                    // Pinned: the map never moves with the finger, so reading the sky can't feel like
+                    // exploring the map. The air is one regional reading, not a spot on a street.
                     PlaceMap(id: mapID, latitude: lat, longitude: lon)
-                        .frame(width: size.width * 1.6, height: size.height)
-                        .offset(x: point.map { (0.5 - $0.x / size.width) * size.width * 0.5 } ?? 0)
+                        .frame(width: size.width, height: size.height)
                         .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
                         .saturation(0)
                         .blendMode(.screen)

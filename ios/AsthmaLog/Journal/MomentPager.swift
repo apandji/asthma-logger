@@ -235,12 +235,11 @@ struct SkyPanel: View {
             ZStack {
                 AmbientField(weave: event.weave, temperatureF: temperature, date: event.loggedAt,
                              conditions: event.conditions, pollen: pollen)
-                // The place, under the whole sky: you can't move it, but dragging sideways drifts it, so you
-                // get a sense of where you were. Screen blend lifts only the streets, so the sky keeps its colors.
+                // The place, under the whole sky, pinned: it never moves with the finger, so reading the sky
+                // can't feel like exploring the map. Screen blend lifts only the streets, so the sky keeps its colors.
                 if event.latitude != nil {
                     MomentMap(event: event, snapshotSize: SkyPanel.mapSize, forceDark: true, scale: SkyPanel.mapScale)
-                        .frame(width: size.width * 1.6, height: size.height)
-                        .offset(x: point.map { (0.5 - $0.x / size.width) * size.width * 0.5 } ?? 0)
+                        .frame(width: size.width, height: size.height)
                         .matchedGeometryEffect(id: "map-\(event.id)", in: mapNamespace)
                         .saturation(0)
                         .blendMode(.screen)

@@ -122,6 +122,8 @@ struct MonthCalendar: View {
     @Binding var month: Date
     let events: [LogEvent]
     @Binding var selected: Date?
+    /// When set, each dot shares its id with the moment's card on the Journal, so cards shrink into dots.
+    var namespace: Namespace.ID? = nil
 
     private let cal = Calendar.current
 
@@ -156,8 +158,8 @@ struct MonthCalendar: View {
                     .font(.subheadline.weight(cal.isDateInToday(d) ? .bold : .regular))
                     .foregroundStyle(d > .now ? Theme.secondaryText : .primary)
                 HStack(spacing: 2) {
-                    ForEach(Array(ms.prefix(3).enumerated()), id: \.offset) { _, m in
-                        Circle().fill(m.moment == .rescue ? Theme.rescue : Theme.standard).frame(width: 5, height: 5)
+                    ForEach(Array(ms.prefix(3))) { m in
+                        dot(m)
                     }
                 }
                 .frame(height: 5)
@@ -168,6 +170,11 @@ struct MonthCalendar: View {
         .buttonStyle(.plain)
         .disabled(d > .now)
         .accessibilityLabel("\(d.formatted(date: .complete, time: .omitted)), \(ms.count) inhaler moments")
+    }
+
+    @ViewBuilder private func dot(_ m: LogEvent) -> some View {
+        let c = Circle().fill(m.moment == .rescue ? Theme.rescue : Theme.standard).frame(width: 6, height: 6)
+        if let namespace { c.matchedGeometryEffect(id: m.id, in: namespace) } else { c }
     }
 
     private var days: [Date] {
@@ -181,5 +188,81 @@ struct MonthCalendar: View {
 
     private func shift(_ n: Int) {
         if let m = cal.date(byAdding: .month, value: n, to: month) { withAnimation { month = m } }
+    }
+}
+
+/// All moments, in place on the Journal: the month with a dot per moment (the cards shrink into them)
+/// and every moment listed below. Tap one to go back to it; pinch out or Done to return.
+struct MomentsOverview: View {
+    let events: [LogEvent]
+    let namespace: Namespace.ID
+    let open: (LogEvent) -> Void
+    let close: () -> Void
+
+    @State private var month = Calendar.current.dateInterval(of: .month, for: .now)!.start
+    @State private var day: Date?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("All moments").font(.system(.title, design: .serif, weight: .medium))
+                    Spacer()
+                    Button("Done", action: close).font(.subheadline.weight(.semibold))
+                }
+                HStack(spacing: 14) {
+                    stat(.rescue, "Rescue")
+                    stat(.maintenance, "Standard")
+                    Text("this month").foregroundStyle(Theme.secondaryText)
+                }
+                .font(.subheadline)
+
+                MonthCalendar(month: $month, events: events, selected: $day, namespace: namespace)
+                    .padding(14)
+                    .frostedCard()
+
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(rows) { e in
+                        Button { open(e) } label: {
+                            HStack(spacing: 12) {
+                                MomentDot(moment: e.moment, size: 9)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(e.loggedAt.formatted(.dateTime.weekday(.abbreviated).month().day().hour().minute()))
+                                        .font(.subheadline.weight(.medium))
+                                    Text(e.weave.isEmpty ? "No air reading" : e.airLine)
+                                        .font(.caption).foregroundStyle(Theme.secondaryText)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Divider()
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 4)
+                .frostedCard()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 40)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var rows: [LogEvent] {
+        let cal = Calendar.current
+        let inhaler = events.filter { $0.moment != .okay }.reversed()
+        if let day { return inhaler.filter { cal.isDate($0.loggedAt, inSameDayAs: day) } }
+        return Array(inhaler)
+    }
+
+    private func stat(_ kind: MomentKind, _ label: String) -> some View {
+        let n = events.filter { $0.moment == kind && Calendar.current.isDate($0.loggedAt, equalTo: month, toGranularity: .month) }.count
+        return HStack(spacing: 6) {
+            MomentDot(moment: kind, size: 8)
+            Text("\(n) \(label)").monospacedDigit()
+        }
     }
 }

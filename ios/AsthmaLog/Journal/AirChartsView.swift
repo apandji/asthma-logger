@@ -130,7 +130,7 @@ struct AirChartsView: View {
                             AxisValueLabel {
                                 Text(Calendar.current.component(.hour, from: d) == 0
                                      ? d.formatted(.dateTime.weekday(.abbreviated))
-                                     : d.formatted(.dateTime.hour()))
+                                     : d.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated))))
                                     .fontWeight(Calendar.current.component(.hour, from: d) == 0 ? .semibold : .regular)
                             }
                         }

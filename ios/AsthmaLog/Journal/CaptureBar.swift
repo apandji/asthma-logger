@@ -2,22 +2,24 @@ import AsthmaCore
 import SwiftData
 import SwiftUI
 
-/// The bottom of the Journal: an Insights peek on the left (swipe up or tap to open, swipe down to
-/// close) and the + capture control on the right.
+/// The bottom of the Journal: the + capture control, with Insights beside it (a ring button by default;
+/// the peek strip and edge tab are crit variants).
 struct CaptureBar: View {
     @Binding var showInsights: Bool
     @Environment(LogService.self) private var services
     @Environment(\.modelContext) private var context
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
     @State private var toast: LogEvent?
-    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.bottomStrip
+    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.ringButton
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 12) {
-            if insightsEntry == .bottomStrip {
-                InsightPeek(open: { showInsights = true })
-            } else {
+            switch insightsEntry {
+            case .bottomStrip: InsightPeek(open: { showInsights = true })
+            case .ringButton:
                 Spacer()
+                InsightsRingButton(open: { showInsights = true })
+            case .edgeTab: Spacer()
             }
             CaptureControl { moment in
                 Task {
@@ -165,7 +167,14 @@ struct CaptureControl: View {
     /// The + that becomes a bead riding up the track with your finger, coloured by the zone it's in.
     private var knob: some View {
         ZStack {
-            Circle().fill(active ? zoneColor : .clear)
+            // A liquid level: a little at rest (there's something to pull up), rising with your finger.
+            ZStack(alignment: .bottom) {
+                Color.clear
+                Rectangle()
+                    .fill(active ? zoneColor : Color.primary.opacity(0.12))
+                    .frame(height: size * (active ? max(0.35, min(1, 0.35 + lift / standardAt)) : 0.22))
+            }
+            .clipShape(Circle())
             Image(systemName: "plus")
                 .font(.title2.weight(.semibold))
                 .rotationEffect(.degrees(active ? 45 * Double(min(1, lift / rescueAt)) : 0))
@@ -173,6 +182,13 @@ struct CaptureControl: View {
         }
         .frame(width: size, height: size)
         .glassEffect(.regular.interactive(), in: .circle)
+        .overlay(alignment: .top) {
+            if !active {
+                Image(systemName: "chevron.up").font(.caption2.weight(.bold)).foregroundStyle(Theme.secondaryText)
+                    .offset(y: -14)
+                    .phaseAnimator([0.0, -5.0, 0.0]) { v, y in v.offset(y: y) } animation: { _ in .easeInOut(duration: 1.4) }
+            }
+        }
         .scaleEffect(active ? 1 + 0.12 * min(1, lift / standardAt) : 1)
         .offset(y: -lift)
         .animation(.interactiveSpring(duration: 0.18), value: lift)
@@ -259,5 +275,88 @@ struct LandscapeDataView: View {
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.stage.ignoresSafeArea())
+    }
+}
+
+/// Insights as a round button next to the +. While felt air is still learning, a ring fills toward the
+/// first pattern. Once there's a pattern, a speech bubble offers it; tap to open Insights.
+struct InsightsRingButton: View {
+    let open: () -> Void
+    @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
+    @AppStorage(Prefs.useDemoData) private var demo = false
+    @AppStorage(Crit.InsightsState.key) private var forced = Crit.InsightsState.auto
+    @State private var model = InsightsModel()
+    @State private var bubbleDismissed = false
+
+    private let size: CGFloat = 56
+
+    var body: some View {
+        Button(action: { bubbleDismissed = true; open() }) {
+            ZStack {
+                Circle().stroke(Theme.secondaryText.opacity(0.18), lineWidth: 3)
+                Circle().trim(from: 0, to: progress)
+                    .stroke(learned ? Color.primary : Theme.secondaryText, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.smooth(duration: 1), value: progress)
+                Image(systemName: learned ? "sparkles" : "sparkle")
+                    .font(.body.weight(.semibold))
+                    .symbolEffect(.pulse, isActive: learned && !bubbleDismissed)
+            }
+            .padding(5)
+            .frame(width: size, height: size)
+            .glassEffect(.regular.interactive(), in: .circle)
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            if learned && !bubbleDismissed {
+                bubble
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 230, alignment: .trailing)
+                    .offset(x: 70, y: -size - 26)
+                    .transition(.scale(scale: 0.6, anchor: .bottomTrailing).combined(with: .opacity))
+                    .onTapGesture { bubbleDismissed = true; open() }
+            }
+        }
+        .animation(.spring(duration: 0.45, bounce: 0.3), value: learned)
+        .accessibilityLabel(learned ? "Insights: a pattern is ready" : "Insights: still learning, \(Int(progress * 100)) percent")
+        .task(id: events.count) {
+            model.rebuild(events: events, demo: demo)
+            await model.narrate(styleScore: 50, useModel: false)
+        }
+    }
+
+    private var bubble: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("felt air noticed something").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+            Text(model.narration?.headline ?? "Your inhaler days have something in common. Take a look.")
+                .font(.subheadline).lineLimit(3)
+        }
+        .padding(12)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .overlay(alignment: .bottomTrailing) {
+            // The bubble's tail points at the button.
+            Image(systemName: "triangle.fill").font(.caption).rotationEffect(.degrees(180))
+                .foregroundStyle(.ultraThinMaterial).offset(x: -86, y: 9)
+        }
+    }
+
+    private var learned: Bool {
+        switch forced {
+        case .learned: true
+        case .learning: false
+        case .auto: model.progress?.isMet ?? false
+        }
+    }
+
+    private var progress: Double {
+        switch forced {
+        case .learned: return 1
+        case .learning: return 0.62
+        case .auto:
+            guard let p = model.progress else { return 0 }
+            let a = min(1, Double(p.attacks) / Double(max(1, p.minAttacks)))
+            let b = min(1, Double(p.baselines) / Double(max(1, p.minBaselines)))
+            return (a + b) / 2
+        }
     }
 }

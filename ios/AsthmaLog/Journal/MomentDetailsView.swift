@@ -82,7 +82,11 @@ struct MomentDetailsView: View {
         .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
     }
 
-    private func tile(_ symbol: String, _ name: String, _ value: String?) -> some View {
+    @ViewBuilder private func tile(_ symbol: String, _ name: String, _ value: String?) -> some View {
+        if let value { tileBody(symbol, name, value) }
+    }
+
+    private func tileBody(_ symbol: String, _ name: String, _ value: String?) -> some View {
         HStack(spacing: 10) {
             Image(systemName: symbol).frame(width: 22).foregroundStyle(Theme.secondaryText)
             VStack(alignment: .leading, spacing: 1) {

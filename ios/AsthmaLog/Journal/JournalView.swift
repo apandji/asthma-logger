@@ -3,20 +3,24 @@ import CoreLocation
 import SwiftData
 import SwiftUI
 
-/// The Journal: the outdoor conditions as a soft colour field, one live sentence, and this week's
-/// moments as cards you swipe through. Pinch a card open for everything about it (weather first);
-/// pinch the room closed for the calendar of all moments. Turn the phone sideways for the Data view.
-/// Logging is the + at the bottom (RootView), the felt button and Apple Watch.
+/// The Journal: one moment at a time. The colour field and the header follow the moment you're on
+/// (swipe sideways between them; a new moment slides in as soon as it's logged, from the +, the felt
+/// button or the watch). Pinch a moment open for everything about it; pinch in and the moments shrink
+/// into dots on a calendar with the full list. Turn sideways for the Data view.
+/// The "felt air" mark top-left opens All moments and Settings.
 struct JournalView: View {
     @Environment(LogService.self) private var services
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @State private var selectedID: UUID?
     @State private var opened: LogEvent?
     @Namespace private var zoom
-    @State private var showOverview = false
+    @Namespace private var morph
+    @State private var overview = false
     @State private var showInsights = false
-    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.bottomStrip
+    @State private var showSettings = false
+    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.ringButton
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
+    @AppStorage(Crit.Header.key) private var headerStyle = Crit.Header.moment
 
     private let days = 7
 
@@ -24,22 +28,32 @@ struct JournalView: View {
         NavigationStack {
             ambient
                 // The + and Insights live on the home only, not on pushed pages.
-                .safeAreaInset(edge: .bottom) { CaptureBar(showInsights: $showInsights) }
+                .safeAreaInset(edge: .bottom) {
+                    if !overview { CaptureBar(showInsights: $showInsights) }
+                }
                 .overlay(alignment: .trailing) {
-                    if insightsEntry == .edgeTab { InsightEdgeTab { showInsights = true } }
+                    if insightsEntry == .edgeTab && !overview { InsightEdgeTab { showInsights = true } }
                 }
                 .sheet(isPresented: $showInsights) {
                     InsightsView()
                         .presentationDragIndicator(.visible)
                         .presentationBackground(.ultraThinMaterial)
                 }
+                .sheet(isPresented: $showSettings) { SettingsView() }
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
                 .navigationDestination(item: $opened) { e in
                     MomentDetailsView(event: e)
                         .navigationTransition(.zoom(sourceID: e.id, in: zoom))
                 }
-                .navigationDestination(isPresented: $showOverview) { MomentListView() }
+        }
+        // A new moment (from anywhere) slides into view.
+        .onChange(of: events.last?.id) { _, id in
+            guard let id, let e = events.last, e.moment != .okay, Date().timeIntervalSince(e.loggedAt) < 120 else { return }
+            withAnimation(.smooth(duration: 0.6)) {
+                overview = false
+                selectedID = id
+            }
         }
     }
 
@@ -47,38 +61,81 @@ struct JournalView: View {
 
     private var ambient: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            Spacer(minLength: 16)
-            if cards.isEmpty {
-                emptyState.padding(.horizontal, 20)
+            topBar
+            if overview {
+                MomentsOverview(events: Array(events), namespace: morph, open: { e in
+                    withAnimation(.spring(duration: 0.55, bounce: 0.15)) { selectedID = e.id; overview = false }
+                }, close: { withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } })
+                .transition(.opacity)
             } else {
-                MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, onOverview: { showOverview = true }) { opened = $0 }
-                    .frame(height: 400)
-                Text("Pinch a card open for details · pinch in for all moments")
-                    .font(.footnote).foregroundStyle(Theme.secondaryText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 10)
+                header.transition(.opacity)
+                Spacer(minLength: 12)
+                if cards.isEmpty {
+                    emptyState.padding(.horizontal, 20)
+                } else {
+                    MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, morph: morph,
+                                   onOverview: zoomOut) { opened = $0 }
+                        .frame(height: 380)
+                    Text("Tap or pinch open for details · pinch in for the calendar")
+                        .font(.footnote).foregroundStyle(Theme.secondaryText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                }
+                if let error = services.lastError {
+                    Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20).padding(.top, 8)
+                }
+                Spacer(minLength: 0)
             }
-            if let error = services.lastError {
-                Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20).padding(.top, 8)
-            }
-            Spacer(minLength: 0)
         }
-        .padding(.top, 8)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
         .simultaneousGesture(
-            MagnifyGesture().onEnded { v in if v.magnification < 0.85 { showOverview = true } }
+            MagnifyGesture().onEnded { v in
+                if v.magnification < 0.85 && !overview { zoomOut() }
+                else if v.magnification > 1.15 && overview { withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } }
+            }
         )
         .background {
-            // The room takes on the current card's air (today's, until you swipe).
-            AmbientField(weave: selected.map { $0.weave.isEmpty ? todayWeave : $0.weave } ?? todayWeave,
+            // The room takes on the moment you're on.
+            AmbientField(weave: fieldWeave,
                          temperatureF: selected?.conditions?.best(.temperature)?.value ?? now?.temp,
                          pollen: DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason))
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 0.8), value: selected?.id)
         }
+    }
+
+    private func zoomOut() {
+        withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = true }
+    }
+
+    /// The quiet "felt air" mark: a menu for All moments and Settings. Findable, not in the way.
+    private var topBar: some View {
+        HStack {
+            Menu {
+                Button(overview ? "Back to moments" : "All moments", systemImage: overview ? "rectangle.stack" : "calendar") {
+                    overview ? withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } : zoomOut()
+                }
+                Button("Settings", systemImage: "gearshape") { showSettings = true }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("felt air").font(.system(.subheadline, weight: .light)).tracking(1)
+                    Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                }
+                .foregroundStyle(Theme.secondaryText)
+                .padding(.vertical, 6).padding(.horizontal, 10)
+                .contentShape(Rectangle())
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 2)
+    }
+
+    private var fieldWeave: WeaveSpec {
+        if headerStyle == .now || headerStyle == .nowWithCounts, selectedID == nil, let n = now { return n.weave }
+        return selected.map { $0.weave.isEmpty ? todayWeave : $0.weave } ?? todayWeave
     }
 
     /// This week's inhaler moments, oldest first (the newest starts in the middle).
@@ -89,27 +146,30 @@ struct JournalView: View {
 
     // MARK: Header
 
-    @AppStorage(Crit.Header.key) private var headerStyle = Crit.Header.now
     @State private var now: (weave: WeaveSpec, temp: Double?, place: String?)?
-    @State private var showSettings = false
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Theme.secondaryText)
-                // Settings is tucked away: long-press the date (or open it from the calendar view).
-                .onLongPressGesture { showSettings = true }
+        VStack(alignment: .leading, spacing: 8) {
             switch headerStyle {
-            case .now, .nowWithCounts:
-                if let now, let sentence = nowSentence(now.weave) {
-                    Text(sentence)
+            case .moment:
+                if let m = selected {
+                    Text(momentWhen(m))
+                        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                        .contentTransition(.opacity)
+                    Text(m.weave.isEmpty ? "No air reading for this one." : m.airLine)
                         .font(.system(.title, design: .serif, weight: .medium))
                         .fixedSize(horizontal: false, vertical: true)
-                    if let detail = nowDetail(now) {
-                        Text(detail).font(.subheadline).foregroundStyle(Theme.secondaryText)
+                        .contentTransition(.opacity)
+                    if let place = m.placeName {
+                        Text(place).font(.subheadline).foregroundStyle(Theme.secondaryText)
                     }
+                } else {
+                    nowLines
                 }
+            case .now, .nowWithCounts:
+                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                nowLines
                 if headerStyle == .nowWithCounts {
                     HStack(spacing: 10) {
                         stat(count(.rescue), "Rescue", Theme.rescue)
@@ -118,6 +178,8 @@ struct JournalView: View {
                     .padding(.top, 4)
                 }
             case .lastMoment:
+                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
                 Text(lastSentence)
                     .font(.system(.title, design: .serif, weight: .medium))
                     .fixedSize(horizontal: false, vertical: true)
@@ -126,13 +188,35 @@ struct JournalView: View {
                     stat(count(.maintenance), "Standard", Theme.standard)
                 }
             case .dateOnly:
-                EmptyView()
+                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
             }
         }
         .padding(.horizontal, 20)
-        .animation(.easeInOut, value: now?.temp)
+        .padding(.top, 6)
+        .animation(.easeInOut(duration: 0.35), value: selected?.id)
         .task { await loadNow() }
-        .sheet(isPresented: $showSettings) { SettingsView() }
+    }
+
+    @ViewBuilder private var nowLines: some View {
+        if let now, let sentence = nowSentence(now.weave) {
+            Text(sentence)
+                .font(.system(.title, design: .serif, weight: .medium))
+                .fixedSize(horizontal: false, vertical: true)
+            if let detail = nowDetail(now) {
+                Text(detail).font(.subheadline).foregroundStyle(Theme.secondaryText)
+            }
+        }
+    }
+
+    /// "Rescue · Yesterday, 7:55 AM"
+    private func momentWhen(_ m: LogEvent) -> String {
+        let cal = Calendar.current
+        let time = m.loggedAt.formatted(date: .omitted, time: .shortened)
+        let day = cal.isDateInToday(m.loggedAt) ? "Today" : cal.isDateInYesterday(m.loggedAt) ? "Yesterday"
+            : m.loggedAt.formatted(.dateTime.weekday(.wide))
+        let kind = m.moment == .rescue ? "Rescue" : m.moment == .maintenance ? "Standard" : "I'm okay"
+        return "\(kind) · \(day), \(time)"
     }
 
     /// "The air is good right now." Present tense, outdoor, no number.
@@ -201,7 +285,7 @@ struct JournalView: View {
 
     private var selected: LogEvent? {
         if let id = selectedID, let e = events.first(where: { $0.id == id }) { return e }
-        return events.last { !$0.weave.isEmpty } ?? events.last
+        return cards.last ?? events.last { !$0.weave.isEmpty } ?? events.last
     }
 }
 

@@ -8,7 +8,7 @@ struct FieldLegend: View {
     let temperatureF: Double?
     var pollen: PollenSample? = nil
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
-    @AppStorage("legend.expanded") private var expanded = true
+    @AppStorage("legend.expanded") private var expanded = false
 
     var body: some View {
         if style == .weather {

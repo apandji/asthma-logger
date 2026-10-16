@@ -4,10 +4,11 @@ import Foundation
 /// compare options on the phone. Each is a plain @AppStorage value; defaults are the current proposal.
 enum Crit {
     enum Header: String, CaseIterable, Identifiable {
-        case now, nowWithCounts, lastMoment, dateOnly
+        case moment, now, nowWithCounts, lastMoment, dateOnly
         var id: String { rawValue }
         var title: String {
             switch self {
+            case .moment: "The moment you're on"
             case .now: "Right now (live)"
             case .nowWithCounts: "Right now + counts"
             case .lastMoment: "Last moment"
@@ -18,9 +19,15 @@ enum Crit {
     }
 
     enum InsightsEntry: String, CaseIterable, Identifiable {
-        case bottomStrip, edgeTab
+        case ringButton, bottomStrip, edgeTab
         var id: String { rawValue }
-        var title: String { self == .bottomStrip ? "Bottom peek strip" : "Sideways on the right edge" }
+        var title: String {
+            switch self {
+            case .ringButton: "Ring button by the +"
+            case .bottomStrip: "Bottom peek strip"
+            case .edgeTab: "Sideways on the right edge"
+            }
+        }
         static let key = "crit.insightsEntry"
     }
 
@@ -50,5 +57,26 @@ enum Crit {
         var id: String { rawValue }
         var title: String { self == .weather ? "Weather (hue, haze, mist)" : "Original inks" }
         static let key = "crit.fieldStyle"
+    }
+
+    enum CardStyle: String, CaseIterable, Identifiable {
+        case card, open
+        var id: String { rawValue }
+        var title: String { self == .card ? "Card" : "No card (floating)" }
+        static let key = "crit.cardStyle"
+    }
+
+    /// Force the Insights ring for a demo: still learning, or ready with a speech bubble.
+    enum InsightsState: String, CaseIterable, Identifiable {
+        case auto, learning, learned
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .auto: "Real progress"
+            case .learning: "Demo: learning (ring filling)"
+            case .learned: "Demo: learned (bubble)"
+            }
+        }
+        static let key = "crit.insightsState"
     }
 }

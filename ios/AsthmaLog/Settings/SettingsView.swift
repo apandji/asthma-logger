@@ -14,11 +14,13 @@ struct SettingsView: View {
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
     @State private var demoNote: String?
     @AppStorage(LevelStyle.key) private var levelStyle = LevelStyle.signal
-    @AppStorage(Crit.Header.key) private var critHeader = Crit.Header.now
+    @AppStorage(Crit.Header.key) private var critHeader = Crit.Header.moment
+    @AppStorage(Crit.CardStyle.key) private var critCard = Crit.CardStyle.open
+    @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
     @AppStorage(Crit.CardMarker.key) private var critMarker = Crit.CardMarker.quietTab
     @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
-    @AppStorage(Crit.InsightsEntry.key) private var critInsights = Crit.InsightsEntry.bottomStrip
+    @AppStorage(Crit.InsightsEntry.key) private var critInsights = Crit.InsightsEntry.ringButton
     @AppStorage(Crit.CaptureOrder.key) private var critOrder = Crit.CaptureOrder.rescueFirst
 
     var body: some View {
@@ -35,6 +37,9 @@ struct SettingsView: View {
                     Picker("Pollen (demo)", selection: $demoPollen) {
                         ForEach(DemoPollen.Season.allCases) { Text($0.title).tag($0) }
                     }
+                    Picker("Moment style", selection: $critCard) {
+                        ForEach(Crit.CardStyle.allCases) { Text($0.title).tag($0) }
+                    }
                     Picker("Card label", selection: $critMarker) {
                         ForEach(Crit.CardMarker.allCases) { Text($0.title).tag($0) }
                     }
@@ -43,6 +48,9 @@ struct SettingsView: View {
                     }
                     Picker("Insights", selection: $critInsights) {
                         ForEach(Crit.InsightsEntry.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Insights state", selection: $critInsightsState) {
+                        ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("+ pull order", selection: $critOrder) {
                         ForEach(Crit.CaptureOrder.allCases) { Text($0.title).tag($0) }

@@ -253,7 +253,7 @@ struct SkyPanel: View {
                 }
 
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band)
+                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band)
                 }
                 if let point, let probe {
                     // The glow belongs to the sky, so it fades with it.

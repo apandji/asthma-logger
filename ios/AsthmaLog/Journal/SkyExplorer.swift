@@ -20,6 +20,24 @@ struct SkyProbe: Equatable {
     let color: Color
     /// 0 (clean) … 1 (high and rising): drives the haptic pulse.
     let intensity: Double
+
+    /// What the highlight is tinted with: the level, in the same three colors as the verdict line
+    /// (good green, OK yellow, not good red). The layer's own ink stays in the sky; its name is in the label.
+    var levelInk: Color {
+        switch level {
+        case .low?: Verdict.green
+        case .medium?: Verdict.yellow
+        case .high?: Verdict.red
+        case nil: .white
+        }
+    }
+}
+
+/// The three verdict colors, shared by the outlook line and the sky highlight.
+enum Verdict {
+    static let green = Color(red: 0.36, green: 0.80, blue: 0.47)
+    static let yellow = Color(red: 0.98, green: 0.80, blue: 0.25)
+    static let red = Color(red: 1.0, green: 0.36, blue: 0.32)
 }
 
 enum SkyExplorer {
@@ -147,14 +165,14 @@ struct SkyProbeOverlay: View {
             if showsGlow, let band {
                 // One regional reading: the layer lights up edge to edge, not a spot.
                 Rectangle()
-                    .fill(LinearGradient(colors: [.clear, probe.color.opacity(0.45), probe.color.opacity(0.45), .clear],
+                    .fill(LinearGradient(colors: [.clear, probe.levelInk.opacity(0.4), probe.levelInk.opacity(0.4), .clear],
                                          startPoint: .top, endPoint: .bottom))
                     .frame(width: width, height: band.upperBound - band.lowerBound)
                     .blur(radius: 8)
                     .position(x: width / 2, y: (band.lowerBound + band.upperBound) / 2)
             } else if showsGlow {
             Circle()
-                .fill(RadialGradient(colors: [probe.color.opacity(0.55), probe.color.opacity(0.15), .clear],
+                .fill(RadialGradient(colors: [probe.levelInk.opacity(0.5), probe.levelInk.opacity(0.15), .clear],
                                      center: .center, startRadius: 0, endRadius: 80))
                 .frame(width: 160, height: 160)
                 .blur(radius: 6)
@@ -186,7 +204,7 @@ struct SkyProbeOverlay: View {
                 Spacer(minLength: 8)
                 if let level = probe.level {
                     VStack(alignment: .trailing, spacing: 2) {
-                        LevelIndicator(level: level, ink: probe.color, style: .signal)
+                        LevelIndicator(level: level, ink: probe.levelInk, style: .signal)
                         Text(Tier(level).word).font(.caption2.weight(.semibold))
                     }
                 }

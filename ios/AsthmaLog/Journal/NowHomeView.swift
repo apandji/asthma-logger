@@ -254,9 +254,7 @@ struct NowHomeView: View {
         return (sentence, nil)
     }
 
-    private static let green = Color(red: 0.36, green: 0.80, blue: 0.47)
-    private static let yellow = Color(red: 0.98, green: 0.80, blue: 0.25)
-    private static let red = Color(red: 1.0, green: 0.36, blue: 0.32)
+    private static let green = Verdict.green, yellow = Verdict.yellow, red = Verdict.red
 
     /// Before felt air has learned: how far along it is.
     private var sentence: String {
@@ -491,7 +489,7 @@ struct NowSky: View {
                         .allowsHitTesting(false)
                 }
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band)
+                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band)
                 }
                 if let point, let probe {
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false, band: band).transition(.opacity)

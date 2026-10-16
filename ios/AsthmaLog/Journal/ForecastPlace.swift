@@ -1,4 +1,5 @@
 import MapKit
+import SwiftData
 import SwiftUI
 
 /// A place to read the air for: here (the phone), or an address you typed, or a saved Home / Work.
@@ -18,6 +19,27 @@ nonisolated struct SavedPlace: Codable, Hashable, Sendable {
     static let chosenKey = "place.chosen"
     static let homeKey = "place.home"
     static let workKey = "place.work"
+
+    /// Washington University in St. Louis, Danforth campus: the default Work until one is saved.
+    static let washU = SavedPlace(name: "WashU · Danforth Campus", lat: 38.6488, lon: -90.3108)
+
+    /// A guess at Home from your own moments: where you most often were between 9 pm and 8 am.
+    /// Computed on the phone from real (not demo) moments with a location; never written anywhere.
+    static func inferredHome(from events: [LogEvent]) -> SavedPlace? {
+        let cal = Calendar.current
+        let night = events.filter { e in
+            guard !e.isDemo, e.latitude != nil, e.longitude != nil else { return false }
+            let h = cal.component(.hour, from: e.loggedAt)
+            return h >= 21 || h < 8
+        }
+        guard night.count >= 2 else { return nil }
+        // Bucket to ~100 m and take the busiest bucket's centre.
+        let buckets = Dictionary(grouping: night) { "\(Int($0.latitude! * 1000)),\(Int($0.longitude! * 1000))" }
+        guard let best = buckets.values.max(by: { $0.count < $1.count }) else { return nil }
+        let lat = best.map { $0.latitude! }.reduce(0, +) / Double(best.count)
+        let lon = best.map { $0.longitude! }.reduce(0, +) / Double(best.count)
+        return SavedPlace(name: best.first?.placeName ?? "Home", lat: lat, lon: lon)
+    }
 }
 
 /// "Where?": here, Home, Work, or search an address or city. Picking one reloads the sky and the
@@ -29,7 +51,8 @@ struct PlacePicker: View {
     @State private var results: [SavedPlace] = []
     @State private var searching = false
     @State private var home = SavedPlace.load(SavedPlace.homeKey)
-    @State private var work = SavedPlace.load(SavedPlace.workKey)
+    @State private var work = SavedPlace.load(SavedPlace.workKey) ?? SavedPlace.washU
+    @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
 
     var body: some View {
         NavigationStack {
@@ -37,7 +60,9 @@ struct PlacePicker: View {
                 Section {
                     row("Here", icon: "location.fill", place: nil, selected: chosen == nil)
                     if let home { row("Home", icon: "house.fill", place: home, selected: chosen == home) }
-                    if let work { row("Work", icon: "building.2.fill", place: work, selected: chosen == work) }
+                    row("Work", icon: "building.2.fill", place: work, selected: chosen == work)
+                } footer: {
+                    if home == nil { Text("Home appears once a couple of moments have been logged at night.") }
                 }
                 Section(results.isEmpty ? "" : "Results") {
                     ForEach(results, id: \.self) { p in
@@ -55,6 +80,7 @@ struct PlacePicker: View {
             .navigationTitle("Where?")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .task { if home == nil { home = SavedPlace.inferredHome(from: events) } }
         }
     }
 
@@ -95,8 +121,15 @@ struct PlacePicker: View {
         guard let response = try? await MKLocalSearch(request: request).start() else { results = []; return }
         results = response.mapItems.prefix(8).map { item in
             let c = item.location.coordinate
-            let parts = [item.name, item.addressRepresentations?.cityWithContext].compactMap { $0 }
-            let name = parts.first.map { parts.count > 1 && $0 != parts[1] ? "\($0), \(parts[1])" : $0 } ?? "Place"
+            let city = item.addressRepresentations?.cityWithContext
+            // "Boston, MA", not "Boston, Boston, MA".
+            let name = switch (item.name, city) {
+            case (let n?, let c?) where c.hasPrefix(n): c
+            case (let n?, let c?): "\(n), \(c)"
+            case (let n?, nil): n
+            case (nil, let c?): c
+            default: "Place"
+            }
             return SavedPlace(name: name, lat: c.latitude, lon: c.longitude)
         }
     }

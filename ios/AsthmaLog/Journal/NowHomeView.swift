@@ -239,6 +239,7 @@ struct NowHomeView: View {
             NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
                    pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
                    mapID: mapID, coordinate: here.map { ($0.lat, $0.lon) })
+                .id(mapID)  // a new place is a new sky and a new map
                 .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
         case .moment(let m):
             NowSky(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
@@ -251,7 +252,7 @@ struct NowHomeView: View {
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
                    pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
                    mapID: mapID, coordinate: here.map { ($0.lat, $0.lon) })
-                .id(h.date)
+                .id("\(mapID)-\(h.date.timeIntervalSinceReferenceDate)")
         }
     }
 

@@ -38,12 +38,17 @@ struct Press { bool used; uint8_t cap; uint16_t seq; uint16_t force; unsigned lo
 const int QUEUE_SIZE = 32;
 Press queue[QUEUE_SIZE];
 
+// LED feedback types live up here so the Arduino IDE's generated prototypes can see them.
+struct Rgb { uint8_t r, g, b; };
+enum Pattern { NONE, PRESSED, CAPTURED };
+
 uint16_t bootId;                     // random per power-up, so seq restarting at 1 isn't a repeat
 uint16_t nextSeq = 1;
 BLECharacteristic *pressChar;
 volatile bool connected = false;
 unsigned long lastResend = 0;
 unsigned long connectedAt = 0;
+volatile uint8_t ackedCap = 0;       // set by the Bluetooth task when the phone acks a press; read in loop()
 
 // ---------- Queue ----------
 
@@ -114,24 +119,85 @@ class AckCallbacks : public BLECharacteristicCallbacks {
     uint16_t seq = (uint8_t)v[2] | ((uint8_t)v[3] << 8);
     if (boot != bootId) return;
     for (int i = 0; i < QUEUE_SIZE; i++) {
-      if (queue[i].used && queue[i].seq == seq) queue[i].used = false;
+      if (queue[i].used && queue[i].seq == seq) {
+        queue[i].used = false;
+        ackedCap = queue[i].cap;     // repeat acks find nothing to clear, so they don't replay the light
+      }
     }
   }
 };
 
-// ---------- LED (the Nano ESP32's RGB LED is active LOW) ----------
+// ---------- LED feedback (the Nano ESP32's RGB LED is active LOW) ----------
+// A mock of what the light on an inhaler cap could say:
+//   Press:    a quick dim flash in the button's colour. The device felt it.
+//   Captured: one slow breath in the same colour once the phone acks. The log is saved with the air.
+//   Waiting:  a faint pulse every few seconds while a press is queued (phone away). It will sync later.
+//   Unpaired: the slow blue blink, when nothing else is showing.
 
-void led(bool r, bool g, bool b) {
-  digitalWrite(LED_RED, r ? LOW : HIGH);
-  digitalWrite(LED_GREEN, g ? LOW : HIGH);
-  digitalWrite(LED_BLUE, b ? LOW : HIGH);
+const Rgb WARM = { 255, 70, 0 };     // rescue
+const Rgb TEAL = { 0, 160, 255 };    // standard
+const Rgb BLUE = { 0, 0, 255 };
+
+const unsigned long PRESS_MS = 150;
+const unsigned long CAPTURED_MS = 1200;
+const unsigned long WAIT_AFTER_MS = 2000;  // a press counts as waiting once it's gone this long without an ack
+const unsigned long WAIT_EVERY_MS = 4000;
+const unsigned long WAIT_PULSE_MS = 500;
+
+Pattern pattern = NONE;
+Rgb patternColor;
+unsigned long patternAt = 0;
+
+Rgb capColor(uint8_t cap) { return cap == CAP_RESCUE ? WARM : TEAL; }
+
+// level 0–1; squared so fades look even to the eye
+void led(Rgb c, float level) {
+  float l = constrain(level, 0.0f, 1.0f);
+  l *= l;
+  analogWrite(LED_RED, 255 - (int)(c.r * l));
+  analogWrite(LED_GREEN, 255 - (int)(c.g * l));
+  analogWrite(LED_BLUE, 255 - (int)(c.b * l));
 }
 
-void flash(uint8_t cap) {
-  if (cap == CAP_RESCUE) led(true, true, false);   // warm (red + green)
-  else led(false, true, true);                     // teal (green + blue)
-  delay(120);
-  led(false, false, false);
+void play(Pattern p, uint8_t cap) {
+  pattern = p;
+  patternColor = capColor(cap);
+  patternAt = millis();
+}
+
+// The oldest press the phone hasn't acked after WAIT_AFTER_MS, or -1.
+int oldestWaiting(unsigned long now) {
+  int oldest = -1;
+  for (int i = 0; i < QUEUE_SIZE; i++) {
+    if (!queue[i].used || now - queue[i].at < WAIT_AFTER_MS) continue;
+    if (oldest < 0 || queue[i].at < queue[oldest].at) oldest = i;
+  }
+  return oldest;
+}
+
+// Called every loop; never blocks, so buttons stay responsive while a pattern plays.
+void updateLed() {
+  unsigned long now = millis();
+  uint8_t acked = ackedCap;
+  if (acked) {
+    ackedCap = 0;
+    play(CAPTURED, acked);
+    Serial.printf("captured cap=%d pending=%d\n", acked, pending());
+  }
+
+  unsigned long t = now - patternAt;
+  if (pattern == PRESSED && t < PRESS_MS) { led(patternColor, 0.6); return; }
+  if (pattern == CAPTURED && t < CAPTURED_MS) { led(patternColor, sin(PI * t / CAPTURED_MS)); return; }
+  pattern = NONE;
+
+  int w = oldestWaiting(now);
+  if (w >= 0) {
+    unsigned long p = now % WAIT_EVERY_MS;
+    led(capColor(queue[w].cap), p < WAIT_PULSE_MS ? 0.4 * sin(PI * p / WAIT_PULSE_MS) : 0);
+    return;
+  }
+
+  led(BLUE, !connected && (now / 500) % 4 == 0 ? 1 : 0);
 }
 
 // ---------- Buttons ----------
@@ -146,7 +212,8 @@ unsigned long fsrLastPress = 0;
 
 void press(uint8_t cap, uint16_t force) {
   enqueue(cap, force);
-  flash(cap);
+  play(PRESSED, cap);
+  led(capColor(cap), 0.6);           // light up now, before the Bluetooth send below
   Serial.printf("press cap=%d seq=%d force=%d connected=%d pending=%d\n", cap, nextSeq - 1, force, connected, pending());
   if (connected) sendQueued();
 }
@@ -185,7 +252,7 @@ void setup() {
   pinMode(LED_RED, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
   pinMode(LED_BLUE, OUTPUT);
-  led(false, false, false);
+  led(BLUE, 0);
 
   bootId = (uint16_t)(esp_random() & 0xFFFF);
 
@@ -224,8 +291,7 @@ void loop() {
     sendQueued();
   }
 
-  // Slow blue blink while waiting for the phone; off once connected.
-  digitalWrite(LED_BLUE, !connected && (now / 500) % 4 == 0 ? LOW : HIGH);
+  updateLed();
 
   delay(5);
 }

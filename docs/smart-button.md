@@ -72,7 +72,16 @@ The program is saved in the board's flash memory, so it stays there after you un
 
 **Check it**: open the Serial Monitor at 115200 (the script prints the command). You should see `felt button ready`. Press each button: it prints `press cap=1` or `cap=2` and the LED flashes warm or teal. No buttons yet? Type `r` (rescue) or `s` (standard) in the Serial Monitor, or touch a jumper from D2 or D3 to GND.
 
-The LED blinks blue slowly while it's waiting for the phone and stops once connected.
+**What the light means** (a mock of feedback on the inhaler itself; it's the RGB LED built into the board, no extra parts):
+
+| Light | Meaning |
+|-------|---------|
+| Quick dim flash, warm (rescue) or teal (standard) | The button felt the press |
+| One slow breath in the same colour | The phone acked it: the log is saved with the air. Serial prints `captured` |
+| Faint pulse every 4 s in the press colour | A press is queued (phone away or app closed); it sends when the phone reconnects |
+| Slow blue blink | Not paired, nothing queued |
+
+The LED sits on top of the board by the USB-C port. In a housing, a small window with frosted acrylic or tracing paper over it diffuses it well.
 
 To use the FSR on the inhaler as well, set `USE_FSR = true`. Watch the Serial Monitor while pressing and adjust `FSR_ON` / `FSR_OFF`.
 

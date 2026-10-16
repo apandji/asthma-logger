@@ -18,7 +18,11 @@ struct JournalView: View {
     @Namespace private var morph
     @State private var overview = false
     /// First-use tips, one at a time: pull to log, then moments.
-    @State private var tips = TipGroup(.ordered) { PullToLogTip(); MomentsTip() }
+    @State private var tips = TipGroup(.ordered) { PullToLogTip(); MomentsTip(); SkyTip() }
+    @State private var probePoint: CGPoint?
+    @State private var probe: SkyProbe?
+    @State private var fieldFrame: CGRect = .zero
+    @State private var ambientFrame: CGRect = .zero
     @State private var showInsights = false
     @State private var showSettings = false
     @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.ringButton
@@ -72,6 +76,8 @@ struct JournalView: View {
                 .transition(.opacity)
             } else {
                 header.transition(.opacity)
+                    .opacity(probe == nil ? 1 : 0.15)  // step aside while you explore the sky
+                    .animation(.easeOut(duration: 0.2), value: probe == nil)
                 Spacer(minLength: 12)
                 if cards.isEmpty {
                     emptyState.padding(.horizontal, 20)
@@ -80,6 +86,9 @@ struct JournalView: View {
                                    onOverview: zoomOut) { opened = $0 }
                         .frame(height: 380)
                     TipView(tips.currentTip as? MomentsTip)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                    TipView(tips.currentTip as? SkyTip)
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                 }
@@ -92,6 +101,17 @@ struct JournalView: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
+        .simultaneousGesture(skyGesture)
+        .overlay {
+            if let probePoint, let probe {
+                SkyProbeOverlay(point: CGPoint(x: probePoint.x - ambientFrame.minX, y: probePoint.y - ambientFrame.minY),
+                                probe: probe, width: ambientFrame.width)
+                    .transition(.opacity)
+            }
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { ambientFrame = $0 }
+        .sensoryFeedback(.selection, trigger: probe?.title)
+        .sensoryFeedback(.impact(weight: .light), trigger: probePoint == nil)
         .simultaneousGesture(
             MagnifyGesture().onEnded { v in
                 if v.magnification < 0.85 && !overview { zoomOut() }
@@ -106,8 +126,31 @@ struct JournalView: View {
                          conditions: selected?.conditions,
                          pollen: DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason))
                 .ignoresSafeArea()
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { fieldFrame = $0 }
                 .animation(.easeInOut(duration: 0.8), value: selected?.id)
         }
+    }
+
+    /// Touch and hold, then move: name whatever colour is under the finger.
+    private var skyGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.3)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+            .onChanged { value in
+                guard case .second(true, let drag?) = value, fieldFrame.width > 0 else { return }
+                SkyTip().invalidate(reason: .actionPerformed)
+                let unit = CGPoint(x: (drag.location.x - fieldFrame.minX) / fieldFrame.width,
+                                   y: (drag.location.y - fieldFrame.minY) / fieldFrame.height)
+                let pollen = DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason)
+                let layers = AirLayers(conditions: selected?.conditions, weave: fieldWeave, pollen: pollen)
+                withAnimation(.easeOut(duration: 0.15)) {
+                    probePoint = drag.location
+                    probe = SkyExplorer.probe(at: unit, layers: layers, conditions: selected?.conditions, weave: fieldWeave,
+                                              temperatureF: selected?.conditions?.best(.temperature)?.value ?? now?.temp, pollen: pollen)
+                }
+            }
+            .onEnded { _ in
+                withAnimation(.easeOut(duration: 0.3)) { probePoint = nil; probe = nil }
+            }
     }
 
     private func zoomOut() {

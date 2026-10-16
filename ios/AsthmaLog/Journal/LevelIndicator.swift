@@ -31,7 +31,7 @@ enum LevelStyle: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .signal: "Signal bars"
+        case .signal: "Amount bars"
         case .word: "Word"
         case .shape: "Shape"
         case .gauge: "Gauge"
@@ -41,7 +41,7 @@ enum LevelStyle: String, CaseIterable, Identifiable {
 
     var note: String {
         switch self {
-        case .signal: "Like phone signal: three bars is good."
+        case .signal: "Bars are the amount: one bar is a little, three is a lot."
         case .word: "A tinted label, no graphic."
         case .shape: "Smooth when good, spiky when not."
         case .gauge: "A small dial in three parts."
@@ -80,9 +80,9 @@ struct LevelIndicator: View {
 
     private var off: Color { Theme.secondaryText.opacity(0.22) }
 
-    /// Three rising bars; good fills all three, like full signal.
+    /// Three rising bars for the amount: one bar is a little (good), three is a lot (not good).
     private func signal(_ t: Tier) -> some View {
-        let filled = 3 - t.rawValue
+        let filled = t.rawValue + 1
         return HStack(alignment: .bottom, spacing: 3) {
             ForEach(0..<3, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 1.5, style: .continuous)

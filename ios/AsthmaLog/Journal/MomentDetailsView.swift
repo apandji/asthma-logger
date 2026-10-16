@@ -16,7 +16,6 @@ struct MomentDetailsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 if let c = event.conditions, !c.observations.isEmpty {
-                    FieldLegend(weave: event.weave, temperatureF: c.best(.temperature)?.value, pollen: pollen, conditions: c)
                     weather(c)
                     air(c)
                     aroundChart
@@ -98,7 +97,15 @@ struct MomentDetailsView: View {
 
     private func air(_ c: Conditions) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Air").font(.headline).padding(.bottom, 6)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Air").font(.headline)
+                Spacer()
+                if let aqi = c.best(.aqi) {
+                    // The AQI is an index across pollutants, so it's a summary, not a row.
+                    Text(aqiLine(aqi)).font(.caption).foregroundStyle(Theme.secondaryText)
+                }
+            }
+            .padding(.bottom, 6)
             let rows = airRows(c)
             if rows.isEmpty {
                 Text("No air readings from nearby monitors.").font(.subheadline).foregroundStyle(Theme.secondaryText).padding(.vertical, 8)
@@ -167,11 +174,16 @@ struct MomentDetailsView: View {
         if let o = c.best(.pm10) { rows.append(AirRow(name: "PM10", obs: o, level: band(Banding.pm10(o.value)), ink: WeatherColor.pm10)) }
         if let o = c.best(.ozone) { rows.append(AirRow(name: "Ozone", obs: o, level: band(Banding.ozone(ppb: o.value)), ink: WeatherColor.ozone)) }
         if let o = c.best(.no2) { rows.append(AirRow(name: "NO₂", obs: o, level: band(Banding.no2(ppb: o.value)), ink: WeatherColor.no2)) }
-        if let o = c.best(.aqi) {
-            let l: WeaveSpec.Level = o.value <= 50 ? .low : o.value <= 100 ? .medium : .high
-            rows.append(AirRow(name: "AQI", obs: o, level: l, ink: WeaveSwatch.ink(.air)))
-        }
         return rows
+    }
+
+    /// "Overall AQI 14 · Good · mostly ozone"
+    private func aqiLine(_ o: EnvObservation) -> String {
+        let parts = (o.category ?? "").components(separatedBy: " · ")
+        let word = o.value <= 50 ? "Good" : o.value <= 100 ? "OK" : "Not good"
+        var line = "Overall AQI \(Int(o.value)) · \(word)"
+        if parts.count > 1, let p = parts.last, !p.isEmpty { line += " · mostly \(p)" }
+        return line
     }
 
     private func band(_ b: PollutantBand) -> WeaveSpec.Level? {

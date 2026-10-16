@@ -27,3 +27,9 @@ enum AppTips {
         try? Tips.configure([.displayFrequency(.immediate)])
     }
 }
+
+struct SkyTip: Tip {
+    var title: Text { Text("Touch and hold the sky") }
+    var message: Text? { Text("Move your finger around to see what each colour is.") }
+    var image: Image? { Image(systemName: "hand.point.up.left") }
+}

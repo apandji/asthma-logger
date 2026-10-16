@@ -44,10 +44,22 @@ struct DaysView: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ScaleHeader(title: "Days") { Text(summary) }
+            list
+        }
+    }
+
+    /// "Oct 11 – 16 · 21 moments"
+    private var summary: String {
+        guard let first = events.first?.loggedAt, let last = events.last?.loggedAt else { return "No moments yet" }
+        let range = (first..<max(last, first.addingTimeInterval(1))).formatted(.interval.month(.abbreviated).day())
+        return "\(range) · \(events.count) moments"
+    }
+
+    private var list: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Days").font(.system(.title, design: .serif, weight: .medium))
-                    .padding(.horizontal, 4).padding(.bottom, 4)
                 ForEach(days, id: \.day) { d in
                     let isCurrent = d.moments.contains { $0.id == selectedID }
                     // The current day shows the moment you came from, so the zoom's anchor stays the same sky.

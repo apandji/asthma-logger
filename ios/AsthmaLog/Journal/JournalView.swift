@@ -30,7 +30,7 @@ struct JournalView: View {
     @State private var gaugeActive = false
     /// The moment opened in place (panel style): the sky gives way to its map and details.
     @State private var expanded: LogEvent?
-    @State private var overview = false
+    @State private var overview = ProcessInfo.processInfo.arguments.contains("-startMonth")  // debug: open on Month
     /// The "days" scale of the zoom (gesture model B).
     @State private var showDays = ProcessInfo.processInfo.arguments.contains("-startDays")  // debug: open on Days
     @State private var zoomingIn = false
@@ -184,7 +184,6 @@ struct JournalView: View {
     @ViewBuilder private var momentLevel: some View {
         VStack(alignment: .leading, spacing: 0) {
                 header.transition(.opacity)
-                    .padding(.trailing, 60)  // clear the glass column
                     .opacity(probe == nil && !panelProbing ? 1 : 0.4)  // step aside while you explore the sky
                     .animation(.easeOut(duration: 0.2), value: probe == nil && !panelProbing)
                 Spacer(minLength: 4)
@@ -266,7 +265,7 @@ struct JournalView: View {
                 }
                 .onEnded { _ in withAnimation(.snappy(duration: 0.25)) { gaugeActive = false } }
         )
-        .padding(.trailing, 8)
+        .padding(.trailing, Self.railAxis - 15)  // dot center (6 inset + 9) on the rail axis
         .animation(.snappy(duration: 0.25), value: levelIndex)
         .animation(.easeOut(duration: 0.3), value: gaugeLabelVisible)
         .task(id: levelKey) {
@@ -379,9 +378,13 @@ struct JournalView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
         }
-        .padding(.trailing, 16)
+        .padding(.trailing, Self.railAxis - 22)
         .padding(.top, 2)
     }
+
+    /// The right-edge column (Insights, Settings, the scale dots, the +) shares one center line,
+    /// this far in from the edge.
+    static let railAxis: CGFloat = 44
 
     private var fieldWeave: WeaveSpec {
         if headerStyle == .now || headerStyle == .nowWithCounts, selectedID == nil, let n = now { return n.weave }
@@ -403,19 +406,12 @@ struct JournalView: View {
             switch headerStyle {
             case .moment:
                 if let m = selected {
-                    // The details line never moves: type, time and place on one line. The statement sits
-                    // under it with two lines reserved, so a one- or two-line statement shifts nothing.
-                    HStack(spacing: 7) {
+                    // The details line never moves; the statement has two lines reserved, so nothing shifts.
+                    ScaleHeader(title: m.statement, reserveTwoLines: true) {
                         MomentDot(moment: m.moment, size: 8)
-                        Text([momentWhen(m), m.placeName].compactMap { $0 }.joined(separator: " · "))
-                            .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-                            .lineLimit(1).minimumScaleFactor(0.8)
+                        Text(m.detailsLine)
                     }
-                    Text(m.weave.isEmpty ? "No air reading." : m.headline)
-                        .font(.system(.title, design: .serif, weight: .medium))
-                        .lineLimit(2, reservesSpace: true)
-                        .minimumScaleFactor(0.85)
-                        .contentTransition(.opacity)
+                    .padding(.leading, -20).padding(.trailing, -(Self.railAxis + 30)).padding(.top, -6)  // the block already pads
                 } else {
                     nowLines
                 }
@@ -445,7 +441,8 @@ struct JournalView: View {
                     .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.leading, 20)
+        .padding(.trailing, Self.railAxis + 30)  // clear the glass column
         .padding(.top, 6)
         .animation(.easeInOut(duration: 0.35), value: selected?.id)
         // Only the "right now" headers need a live reading; don't spend launch on it otherwise.
@@ -463,15 +460,6 @@ struct JournalView: View {
         }
     }
 
-    /// "Rescue · Yesterday, 7:55 AM"
-    private func momentWhen(_ m: LogEvent) -> String {
-        let cal = Calendar.current
-        let time = m.loggedAt.formatted(date: .omitted, time: .shortened)
-        let day = cal.isDateInToday(m.loggedAt) ? "Today" : cal.isDateInYesterday(m.loggedAt) ? "Yesterday"
-            : m.loggedAt.formatted(.dateTime.weekday(.abbreviated))
-        let kind = m.moment == .rescue ? "Rescue" : m.moment == .maintenance ? "Standard" : "I'm okay"
-        return "\(kind) · \(day), \(time)"
-    }
 
     /// "The air is good right now." Present tense, outdoor, no number.
     private func nowSentence(_ w: WeaveSpec) -> String? {

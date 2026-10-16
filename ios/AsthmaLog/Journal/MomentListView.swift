@@ -135,13 +135,16 @@ struct MonthCalendar: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            HStack {
-                Text(month.formatted(.dateTime.month(.wide).year())).font(.headline)
-                Spacer()
+            // The month's name is the screen's title; the arrows sit left, clear of the glass column.
+            HStack(spacing: 22) {
                 Button { shift(-1) } label: { Image(systemName: "chevron.left") }
+                    .accessibilityLabel("Previous month")
                 Button { shift(1) } label: { Image(systemName: "chevron.right") }
+                    .accessibilityLabel("Next month")
                     .disabled(cal.isDate(month, equalTo: .now, toGranularity: .month))
+                Spacer()
             }
+            .font(.subheadline.weight(.semibold))
             .buttonStyle(.borderless)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 6) {
                 ForEach(Array(cal.veryShortWeekdaySymbols.enumerated()), id: \.offset) { _, s in
@@ -242,19 +245,20 @@ struct MomentsOverview: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Back is the gauge (or tapping a moment); the top right belongs to the glass column.
+            ScaleHeader(title: month.formatted(.dateTime.month(.wide).year())) {
+                stat(.rescue, "Rescue")
+                Text("·")
+                stat(.maintenance, "Standard")
+            }
+            list
+        }
+    }
+
+    private var list: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("All moments").font(.system(.title, design: .serif, weight: .medium))
-                    Spacer()
-                    Button("Done", action: close).font(.subheadline.weight(.semibold))
-                }
-                HStack(spacing: 14) {
-                    stat(.rescue, "Rescue")
-                    stat(.maintenance, "Standard")
-                    Text("this month").foregroundStyle(Theme.secondaryText)
-                }
-                .font(.subheadline)
 
                 MonthCalendar(month: $month, events: events, selected: $day, namespace: namespace,
                               anchorStore: anchorStore, anchorHidden: anchorHidden, anchorDay: anchorDay, anchorMoment: anchorMoment)

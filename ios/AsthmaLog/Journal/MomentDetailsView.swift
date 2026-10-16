@@ -22,6 +22,19 @@ struct MomentDetailsView: View {
     /// The Journal's zoom: the map grows out of the sky into a sharp hero, the details rise beneath it.
     /// Pull down, pinch closed or tap the chevron to go back.
     private func inPlace(_ ns: Namespace.ID) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // The same line as the Moment scale, in the same place, so zooming in keeps your bearings.
+            ScaleHeader(title: event.statement, reserveTwoLines: true) {
+                MomentDot(moment: event.moment, size: 8)
+                Text(event.detailsLine)
+            }
+            inPlaceScroll(ns)
+        }
+        .background(Color.black.ignoresSafeArea())
+        .task { await loadAround() }
+    }
+
+    private func inPlaceScroll(_ ns: Namespace.ID) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 MomentMap(event: event)
@@ -50,8 +63,6 @@ struct MomentDetailsView: View {
             pull = y
             if y < -90 { onClose?() }   // pull down past the top to go back
         }
-        .background(Color.black.ignoresSafeArea())
-        .task { await loadAround() }
     }
 
     private var page: some View {
@@ -69,7 +80,7 @@ struct MomentDetailsView: View {
     }
 
     @ViewBuilder private var content: some View {
-                header
+                if mapNamespace == nil { header }
                 if let c = event.conditions, !c.observations.isEmpty {
                     weather(c)
                     air(c)

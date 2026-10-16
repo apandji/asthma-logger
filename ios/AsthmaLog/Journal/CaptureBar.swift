@@ -43,7 +43,8 @@ struct CaptureBar: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.leading, 16)
+        .padding(.trailing, JournalView.railAxis - 32)  // the 64pt + centers on the rail axis
         .padding(.bottom, 6)
         .animation(.snappy, value: useButtons)
         .overlay(alignment: .top) {

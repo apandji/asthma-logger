@@ -2,6 +2,8 @@
 
 First time running it? Follow these steps on your Mac. The guide assumes you're new to Xcode, and works for anyone on the team setting it up on their own iPhone.
 
+Each person builds under **their own paid Apple Developer membership** (we don't share a team: Individual memberships can't, and we have no company for an Organization account). Setting this up with a Claude agent? Hand it [docs/teammate-setup.md](../docs/teammate-setup.md).
+
 ## 0. Get the code
 
 1. Install **Git** if you don't have it: open Terminal and run `git --version`. If macOS offers to install the Command Line Tools, say yes.
@@ -9,7 +11,7 @@ First time running it? Follow these steps on your Mac. The guide assumes you're 
    ```sh
    git clone https://github.com/apandji/asthma-logger.git
    cd asthma-logger
-   git checkout main   # or the branch you were asked to try, e.g. claude/fix-week-strip
+   git checkout main
    ```
 3. Later, to get the newest changes: `git pull`, then re-run `xcodegen` (step 3).
 
@@ -19,9 +21,7 @@ To push your own changes, ask the owner to add you as a collaborator on GitHub (
 
 1. Install **Xcode 27** (it supports iOS 27) from the Mac App Store and open it once. When it asks which platforms to install, include **iOS** (and **watchOS** if you'll try the watch app). You can add them later in Xcode → Settings → Components.
 2. Sign in: Xcode → Settings → Accounts → **+** → Apple ID.
-3. Pick how you'll sign the app. WeatherKit and HealthKit need a **paid** Apple Developer team, so a free Apple ID alone won't build it with weather. Two options:
-   - **Join the owner's team (easiest).** The owner invites you at https://developer.apple.com/account → *People*, with access to *Certificates, Identifiers & Profiles* so Xcode can register your iPhone. Accept the email, and the team appears in Xcode → Settings → Accounts. Use the owner's Team ID and bundle prefix below, and WeatherKit is already turned on, so you can skip step 2.
-   - **Your own paid team.** Use your own Team ID and a bundle prefix you own, and do step 2 yourself.
+3. Have your own **paid Apple Developer membership** (https://developer.apple.com/programs/enroll). WeatherKit and HealthKit need one, so a free Apple ID won't build the app. Check it's active under https://developer.apple.com/account → Membership details.
 4. Install XcodeGen (it builds the Xcode project from `project.yml`):
    ```sh
    brew install xcodegen
@@ -33,15 +33,15 @@ To push your own changes, ask the owner to add you as a collaborator on GitHub (
    cp Secrets.example.xcconfig Secrets.xcconfig
    ```
    Open `Secrets.xcconfig` and fill in:
-   - `DEVELOPMENT_TEAM`: Xcode → Settings → Accounts → select the team → the 10-character Team ID.
-   - `BUNDLE_ID_PREFIX`: on the owner's team, ask the owner for theirs; on your own team, something you own, e.g. `com.yourname`.
-   - `OPENAQ_API_KEY` / `AIRNOW_API_KEY`: optional free keys (links in the file). Without them you get weather only. The owner can share theirs privately (never in the repo or a GitHub comment).
+   - `DEVELOPMENT_TEAM`: your 10-character Team ID (developer.apple.com/account → Membership details).
+   - `BUNDLE_ID_PREFIX`: something unique to you, e.g. `com.yourname`. Not anyone else's prefix: each person's felt air is a separate app with its own Journal.
+   - `OPENAQ_API_KEY` / `AIRNOW_API_KEY`: optional free keys (links in the file). Without them you get weather only. Never put keys in the repo or a GitHub comment.
 
    `Secrets.xcconfig` is gitignored, so it stays on your Mac.
 
 ## 2. Turn on WeatherKit for the app (developer portal)
 
-Skip this if you joined the owner's team: it's already on. WeatherKit is the one capability Xcode can't switch on by itself.
+WeatherKit is the one capability Xcode can't switch on by itself. Everyone does this once, on their own account. (HealthKit is turned on automatically by the first build.)
 
 1. https://developer.apple.com/account → Certificates, IDs & Profiles → **Identifiers**.
 2. After your first build (step 3) Xcode will have created an App ID `<your prefix>.asthmalog`. Open it.

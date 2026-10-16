@@ -38,7 +38,7 @@ struct MomentDetailsView: View {
             .padding(16)
             .padding(.bottom, 40)
         }
-        .background { AmbientField(weave: event.weave, temperatureF: event.conditions?.best(.temperature)?.value, pollen: pollen).ignoresSafeArea() }
+        .background { AmbientField(weave: event.weave, temperatureF: event.conditions?.best(.temperature)?.value, date: event.loggedAt, pollen: pollen).ignoresSafeArea() }
         .navigationTitle(event.moment == .okay ? "I'm okay" : event.moment.title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadAround() }

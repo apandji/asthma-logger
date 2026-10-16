@@ -5,14 +5,17 @@ import SwiftUI
 ///
 /// Two styles (Settings › Design crit › Field):
 /// - Weather (default): each condition changes the field the way it changes the sky.
-///   Temperature is the hue (blue cold → sage mild → amber warm → red hot), dirtier air greys the colour
-///   and adds grain, humidity adds a milky mist (dry air is crisp), and pollen adds coloured specks.
+///   Temperature is the hue (blue cold → green mild → gold warm → red hot), the hour sets the light
+///   (indigo night, rose dawn and dusk), dirtier air greys the colour and adds grain, humidity adds a
+///   milky mist (dry air is crisp), and pollen layers on soft colour blooms.
 /// - Inks: the original look, one riso ink per factor, stronger with its level.
 /// Purely atmospheric: the numbers live in the cards. Static with Reduce Motion; plain with Reduce Transparency.
 struct AmbientField: View {
     let weave: WeaveSpec
     /// The actual temperature, when known, for a smooth hue. Falls back to the cold / mild / hot word.
     var temperatureF: Double? = nil
+    /// When the moment happened: the light changes with the hour (night indigo, dawn and dusk rose).
+    var date: Date? = nil
     /// Demo pollen, when switched on in Design crit (pollen isn't connected yet).
     var pollen: PollenSample? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -43,11 +46,11 @@ struct AmbientField: View {
 
     private func weatherField(t: Double) -> some View {
         let base = Theme.stage
-        let warm = WeatherColor.temperature(temperatureF ?? WeatherColor.fallbackTemp(weave))
+        let warm = WeatherColor.light(WeatherColor.temperature(temperatureF ?? WeatherColor.fallbackTemp(weave)), at: date)
         let air = weave.levels[.air]?.rawValue ?? 0
         let humid = weave.words[.humidity] == "humid"
         let dry = weave.words[.humidity] == "dry"
-        let strength = scheme == .dark ? 0.55 : 0.6
+        let strength = scheme == .dark ? 0.78 : 0.7
 
         func d(_ phase: Double, _ amp: Float = 0.07) -> Float { Float(sin(t / 8 + phase)) * amp }
         let points: [SIMD2<Float>] = [
@@ -66,11 +69,11 @@ struct AmbientField: View {
             .overlay(WeatherColor.smog.opacity([0, 0.16, 0.32][air]))
             .overlay { if air > 0 { Grain(density: air, seed: 7).opacity(scheme == .dark ? 0.5 : 0.35) } }
             // Humid air: a soft milky mist. Dry air: crisper, a touch more contrast.
-            .overlay { if humid { MistLayer(t: t) } }
+            .overlay { if humid { MistLayer(t: t).opacity(WeatherColor.isNight(date) ? 0.35 : 1) } }
             .contrast(dry ? 1.12 : 1)
-            // Pollen: specks layered per kind, more when higher.
-            .overlay { PollenSpecks(sample: pollen, t: t) }
-            .overlay(base.opacity(scheme == .dark ? 0.2 : 0.06))
+            // Pollen: soft colour blooms layered per kind, fuller when higher.
+            .overlay { PollenBlooms(sample: pollen, t: t) }
+            .overlay(base.opacity(scheme == .dark ? 0.12 : 0.04))
             .accessibilityHidden(true)
     }
 
@@ -105,18 +108,41 @@ struct AmbientField: View {
 /// The weather colour language, shared by the field and its legend.
 enum WeatherColor {
     /// Blue (cold) → sky → sage (mild) → amber (warm) → red (hot), by °F.
+    /// Spread so ordinary days differ: 45° sky blue, 55° teal, 63° green, 70° gold, 78° orange, 88° red.
     static let stops: [(f: Double, color: Color)] = [
-        (25, Color(red: 0.20, green: 0.38, blue: 0.85)),
-        (45, Color(red: 0.36, green: 0.66, blue: 0.86)),
-        (65, Color(red: 0.58, green: 0.78, blue: 0.62)),
-        (80, Color(red: 0.95, green: 0.70, blue: 0.33)),
-        (95, Color(red: 0.88, green: 0.30, blue: 0.22)),
+        (30, Color(red: 0.22, green: 0.34, blue: 0.86)),
+        (45, Color(red: 0.30, green: 0.58, blue: 0.92)),
+        (55, Color(red: 0.20, green: 0.70, blue: 0.72)),
+        (63, Color(red: 0.42, green: 0.76, blue: 0.42)),
+        (70, Color(red: 0.93, green: 0.78, blue: 0.32)),
+        (78, Color(red: 0.97, green: 0.56, blue: 0.24)),
+        (88, Color(red: 0.90, green: 0.28, blue: 0.22)),
     ]
+
+    static func isNight(_ date: Date?) -> Bool {
+        guard let date else { return false }
+        let h = Calendar.current.component(.hour, from: date)
+        return h < 5 || h >= 21
+    }
+
+    /// The light of the hour over the temperature hue: deep indigo at night, rose at dawn and dusk.
+    static func light(_ c: Color, at date: Date?) -> Color {
+        guard let date else { return c }
+        let h = Double(Calendar.current.component(.hour, from: date)) + Double(Calendar.current.component(.minute, from: date)) / 60
+        let night = Color(red: 0.22, green: 0.20, blue: 0.62)
+        let rose = Color(red: 0.92, green: 0.48, blue: 0.56)
+        switch h {
+        case ..<5, 21...: return c.mix(with: night, by: 0.62)
+        case 5..<8: return c.mix(with: rose, by: 0.3 * (1 - abs(h - 6.5) / 1.5) + 0.1)
+        case 17..<21: return c.mix(with: rose, by: 0.15 + 0.25 * (h - 17) / 4).mix(with: night, by: max(0, (h - 19.5) / 1.5) * 0.4)
+        default: return c
+        }
+    }
     static let smog = Color(red: 0.52, green: 0.50, blue: 0.46)
     static let pollen: [Color] = [
-        Color(red: 0.40, green: 0.72, blue: 0.42),   // tree: green
-        Color(red: 0.93, green: 0.80, blue: 0.25),   // grass: yellow
-        Color(red: 0.70, green: 0.45, blue: 0.82),   // weed: purple
+        Color(red: 0.36, green: 0.80, blue: 0.46),   // tree: green
+        Color(red: 0.98, green: 0.80, blue: 0.22),   // grass: gold
+        Color(red: 0.72, green: 0.42, blue: 0.95),   // weed: violet
     ]
 
     static func temperature(_ f: Double) -> Color {
@@ -169,28 +195,34 @@ private struct MistLayer: View {
     }
 }
 
-/// Pollen as coloured specks drifting in the upper field: green tree, yellow grass, purple weed,
-/// each layered on by its own level. Nothing when there's no pollen data.
-private struct PollenSpecks: View {
+/// Pollen as soft colour blooms layered over the field, like Apple Card picking up colour:
+/// green for trees, gold for grass, violet for weeds. Each one is faint when low, fuller when high,
+/// and drifts slowly; where they overlap the colours mix. Nothing when there's no pollen data.
+private struct PollenBlooms: View {
     let sample: PollenSample?
     let t: Double
+    @Environment(\.colorScheme) private var scheme
+
+    /// Where each kind's bloom sits (unit coordinates) and how it drifts.
+    private let anchors: [(x: Double, y: Double, phase: Double)] = [(0.18, 0.22, 0), (0.82, 0.16, 2.1), (0.55, 0.42, 4.2)]
 
     var body: some View {
         if let sample {
             Canvas { ctx, size in
+                ctx.blendMode = scheme == .dark ? .plusLighter : .normal
                 for (k, kind) in sample.kinds.enumerated() where kind.count > 0 {
-                    var rng = Seeded(Double(31 + k * 101))
-                    let count = [10, 34, 70][kind.level.rawValue]
-                    for _ in 0..<count {
-                        let speed = 2 + rng.next() * 4
-                        let x = (rng.next() * size.width + sin(t / 5 + rng.next() * 6) * 8)
-                        let y = (rng.next() * size.height * 0.7 + t * speed).truncatingRemainder(dividingBy: size.height * 0.7)
-                        let r = 1.6 + rng.next() * 2.6
-                        ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r, height: r)),
-                                 with: .color(WeatherColor.pollen[k].opacity(0.75)))
-                    }
+                    let a = anchors[k]
+                    let strength = [0.22, 0.45, 0.7][kind.level.rawValue]
+                    let radius = min(size.width, size.height) * [0.32, 0.42, 0.52][kind.level.rawValue]
+                    let c = CGPoint(x: size.width * (a.x + sin(t / 9 + a.phase) * 0.06),
+                                    y: size.height * (a.y + cos(t / 11 + a.phase) * 0.04))
+                    let color = WeatherColor.pollen[k]
+                    ctx.fill(Path(ellipseIn: CGRect(x: c.x - radius, y: c.y - radius, width: radius * 2, height: radius * 2)),
+                             with: .radialGradient(Gradient(colors: [color.opacity(strength), color.opacity(strength * 0.4), .clear]),
+                                                   center: c, startRadius: 0, endRadius: radius))
                 }
             }
+            .blur(radius: 24)
             .allowsHitTesting(false)
         }
     }

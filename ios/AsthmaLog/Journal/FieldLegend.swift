@@ -25,7 +25,7 @@ struct FieldLegend: View {
                 if expanded {
                     strip("Hue is temperature", "Cold", "Hot",
                           LinearGradient(colors: WeatherColor.stops.map(\.color), startPoint: .leading, endPoint: .trailing),
-                          at: temperatureF.map { (min(95, max(25, $0)) - 25) / 70 } ?? fallbackTemp)
+                          at: temperatureF.map { (min(88, max(30, $0)) - 30) / 58 } ?? fallbackTemp)
                     strip("Grey haze is dirtier air", "Clean", "Dirty",
                           LinearGradient(colors: [WeatherColor.temperature(65), WeatherColor.temperature(65).mix(with: WeatherColor.smog, by: 0.85)],
                                          startPoint: .leading, endPoint: .trailing),
@@ -36,8 +36,8 @@ struct FieldLegend: View {
                           at: humidityPosition)
                     HStack(spacing: 8) {
                         ForEach(0..<3) { i in Circle().fill(WeatherColor.pollen[i]).frame(width: 6, height: 6) }
-                        Text(pollen.map { p in "Specks are pollen: green tree, yellow grass, purple weed. More specks, more pollen. Now: " + p.kinds.map { "\($0.name.lowercased()) \(Tier($0.level).word.lowercased())" }.joined(separator: ", ") + " (demo)." }
-                             ?? "Specks are pollen: green tree, yellow grass, purple weed. Not connected yet.")
+                        Text(pollen.map { p in "Colour blooms are pollen: green tree, gold grass, violet weed. Stronger bloom, more pollen. Now: " + p.kinds.map { "\($0.name.lowercased()) \(Tier($0.level).word.lowercased())" }.joined(separator: ", ") + " (demo)." }
+                             ?? "Colour blooms are pollen: green tree, gold grass, violet weed. Not connected yet.")
                             .font(.caption).foregroundStyle(Theme.secondaryText)
                     }
                 }

@@ -100,6 +100,7 @@ struct JournalView: View {
             // The room takes on the moment you're on.
             AmbientField(weave: fieldWeave,
                          temperatureF: selected?.conditions?.best(.temperature)?.value ?? now?.temp,
+                         date: selected?.loggedAt ?? .now,
                          pollen: DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason))
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 0.8), value: selected?.id)

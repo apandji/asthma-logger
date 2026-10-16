@@ -85,8 +85,8 @@ struct DaysView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 120)
-            .frame(maxWidth: .infinity)  // clear the + bar
+            .padding(.bottom, 120)  // clear the + bar
+            .containerRelativeFrame(.horizontal)  // never wider than the screen
             .scrollTargetLayout()
         }
         .defaultScrollAnchor(.bottom)

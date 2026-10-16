@@ -79,7 +79,7 @@ struct NowHomeView: View {
                 }
             }
             .sheet(isPresented: $showInsights) {
-                InsightsView().presentationDragIndicator(.visible).presentationBackground(.ultraThinMaterial)
+                InsightsView().presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper))
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showPlaces) { PlacePicker(chosen: $chosen).presentationDetents([.medium, .large]) }

@@ -116,7 +116,7 @@ struct InsightsView: View {
                 tile("person.crop.circle", "Profile", demoLearned ? "Pollen-led" : learned ? "Ready" : "Soon")
             }
             NavigationLink(value: Page.moments) {
-                tile("calendar", "Moments this month", "\(monthCount)")
+                tile("calendar", "This month", "\(monthCount)")
             }
             Button { showDoctor = true } label: { tile("tablecells", "For your doctor", "Table") }
         }

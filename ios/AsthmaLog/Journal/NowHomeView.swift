@@ -261,7 +261,8 @@ struct NowHomeView: View {
             if needCalm > 0 { parts.append("\(needCalm) baseline moment\(needCalm == 1 ? "" : "s")") }
             if needRescue > 0 { parts.append("\(needRescue) rescue moment\(needRescue == 1 ? "" : "s")") }
             // "14 calm days and 1 rescue moment to go." Short enough for two lines.
-            return parts.joined(separator: " and ") + " to go before felt air can compare."
+            // Short enough for one line on the pill: "14 baseline and 1 rescue moment to go."
+            return parts.joined(separator: " and ").replacingOccurrences(of: " moments and", with: " and") + " to go."
         }
         return "Still learning your days."
     }

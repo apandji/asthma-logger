@@ -14,6 +14,7 @@ struct SettingsView: View {
     @Environment(ButtonLink.self) private var button
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
     @State private var demoNote: String?
+    @State private var tutorialNote: String?
     @AppStorage(LevelStyle.key) private var levelStyle = LevelStyle.signal
     @AppStorage(Crit.Header.key) private var critHeader = Crit.Header.moment
     @AppStorage(Crit.CardStyle.key) private var critCard = Crit.CardStyle.panel
@@ -30,6 +31,13 @@ struct SettingsView: View {
             Form {
                 #if DEBUG
                 Section {
+                    Button("Replay tutorial") {
+                        UserDefaults.standard.set(true, forKey: AppTips.resetKey)
+                        tutorialNote = "Close felt air (swipe it away) and open it again to see the tutorial."
+                    }
+                    if let tutorialNote {
+                        Text(tutorialNote).font(.footnote).foregroundStyle(Theme.secondaryText)
+                    }
                     Picker("Header", selection: $critHeader) {
                         ForEach(Crit.Header.allCases) { Text($0.title).tag($0) }
                     }

@@ -10,10 +10,12 @@ struct MomentPager: View {
     let events: [LogEvent]
     @Binding var selectedID: UUID?
     let zoom: Namespace.ID
+    let mapNamespace: Namespace.ID
     let pollenSeason: DemoPollen.Season
     let onOpen: (LogEvent) -> Void
     let onOverview: () -> Void
     @Binding var probing: Bool
+    var spot: SpotlightFrames? = nil
 
     private var current: LogEvent? { events.first { $0.id == selectedID } ?? events.last }
 
@@ -22,15 +24,17 @@ struct MomentPager: View {
             ZStack {
                 if let e = current {
                     SkyPanel(event: e, pollen: DemoPollen.sample(at: e.loggedAt, season: pollenSeason),
-                             zoom: zoom, probing: $probing, onOpen: { onOpen(e) }, onOverview: onOverview)
+                             zoom: zoom, mapNamespace: mapNamespace, probing: $probing, onOpen: { onOpen(e) }, onOverview: onOverview)
                         .id(e.id)
                         .transition(.opacity)
                 }
             }
+            .modifier(SpotIf(id: "sky", spot: spot))
             .animation(.easeInOut(duration: 0.35), value: current?.id)
 
             TimelineTrack(events: events, selectedID: $selectedID)
                 .frame(height: 58)
+                .modifier(SpotIf(id: "track", spot: spot))
         }
     }
 }
@@ -158,6 +162,7 @@ struct SkyPanel: View {
     let event: LogEvent
     let pollen: PollenSample?
     let zoom: Namespace.ID
+    let mapNamespace: Namespace.ID
     @Binding var probing: Bool
     let onOpen: () -> Void
     let onOverview: () -> Void
@@ -178,16 +183,14 @@ struct SkyPanel: View {
                 if event.latitude != nil {
                     MomentMap(event: event)
                         .frame(width: size.width * 0.62, height: size.width * 0.62)
+                        .matchedGeometryEffect(id: "map-\(event.id)", in: mapNamespace)
                         .saturation(0.35)
                         .opacity(0.5)
                         .mask(EllipticalGradient(colors: [.black, .clear], center: .center,
                                                  startRadiusFraction: 0.1, endRadiusFraction: 0.5))
-                        .matchedTransitionSource(id: event.id, in: zoom) { $0.clipShape(RoundedRectangle(cornerRadius: 200)) }
                         .allowsHitTesting(false)
-                } else {
-                    Color.clear.frame(width: 1, height: 1)
-                        .matchedTransitionSource(id: event.id, in: zoom)
                 }
+
                 if let point, let probe {
                     // The glow belongs to the sky, so it fades with it.
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false)
@@ -282,5 +285,14 @@ struct SkyPanel: View {
     private func stopPulse() {
         pulse?.cancel()
         pulse = nil
+    }
+}
+
+/// Marks a spotlight target when there's a store.
+struct SpotIf: ViewModifier {
+    let id: String
+    let spot: SpotlightFrames?
+    func body(content: Content) -> some View {
+        if let spot { content.spotlightTarget(id, spot) } else { content }
     }
 }

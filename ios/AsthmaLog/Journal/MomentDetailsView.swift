@@ -6,14 +6,70 @@ import SwiftUI
 /// then how both moved in the hours around it, where it was, the voice note, and every source.
 struct MomentDetailsView: View {
     let event: LogEvent
+    /// In-place mode (the Journal's zoom): the map is the hero, shared with the sky panel, on black.
+    var mapNamespace: Namespace.ID? = nil
+    var onClose: (() -> Void)? = nil
+    @State private var pull: CGFloat = 0
     @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
     @State private var around: HourlyHistory?
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
     private var pollen: PollenSample? { DemoPollen.sample(at: event.loggedAt, season: pollenSeason) }
 
     var body: some View {
+        if let mapNamespace { inPlace(mapNamespace) } else { page }
+    }
+
+    /// The Journal's zoom: the map grows out of the sky into a sharp hero, the details rise beneath it.
+    /// Pull down, pinch closed or tap the chevron to go back.
+    private func inPlace(_ ns: Namespace.ID) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                MomentMap(event: event)
+                    .frame(height: event.latitude == nil ? 64 : 320)
+                    .opacity(event.latitude == nil ? 0 : 1)
+                    .matchedGeometryEffect(id: "map-\(event.id)", in: ns)
+                    .mask(LinearGradient(stops: [.init(color: .black, location: 0.7), .init(color: .clear, location: 1)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .overlay(alignment: .topLeading) {
+                        Button { onClose?() } label: {
+                            Image(systemName: "chevron.down").font(.body.weight(.semibold))
+                                .frame(width: 44, height: 44)
+                                .glassEffect(.regular.interactive(), in: .circle)
+                        }
+                        .padding(.leading, 16).padding(.top, 8)
+                        .accessibilityLabel("Close")
+                    }
+                    .padding(.horizontal, -16)
+                content
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 40)
+        }
+        .scrollIndicators(.hidden)
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in
+            pull = y
+            if y < -90 { onClose?() }   // pull down past the top to go back
+        }
+        .simultaneousGesture(MagnifyGesture().onEnded { v in if v.magnification < 0.85 { onClose?() } })
+        .background(Color.black.ignoresSafeArea())
+        .task { await loadAround() }
+    }
+
+    private var page: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                content
+            }
+            .padding(16)
+            .padding(.bottom, 40)
+        }
+        .background { AmbientField(weave: event.weave, temperatureF: event.conditions?.best(.temperature)?.value, date: event.loggedAt, conditions: event.conditions, pollen: pollen).ignoresSafeArea() }
+        .navigationTitle(event.moment == .okay ? "I'm okay" : event.moment.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await loadAround() }
+    }
+
+    @ViewBuilder private var content: some View {
                 header
                 if let c = event.conditions, !c.observations.isEmpty {
                     weather(c)
@@ -24,23 +80,17 @@ struct MomentDetailsView: View {
                         .font(.subheadline).foregroundStyle(Theme.secondaryText)
                         .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
                 }
-                MomentMap(event: event)
-                    .frame(height: 200)
-                    .clipShape(.rect(cornerRadius: 22, style: .continuous))
+                if mapNamespace == nil {
+                    MomentMap(event: event)
+                        .frame(height: 200)
+                        .clipShape(.rect(cornerRadius: 22, style: .continuous))
+                }
                 VoiceNoteButton(event: event).frame(maxWidth: .infinity)
                 if let c = event.conditions, !c.observations.isEmpty { sources(c) }
                 NavigationLink(value: event) {
                     Text("Edit, retry or delete").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered).buttonBorderShape(.capsule)
-            }
-            .padding(16)
-            .padding(.bottom, 40)
-        }
-        .background { AmbientField(weave: event.weave, temperatureF: event.conditions?.best(.temperature)?.value, date: event.loggedAt, conditions: event.conditions, pollen: pollen).ignoresSafeArea() }
-        .navigationTitle(event.moment == .okay ? "I'm okay" : event.moment.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .task { await loadAround() }
     }
 
     // MARK: Sections

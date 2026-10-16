@@ -8,6 +8,7 @@ import TipKit
 struct CaptureBar: View {
     @Binding var showInsights: Bool
     var tip: PullToLogTip? = nil
+    var spot: SpotlightFrames? = nil
     @Environment(LogService.self) private var services
     @Environment(\.modelContext) private var context
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
@@ -36,6 +37,7 @@ struct CaptureBar: View {
                     PullToLogTip().invalidate(reason: .actionPerformed)
                     log(moment)
                 }
+                .modifier(SpotIf(id: "plus", spot: spot))
                 .popoverTip(tip, arrowEdge: .bottom) { action in
                     if action.id == "buttons" { useButtons = true; tip?.invalidate(reason: .actionPerformed) }
                 }

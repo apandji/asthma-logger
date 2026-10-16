@@ -16,6 +16,9 @@ struct JournalView: View {
     @State private var opened: LogEvent?
     @Namespace private var zoom
     @Namespace private var morph
+    @Namespace private var mapZoom
+    /// The moment opened in place (panel style): the sky gives way to its map and details.
+    @State private var expanded: LogEvent?
     @State private var overview = false
     /// First-use tips, one at a time: pull to log, then moments.
     @State private var tips = TipGroup(.ordered) { PullToLogTip(); MomentsTip(); SkyTip() }
@@ -23,6 +26,7 @@ struct JournalView: View {
     @State private var probe: SkyProbe?
     @State private var fieldFrame: CGRect = .zero
     @State private var panelProbing = false
+    @State private var spot = SpotlightFrames()
     @AppStorage(Crit.CardStyle.key) private var momentStyle = Crit.CardStyle.panel
     @State private var ambientFrame: CGRect = .zero
     @State private var showInsights = false
@@ -38,11 +42,18 @@ struct JournalView: View {
             ambient
                 // The + and Insights live on the home only, not on pushed pages.
                 .safeAreaInset(edge: .bottom) {
-                    if !overview { CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip) }
+                    if !overview && expanded == nil { CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, spot: spot) }
                 }
                 .overlay(alignment: .trailing) {
                     if insightsEntry == .edgeTab && !overview { InsightEdgeTab { showInsights = true } }
                 }
+                // Tutorial: dim everything the current tip isn't about.
+                .overlay {
+                    if expanded == nil && !overview, let ids = spotlightIDs {
+                        SpotlightDim(holes: ids.compactMap { spot.frames[$0] })
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: spotlightIDs)
                 .sheet(isPresented: $showInsights) {
                     InsightsView()
                         .presentationDragIndicator(.visible)
@@ -70,13 +81,17 @@ struct JournalView: View {
 
     private var ambient: some View {
         VStack(alignment: .leading, spacing: 0) {
-            topBar
+            if expanded == nil { topBar }
             if overview {
                 MomentsOverview(events: Array(events), namespace: morph, open: { e in
                     withAnimation(.spring(duration: 0.55, bounce: 0.15)) { selectedID = e.id; overview = false }
                 }, close: { withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } })
                 .transition(.opacity)
             } else {
+                if let e = expanded {
+                    MomentDetailsView(event: e, mapNamespace: mapZoom, onClose: collapse)
+                        .transition(.opacity)
+                } else {
                 header.transition(.opacity)
                     .opacity(probe == nil && !panelProbing ? 1 : 0.4)  // step aside while you explore the sky
                     .animation(.easeOut(duration: 0.2), value: probe == nil && !panelProbing)
@@ -85,8 +100,9 @@ struct JournalView: View {
                     emptyState.padding(.horizontal, 20)
                 } else {
                     if momentStyle == .panel {
-                        MomentPager(events: cards, selectedID: $selectedID, zoom: zoom, pollenSeason: pollenSeason,
-                                    onOpen: { opened = $0 }, onOverview: zoomOut, probing: $panelProbing)
+                        MomentPager(events: cards, selectedID: $selectedID, zoom: zoom, mapNamespace: mapZoom,
+                                    pollenSeason: pollenSeason, onOpen: expand, onOverview: zoomOut, probing: $panelProbing,
+                                    spot: spot)
                             .frame(maxHeight: 520)
                     } else {
                         MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, morph: morph,
@@ -94,11 +110,14 @@ struct JournalView: View {
                             .frame(height: 380)
                     }
                     TipView(tips.currentTip as? MomentsTip)
+                        .spotlightTarget("momentsTip", spot)
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                     TipView(tips.currentTip as? SkyTip)
+                        .spotlightTarget("skyTip", spot)
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
+                }
                 }
                 if let error = services.lastError {
                     Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20).padding(.top, 8)
@@ -122,7 +141,7 @@ struct JournalView: View {
         .sensoryFeedback(.impact(weight: .light), trigger: probePoint == nil)
         .simultaneousGesture(
             MagnifyGesture().onEnded { v in
-                if v.magnification < 0.85 && !overview { zoomOut() }
+                if v.magnification < 0.85 && !overview && expanded == nil { zoomOut() }
                 else if v.magnification > 1.15 && overview { withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } }
             }
         )
@@ -164,6 +183,24 @@ struct JournalView: View {
             .onEnded { _ in
                 withAnimation(.easeOut(duration: 0.3)) { probePoint = nil; probe = nil }
             }
+    }
+
+    /// What the current tip points at (plus the inline tip itself, so it stays lit).
+    private var spotlightIDs: [String]? {
+        switch tips.currentTip {
+        case is PullToLogTip: ["plus"]
+        case is MomentsTip: ["track", "momentsTip"]
+        case is SkyTip: ["sky", "skyTip"]
+        default: nil
+        }
+    }
+
+    private func expand(_ e: LogEvent) {
+        withAnimation(.spring(duration: 0.6, bounce: 0.12)) { expanded = e }
+    }
+
+    private func collapse() {
+        withAnimation(.spring(duration: 0.55, bounce: 0.1)) { expanded = nil }
     }
 
     private func zoomOut() {

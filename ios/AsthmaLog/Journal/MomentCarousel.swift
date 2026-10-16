@@ -231,8 +231,10 @@ struct MomentMap: View {
                     Rectangle().fill(.quaternary)
                 }
             }
-            .task(id: "\(event.id)-\(scheme)-\(Int(geo.size.width))") {
-                image = await MapSnapshots.image(for: event, size: geo.size, dark: scheme == .dark)
+            .task(id: "\(event.id)-\(scheme)") {
+                // One generous square, cropped to fit: the view can grow and shrink (the zoom) without
+                // asking for a new snapshot every frame.
+                image = await MapSnapshots.image(for: event, size: CGSize(width: 520, height: 520), dark: scheme == .dark)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: image != nil)

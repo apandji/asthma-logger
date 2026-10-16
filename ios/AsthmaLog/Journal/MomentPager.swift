@@ -43,84 +43,93 @@ struct MomentPager: View {
             .task(id: current?.id) { await prefetchNeighbours() }
 
             TimelineTrack(events: events, selectedID: $selectedID)
-                .frame(height: 58)
+                .frame(height: 104)
                 .modifier(SpotIf(id: "track", spot: spot))
         }
     }
 }
 
-/// History as a track: ticks every 6 hours (taller at midnight, with the day), moments as dots.
-/// A fixed centre marker reads the moment under it.
+/// History as a scrubber, in the language of the Photos and Camera dials: ticks every 6 hours (taller at
+/// midnight, day names beneath), moments as dots on the same axis, and a fixed playhead in the middle
+/// with the current moment's time in a pill above it. The moment under the playhead is enlarged and ringed.
 struct TimelineTrack: View {
     let events: [LogEvent]
     @Binding var selectedID: UUID?
 
     @State private var position = ScrollPosition(edge: .trailing)
-    /// The track point under the centre marker (content offset, thanks to the half-width padding).
+    /// The track point under the playhead.
     @State private var centerX: CGFloat = 0
-    @State private var width: CGFloat = 0
+    /// The scroll view's visible width (from its own geometry, so the padding and playhead line up exactly).
+    @State private var viewport: CGFloat = 0
     @State private var dragging = false
 
     private let dayWidth: CGFloat = 64
+    private let axis: CGFloat = 46       // y of the shared axis for ticks and dots
+    private let height: CGFloat = 86
     private let cal = Calendar.current
 
-    private var start: Date {
-        cal.startOfDay(for: events.first?.loggedAt ?? .now)
-    }
-    private var end: Date {
-        cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: .now))!
-    }
+    private var start: Date { cal.startOfDay(for: events.first?.loggedAt ?? .now) }
+    private var end: Date { cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: .now))! }
     private var contentWidth: CGFloat { CGFloat(end.timeIntervalSince(start) / 86_400) * dayWidth }
-
     private func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(start) / 86_400) * dayWidth }
+    /// The moment under the playhead (the newest until you scrub).
+    private var currentID: UUID? { selectedID ?? events.last?.id }
+    private var selected: LogEvent? { events.first { $0.id == currentID } }
 
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 0) {
-            // Half-width padding at both ends, so any moment (even the first or last) can sit under the marker.
-            Color.clear.frame(width: width / 2)
-            ZStack(alignment: .topLeading) {
-                Canvas { ctx, size in
-                    // Ticks.
-                    var t = start
-                    while t <= end {
-                        let isDay = cal.component(.hour, from: t) == 0
-                        let px = x(t)
-                        var p = Path()
-                        p.move(to: CGPoint(x: px, y: isDay ? 18 : 26))
-                        p.addLine(to: CGPoint(x: px, y: 34))
-                        ctx.stroke(p, with: .color(.white.opacity(isDay ? 0.45 : 0.18)), lineWidth: 1)
-                        if isDay {
-                            let label = cal.isDateInToday(t) ? "Today" : t.formatted(.dateTime.weekday(.abbreviated).day())
-                            ctx.draw(Text(label).font(.caption2).foregroundStyle(.white.opacity(0.5)),
-                                     at: CGPoint(x: px + 4, y: 46), anchor: .leading)
+                // Half the viewport at each end, so any moment can sit under the playhead.
+                Color.clear.frame(width: viewport / 2)
+                ZStack(alignment: .topLeading) {
+                    Canvas { ctx, size in
+                        // Axis.
+                        var line = Path()
+                        line.move(to: CGPoint(x: 0, y: axis)); line.addLine(to: CGPoint(x: size.width, y: axis))
+                        ctx.stroke(line, with: .color(.white.opacity(0.12)), lineWidth: 1)
+                        // Ticks, centred on the axis.
+                        var t = start
+                        while t <= end {
+                            let isDay = cal.component(.hour, from: t) == 0
+                            let half: CGFloat = isDay ? 10 : 4
+                            var p = Path()
+                            p.move(to: CGPoint(x: x(t), y: axis - half)); p.addLine(to: CGPoint(x: x(t), y: axis + half))
+                            ctx.stroke(p, with: .color(.white.opacity(isDay ? 0.4 : 0.18)), lineWidth: 1)
+                            if isDay {
+                                let label = cal.isDateInToday(t) ? "Today" : t.formatted(.dateTime.weekday(.abbreviated).day())
+                                ctx.draw(Text(label).font(.caption2).foregroundStyle(.white.opacity(0.45)),
+                                         at: CGPoint(x: x(t) + dayWidth / 2, y: axis + 26))
+                            }
+                            t = cal.date(byAdding: .hour, value: 6, to: t)!
                         }
-                        t = cal.date(byAdding: .hour, value: 6, to: t)!
                     }
-                    // Baseline.
-                    var line = Path()
-                    line.move(to: CGPoint(x: 0, y: 34)); line.addLine(to: CGPoint(x: size.width, y: 34))
-                    ctx.stroke(line, with: .color(.white.opacity(0.12)), lineWidth: 1)
-                }
-                .frame(width: contentWidth, height: 58)
+                    .frame(width: contentWidth, height: height)
 
-                ForEach(events) { e in
-                    let on = e.id == selectedID
-                    Circle()
-                        .fill(e.moment == .rescue ? Theme.rescue : Theme.standard)
-                        .frame(width: on ? 11 : 7, height: on ? 11 : 7)
-                        .overlay(Circle().strokeBorder(.white, lineWidth: on ? 2 : 0))
-                        .position(x: x(e.loggedAt), y: 10)
-                        .onTapGesture { select(e, scroll: true) }
+                    // Moments on the axis. The current one is enlarged and ringed.
+                    ForEach(events) { e in
+                        let on = e.id == currentID
+                        Circle()
+                            .fill(e.moment == .rescue ? Theme.rescue : Theme.standard)
+                            .frame(width: on ? 14 : 8, height: on ? 14 : 8)
+                            .overlay(Circle().strokeBorder(.black.opacity(0.6), lineWidth: on ? 0 : 1))
+                            .background {
+                                if on {
+                                    Circle().fill(.white).frame(width: 22, height: 22)
+                                        .shadow(color: (e.moment == .rescue ? Theme.rescue : Theme.standard).opacity(0.8), radius: 8)
+                                }
+                            }
+                            .position(x: x(e.loggedAt), y: axis)
+                            .animation(.snappy(duration: 0.2), value: on)
+                            .onTapGesture { select(e, scroll: true) }
+                    }
                 }
-            }
-            .frame(width: contentWidth, height: 58)
-            Color.clear.frame(width: width / 2)
+                .frame(width: contentWidth, height: height)
+                Color.clear.frame(width: viewport / 2)
             }
         }
         .scrollIndicators(.hidden)
         .scrollPosition($position)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.width } action: { _, w in viewport = w }
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, cx in
             centerX = cx
             guard dragging, let nearest = nearest(to: cx), nearest.id != selectedID else { return }
@@ -131,25 +140,42 @@ struct TimelineTrack: View {
             // Snap only after a real drag, not when the track settles at launch.
             if phase == .idle, old == .interacting || old == .decelerating, let n = nearest(to: centerX) { select(n, scroll: true) }
         }
-        .overlay {
-            // The centre marker.
-            Capsule().fill(.white).frame(width: 2, height: 30).offset(y: -6).allowsHitTesting(false)
+        // The playhead: a bright capsule through the axis, the current moment's time in a pill above.
+        .overlay(alignment: .top) {
+            ZStack(alignment: .top) {
+                Capsule().fill(.white).frame(width: 3, height: 34)
+                    .shadow(color: .black.opacity(0.5), radius: 2)
+                    .offset(y: axis - 17)
+                if let e = selected {
+                    Text(e.loggedAt.formatted(.dateTime.weekday(.abbreviated).day().hour().minute()))
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(.white, in: Capsule())
+                        .contentTransition(.numericText())
+                        .animation(.snappy(duration: 0.2), value: e.id)
+                        .fixedSize()
+                        .offset(y: axis - 17 - 30)
+                }
+            }
+            .allowsHitTesting(false)
         }
+        .padding(.top, 24)
         .sensoryFeedback(.selection, trigger: selectedID)
         .onChange(of: selectedID) { _, id in
-            // Moved from elsewhere (a new log, the calendar): bring it under the marker.
+            // Moved from elsewhere (a new log, the calendar): bring it under the playhead.
             if !dragging, let e = events.first(where: { $0.id == id }), abs(x(e.loggedAt) - centerX) > 1 {
                 withAnimation(.smooth) { position.scrollTo(x: x(e.loggedAt)) }
             }
         }
-        // Once the width is known, start on the current moment (the newest by default).
-        .task(id: width) {
-            guard width > 0 else { return }
+        .task(id: viewport) {
+            guard viewport > 0 else { return }
             try? await Task.sleep(for: .milliseconds(80))   // let the content lay out first
             if let e = events.first(where: { $0.id == selectedID }) ?? events.last { position.scrollTo(x: x(e.loggedAt)) }
         }
         .accessibilityElement()
         .accessibilityLabel("History")
+        .accessibilityValue(selected.map { "\($0.moment.title), \($0.loggedAt.formatted(date: .abbreviated, time: .shortened))" } ?? "")
         .accessibilityAdjustableAction { dir in
             guard let i = events.firstIndex(where: { $0.id == selectedID }) ?? events.indices.last else { return }
             let j = dir == .increment ? min(events.count - 1, i + 1) : max(0, i - 1)

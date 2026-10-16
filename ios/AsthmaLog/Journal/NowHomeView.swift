@@ -46,6 +46,8 @@ struct NowHomeView: View {
                     if expanded, case .moment(let m) = focus {
                         MomentDetailsView(event: m, onClose: { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = false } }, airOnly: true)
                             .id(m.id)
+                            // Tap the table to go back to the sky.
+                            .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = false } }
                             .transition(.opacity)
                     } else {
                         sky.transition(.opacity)

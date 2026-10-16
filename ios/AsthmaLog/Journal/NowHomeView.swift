@@ -282,8 +282,9 @@ struct NowHomeView: View {
     @ViewBuilder private var sky: some View {
         switch focus {
         case .now:
-            if let j = justNow, !j.weave.isEmpty {
-                NowSky(conditions: j.conditions, weave: j.weave, date: j.loggedAt,
+            if let j = justNow {
+                // The ripple fires the instant the log lands; the live sky stands in until its air arrives.
+                NowSky(conditions: j.conditions ?? here?.conditions, weave: j.weave.isEmpty ? (here?.weave ?? WeaveSpec()) : j.weave, date: j.loggedAt,
                        pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
                        mapID: j.latitude == nil ? "here" : j.id.uuidString,
                        coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },

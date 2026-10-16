@@ -85,7 +85,11 @@ struct NowHomeView: View {
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showPlaces) { PlacePicker(chosen: $chosen).presentationDetents([.medium, .large]) }
-            .onChange(of: chosen) { _, _ in hours = []; Task { await loadForecastPlace() } }
+            .onChange(of: chosen) { _, new in
+                away = new.map { NowReading(lat: $0.lat, lon: $0.lon, place: $0.name, conditions: Conditions()) }
+                hours = []
+                Task { await loadForecastPlace() }
+            }
             .sheet(isPresented: $showMonth) {
                 MomentsOverview(events: Array(events), namespace: month, anchorDay: focusTime,
                                 open: { e in focusTime = e.loggedAt; showMonth = false },
@@ -260,11 +264,13 @@ struct NowHomeView: View {
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
                    pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
-                   mapID: mapID, coordinate: (away ?? here).map { ($0.lat, $0.lon) })
+                   mapID: mapID, coordinate: forecastCoordinate)
         }
     }
 
     private var mapID: String { chosen.map { "place-\($0.lat)-\($0.lon)" } ?? "here" }
+    /// Straight from the choice, so the map id and its coordinates can never disagree mid-reload.
+    private var forecastCoordinate: (Double, Double)? { chosen.map { ($0.lat, $0.lon) } ?? here.map { ($0.lat, $0.lon) } }
 
     // MARK: Right edge
 

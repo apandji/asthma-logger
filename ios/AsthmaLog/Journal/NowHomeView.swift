@@ -101,6 +101,15 @@ struct NowHomeView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .task { await load() }
+            // Every moment's map, newest first, drawn ahead of time: scrubbing never finds a blank.
+            .task(id: moments.count) {
+                for m in moments.reversed() {
+                    if Task.isCancelled { return }
+                    guard let lat = m.latitude, let lon = m.longitude else { continue }
+                    _ = await MapSnapshots.image(id: m.id.uuidString, latitude: lat, longitude: lon,
+                                                 size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale)
+                }
+            }
             .task {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(30))
@@ -247,13 +256,11 @@ struct NowHomeView: View {
                    pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason), probing: $probing,
                    mapID: m.id.uuidString, coordinate: m.latitude.flatMap { lat in m.longitude.map { (lat, $0) } },
                    mapNamespace: mapZoom)
-                .id(m.id)
                 .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = true } }
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
                    pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
                    mapID: mapID, coordinate: (away ?? here).map { ($0.lat, $0.lon) })
-                .id("\(mapID)-\(h.date.timeIntervalSinceReferenceDate)")
         }
     }
 
@@ -282,6 +289,8 @@ struct NowHomeView: View {
     private func load() async {
         guard let fix = try? await services.location.currentLocation(timeout: .seconds(6)) else { return }
         let lat = fix.coordinate.latitude, lon = fix.coordinate.longitude
+        // The map first: it's the slowest part and the first thing you see.
+        Task { _ = await MapSnapshots.image(id: "here", latitude: lat, longitude: lon, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale) }
         async let c = services.conditions.conditions(latitude: lat, longitude: lon)
         async let marks = try? CLGeocoder().reverseGeocodeLocation(fix)
         let place = await marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
@@ -297,7 +306,10 @@ struct NowHomeView: View {
             away = nil
         }
         guard let p = away ?? here else { return }
-        hours = await NowHour.forecast(latitude: p.lat, longitude: p.lon)
+        let id = mapID
+        Task { _ = await MapSnapshots.image(id: id, latitude: p.lat, longitude: p.lon, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale) }
+        // For a place that isn't here we have no live reading to carry forward.
+        hours = await NowHour.forecast(latitude: p.lat, longitude: p.lon, now: away == nil ? here?.conditions : nil)
         await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here")
     }
 }
@@ -314,12 +326,12 @@ struct NowReading {
 
 /// One voice across past, present and forecast: "It was… / It's… / It will be…".
 nonisolated enum AirWords {
-    enum Tense { case past, present, future }
+    enum Tense { case past, present, future, carried }
 
     /// "It was 51° and comfortable. The air was a bit hazy." / "It's… The air is…" / "It will be… The air will be…"
     static func sentence(tense: Tense, weave: WeaveSpec, conditions: Conditions?) -> String {
-        let verb = switch tense { case .past: "was"; case .present: "is"; case .future: "will be" }
-        let it = switch tense { case .past: "It was"; case .present: "It's"; case .future: "It will be" }
+        let verb = switch tense { case .past: "was"; case .present: "is"; case .future: "will be"; case .carried: "should stay" }
+        let it = switch tense { case .past: "It was"; case .present: "It's"; case .future, .carried: "It will be" }
         let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
         let feel = weave.words[.humidity] ?? weave.words[.temperature]
         let weather = [temp, feel].compactMap { $0 }.joined(separator: " and ")
@@ -343,20 +355,25 @@ extension LogEvent {
 struct NowHour: Identifiable, Sendable {
     let date: Date
     let conditions: Conditions
+    /// No air forecast was published for this place, so today's readings stand in (low confidence).
+    var airCarried = false
     var id: Date { date }
     var weave: WeaveSpec { WeaveSpec(conditions.input) }
-    /// "It will be 78° and humid. The air will be a bit hazy."
-    var statement: String { AirWords.sentence(tense: .future, weave: weave, conditions: conditions) }
+    /// "It will be 78° and humid. The air will be a bit hazy." (or "should stay", when carried forward)
+    var statement: String { AirWords.sentence(tense: airCarried ? .carried : .future, weave: weave, conditions: conditions) }
 
     static let source = "Forecast"
     /// Typical PM2.5 (µg/m³) and ozone (ppb) for each AirNow category, so the sky can color it.
     private static let pm25ByCategory: [Int: Double] = [1: 6, 2: 20, 3: 45, 4: 80, 5: 200, 6: 300]
     private static let ozoneByCategory: [Int: Double] = [1: 35, 2: 62, 3: 78, 4: 95, 5: 130, 6: 200]
 
-    static func forecast(latitude: Double, longitude: Double) async -> [NowHour] {
+    /// `now` is the current reading for the place: when AirNow has no forecast for it (many areas only
+    /// publish in ozone season), today's PM2.5 and ozone are carried forward, marked low confidence.
+    static func forecast(latitude: Double, longitude: Double, now: Conditions? = nil) async -> [NowHour] {
         guard let hours = try? await WeatherProvider().hourly(latitude: latitude, longitude: longitude, hours: 48) else { return [] }
         var aq: [String: (pm25: Int?, ozone: Int?)] = [:]
         if let key = Secrets.airNow { aq = (try? await AirNowProvider(key: key).forecast(latitude: latitude, longitude: longitude)) ?? [:] }
+        let carried = aq.isEmpty ? now : nil
         return hours.map { h in
             var obs = [
                 EnvObservation(signal: .temperature, value: h.temperatureF, unit: "°F", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true),
@@ -369,7 +386,16 @@ struct NowHour: Identifiable, Sendable {
             if let c = day?.ozone, let v = ozoneByCategory[c] {
                 obs.append(EnvObservation(signal: .ozone, value: v, unit: "ppb", asOf: h.date, source: source, spatialScale: .modelGrid, confidence: .low, isForecast: true))
             }
-            return NowHour(date: h.date, conditions: Conditions(observations: obs, fetchedAt: .now))
+            var airCarried = false
+            if let carried {
+                for signal in [Signal.pm25, .ozone, .aqi] {
+                    guard let o = carried.best(signal) else { continue }
+                    obs.append(EnvObservation(signal: signal, value: o.value, unit: o.unit, asOf: h.date, source: "Today's reading, carried forward",
+                                              spatialScale: o.spatialScale, distanceKm: o.distanceKm, confidence: .low, isForecast: true))
+                    airCarried = true
+                }
+            }
+            return NowHour(date: h.date, conditions: Conditions(observations: obs, fetchedAt: .now), airCarried: airCarried)
         }
     }
 }

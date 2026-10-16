@@ -23,6 +23,18 @@ nonisolated struct SavedPlace: Codable, Hashable, Sendable {
     static let chosenKey = "place.chosen"
     static let homeKey = "place.home"
     static let workKey = "place.work"
+    static let recentsKey = "place.recents"
+
+    /// The last few places looked up, newest first.
+    static var recents: [SavedPlace] {
+        UserDefaults.standard.data(forKey: recentsKey).flatMap { try? JSONDecoder().decode([SavedPlace].self, from: $0) } ?? []
+    }
+
+    func remember() {
+        var list = Self.recents.filter { $0 != self }
+        list.insert(self, at: 0)
+        UserDefaults.standard.set(try? JSONEncoder().encode(Array(list.prefix(6))), forKey: Self.recentsKey)
+    }
 
     /// Washington University in St. Louis, Danforth campus: the default Work until one is saved.
     static let washU = SavedPlace(name: "WashU · Danforth Campus", lat: 38.6488, lon: -90.3108)
@@ -56,17 +68,35 @@ struct PlacePicker: View {
     @State private var searching = false
     @State private var home = SavedPlace.load(SavedPlace.homeKey)
     @State private var work = SavedPlace.load(SavedPlace.workKey) ?? SavedPlace.washU
+    @State private var recents = SavedPlace.recents
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
+                    // What the forecast is for, right now.
+                    HStack(spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.tint)
+                        Text("Forecast for ").foregroundStyle(Theme.secondaryText) + Text(currentLabel).fontWeight(.semibold)
+                    }
+                    .font(.subheadline)
+                    .listRowBackground(Color.clear)
+                }
+                Section {
                     row("Here", icon: "location.fill", place: nil, selected: chosen == nil)
                     if let home { row("Home", icon: "house.fill", place: home, selected: chosen == home) }
                     row("Work", icon: "building.2.fill", place: work, selected: chosen == work)
                 } footer: {
                     if home == nil { Text("Home appears once a couple of moments have been logged at night.") }
+                }
+                if !recents.isEmpty && results.isEmpty {
+                    Section("Recent") {
+                        ForEach(recents, id: \.self) { p in
+                            row(p.name, icon: "clock", place: p, selected: chosen == p)
+                                .swipeActions(edge: .trailing) { saveActions(p) }
+                        }
+                    }
                 }
                 Section(results.isEmpty ? "" : "Results") {
                     ForEach(results, id: \.self) { p in
@@ -88,24 +118,34 @@ struct PlacePicker: View {
         }
     }
 
+    private var currentLabel: String {
+        guard let chosen else { return "here" }
+        if chosen == home { return "Home" }
+        if chosen == work { return "Work" }
+        return chosen.name
+    }
+
     private func row(_ title: String, icon: String, place: SavedPlace?, selected: Bool) -> some View {
         Button {
             chosen = place
             place?.save(SavedPlace.chosenKey)
             if place == nil { SavedPlace.clear(SavedPlace.chosenKey) }
+            if let place, place != home, place != work { place.remember() }
             dismiss()
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: icon).frame(width: 22).foregroundStyle(Theme.secondaryText)
+                Image(systemName: icon).frame(width: 22).foregroundStyle(selected ? Theme.tint : Theme.secondaryText)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
+                    Text(title).fontWeight(selected ? .semibold : .regular)
                     if let place, title != place.name { Text(place.name).font(.caption).foregroundStyle(Theme.secondaryText) }
                 }
                 Spacer()
-                if selected { Image(systemName: "checkmark").foregroundStyle(Theme.tint) }
+                if selected { Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.tint) }
             }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .listRowBackground(selected ? Theme.tint.opacity(0.12) : nil)
     }
 
     @ViewBuilder private func saveActions(_ p: SavedPlace) -> some View {

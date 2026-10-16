@@ -319,9 +319,12 @@ struct PlaceMap: View {
             }
         }
         .task(id: id) {
-            guard shown == nil else { return }
-            image = await MapSnapshots.image(id: id, latitude: latitude, longitude: longitude,
-                                             size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale)
+            // A new place: swap in its map at once if it's drawn; otherwise keep the old one up until
+            // the new one is ready, so there's never a blank.
+            if let hit = MapSnapshots.cached(id: id, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale) { image = hit; return }
+            let fresh = await MapSnapshots.image(id: id, latitude: latitude, longitude: longitude,
+                                                 size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale)
+            if !Task.isCancelled, let fresh { image = fresh }
         }
         .animation(.easeInOut(duration: 0.25), value: image != nil)
     }

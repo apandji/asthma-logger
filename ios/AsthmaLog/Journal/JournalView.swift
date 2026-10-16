@@ -11,6 +11,7 @@ import TipKit
 /// The ••• button top-right opens All moments and Settings.
 struct JournalView: View {
     @Environment(LogService.self) private var services
+    @Environment(\.modelContext) private var context
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @State private var selectedID: UUID?
     @State private var opened: LogEvent?
@@ -59,7 +60,7 @@ struct JournalView: View {
                 // One column of glass controls on the right edge, the same on every scale and over
                 // everything: Insights and Settings at the top, the + at the bottom. The left is for words.
                 .overlay(alignment: .bottom) {
-                    CaptureBar(showInsights: $showInsights, toast: $toast, tip: tips.currentTip as? PullToLogTip, spot: spot)
+                    CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, spot: spot, toast: $toast)
                 }
                 .overlay(alignment: .topTrailing) { topRail }
                 .overlay(alignment: .top) {

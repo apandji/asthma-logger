@@ -244,9 +244,16 @@ struct JournalView: View {
                 .accessibilityAction { zoom(by: i - levelIndex) }
             }
         }
-        .padding(.vertical, 8).padding(.leading, gaugeActive ? 10 : 6).padding(.trailing, 6)
+        .padding(.vertical, 8).padding(.leading, gaugeActive ? 8 : 6).padding(.trailing, 6)
+        // While held, a frosted panel like an iOS menu: a modest corner, even padding, no outline.
         .background {
-            if gaugeActive { Capsule().fill(.black.opacity(0.55)).overlay(Capsule().strokeBorder(.white.opacity(0.15))) }
+            if gaugeActive {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .environment(\.colorScheme, .dark)
+                    .shadow(color: .black.opacity(0.35), radius: 16, y: 6)
+                    .transition(.opacity)
+            }
         }
         .contentShape(Rectangle().inset(by: -16))
         .gesture(

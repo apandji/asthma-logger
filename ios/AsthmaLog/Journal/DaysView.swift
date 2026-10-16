@@ -65,8 +65,13 @@ struct DaysView: View {
                                 Text(dayLabel(d.day)).font(.subheadline.weight(.semibold))
                                 Text(t.weave.isEmpty ? "No air reading." : t.headline)
                                     .font(.footnote).foregroundStyle(Theme.secondaryText).lineLimit(2)
+                                // Capped, so a busy day can't push the row wider than the screen.
                                 HStack(spacing: 5) {
-                                    ForEach(d.moments) { MomentSwatch(event: $0, size: 12) }
+                                    ForEach(d.moments.prefix(9)) { MomentSwatch(event: $0, size: 12) }
+                                    if d.moments.count > 9 {
+                                        Text("+\(d.moments.count - 9)").font(.caption2.weight(.medium))
+                                            .foregroundStyle(Theme.secondaryText)
+                                    }
                                 }
                             }
                             Spacer(minLength: 0)
@@ -80,7 +85,8 @@ struct DaysView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 120)  // clear the + bar
+            .padding(.bottom, 120)
+            .frame(maxWidth: .infinity)  // clear the + bar
             .scrollTargetLayout()
         }
         .defaultScrollAnchor(.bottom)

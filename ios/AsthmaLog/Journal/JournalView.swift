@@ -32,7 +32,7 @@ struct JournalView: View {
     @State private var expanded: LogEvent?
     @State private var overview = false
     /// The "days" scale of the zoom (gesture model B).
-    @State private var showDays = false
+    @State private var showDays = ProcessInfo.processInfo.arguments.contains("-startDays")  // debug: open on Days
     @State private var zoomingIn = false
     @AppStorage(Crit.Gestures.key) private var gestures = Crit.Gestures.zoom
     /// First-use tips, one at a time: pull to log, then moments.
@@ -186,7 +186,7 @@ struct JournalView: View {
                 header.transition(.opacity)
                     .opacity(probe == nil && !panelProbing ? 1 : 0.4)  // step aside while you explore the sky
                     .animation(.easeOut(duration: 0.2), value: probe == nil && !panelProbing)
-                Spacer(minLength: 12)
+                Spacer(minLength: 4)
                 if cards.isEmpty {
                     emptyState.padding(.horizontal, 20)
                 } else {
@@ -195,7 +195,7 @@ struct JournalView: View {
                                     pollenSeason: pollenSeason, onOpen: expand, onOverview: zoomOut, probing: $panelProbing,
                                     spot: spot, anchorStore: gestures == .zoom ? anchorStore : nil, anchorHidden: flight != nil,
                                     momentsTip: tips.currentTip as? MomentsTip, skyTip: tips.currentTip as? SkyTip)
-                            .frame(maxHeight: 520)
+                            .frame(maxHeight: 640)
                     } else {
                         MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, morph: morph,
                                        onOverview: zoomOut) { opened = $0 }

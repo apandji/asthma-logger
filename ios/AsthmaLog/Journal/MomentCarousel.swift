@@ -210,6 +210,7 @@ struct FolderCard: View {
 /// unlike a live map. Cached per moment and appearance. A quiet placeholder without a location.
 struct MomentMap: View {
     let event: LogEvent
+    var snapshotSize = CGSize(width: 520, height: 520)
     @Environment(\.colorScheme) private var scheme
     @State private var image: UIImage?
 
@@ -234,7 +235,7 @@ struct MomentMap: View {
             .task(id: "\(event.id)-\(scheme)") {
                 // One generous square, cropped to fit: the view can grow and shrink (the zoom) without
                 // asking for a new snapshot every frame.
-                image = await MapSnapshots.image(for: event, size: CGSize(width: 520, height: 520), dark: scheme == .dark)
+                image = await MapSnapshots.image(for: event, size: snapshotSize, dark: scheme == .dark)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: image != nil)

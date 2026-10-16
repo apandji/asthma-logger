@@ -37,7 +37,7 @@ struct MomentPager: View {
         guard let i = events.firstIndex(where: { $0.id == current?.id }) else { return }
         let dark = true  // the Journal page is black
         for j in [i - 1, i + 1, i - 2, i + 2] where events.indices.contains(j) {
-            _ = await MapSnapshots.image(for: events[j], size: CGSize(width: 520, height: 520), dark: dark)
+            _ = await MapSnapshots.image(for: events[j], size: SkyPanel.mapSize, dark: dark)
         }
     }
 
@@ -232,15 +232,18 @@ struct SkyPanel: View {
             ZStack {
                 AmbientField(weave: event.weave, temperatureF: temperature, date: event.loggedAt,
                              conditions: event.conditions, pollen: pollen)
-                // The place, faint and inactive: it comes alive when you open the moment.
+                // The place, under the whole sky: you can't move it, but dragging sideways drifts it, so you
+                // get a sense of where you were. Screen blend lifts only the streets, so the sky keeps its colors.
                 if event.latitude != nil {
-                    MomentMap(event: event)
-                        .frame(width: size.width * 0.62, height: size.width * 0.62)
+                    MomentMap(event: event, snapshotSize: SkyPanel.mapSize)
+                        .frame(width: size.width * 1.6, height: size.height)
+                        .offset(x: point.map { (0.5 - $0.x / size.width) * size.width * 0.5 } ?? 0)
                         .matchedGeometryEffect(id: "map-\(event.id)", in: mapNamespace)
-                        .saturation(0.35)
-                        .opacity(0.5)
-                        .mask(EllipticalGradient(colors: [.black, .clear], center: .center,
-                                                 startRadiusFraction: 0.1, endRadiusFraction: 0.5))
+                        .saturation(0)
+                        .blendMode(.screen)
+                        .opacity(point == nil ? 0.45 : 0.75)
+                        .frame(width: size.width, height: size.height)
+                        .clipped()
                         .allowsHitTesting(false)
                 }
 
@@ -281,6 +284,8 @@ struct SkyPanel: View {
     }
 
     private var temperature: Double? { event.conditions?.best(.temperature)?.value }
+    /// Wide and tall enough to fill the sky with room to drift sideways.
+    static let mapSize = CGSize(width: 900, height: 700)
 
     /// Touch and hold, then move: name what's under the finger, with a steady haptic pulse that
     /// quickens and strengthens as the reading nears high.

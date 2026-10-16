@@ -55,6 +55,8 @@ struct NowHomeView: View {
                     .frame(maxHeight: .infinity)
                     .padding(.top, 4)
                 NowTimeline(moments: moments, baselines: events.filter { $0.moment == .okay }.map(\.loggedAt),
+                            tint: { airTint($0.weave) },
+                            forecastTints: hours.map { ($0.date, outlook(at: $0.date).tint) },
                             hours: hours, now: now, focusTime: $focusTime, onPastEnd: { showInsights = true })
                     .frame(height: 104)
                     .padding(.bottom, 84)  // clear the +
@@ -229,6 +231,16 @@ struct NowHomeView: View {
     /// The one sentence for a time, with its color once felt air has learned. Never a percent, never
     /// "attack", never a cause. Green: like your okay days. Yellow: a bit like your rescue days.
     /// Red: matches the days you reached for your rescue.
+    /// The air's level as the verdict's colours: green clear, yellow hazy, red heavy.
+    private func airTint(_ w: WeaveSpec) -> Color? {
+        switch w.levels[.air] {
+        case .low?: Verdict.green
+        case .medium?: Verdict.yellow
+        case .high?: Verdict.red
+        case nil: nil
+        }
+    }
+
     private func outlook(at t: Date) -> (text: String, tint: Color?) {
         let learned = forced == .learned || (forced == .auto && (model.progress?.isMet ?? false))
         if learned {

@@ -8,6 +8,11 @@ struct NowTimeline: View {
     let moments: [LogEvent]
     /// Baseline moments (felt air's own checks): small ticks, so the comparison is visible.
     var baselines: [Date] = []
+    /// How the air was at each moment: green / yellow / red, so the rail answers "was that comfortable?"
+    /// at a glance. Nil when there was no reading.
+    var tint: (LogEvent) -> Color? = { _ in nil }
+    /// The forecast ahead of now, hour by hour, in the verdict's colours (nil while still learning).
+    var forecastTints: [(Date, Color?)] = []
     let hours: [NowHour]
     /// The clock, passed in so the track creeps forward while you watch.
     let now: Date
@@ -60,6 +65,26 @@ struct NowTimeline: View {
                             ahead.move(to: CGPoint(x: x(now), y: axis)); ahead.addLine(to: CGPoint(x: x(last.date), y: axis))
                             ctx.stroke(ahead, with: .color(ink.opacity(0.14)), style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
                         }
+                        // The forecast as a spectrum: one slot per hour in the verdict's colour. While felt air
+                        // is still learning it's a faint neutral band, so the shape of the day still shows.
+                        for (date, c) in forecastTints where date >= now {
+                            let w = dayWidth / 24 + 0.5
+                            let rect = CGRect(x: x(date), y: axis - 4, width: w, height: 8)
+                            ctx.fill(Path(rect), with: .color((c ?? ink).opacity(c == nil ? 0.12 : 0.75)))
+                        }
+                        // Moments: a tick per moment in the colour of the air that day. Rescue stands taller than
+                        // standard, so the kind reads in the shape and the comfort in the colour.
+                        for e in moments {
+                            let on = e.id == currentMoment?.id
+                            let tall: CGFloat = e.moment == .rescue ? 11 : 7
+                            let c = tint(e) ?? ink.opacity(0.5)
+                            let rect = CGRect(x: x(e.loggedAt) - 1.5, y: axis - tall, width: 3, height: 2 * tall)
+                            ctx.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(on ? c : c.opacity(0.85)))
+                            if on {
+                                ctx.stroke(Path(ellipseIn: CGRect(x: x(e.loggedAt) - 9, y: axis - 9, width: 18, height: 18)),
+                                           with: .color(ink), lineWidth: 1.5)
+                            }
+                        }
                         // Now: a short bright tick.
                         var nowTick = Path()
                         nowTick.move(to: CGPoint(x: x(now), y: axis - 12)); nowTick.addLine(to: CGPoint(x: x(now), y: axis + 12))
@@ -89,25 +114,11 @@ struct NowTimeline: View {
                     }
                     .frame(width: contentWidth, height: height)
 
-                    // Moments within ten minutes share one swatch with a count, so a busy hour is one mark.
-                    ForEach(clusters, id: \.first!.id) { group in
-                        let e = group.last!
-                        let on = group.contains { $0.id == currentMoment?.id }
-                        ZStack(alignment: .topTrailing) {
-                            MomentSwatch(event: e, size: on ? 13 : 8, ringWidth: on ? 2 : 1.2)
-                                .background { if on { Circle().fill(ink).frame(width: 18, height: 18) } }
-                            if group.count > 1 {
-                                Text("\(group.count)")
-                                    .font(.system(size: 9, weight: .bold).monospacedDigit())
-                                    .foregroundStyle(Theme.paper(paper))
-                                    .padding(.horizontal, 3).padding(.vertical, 1)
-                                    .background(ink, in: Capsule())
-                                    .offset(x: 9, y: -9)
-                            }
-                        }
-                        .position(x: x(e.loggedAt), y: axis)
-                        .animation(Theme.snap, value: on)
-                        .onTapGesture { go(to: e.loggedAt) }
+                    // Tap targets for the ticks (the marks themselves are drawn above).
+                    ForEach(moments) { e in
+                        Color.clear.frame(width: 22, height: 36).contentShape(Rectangle())
+                            .position(x: x(e.loggedAt), y: axis)
+                            .onTapGesture { go(to: e.loggedAt) }
                     }
                 }
                 .frame(width: contentWidth, height: height)
@@ -221,16 +232,6 @@ struct NowTimeline: View {
         let past = moments.filter { $0.loggedAt < current - 60 }
         guard let target = past.last else { return }
         go(to: target.loggedAt)
-    }
-
-    /// Moments grouped within ten minutes of each other, oldest first.
-    private var clusters: [[LogEvent]] {
-        var out: [[LogEvent]] = []
-        for m in moments {
-            if let last = out.last?.last, m.loggedAt.timeIntervalSince(last.loggedAt) < 10 * 60 { out[out.count - 1].append(m) }
-            else { out.append([m]) }
-        }
-        return out
     }
 
     private func go(to t: Date?) {

@@ -43,8 +43,8 @@ Names for the pieces of the app, so we can talk about them (and so code, docs an
 
 | Word | Means |
 |---|---|
-| **Pattern** | Conditions that show up more on Rescue days than on calm moments. Only shown once there's enough data. |
-| **Look-ahead** | Days coming up that look like your Rescue days. Never a prediction or a risk percentage. |
+| **Pattern** | Conditions that show up more on flare days than in your baseline. Only shown once there's enough data. |
+| **Look-ahead** | Days coming up that look like your flare days. Never a prediction or a risk percentage. |
 | **felt button** | The physical button: orange cap Rescue, teal cap Standard. |
 | **Design crit switches** | Settings › Design crit: live options for comparing designs on the phone. |
 

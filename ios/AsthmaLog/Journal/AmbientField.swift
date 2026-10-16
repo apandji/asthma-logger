@@ -1,30 +1,86 @@
 import AsthmaCore
 import SwiftUI
 
-/// Today's outdoor conditions as a soft, slowly drifting colour field behind frosted glass, like the
-/// Apple Card's spending hues. One hue per factor (the weave inks); each grows stronger with its level.
-/// Purely atmospheric: the numbers live in the cards. Static with Reduce Motion; plain with Reduce Transparency.
+/// A moment's outdoor conditions as a soft color field, like a sky.
+///
+/// Two styles (Settings › Design crit › Color field):
+/// - Weather (default), in layers:
+///   - Base: temperature is the hue (blue cold → green mild → gold warm → red hot) under the light of
+///     the hour (indigo night, rose dawn and dusk); humidity is the softness (dry crisp and saturated,
+///     humid paler and softer).
+///   - On top, each pollutant and pollen type adds its own color, faint when low and fuller when high,
+///     like Apple Card picking up hues: PM2.5 slate, PM10 sand, NO₂ rust, ozone icy cyan; tree green,
+///     grass gold, weed violet. Unknown values add nothing.
+/// - Inks: the original look, one riso ink per factor.
+/// Still (no idle motion); it eases between moments. Plain with Reduce Transparency.
 struct AmbientField: View {
     let weave: WeaveSpec
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The actual temperature, when known, for a smooth hue. Falls back to the cold / mild / hot word.
+    var temperatureF: Double? = nil
+    /// When the moment happened: the light changes with the hour (night indigo, dawn and dusk rose).
+    var date: Date? = nil
+    /// Per-pollutant readings for the color layers.
+    var conditions: Conditions? = nil
+    /// Demo pollen, when switched on in Design crit (pollen isn't connected yet).
+    var pollen: PollenSample? = nil
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var scheme
+    @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
+    @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
 
     var body: some View {
         if reduceTransparency {
             Theme.stage
-        } else if reduceMotion {
-            field(t: 0)
         } else {
-            TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-                field(t: context.date.timeIntervalSinceReferenceDate)
+            switch style {
+            case .weather: weatherField
+            case .inks: inkField(t: 0)
             }
         }
     }
 
-    private func field(t: Double) -> some View {
+    // MARK: Weather
+
+    private var weatherField: some View {
         let base = Theme.stage
-        // Gentle drift of the inner points, a slow breathing.
+        let humidity = weave.words[.humidity]
+        var sky = WeatherColor.light(WeatherColor.temperature(temperatureF ?? WeatherColor.fallbackTemp(weave)), at: date)
+        if humidity == "humid" { sky = sky.mix(with: .white, by: 0.16) }
+        let strength = scheme == .dark ? 0.75 : 0.66
+
+        let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
+        func tint(_ c: Color, _ layer: AirLayers.Layer?) -> Color {
+            guard let layer else { return c }
+            return c.mix(with: layer.color, by: layer.amount)
+        }
+        let mid = sky.mix(with: base, by: 0.3)
+        let low = sky.mix(with: base, by: 0.55)
+        // Rows: sky · pollutants · pollen · ground.
+        let points: [SIMD2<Float>] = [
+            [0, 0], [0.33, 0], [0.67, 0], [1, 0],
+            [0, 0.3], [0.33, 0.26], [0.67, 0.3], [1, 0.26],
+            [0, 0.56], [0.33, 0.6], [0.67, 0.56], [1, 0.6],
+            [0, 1], [0.33, 1], [0.67, 1], [1, 1],
+        ]
+        let colors: [Color] = [
+            sky, sky, sky, sky,
+            tint(mid, layers.pm25), tint(mid, layers.no2), tint(mid, layers.ozone), tint(mid, layers.pm10),
+            tint(low, layers.tree), tint(low, layers.weed), tint(low, layers.grass), tint(low, layers.pm25),
+            base, base, base, base,
+        ].enumerated().map { $0.offset < 12 ? $0.element.opacity(strength) : $0.element }
+
+        return MeshGradient(width: 4, height: 4, points: points, colors: colors, background: base)
+            // Humidity is the softness: dry crisp and saturated, humid paler.
+            .saturation(humidity == "dry" ? 1.15 : humidity == "humid" ? 0.8 : 1)
+            .contrast(humidity == "dry" ? 1.06 : 1)
+            .accessibilityHidden(true)
+    }
+
+    // MARK: Inks (original)
+
+    private func inkField(t: Double) -> some View {
+        // Still: no drift.
+        let base = Theme.stage
         func d(_ phase: Double, _ amp: Float = 0.06) -> Float { Float(sin(t / 7 + phase)) * amp }
         let points: [SIMD2<Float>] = [
             [0, 0], [0.5, 0], [1, 0],
@@ -49,6 +105,153 @@ struct AmbientField: View {
     }
 }
 
+/// The color layers on top of the sky: one per pollutant and pollen type, at a strength from its level.
+struct AirLayers {
+    struct Layer {
+        let name: String
+        let color: Color
+        let level: WeaveSpec.Level
+        /// Where the reading sits inside its level, 0…1 (used by the "smooth" strength).
+        var fraction: Double = 0.5
+        var smooth = false
+        /// Nothing in the air (zero pollen): readable as "0 · Good", but adds no color to the sky.
+        var empty = false
+
+        /// Color strength. Steps: one strength per level. Smooth: rises with the amount inside the
+        /// level's own range, never reaching the next level's, so the jump between levels stays clear.
+        var amount: Double {
+            guard smooth else { return [0.14, 0.36, 0.6][level.rawValue] }
+            let range = [(0.08, 0.2), (0.3, 0.45), (0.55, 0.7)][level.rawValue]
+            return range.0 + (range.1 - range.0) * max(0, min(1, fraction))
+        }
+    }
+
+    var pm25: Layer?, pm10: Layer?, no2: Layer?, ozone: Layer?
+    var tree: Layer?, grass: Layer?, weed: Layer?
+
+    /// Layers that color the sky.
+    var all: [Layer] { [pm25, pm10, no2, ozone, tree, grass, weed].compactMap { $0 }.filter { !$0.empty } }
+    /// Layers you can read, zero pollen included, so every sky has the same strata.
+    var readable: [Layer] { [pm25, pm10, no2, ozone, tree, grass, weed].compactMap { $0 } }
+
+    /// Level edges per layer (start of low, moderate, high, and a ceiling for "high"):
+    /// EPA for pollutants (µg/m³ or ppb), Ambee's risk thresholds for pollen (grains/m³).
+    static let edges: [String: [Double]] = [
+        "PM2.5": [0, 12, 35, 150], "PM10": [0, 55, 155, 355], "NO₂": [0, 54, 101, 360], "Ozone": [0, 55, 71, 125],
+        "Tree pollen": [0, 100, 213, 940], "Grass pollen": [0, 30, 61, 342], "Weed pollen": [0, 44, 80, 296],
+    ]
+
+    init(conditions c: Conditions?, weave: WeaveSpec, pollen: PollenSample?, smooth: Bool = false) {
+        func level(_ b: PollutantBand) -> WeaveSpec.Level? {
+            switch b { case .low: .low; case .moderate: .medium; case .high: .high; case .unknown: nil }
+        }
+        func layer(_ name: String, _ color: Color, _ l: WeaveSpec.Level, _ value: Double?) -> Layer {
+            var f = 0.5
+            if let value, let e = Self.edges[name] {
+                let lo = e[l.rawValue], hi = e[l.rawValue + 1]
+                f = (value - lo) / max(0.001, hi - lo)
+            }
+            return Layer(name: name, color: color, level: l, fraction: f, smooth: smooth)
+        }
+        if let v = c?.best(.pm25)?.value, let l = level(Banding.pm25(v)) { pm25 = layer("PM2.5", WeatherColor.pm25, l, v) }
+        if let v = c?.best(.pm10)?.value, let l = level(Banding.pm10(v)) { pm10 = layer("PM10", WeatherColor.pm10, l, v) }
+        if let v = c?.best(.no2)?.value, let l = level(Banding.no2(ppb: v)) { no2 = layer("NO₂", WeatherColor.no2, l, v) }
+        if let v = c?.best(.ozone)?.value, let l = level(Banding.ozone(ppb: v)) { ozone = layer("Ozone", WeatherColor.ozone, l, v) }
+        // AirNow's official AQI wins when it says the air is worse than the nearest station's reading
+        // (the station can sit just under a cut-off while the AQI, a NowCast over hours, is over it).
+        // Its main pollutant takes the bump; otherwise PM2.5.
+        if let aqi = c?.best(.aqi) {
+            let l: WeaveSpec.Level = aqi.value <= 50 ? .low : aqi.value <= 100 ? .medium : .high
+            let f = (aqi.value - [0, 51, 101][l.rawValue]) / [50.0, 49, 99][l.rawValue]
+            let isOzone = (aqi.category ?? "").localizedCaseInsensitiveContains("ozone")
+            if isOzone {
+                if ozone == nil || ozone!.level < l { ozone = Layer(name: "Ozone", color: WeatherColor.ozone, level: l, fraction: f, smooth: smooth) }
+            } else if pm25 == nil || pm25!.level < l {
+                pm25 = Layer(name: "PM2.5", color: WeatherColor.pm25, level: l, fraction: f, smooth: smooth)
+            }
+        }
+        // No per-pollutant readings and no AQI (older moments): the overall air level drives the PM2.5 layer.
+        if pm25 == nil && pm10 == nil && no2 == nil && ozone == nil, let air = weave.levels[.air] {
+            pm25 = Layer(name: "Air", color: WeatherColor.pm25, level: air, smooth: smooth)
+        }
+        if let p = pollen {
+            let kinds = p.kinds
+            func pollenLayer(_ i: Int, _ name: String) -> Layer {
+                var l = layer(name, WeatherColor.pollen[i], kinds[i].level, Double(kinds[i].count))
+                l.empty = kinds[i].count == 0
+                return l
+            }
+            tree = pollenLayer(0, "Tree pollen")
+            grass = pollenLayer(1, "Grass pollen")
+            weed = pollenLayer(2, "Weed pollen")
+        }
+    }
+}
+
+/// The weather color language, shared by the field and its legend.
+enum WeatherColor {
+    /// Blue (cold) → sky → sage (mild) → amber (warm) → red (hot), by °F.
+    /// Spread so ordinary days differ: 45° sky blue, 55° teal, 63° green, 70° gold, 78° orange, 88° red.
+    static let stops: [(f: Double, color: Color)] = [
+        (30, Color(red: 0.22, green: 0.34, blue: 0.86)),
+        (45, Color(red: 0.30, green: 0.58, blue: 0.92)),
+        (55, Color(red: 0.20, green: 0.70, blue: 0.72)),
+        (63, Color(red: 0.42, green: 0.76, blue: 0.42)),
+        (70, Color(red: 0.93, green: 0.78, blue: 0.32)),
+        (78, Color(red: 0.97, green: 0.56, blue: 0.24)),
+        (88, Color(red: 0.90, green: 0.28, blue: 0.22)),
+    ]
+
+    static func isNight(_ date: Date?) -> Bool {
+        guard let date else { return false }
+        let h = Calendar.current.component(.hour, from: date)
+        return h < 5 || h >= 21
+    }
+
+    /// The light of the hour over the temperature hue: deep indigo at night, rose at dawn and dusk.
+    static func light(_ c: Color, at date: Date?) -> Color {
+        guard let date else { return c }
+        let h = Double(Calendar.current.component(.hour, from: date)) + Double(Calendar.current.component(.minute, from: date)) / 60
+        let night = Color(red: 0.22, green: 0.20, blue: 0.62)
+        let rose = Color(red: 0.92, green: 0.48, blue: 0.56)
+        switch h {
+        case ..<5, 21...: return c.mix(with: night, by: 0.62)
+        case 5..<8: return c.mix(with: rose, by: 0.3 * (1 - abs(h - 6.5) / 1.5) + 0.1)
+        case 17..<21: return c.mix(with: rose, by: 0.15 + 0.25 * (h - 17) / 4).mix(with: night, by: max(0, (h - 19.5) / 1.5) * 0.4)
+        default: return c
+        }
+    }
+    static let smog = Color(red: 0.52, green: 0.50, blue: 0.46)
+    /// Pollutant layers: fine particles slate, coarse dust sand, NO₂ rust (it's a brown gas), ozone icy cyan.
+    static let pm25 = Color(red: 0.42, green: 0.48, blue: 0.60)
+    static let pm10 = Color(red: 0.86, green: 0.72, blue: 0.50)
+    static let no2 = Color(red: 0.74, green: 0.38, blue: 0.24)
+    static let ozone = Color(red: 0.66, green: 0.92, blue: 1.0)
+    static let pollen: [Color] = [
+        Color(red: 0.36, green: 0.80, blue: 0.46),   // tree: green
+        Color(red: 0.98, green: 0.80, blue: 0.22),   // grass: gold
+        Color(red: 0.72, green: 0.42, blue: 0.95),   // weed: violet
+    ]
+
+    static func temperature(_ f: Double) -> Color {
+        guard let first = stops.first, let last = stops.last else { return .gray }
+        if f <= first.f { return first.color }
+        if f >= last.f { return last.color }
+        for (a, b) in zip(stops, stops.dropFirst()) where f <= b.f {
+            return a.color.mix(with: b.color, by: (f - a.f) / (b.f - a.f))
+        }
+        return last.color
+    }
+
+    static func fallbackTemp(_ w: WeaveSpec) -> Double {
+        switch w.words[.temperature] {
+        case "cold": 32
+        case "hot": 92
+        default: 65
+        }
+    }
+}
+
 extension View {
     /// Frosted glass card over the ambient field: dark-tinted material in dark mode, light material in light.
     func frostedCard(cornerRadius: CGFloat = 22) -> some View {
@@ -66,5 +269,127 @@ private struct FrostedCard: ViewModifier {
             .background(Color.black.opacity(scheme == .dark ? 0.35 : 0), in: shape)
             .background(.ultraThinMaterial, in: shape)
             .overlay(shape.strokeBorder(.white.opacity(scheme == .dark ? 0.08 : 0.4), lineWidth: 0.5))
+    }
+}
+
+/// Small deterministic random numbers so example values don't jump between redraws.
+nonisolated struct Seeded {
+    private var s: UInt64
+    init(_ seed: Double) { s = UInt64(abs(seed)) &* 2654435761 | 1 }
+    mutating func next() -> Double {
+        s = s &* 6364136223846793005 &+ 1442695040888963407
+        return Double(s >> 11) / Double(1 << 53)
+    }
+}
+
+/// Riso grain over the sky: a halftone of tiny ink dots on a slightly turned grid. At rest it's a
+/// print texture; under a finger the dots swell and take the ink of the layer being read, so the sky
+/// reads as a surface that answers touch.
+struct SkyGrain: View {
+    /// Where the finger is, in the sky's own coordinates.
+    var point: CGPoint? = nil
+    /// The ink of the layer under the finger.
+    var ink: Color? = nil
+    /// 0 clean … 1 high: how far the dots swell.
+    var intensity: Double = 0
+    /// Static grain only, no response.
+    var responds = true
+    /// When the sky appeared: a wave runs out through the dots to say "touch me". Until the sky has
+    /// been touched once it runs again every few seconds.
+    var rippleAt: Date? = nil
+    var inviting = true
+    /// Strata: the band (in points) being read. The swell then runs the full width of the band.
+    var band: ClosedRange<CGFloat>? = nil
+    /// Strata: the ripple is a horizontal wave sweeping down through the layers, not a ring.
+    var sweeps = false
+    /// The ripple's ink. White to invite touch; the moment's orange or blue when a log has just landed,
+    /// when it also runs as a ring from the + (bottom right), whatever the reading mode.
+    var rippleInk: Color = .white
+    var rippleFromCapture = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let spacing: CGFloat = 10
+    private let angle: CGFloat = 12 * .pi / 180
+    private let reach: CGFloat = 80
+    private let rippleSeconds = 1.6
+    private let rippleEvery = 5.0
+
+    var body: some View {
+        // Alive at rest: a slow breath moves through the grain (24 fps is plenty; off with Reduce Motion).
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion || !responds)) { frame in
+            grain(at: frame.date)
+        }
+    }
+
+    private func grain(at time: Date) -> some View {
+        // The wavefront: a ring that grows from the centre and fades as it goes.
+        var age = rippleAt.map { time.timeIntervalSince($0) } ?? rippleSeconds
+        if inviting, age >= rippleSeconds { age = age.truncatingRemainder(dividingBy: rippleEvery) }
+        let wave = (responds && !reduceMotion && age < rippleSeconds) ? age / rippleSeconds : nil
+        let breath = reduceMotion || !responds ? 0.0 : time.timeIntervalSinceReferenceDate
+        return Canvas(rendersAsynchronously: true) { ctx, size in
+            let cosA = cos(angle), sinA = sin(angle)
+            let centre = rippleFromCapture ? CGPoint(x: size.width - 24, y: size.height + 40) : CGPoint(x: size.width / 2, y: size.height * 0.55)
+            let radius = wave.map { CGFloat($0) * hypot(size.width, size.height) * (rippleFromCapture ? 1.1 : 0.6) }
+            let sweeps = sweeps && !rippleFromCapture
+            let strong: CGFloat = rippleFromCapture ? 1.6 : 1
+            let fade = wave.map { 1 - $0 } ?? 0
+            let diag = hypot(size.width, size.height)
+            let n = Int(diag / spacing) + 2
+            let rest: CGFloat = 1.5
+            let ink = ink ?? .white
+            // A turned grid, big enough to cover the corners.
+            for i in -n...n {
+                for j in -n...n {
+                    let gx = CGFloat(i) * spacing, gy = CGFloat(j) * spacing
+                    let x = size.width / 2 + gx * cosA - gy * sinA
+                    let y = size.height / 2 + gx * sinA + gy * cosA
+                    guard x > -4, y > -4, x < size.width + 4, y < size.height + 4 else { continue }
+                    // Printed, not plotted: each dot a little different.
+                    let wobble = CGFloat((i &* 73 &+ j &* 151) & 7) / 7
+                    var r = rest * (0.7 + 0.5 * wobble)
+                    var color = Color.black.opacity(0.32)
+                    if breath > 0 {
+                        // A slow swell drifting across the field, like breathing.
+                        let phase = breath * 1.1 + Double(x + y) / 90
+                        let b = CGFloat(0.5 + 0.5 * sin(phase))
+                        r += 0.6 * b
+                        color = Color.black.opacity(0.24 + 0.16 * Double(b))
+                    }
+                    if responds, let band, point != nil {
+                        // The whole layer answers: strongest at the band's centre, fading to its edges.
+                        let mid = (band.lowerBound + band.upperBound) / 2, half = max(1, (band.upperBound - band.lowerBound) / 2)
+                        let d = abs(y - mid) / half
+                        if d < 1 {
+                            let t = 1 - d * d
+                            r += t * (1.0 + 1.8 * CGFloat(intensity)) * 1.6
+                            color = ink.opacity(0.3 + 0.55 * Double(t))
+                        }
+                    } else if responds, let p = point {
+                        let d = hypot(x - p.x, y - p.y)
+                        if d < reach {
+                            let t = 1 - d / reach                 // 1 at the finger, 0 at the edge
+                            let swell = t * t * (1.2 + 2.2 * CGFloat(intensity))
+                            r += swell * 2.2
+                            color = ink.opacity(0.35 + 0.6 * Double(t))
+                        }
+                    } else if let radius {
+                        // Dots near the wavefront swell and go white, then settle back. The front is a ring
+                        // from the centre (blob) or a line sweeping top to bottom (strata).
+                        let d = sweeps ? abs(y - radius / 0.6 / hypot(size.width, size.height) * size.height)
+                                       : abs(hypot(x - centre.x, y - centre.y) - radius)
+                        let width = 36 * strong
+                        if d < width {
+                            let t = (1 - d / width) * fade
+                            r += t * t * 2.4 * strong
+                            color = rippleInk.opacity(0.15 + 0.7 * Double(t))
+                        }
+                    }
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)), with: .color(color))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

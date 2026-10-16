@@ -29,6 +29,16 @@ public enum OpenAQ {
         public var measuresOzone: Bool {
             paramName == "o3" || paramName.contains("ozone") || parameter?.id == 10
         }
+
+        /// Coarse particles (dust, pollen fragments).
+        public var measuresPM10: Bool {
+            paramName == "pm10" || parameter?.id == 1
+        }
+
+        /// Nitrogen dioxide, mostly traffic exhaust.
+        public var measuresNO2: Bool {
+            paramName == "no2" || paramName.contains("nitrogendioxide") || parameter?.id == 7 || parameter?.id == 15
+        }
     }
 
     public struct Coordinates: Codable, Sendable {
@@ -142,7 +152,7 @@ public enum OpenAQ {
         EnvObservation(
             signal: signal,
             value: r.value,
-            unit: signal == .pm25 ? "µg/m³" : "ppb",
+            unit: signal == .pm25 || signal == .pm10 ? "µg/m³" : "ppb",
             asOf: r.asOf,
             source: "OpenAQ",
             spatialScale: .station,

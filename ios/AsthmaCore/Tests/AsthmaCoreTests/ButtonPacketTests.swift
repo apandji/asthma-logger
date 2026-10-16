@@ -1,0 +1,87 @@
+import Foundation
+import Testing
+@testable import AsthmaCore
+
+@Suite struct ButtonPacketTests {
+    @Test func decodesLittleEndianFields() {
+        let bytes: [UInt8] = [1, 1, 0x34, 0x12, 0x07, 0x00, 0xFF, 0x0F, 0x10, 0x27, 0x00, 0x00]
+        let p = ButtonPacket(bytes: bytes)
+        #expect(p == ButtonPacket(cap: .rescue, bootID: 0x1234, seq: 7, force: 4095, ageMs: 10_000))
+    }
+
+    @Test func roundTrips() {
+        let p = ButtonPacket(cap: .standard, bootID: 65535, seq: 300, force: 12, ageMs: 4_000_000_000)
+        #expect(ButtonPacket(bytes: p.bytes) == p)
+        #expect(p.bytes.count == 12)
+    }
+
+    @Test(arguments: [
+        [UInt8](),
+        [1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0],          // too short
+        [2, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],       // unknown version
+        [1, 3, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],       // unknown cap
+    ])
+    func rejectsBadPackets(_ bytes: [UInt8]) {
+        #expect(ButtonPacket(bytes: bytes) == nil)
+    }
+
+    @Test func ackIsBootIDThenSeq() {
+        let p = ButtonPacket(cap: .rescue, bootID: 0xABCD, seq: 0x0102)
+        #expect(p.ack == [0xCD, 0xAB, 0x02, 0x01])
+    }
+
+    @Test func pressTimeComesFromAge() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let p = ButtonPacket(cap: .rescue, bootID: 1, seq: 1, ageMs: 90_500)
+        #expect(p.pressedAt(receivedAt: now) == now.addingTimeInterval(-90.5))
+    }
+
+    @Test func resendsShareAKeyButRebootsDont() {
+        let a = ButtonPacket(cap: .rescue, bootID: 9, seq: 1, ageMs: 0)
+        let resent = ButtonPacket(cap: .rescue, bootID: 9, seq: 1, ageMs: 5_000)
+        let afterReboot = ButtonPacket(cap: .rescue, bootID: 10, seq: 1)
+        #expect(a.key == resent.key)
+        #expect(a.key != afterReboot.key)
+    }
+}
+
+@Suite struct PollutantBandTests {
+    @Test func pm10UsesEPABreakpoints() {
+        #expect(Banding.pm10(20) == .low)
+        #expect(Banding.pm10(54.9) == .low)
+        #expect(Banding.pm10(55) == .moderate)
+        #expect(Banding.pm10(155) == .high)
+        #expect(Banding.pm10(nil) == .unknown)
+    }
+
+    @Test func no2UsesEPABreakpoints() {
+        #expect(Banding.no2(ppb: 53) == .low)
+        #expect(Banding.no2(ppb: 54) == .moderate)
+        #expect(Banding.no2(ppb: 101) == .high)
+        #expect(Banding.no2(ppb: .nan) == .unknown)
+    }
+
+    @Test func openAQRecognisesPM10AndNO2Sensors() {
+        let pm10 = OpenAQ.Sensor(id: 1, name: "pm10 µg/m³", parameter: .init(id: 1, name: "pm10", units: "µg/m³"))
+        let no2 = OpenAQ.Sensor(id: 2, name: "no2 ppm", parameter: .init(id: 7, name: "no2", units: "ppm"))
+        #expect(pm10.measuresPM10 && !pm10.measuresPM25)
+        #expect(no2.measuresNO2 && !no2.measuresOzone)
+    }
+}
+
+@Suite struct WeaveAirTests {
+    @Test func officialAQIWinsWhenWorseThanTheStation() {
+        // PM2.5 just under the cut-off, but AirNow's AQI says unhealthy for sensitive groups.
+        let w = WeaveSpec(ConditionsInput(pm25: 11.8, ozonePpb: 6, aqi: 112))
+        #expect(w.levels[.air] == .high)
+    }
+
+    @Test func stationWinsWhenWorseThanAQI() {
+        let w = WeaveSpec(ConditionsInput(pm25: 40, aqi: 30))
+        #expect(w.levels[.air] == .high)
+    }
+
+    @Test func aqiAloneStillWorks() {
+        #expect(WeaveSpec(ConditionsInput(aqi: 75)).levels[.air] == .medium)
+    }
+}

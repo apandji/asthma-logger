@@ -10,4 +10,6 @@ enum Prefs {
     static let didOnboard = "didOnboard"
     /// How the person said they'll log: "watch", "button" or "app".
     static let logMethod = "logMethod"
+    /// Two labelled Rescue / Standard buttons instead of the pull-up +.
+    static let logButtons = "logButtons"
 }

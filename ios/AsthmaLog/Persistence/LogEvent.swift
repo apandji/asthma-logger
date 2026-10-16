@@ -36,6 +36,10 @@ final class LogEvent {
     /// Made-up moment from Settings → Demo moments. Its own field, so a user note (voice notes) never
     /// turns a demo moment real or the other way round.
     var isDemoMoment: Bool = false
+    /// File name of this moment's voice note in Documents/VoiceNotes (audio stays on the phone).
+    var voiceNoteFile: String?
+    /// "University City, MO", looked up once from the coordinates.
+    var placeName: String?
 
     init(moment: MomentKind, loggedAt: Date = .now, id: UUID = UUID()) {
         self.id = id

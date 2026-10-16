@@ -7,7 +7,7 @@ import WeatherKit
 struct WeatherProvider {
     static let source = "Apple Weather"
 
-    func current(latitude: Double, longitude: Double) async throws -> (observations: [EnvObservation], alerts: [ConditionAlert]) {
+    func current(latitude: Double, longitude: Double) async throws -> (observations: [EnvObservation], alerts: [ConditionAlert], condition: String) {
         let location = CLLocation(latitude: latitude, longitude: longitude)
         let (now, alerts) = try await WeatherService.shared.weather(for: location, including: .current, .alerts)
         let asOf = now.date
@@ -25,7 +25,7 @@ struct WeatherProvider {
         let named = (alerts ?? []).map {
             ConditionAlert(name: $0.summary, source: $0.source, severity: String(describing: $0.severity))
         }
-        return (observations, named)
+        return (observations, named, now.condition.description)
     }
 
     struct Hour: Sendable {

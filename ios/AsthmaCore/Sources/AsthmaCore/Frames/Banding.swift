@@ -14,6 +14,22 @@ public enum Banding {
         return .high
     }
 
+    /// PM10 (µg/m³, 24-hour EPA breakpoints): good < 55, moderate < 155.
+    public static func pm10(_ ug: Double?) -> PollutantBand {
+        guard let v = ug, v.isFinite else { return .unknown }
+        if v < 55 { return .low }
+        if v < 155 { return .moderate }
+        return .high
+    }
+
+    /// NO₂ (ppb, 1-hour EPA breakpoints): good ≤ 53, moderate ≤ 100.
+    public static func no2(ppb: Double?) -> PollutantBand {
+        guard let v = ppb, v.isFinite else { return .unknown }
+        if v <= 53 { return .low }
+        if v <= 100 { return .moderate }
+        return .high
+    }
+
     public static func ozone(ppb: Double?) -> PollutantBand {
         guard let v = ppb, v.isFinite else { return .unknown }
         if v < 55 { return .low }

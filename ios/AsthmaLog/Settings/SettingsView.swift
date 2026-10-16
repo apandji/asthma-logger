@@ -7,15 +7,92 @@ struct SettingsView: View {
     @AppStorage(Prefs.narratorStyle) private var styleScore = NarratorStyle.defaultScore
     @AppStorage(Prefs.useOnDeviceModel) private var useModel = true
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
+    @AppStorage(Prefs.logButtons) private var useButtons = false
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.useDemoData) private var demo = false
     @Environment(\.modelContext) private var context
+    @Environment(ButtonLink.self) private var button
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
     @State private var demoNote: String?
+    @State private var tutorialNote: String?
+    @AppStorage(Crit.performanceHUD) private var perfHUD = false
+    @AppStorage(Crit.Gestures.key) private var critGestures = Crit.Gestures.zoom
+    @AppStorage(LevelStyle.key) private var levelStyle = LevelStyle.signal
+    @AppStorage(Crit.Header.key) private var critHeader = Crit.Header.moment
+    @AppStorage(Crit.CardStyle.key) private var critCard = Crit.CardStyle.panel
+    @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
+    @AppStorage(Crit.Home.key) private var critHome = Crit.Home.journal
+    @AppStorage(Crit.SkyTexture.key) private var critTexture = Crit.SkyTexture.dots
+    @AppStorage(Crit.SkyReading.key) private var critReading = Crit.SkyReading.strata
+    @AppStorage(Crit.CardMarker.key) private var critMarker = Crit.CardMarker.quietTab
+    @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather
+    @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
+    @AppStorage(Crit.LayerStrength.key) private var critStrength = Crit.LayerStrength.smooth
+    @AppStorage(Crit.InsightsEntry.key) private var critInsights = Crit.InsightsEntry.topBar
+    @AppStorage(Crit.CaptureOrder.key) private var critOrder = Crit.CaptureOrder.rescueFirst
 
     var body: some View {
         NavigationStack {
             Form {
+                #if DEBUG
+                Section {
+                    Toggle("Performance readout", isOn: $perfHUD)
+                    Button("Replay tutorial") {
+                        UserDefaults.standard.set(true, forKey: AppTips.resetKey)
+                        tutorialNote = "Close felt air (swipe it away) and open it again to see the tutorial."
+                    }
+                    if let tutorialNote {
+                        Text(tutorialNote).font(.footnote).foregroundStyle(Theme.secondaryText)
+                    }
+                    Picker("Home", selection: $critHome) {
+                        ForEach(Crit.Home.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Gestures", selection: $critGestures) {
+                        ForEach(Crit.Gestures.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Header", selection: $critHeader) {
+                        ForEach(Crit.Header.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Sky reading", selection: $critReading) {
+                        ForEach(Crit.SkyReading.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Sky surface", selection: $critTexture) {
+                        ForEach(Crit.SkyTexture.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Color field", selection: $critField) {
+                        ForEach(Crit.FieldStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Color strength", selection: $critStrength) {
+                        ForEach(Crit.LayerStrength.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Pollen (demo)", selection: $demoPollen) {
+                        ForEach(DemoPollen.Season.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Moment style", selection: $critCard) {
+                        ForEach(Crit.CardStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Card label", selection: $critMarker) {
+                        ForEach(Crit.CardMarker.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Good / OK / Not good", selection: $levelStyle) {
+                        ForEach(LevelStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Insights", selection: $critInsights) {
+                        ForEach(Crit.InsightsEntry.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Insights state", selection: $critInsightsState) {
+                        ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("+ pull order", selection: $critOrder) {
+                        ForEach(Crit.CaptureOrder.allCases) { Text($0.title).tag($0) }
+                    }
+                } header: {
+                    Text("Design crit")
+                } footer: {
+                    Text("Debug builds only. Switch variants live to compare them in a review. Demo pollen is made up (realistic Midwest seasons), labelled Demo, and never used for patterns. \(levelStyle.note)")
+                }
+                #endif
+
                 Section {
                     Slider(
                         value: Binding(get: { Double(styleScore) }, set: { styleScore = NarratorStyle.clamp($0) }),
@@ -40,6 +117,7 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Log with two buttons instead of the +", isOn: $useButtons)
                     Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
                     Toggle("Add I'm okay moments automatically", isOn: $autoBaseline)
                 } header: {
@@ -47,6 +125,8 @@ struct SettingsView: View {
                 } footer: {
                     Text("I'm okay moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
                 }
+
+                ButtonSection()
 
                 Section("Data sources") {
                     LabeledContent("Apple Weather", value: "On")
@@ -75,6 +155,43 @@ struct SettingsView: View {
                     Text(demoNote ?? "Made-up moments for showing the Journal, labelled Demo in their sources. They don't count toward your patterns.")
                 }
 
+                #if DEBUG
+                Section {
+                    Button("Reset onboarding and button", role: .destructive) {
+                        button.resetForOnboarding()
+                        UserDefaults.standard.set(true, forKey: AppTips.resetKey)
+                        dismiss()
+                        Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
+                    }
+                } header: {
+                    Text("Onboarding (debug)")
+                } footer: {
+                    Text("Forgets the paired button, starts onboarding again and brings the tips back next launch. Your moments stay. iOS only shows each permission sheet once per install: to see them again, reinstall with ios/scripts/fresh-install.sh (this erases the Journal).")
+                }
+
+                Section {
+                    NavigationLink("Voice effect") { VoiceOrbPrototype() }
+                } header: {
+                    Text("Prototypes")
+                } footer: {
+                    Text("Debug builds only. The voice effect uses simulated sound.")
+                }
+
+                Section {
+                    prototypeLink("Strand", "The week as a necklace: spikier beads for worse air, flowers for pollen.") { StrandPrototype() }
+                    prototypeLink("Bouquet", "Each day's pollen as a bouquet; haze and sway for pollution.") { BouquetPrototype() }
+                    prototypeLink("Airways v2 · horizon", "You're the breathing line; the air is the sky above.") { BreathHorizonPrototype() }
+                    prototypeLink("Aura", "One day as a clock, you in the middle, air in rings around you.") { AuraPrototype() }
+                    prototypeLink("Sampler", "The week as cross-stitch: denser where the air was higher.") { SamplerPrototype() }
+                    prototypeLink("Overprint", "Three riso inks as hills through the week.") { OverprintPrototype() }
+                    prototypeLink("Airways v1 · tubes", "April's first sketch: one tube per day.") { AirwaysPrototype() }
+                } header: {
+                    Text("Air visualizations")
+                } footer: {
+                    Text("Debug builds only. PM2.5 and ozone are from your moments; PM10, NO₂, pollen and breathing scores are examples.")
+                }
+                #endif
+
                 Section {
                     Text("felt air is a diary, not a medical device. It compares outdoor conditions when you used your inhaler with your I'm okay moments. It can't see indoor air and doesn't diagnose or predict attacks.")
                         .font(Theme.caption)
@@ -90,6 +207,17 @@ struct SettingsView: View {
             }
         }
     }
+
+    #if DEBUG
+    private func prototypeLink<D: View>(_ title: String, _ note: String, @ViewBuilder _ destination: @escaping () -> D) -> some View {
+        NavigationLink(destination: destination) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(note).font(.caption).foregroundStyle(Theme.secondaryText)
+            }
+        }
+    }
+    #endif
 
     private func addDemoWeek() {
         let n = DemoSeeder.add(in: context)
@@ -131,6 +259,11 @@ enum DemoSeeder {
             e.conditions = m.conditions
             e.envStatus = .ready
             e.isDemoMoment = true
+            let place = DemoRoute.place(at: m.at)
+            (e.latitude, e.longitude) = DemoRoute.coordinate(for: place, at: m.at)
+            e.horizontalAccuracy = 15
+            e.placeName = place.name
+            e.indoorGuessRaw = (place.outdoor ? IndoorOutdoor.outdoor : .indoor).rawValue
             context.insert(e)
         }
         try? context.save()

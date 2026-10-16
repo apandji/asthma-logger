@@ -1,9 +1,15 @@
 import AsthmaCore
 import Foundation
 
-/// Nearest PM2.5 and ozone stations. Station choice lives in AsthmaCore (OpenAQ) and is unit-tested.
+/// Nearest monitors for PM2.5, PM10, ozone and NO₂. Station choice lives in AsthmaCore (OpenAQ) and
+/// is unit-tested. Each pollutant comes from its own nearest station; missing ones are simply left out.
 struct OpenAQProvider {
     let key: String
+
+    private static let pollutants: [(signal: Signal, measures: @Sendable (OpenAQ.Sensor) -> Bool)] = [
+        (.pm25, { $0.measuresPM25 }), (.pm10, { $0.measuresPM10 }),
+        (.ozone, { $0.measuresOzone }), (.no2, { $0.measuresNO2 }),
+    ]
 
     func observations(latitude lat: Double, longitude lon: Double) async throws -> [EnvObservation] {
         var locations = try await search(lat, lon, monitor: true)
@@ -14,29 +20,23 @@ struct OpenAQProvider {
             locations += try await search(lat, lon, monitor: false).filter { $0.id.map { !seen.contains($0) } ?? false }
         }
 
-        let pmLoc = OpenAQ.nearest(locations, lat: lat, lon: lon) { $0.measuresPM25 }
-        let o3Loc = OpenAQ.nearest(locations, lat: lat, lon: lon) { $0.measuresOzone }
+        let picks = Self.pollutants.map { p in (p, OpenAQ.nearest(locations, lat: lat, lon: lon, measures: p.measures)) }
         var latest: [Int: [OpenAQ.Latest]] = [:]
-        for id in Set([pmLoc?.id, o3Loc?.id].compactMap { $0 }) {
+        for id in Set(picks.compactMap { $0.1?.id }) {
             let url = URL(string: "\(OpenAQ.baseURL)/locations/\(id)/latest")!
             latest[id] = try await HTTP.get(url, headers: headers, as: OpenAQ.Results<OpenAQ.Latest>.self).results ?? []
         }
 
-        var out: [EnvObservation] = []
-        if let loc = pmLoc, let id = loc.id,
-           let r = OpenAQ.reading(at: loc, latest: latest[id] ?? [], lat: lat, lon: lon, measures: { $0.measuresPM25 }) {
-            out.append(OpenAQ.observation(r, signal: .pm25))
+        return picks.compactMap { p, loc in
+            guard let loc, let id = loc.id,
+                  let r = OpenAQ.reading(at: loc, latest: latest[id] ?? [], lat: lat, lon: lon, measures: p.measures) else { return nil }
+            return OpenAQ.observation(r, signal: p.signal)
         }
-        if let loc = o3Loc, let id = loc.id,
-           let r = OpenAQ.reading(at: loc, latest: latest[id] ?? [], lat: lat, lon: lon, measures: { $0.measuresOzone }) {
-            out.append(OpenAQ.observation(r, signal: .ozone))
-        }
-        return out
     }
 
     private var headers: [String: String] { ["X-API-Key": key, "Accept": "application/json"] }
 
-    private func search(_ lat: Double, _ lon: Double, monitor: Bool) async throws -> [OpenAQ.Location] {
+    func search(_ lat: Double, _ lon: Double, monitor: Bool) async throws -> [OpenAQ.Location] {
         var c = URLComponents(string: "\(OpenAQ.baseURL)/locations")!
         c.queryItems = [
             URLQueryItem(name: "coordinates", value: String(format: "%.4f,%.4f", lat, lon)),

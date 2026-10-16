@@ -44,7 +44,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: Your location stamps each inhaler log with the outdoor air and weather where you were.
         NSLocationAlwaysAndWhenInUseUsageDescription: Lets the app learn your home, work and usual places so forecasts use the right spot.
@@ -53,6 +53,8 @@ targets:
         NSHealthShareUsageDescription: Reads nothing yet. Required by Apple Health alongside saving.
         NSMicrophoneUsageDescription: Record a short voice note about how you're feeling.
         NSSpeechRecognitionUsageDescription: Turns your voice note into text on this iPhone.
+        NSBluetoothAlwaysUsageDescription: Connects to your felt button so a press logs a moment, even when the app is closed.
+        UIBackgroundModes: [bluetooth-central]
         OPENAQ_API_KEY: $(OPENAQ_API_KEY)
         AIRNOW_API_KEY: $(AIRNOW_API_KEY)
     entitlements:

@@ -16,37 +16,46 @@ struct InsightsView: View {
     @State private var showDoctor = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
 
+    /// The pages behind the tiles.
+    enum Page: Hashable { case pattern, profile, moments }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    // The same top-left header as the home: a small line, then one serif title.
+                VStack(alignment: .leading, spacing: 32) {
                     ScaleHeader(title: learned ? "felt air knows your pattern." : "Still learning your pattern.") {
                         Image(systemName: "sparkles")
                         Text(["Insights", demo ? "Demo data" : nil, demoLearned ? "Demo person" : nil].compactMap { $0 }.joined(separator: " · "))
                     }
                     .padding(.horizontal, -20)
-                    LearningRing(progress: model.progress, forcedLearned: forced == .learned)
-                    patternCard
-                    profileCard
-                    lookAheadCard
-                    calendarCard
-                    evidenceCard
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Compares your flare days (rescue use) with your baseline. Outdoor air only. Not medical advice, and not a prediction.")
-                        WeatherAttributionView()
-                    }
-                    .font(Theme.caption)
-                    .foregroundStyle(Theme.secondaryText)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    hero
+                    tiles
+                    Text("Outdoor air only. Not medical advice, and not a prediction.")
+                        .font(Theme.caption).foregroundStyle(Theme.secondaryText)
+                        .frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 12).padding(.bottom, 40)
             }
             .scrollIndicators(.hidden)
-            // The home's paper: black or linen, with the same still riso grain.
-            .background { ZStack { Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea() }
+            .background(paperBackground)
             .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: Page.self) { page in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 28) {
+                        switch page {
+                        case .pattern: patternCard; lookAheadCard; evidenceCard
+                        case .profile: profileCard
+                        case .moments: calendarCard
+                        }
+                    }
+                    .padding(20)
+                }
+                .scrollIndicators(.hidden)
+                .background(paperBackground)
+                .navigationTitle(page == .pattern ? "Your pattern" : page == .profile ? "Your profile" : "Your moments")
+                .navigationBarTitleDisplayMode(.inline)
+            }
             .environment(\.colorScheme, paper == .linen ? .light : .dark)
             .task(id: dataKey) {
                 model.rebuild(events: events, demo: demo)
@@ -55,12 +64,79 @@ struct InsightsView: View {
             .task(id: forecastKey) {
                 await loadForecast()
             }
-            .refreshable {
-                model.rebuild(events: events, demo: demo)
-                await model.narrate(styleScore: styleScore, useModel: useModel)
-                await loadForecast()
+        }
+    }
+
+    private var paperBackground: some View {
+        ZStack { Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
+    }
+
+    // MARK: Hero
+
+    /// The ring, and one sentence: what it's waiting for, or the pattern (tap for the evidence).
+    private var hero: some View {
+        VStack(spacing: 18) {
+            LearningRing(progress: model.progress, forcedLearned: forced == .learned, size: 184)
+            if learned {
+                NavigationLink(value: Page.pattern) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(demoLearned ? "Weed pollen showed up on 9 of 14 flare days vs 6 of 40 baseline days."
+                                         : (model.narration?.headline ?? "Your pattern is ready."))
+                            .multilineTextAlignment(.center)
+                        Image(systemName: "chevron.right").font(.caption.weight(.bold)).opacity(0.6)
+                    }
+                    .font(.system(.title3, design: .serif, weight: .medium))
+                    .foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
+            } else if let p = model.progress {
+                Text(needs(p)).font(.system(.title3, design: .serif, weight: .medium)).multilineTextAlignment(.center)
             }
         }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// "Needs 1 more rescue and 14 more baseline moments."
+    private func needs(_ p: GateProgress) -> String {
+        let r = max(0, p.minAttacks - p.attacks), b = max(0, p.minBaselines - p.baselines)
+        var parts: [String] = []
+        if r > 0 { parts.append("\(r) more rescue") }
+        if b > 0 { parts.append("\(b) more baseline") }
+        return parts.isEmpty ? "Almost there." : "Needs " + parts.joined(separator: " and ") + " moments."
+    }
+
+    // MARK: Tiles
+
+    private var tiles: some View {
+        HStack(spacing: 10) {
+            NavigationLink(value: Page.profile) {
+                tile("person.crop.circle", "Profile", demoLearned ? "Pollen-led" : learned ? "Ready" : "Soon")
+            }
+            NavigationLink(value: Page.moments) {
+                tile("calendar", "Moments this month", "\(monthCount)")
+            }
+            Button { showDoctor = true } label: { tile("tablecells", "For your doctor", "Table") }
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showDoctor) { DoctorSheet(events: Array(events)) }
+    }
+
+    private var monthCount: Int {
+        events.filter { $0.moment != .okay && Calendar.current.isDate($0.loggedAt, equalTo: .now, toGranularity: .month) }.count
+    }
+
+    private func tile(_ icon: String, _ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon).font(.title3)
+            Spacer(minLength: 0)
+            Text(value).font(.system(.headline, design: .serif, weight: .medium)).lineLimit(1)
+            Text(title).font(Theme.caption).foregroundStyle(Theme.secondaryText).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Theme.secondaryText.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.secondaryText.opacity(0.18)))
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     // MARK: Cards
@@ -277,6 +353,7 @@ struct InsightSection<Content: View>: View {
 struct LearningRing: View {
     let progress: GateProgress?
     var forcedLearned = false
+    var size: CGFloat = 140
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -300,10 +377,10 @@ struct LearningRing: View {
                         ctx.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)), with: .color(ink))
                     }
                 }
-                Image(systemName: done ? "sparkles" : "sparkle").font(.system(size: 30, weight: .semibold))
+                Image(systemName: done ? "sparkles" : "sparkle").font(.system(size: size * 0.2, weight: .semibold))
                     .symbolEffect(.pulse, isActive: done && !reduceMotion)
             }
-            .frame(width: 140, height: 140)
+            .frame(width: size, height: size)
             if let p = progress, !done {
                 HStack(spacing: 32) {
                     count("Rescue moments", p.attacks, p.minAttacks, Theme.rescue)

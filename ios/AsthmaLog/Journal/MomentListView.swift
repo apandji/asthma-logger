@@ -124,6 +124,12 @@ struct MonthCalendar: View {
     @Binding var selected: Date?
     /// When set, each dot shares its id with the moment's card on the Journal, so cards shrink into dots.
     var namespace: Namespace.ID? = nil
+    /// The zoom anchor: the current moment's day square.
+    var anchor: Namespace.ID? = nil
+    var anchorDay: Date? = nil
+    var spot: SpotlightFrames? = nil
+    /// The moment whose sky fills the anchor square.
+    var anchorMoment: LogEvent? = nil
 
     private let cal = Calendar.current
 
@@ -166,6 +172,21 @@ struct MonthCalendar: View {
             }
             .frame(maxWidth: .infinity, minHeight: 40)
             .background(isSel ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 10))
+            .background {
+                if let anchorDay, cal.isDate(anchorDay, inSameDayAs: d) {
+                    Group {
+                        if let m = anchorMoment {
+                            AmbientField(weave: m.weave, temperatureF: m.conditions?.best(.temperature)?.value,
+                                         date: m.loggedAt, conditions: m.conditions)
+                        } else {
+                            Color.white.opacity(0.16)
+                        }
+                    }
+                    .clipShape(.rect(cornerRadius: 10, style: .continuous))
+                    .modifier(AnchorIf(namespace: anchor))
+                    .modifier(SpotIf(id: "anchor", spot: spot))
+                }
+            }
         }
         .buttonStyle(.plain)
         .disabled(d > .now)
@@ -196,6 +217,10 @@ struct MonthCalendar: View {
 struct MomentsOverview: View {
     let events: [LogEvent]
     let namespace: Namespace.ID
+    var anchor: Namespace.ID? = nil
+    var anchorDay: Date? = nil
+    var spot: SpotlightFrames? = nil
+    var anchorMoment: LogEvent? = nil
     let open: (LogEvent) -> Void
     let close: () -> Void
 
@@ -217,7 +242,8 @@ struct MomentsOverview: View {
                 }
                 .font(.subheadline)
 
-                MonthCalendar(month: $month, events: events, selected: $day, namespace: namespace)
+                MonthCalendar(month: $month, events: events, selected: $day, namespace: namespace,
+                              anchor: anchor, anchorDay: anchorDay, spot: spot, anchorMoment: anchorMoment)
                     .padding(14)
                     .frostedCard()
 

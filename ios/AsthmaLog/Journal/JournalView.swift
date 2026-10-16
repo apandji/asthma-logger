@@ -17,6 +17,9 @@ struct JournalView: View {
     @Namespace private var zoom
     @Namespace private var morph
     @Namespace private var mapZoom
+    /// The zoom's anchor: the current moment's sky, its day tile, its month square.
+    @Namespace private var anchorNS
+    @State private var gaugeLabelVisible = false
     /// The moment opened in place (panel style): the sky gives way to its map and details.
     @State private var expanded: LogEvent?
     @State private var overview = false
@@ -52,6 +55,9 @@ struct JournalView: View {
                 }
                 .overlay(alignment: .trailing) {
                     if insightsEntry == .edgeTab && !overview { InsightEdgeTab { showInsights = true } }
+                }
+                .overlay(alignment: .trailing) {
+                    if gestures == .zoom && !cards.isEmpty { depthGauge }
                 }
                 // Tutorial: dim everything the current tip isn't about.
                 .overlay {
@@ -91,11 +97,14 @@ struct JournalView: View {
             if expanded == nil { topBar }
             Group {
                 if overview {
-                    MomentsOverview(events: Array(events), namespace: morph, open: { e in
+                    MomentsOverview(events: Array(events), namespace: morph,
+                                    anchor: gestures == .zoom ? anchorNS : nil, anchorDay: selected?.loggedAt, spot: spot,
+                                    anchorMoment: selected, open: { e in
                         withAnimation(.spring(duration: 0.55, bounce: 0.15)) { selectedID = e.id; overview = false; showDays = false }
                     }, close: { withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } })
                 } else if showDays {
-                    DaysView(events: cards, selectedID: selected?.id, pollenSeason: pollenSeason) { e in
+                    DaysView(events: cards, selectedID: selected?.id, pollenSeason: pollenSeason,
+                             anchor: gestures == .zoom ? anchorNS : nil, spot: spot) { e in
                         zoomingIn = true
                         withAnimation(.spring(duration: 0.5, bounce: 0.12)) { selectedID = e.id; showDays = false }
                     }
@@ -108,10 +117,11 @@ struct JournalView: View {
             .id(levelKey)
             // Model B: the level follows the fingers (smaller and fainter pinching in, larger pinching out)
             // and the next one settles in from the opposite size.
-            .scaleEffect(liveScale)
+            // Zoom around the anchor, not the middle of the screen.
+            .scaleEffect(liveScale, anchor: anchorPoint)
             .opacity(liveOpacity)
-            .transition(.asymmetric(insertion: .scale(scale: zoomingIn ? 0.86 : 1.14).combined(with: .opacity),
-                                    removal: .opacity))
+            // Only the anchor moves between levels (shared geometry); everything else just fades.
+            .transition(.opacity)
             .sensoryFeedback(.impact(flexibility: .soft), trigger: levelKey)
             if let error = services.lastError {
                 Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20).padding(.top, 8)
@@ -164,7 +174,7 @@ struct JournalView: View {
                     if momentStyle == .panel {
                         MomentPager(events: cards, selectedID: $selectedID, zoom: zoom, mapNamespace: mapZoom,
                                     pollenSeason: pollenSeason, onOpen: expand, onOverview: zoomOut, probing: $panelProbing,
-                                    spot: spot)
+                                    spot: spot, anchor: gestures == .zoom ? anchorNS : nil)
                             .frame(maxHeight: 520)
                     } else {
                         MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, morph: morph,
@@ -187,8 +197,66 @@ struct JournalView: View {
         overview ? "month" : showDays ? "days" : expanded != nil ? "detail" : "moment"
     }
 
-    private var liveScale: CGFloat { gestures == .zoom ? min(1.25, max(0.75, pinchScale)) : 1 }
-    private var liveOpacity: Double { gestures == .zoom ? 1 - min(0.55, abs(Double(pinchScale) - 1) * 1.6) : 1 }
+    private var liveScale: CGFloat { gestures == .zoom ? min(1.3, max(0.7, pinchScale)) : 1 }
+    /// Everything but the anchor fades a little as you pinch; the anchor carries you to the next level.
+    private var liveOpacity: Double { gestures == .zoom ? 1 - min(0.35, abs(Double(pinchScale) - 1) * 1.0) : 1 }
+
+    /// The anchor's centre, as a unit point of the Journal, for scaling around it.
+    private var anchorPoint: UnitPoint {
+        guard let a = spot.frames["anchor"], ambientFrame.width > 0, ambientFrame.height > 0 else { return .center }
+        return UnitPoint(x: (a.midX - ambientFrame.minX) / ambientFrame.width, y: (a.midY - ambientFrame.minY) / ambientFrame.height)
+    }
+
+    /// Levels top to bottom on the gauge: widest view first.
+    private static let levels = ["month", "days", "moment", "detail"]
+    private static let levelNames = ["Month", "Days", "Moment", "Details"]
+    private var levelIndex: Int { Self.levels.firstIndex(of: levelKey) ?? 2 }
+    /// Where the live pinch is heading, if it has gone far enough to show.
+    private var pinchTarget: Int? {
+        guard gestures == .zoom else { return nil }
+        if pinchScale < 0.92 { return max(0, levelIndex - 1) }
+        if pinchScale > 1.08 { return min(3, levelIndex + 1) }
+        return nil
+    }
+
+    /// A depth gauge on the right: Month · Days · Moment · Details. The current level is bright; while you
+    /// pinch, the level you're heading to lights up with its name. Tap a dot to jump there.
+    private var depthGauge: some View {
+        VStack(alignment: .trailing, spacing: 14) {
+            ForEach(0..<4, id: \.self) { i in
+                let isCurrent = i == levelIndex
+                let isTarget = i == pinchTarget
+                HStack(spacing: 8) {
+                    if (gaugeLabelVisible && isCurrent) || isTarget {
+                        Text(Self.levelNames[i])
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(.white.opacity(isTarget ? 0.9 : 0.75), in: Capsule())
+                            .foregroundStyle(.black)
+                            .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    }
+                    Circle()
+                        .fill(.white.opacity(isCurrent ? 0.95 : isTarget ? 0.7 : 0.25))
+                        .frame(width: isCurrent ? 9 : 6, height: isCurrent ? 9 : 6)
+                        .frame(width: 14, height: 14)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { zoom(by: i - levelIndex) }
+                .accessibilityElement()
+                .accessibilityLabel(Self.levelNames[i])
+                .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
+            }
+        }
+        .padding(.trailing, 10)
+        .animation(.snappy(duration: 0.25), value: pinchTarget)
+        .animation(.snappy(duration: 0.25), value: levelIndex)
+        .animation(.easeOut(duration: 0.3), value: gaugeLabelVisible)
+        .task(id: levelKey) {
+            gaugeLabelVisible = true
+            try? await Task.sleep(for: .seconds(1.4))
+            gaugeLabelVisible = false
+        }
+    }
 
     /// Model B: one pinch through the scales, detail ⇄ moment ⇄ days ⇄ month.
     private var zoomGesture: some Gesture {
@@ -205,20 +273,16 @@ struct JournalView: View {
             }
     }
 
-    /// -1 zooms out (detail → moment → days → month), +1 zooms in.
+    /// Negative zooms out (detail → moment → days → month), positive zooms in; jumps several levels at once.
     private func zoom(by step: Int) {
+        guard step != 0 else { return }
         zoomingIn = step > 0
         MomentsTip().invalidate(reason: .actionPerformed)
-        withAnimation(.spring(duration: 0.5, bounce: 0.12)) {
-            switch (levelKey, step) {
-            case ("detail", -1): expanded = nil
-            case ("moment", -1): showDays = true
-            case ("days", -1): showDays = false; overview = true
-            case ("month", 1): overview = false; showDays = true
-            case ("days", 1): showDays = false
-            case ("moment", 1): if let e = selected { expanded = e }
-            default: break
-            }
+        let target = max(0, min(3, levelIndex + step))
+        withAnimation(.spring(duration: 0.55, bounce: 0.1)) {
+            overview = target == 0
+            showDays = target == 1
+            expanded = target == 3 ? selected : nil
         }
     }
 

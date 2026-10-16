@@ -16,6 +16,8 @@ struct MomentPager: View {
     let onOverview: () -> Void
     @Binding var probing: Bool
     var spot: SpotlightFrames? = nil
+    /// The zoom's anchor: this sky becomes its day's tile in Days and its square in the month.
+    var anchor: Namespace.ID? = nil
 
     private var current: LogEvent? { events.first { $0.id == selectedID } ?? events.last }
 
@@ -48,6 +50,8 @@ struct MomentPager: View {
             }
             .modifier(SpotIf(id: "sky", spot: spot))
             .animation(.easeInOut(duration: 0.35), value: current?.id)
+            .modifier(AnchorIf(namespace: anchor))
+            .modifier(SpotIf(id: "anchor", spot: spot))
             .task(id: current?.id) { await prefetchNeighbours() }
 
             TimelineTrack(events: events, selectedID: $selectedID)
@@ -357,5 +361,13 @@ struct SpotIf: ViewModifier {
     let spot: SpotlightFrames?
     func body(content: Content) -> some View {
         if let spot { content.spotlightTarget(id, spot) } else { content }
+    }
+}
+
+/// Marks the zoom anchor (shared geometry across the zoom levels) when there's a namespace.
+struct AnchorIf: ViewModifier {
+    let namespace: Namespace.ID?
+    func body(content: Content) -> some View {
+        if let namespace { content.matchedGeometryEffect(id: "zoom-anchor", in: namespace) } else { content }
     }
 }

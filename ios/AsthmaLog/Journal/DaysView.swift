@@ -8,6 +8,8 @@ struct DaysView: View {
     let events: [LogEvent]
     let selectedID: UUID?
     let pollenSeason: DemoPollen.Season
+    var anchor: Namespace.ID? = nil
+    var spot: SpotlightFrames? = nil
     let open: (LogEvent) -> Void
 
     private var days: [(day: Date, moments: [LogEvent])] {
@@ -32,14 +34,17 @@ struct DaysView: View {
                 Text("Days").font(.system(.title, design: .serif, weight: .medium))
                     .padding(.horizontal, 4).padding(.bottom, 4)
                 ForEach(days, id: \.day) { d in
-                    let t = telling(d.moments)
                     let isCurrent = d.moments.contains { $0.id == selectedID }
+                    // The current day shows the moment you came from, so the zoom's anchor stays the same sky.
+                    let t = isCurrent ? d.moments.first { $0.id == selectedID }! : telling(d.moments)
                     Button { open(d.moments.contains { $0.id == selectedID } ? d.moments.first { $0.id == selectedID }! : t) } label: {
                         HStack(spacing: 14) {
                             AmbientField(weave: t.weave, temperatureF: t.conditions?.best(.temperature)?.value, date: t.loggedAt,
                                          conditions: t.conditions, pollen: DemoPollen.sample(at: t.loggedAt, season: pollenSeason))
                                 .frame(width: 84, height: 84)
                                 .clipShape(.rect(cornerRadius: 20, style: .continuous))
+                                .modifier(AnchorIf(namespace: isCurrent ? anchor : nil))
+                                .modifier(SpotIf(id: isCurrent ? "anchor" : "day-\(d.day.timeIntervalSince1970)", spot: isCurrent ? spot : nil))
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(dayLabel(d.day)).font(.subheadline.weight(.semibold))
                                 Text(t.weave.isEmpty ? "No air reading." : t.headline)

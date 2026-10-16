@@ -25,7 +25,7 @@ struct SettingsView: View {
     @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
     @AppStorage(Crit.LayerStrength.key) private var critStrength = Crit.LayerStrength.smooth
-    @AppStorage(Crit.InsightsEntry.key) private var critInsights = Crit.InsightsEntry.ringButton
+    @AppStorage(Crit.InsightsEntry.key) private var critInsights = Crit.InsightsEntry.topBar
     @AppStorage(Crit.CaptureOrder.key) private var critOrder = Crit.CaptureOrder.rescueFirst
 
     var body: some View {

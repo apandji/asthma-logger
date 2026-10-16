@@ -256,11 +256,12 @@ struct SkyPanel: View {
             .frame(width: size.width, height: size.height)
             // One offscreen pass for the sky, map and glow, instead of a pass per mask.
             .drawingGroup()
-            // Self-contained: fades to black at the edges, and most of all toward the top.
+            // Self-contained: fades to black at every edge, most of all toward the top.
             .mask {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),
                                    startRadiusFraction: 0, endRadiusFraction: 0.7)
-                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.26)],
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.26),
+                                                 .init(color: .black, location: 0.78), .init(color: .clear, location: 1)],
                                          startPoint: .top, endPoint: .bottom))
             }
             // The label sits above the fade, always fully legible.

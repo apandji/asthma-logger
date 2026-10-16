@@ -19,10 +19,11 @@ enum Crit {
     }
 
     enum InsightsEntry: String, CaseIterable, Identifiable {
-        case ringButton, bottomStrip, edgeTab
+        case topBar, ringButton, bottomStrip, edgeTab
         var id: String { rawValue }
         var title: String {
             switch self {
+            case .topBar: "Ring at the top, by •••"
             case .ringButton: "Ring button by the +"
             case .bottomStrip: "Bottom peek strip"
             case .edgeTab: "Sideways on the right edge"

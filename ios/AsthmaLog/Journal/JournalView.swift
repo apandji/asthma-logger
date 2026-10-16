@@ -46,7 +46,7 @@ struct JournalView: View {
     @State private var ambientFrame: CGRect = .zero
     @State private var showInsights = false
     @State private var showSettings = false
-    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.ringButton
+    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.topBar
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
     @AppStorage(Crit.Header.key) private var headerStyle = Crit.Header.moment
 
@@ -365,8 +365,11 @@ struct JournalView: View {
 
     /// A standard ••• menu, top right: All moments and Settings.
     private var topBar: some View {
-        HStack {
+        HStack(spacing: 10) {
             Spacer()
+            if insightsEntry == .topBar {
+                InsightsRingButton(open: { showInsights = true }, size: 44, bubbleBelow: true)
+            }
             Menu {
                 Button(overview ? "Back to moments" : "All moments", systemImage: overview ? "rectangle.stack" : "calendar") {
                     overview ? withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } : zoomOut()

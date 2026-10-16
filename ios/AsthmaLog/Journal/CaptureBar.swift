@@ -13,7 +13,7 @@ struct CaptureBar: View {
     @Environment(\.modelContext) private var context
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
     @State private var toast: LogEvent?
-    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.ringButton
+    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.topBar
     @AppStorage(Prefs.logButtons) private var useButtons = false
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -24,7 +24,7 @@ struct CaptureBar: View {
             case .ringButton:
                 Spacer()
                 InsightsRingButton(open: { showInsights = true })
-            case .edgeTab: Spacer()
+            case .edgeTab, .topBar: Spacer()
             }
             if useButtons || typeSize.isAccessibilitySize {
                 // Two labelled buttons: chosen in Settings (or from the tip), and always at accessibility text sizes.
@@ -320,7 +320,10 @@ struct InsightsRingButton: View {
     @State private var model = InsightsModel()
     @State private var bubbleDismissed = false
 
-    private let size: CGFloat = 56
+    /// 56 by the +; 44 in the top bar, matching •••.
+    var size: CGFloat = 56
+    /// In the top bar the bubble hangs below the button instead of above it.
+    var bubbleBelow = false
 
     var body: some View {
         Button(action: { bubbleDismissed = true; open() }) {
@@ -334,7 +337,7 @@ struct InsightsRingButton: View {
                     .font(.body.weight(.semibold))
                     .symbolEffect(.pulse, isActive: learned && !bubbleDismissed)
             }
-            .padding(5)
+            .padding(size < 50 ? 4 : 5)
             .frame(width: size, height: size)
             .glassEffect(.regular.interactive(), in: .circle)
         }
@@ -344,8 +347,8 @@ struct InsightsRingButton: View {
                 bubble
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(width: 230, alignment: .trailing)
-                    .offset(x: 70, y: -size - 26)
-                    .transition(.scale(scale: 0.6, anchor: .bottomTrailing).combined(with: .opacity))
+                    .offset(x: bubbleBelow ? 0 : 70, y: bubbleBelow ? size + 10 : -size - 26)
+                    .transition(.scale(scale: 0.6, anchor: bubbleBelow ? .topTrailing : .bottomTrailing).combined(with: .opacity))
                     .onTapGesture { bubbleDismissed = true; open() }
             }
         }

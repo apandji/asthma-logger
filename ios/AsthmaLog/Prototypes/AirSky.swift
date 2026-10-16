@@ -195,16 +195,6 @@ enum AirSky {
     }
 }
 
-/// Small deterministic random numbers so example values don't jump between redraws.
-nonisolated struct Seeded {
-    private var s: UInt64
-    init(_ seed: Double) { s = UInt64(abs(seed)) &* 2654435761 | 1 }
-    mutating func next() -> Double {
-        s = s &* 6364136223846793005 &+ 1442695040888963407
-        return Double(s >> 11) / Double(1 << 53)
-    }
-}
-
 // MARK: Marks
 
 enum AirMark {

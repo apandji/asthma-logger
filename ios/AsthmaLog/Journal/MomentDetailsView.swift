@@ -8,12 +8,15 @@ struct MomentDetailsView: View {
     let event: LogEvent
     @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
     @State private var around: HourlyHistory?
+    @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
+    private var pollen: PollenSample? { DemoPollen.sample(at: event.loggedAt, season: pollenSeason) }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 if let c = event.conditions, !c.observations.isEmpty {
+                    FieldLegend(weave: event.weave, temperatureF: c.best(.temperature)?.value, pollen: pollen)
                     weather(c)
                     air(c)
                     aroundChart
@@ -35,7 +38,7 @@ struct MomentDetailsView: View {
             .padding(16)
             .padding(.bottom, 40)
         }
-        .background { AmbientField(weave: event.weave).ignoresSafeArea() }
+        .background { AmbientField(weave: event.weave, temperatureF: event.conditions?.best(.temperature)?.value, pollen: pollen).ignoresSafeArea() }
         .navigationTitle(event.moment == .okay ? "I'm okay" : event.moment.title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadAround() }
@@ -98,13 +101,34 @@ struct MomentDetailsView: View {
             Divider()
             airRow("AQI", c.best(.aqi), level: c.best(.aqi).map { $0.value <= 50 ? .low : $0.value <= 100 ? .medium : .high })
             Divider()
-            HStack {
-                LevelIndicator(level: nil, ink: WeaveSwatch.ink(.pollen), style: style).frame(minWidth: 30)
-                Text("Pollen")
-                Spacer()
-                Text("Not included yet").foregroundStyle(Theme.secondaryText)
+            if let pollen {
+                ForEach(Array(pollen.kinds.enumerated()), id: \.offset) { k, kind in
+                    if k > 0 { Divider() }
+                    HStack(spacing: 12) {
+                        LevelIndicator(level: kind.level, ink: WeatherColor.pollen[k], style: style).frame(minWidth: 30)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("\(kind.name) pollen")
+                            if kind.count > 0 && kind.name != "Grass" {
+                                Text(kind.species).font(.caption).foregroundStyle(Theme.secondaryText)
+                            }
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(Tier(kind.level).word)
+                            Text("\(kind.count) grains/m³ · Demo").font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
+                        }
+                    }
+                    .font(.subheadline).padding(.vertical, 8)
+                }
+            } else {
+                HStack {
+                    LevelIndicator(level: nil, ink: WeaveSwatch.ink(.pollen), style: style).frame(minWidth: 30)
+                    Text("Pollen")
+                    Spacer()
+                    Text("Not included yet").foregroundStyle(Theme.secondaryText)
+                }
+                .font(.subheadline).padding(.vertical, 8)
             }
-            .font(.subheadline).padding(.vertical, 8)
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
     }

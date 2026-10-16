@@ -45,30 +45,30 @@ struct AsthmaLogApp: App {
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var context
+    @Environment(\.verticalSizeClass) private var verticalSize
     @Environment(LogService.self) private var services
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
-    @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
-    @State private var logCount = 0
+    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.bottomStrip
+    @State private var showInsights = false
 
     var body: some View {
-        TabView {
-            Tab("Journal", systemImage: "book.closed") {
+        Group {
+            if verticalSize == .compact {
+                // Sideways: the Data view. Turn back upright for the Journal.
+                LandscapeDataView()
+            } else {
                 JournalView()
-            }
-            Tab("Insights", systemImage: "sparkles") {
-                InsightsView()
+                    .safeAreaInset(edge: .bottom) { CaptureBar(showInsights: $showInsights) }
+                    .overlay(alignment: .trailing) {
+                        if insightsEntry == .edgeTab { InsightEdgeTab { showInsights = true } }
+                    }
             }
         }
-        // One tap, always reachable: floats above the tab bar. Same two actions as the watch.
-        // I'm okay moments are added automatically.
-        .tabViewBottomAccessory {
-            HStack(spacing: 0) {
-                logButton(.rescue, "Rescue", Theme.rescue)
-                Divider().frame(height: 22)
-                logButton(.maintenance, "Standard", Theme.standard)
-            }
-            .sensoryFeedback(.success, trigger: logCount)
+        .sheet(isPresented: $showInsights) {
+            InsightsView()
+                .presentationDragIndicator(.visible)
+                .presentationBackground(.ultraThinMaterial)
         }
         .fullScreenCover(isPresented: Binding(get: { !didOnboard }, set: { _ in })) {
             OnboardingView()
@@ -76,19 +76,6 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             guard phase == .active, autoBaseline, didOnboard else { return }
             Task { await services.sampleUsualDayIfDue(in: context) }
-        }
-    }
-
-    private func logButton(_ moment: MomentKind, _ title: String, _ color: Color) -> some View {
-        // The moment saves instantly; the air arrives on its tile. The button never waits on the network.
-        Button {
-            logCount += 1
-            Task { _ = await services.log(moment, in: context, writeToHealth: writeToHealth) as LogEvent; return }
-        } label: {
-            Label(title, systemImage: "plus")
-                .font(.headline)
-                .foregroundStyle(color)
-                .frame(maxWidth: .infinity)
         }
     }
 }

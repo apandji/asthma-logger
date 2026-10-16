@@ -9,6 +9,8 @@ import SwiftUI
 /// Lines come from hourly history (Apple Weather, nearest OpenAQ monitor) where you last logged;
 /// without it, only the readings captured at your moments are plotted.
 struct AirChartsView: View {
+    /// Sideways: three slim charts filling the screen, a full day visible at once.
+    var wide = false
     @Environment(LogService.self) private var services
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @State private var history: HourlyHistory?
@@ -17,7 +19,7 @@ struct AirChartsView: View {
     @State private var place: String?
 
     private let hoursBack: Double = 72
-    private let visibleHours: Double = 12
+    private var visibleHours: Double { wide ? 24 : 12 }
 
     enum Metric: CaseIterable, Identifiable {
         case temperature, humidity, air
@@ -30,6 +32,26 @@ struct AirChartsView: View {
     private var start: Date { Date.now.addingTimeInterval(-hoursBack * 3600) }
 
     var body: some View {
+        if wide { wideBody } else { tallBody }
+    }
+
+    private var wideBody: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 14) {
+                Text(rangeTitle).font(.headline)
+                Text("Swipe to go back in time").font(.caption).foregroundStyle(Theme.secondaryText)
+                Spacer()
+                legend(Theme.rescue, "Rescue")
+                legend(Theme.standard, "Standard")
+                if loading { ProgressView().controlSize(.small) }
+            }
+            .font(.caption).foregroundStyle(Theme.secondaryText)
+            ForEach(Metric.allCases) { m in card(m) }
+        }
+        .task { await load() }
+    }
+
+    private var tallBody: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(rangeTitle).font(Theme.headlineSerif)
@@ -63,9 +85,9 @@ struct AirChartsView: View {
     private func card(_ m: Metric) -> some View {
         let line = series(m)
         let ink = WeaveSwatch.ink(m.factor)
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: wide ? 2 : 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(m.title).font(.subheadline.weight(.semibold))
+                Text(m.title).font(wide ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
                 Spacer()
                 if let last = line.last {
                     Text("\(Int(last.value.rounded())) \(m.unit)").font(.subheadline.monospacedDigit())
@@ -75,7 +97,7 @@ struct AirChartsView: View {
             if line.count < 2 {
                 Text(loading ? "Loading…" : "No hourly readings here yet.")
                     .font(.footnote).foregroundStyle(Theme.secondaryText)
-                    .frame(maxWidth: .infinity, minHeight: 110)
+                    .frame(maxWidth: .infinity, minHeight: wide ? 40 : 110)
             } else {
                 Chart {
                     ForEach(line) { p in
@@ -115,11 +137,12 @@ struct AirChartsView: View {
                     }
                 }
                 .chartYAxis { AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) }
-                .frame(height: 140)
+                .frame(height: wide ? nil : 140)
+                .frame(maxHeight: wide ? .infinity : nil)
                 .accessibilityLabel("\(m.title) over the last three days")
             }
         }
-        .padding(14)
+        .padding(wide ? 8 : 14)
         .frostedCard()
     }
 

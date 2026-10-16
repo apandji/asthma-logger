@@ -11,13 +11,14 @@ struct MomentCarousel: View {
     let events: [LogEvent]
     @Binding var selectedID: UUID?
     let namespace: Namespace.ID
+    var onOverview: () -> Void = {}
     let onOpen: (LogEvent) -> Void
 
     var body: some View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 14) {
                 ForEach(events) { e in
-                    FolderCard(event: e, isCurrent: e.id == selectedID, onOpen: { onOpen(e) })
+                    FolderCard(event: e, isCurrent: e.id == selectedID, onOpen: { onOpen(e) }, onOverview: onOverview)
                         .matchedTransitionSource(id: e.id, in: namespace)
                         .containerRelativeFrame(.horizontal) { w, _ in w * 0.78 }
                         .scrollTransition(.interactive, axis: .horizontal) { content, phase in
@@ -43,24 +44,51 @@ struct FolderCard: View {
     let event: LogEvent
     let isCurrent: Bool
     let onOpen: () -> Void
+    var onOverview: () -> Void = {}
 
     @State private var pinch: CGFloat = 1
+    @AppStorage(Crit.CardMarker.key) private var marker = Crit.CardMarker.quietTab
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Spacer()
-                Text(event.moment == .rescue ? "RESCUE" : event.moment == .maintenance ? "MAINTENANCE" : "I'M OKAY")
+    private var kindWord: String {
+        event.moment == .rescue ? "Rescue" : event.moment == .maintenance ? "Maintenance" : "I'm okay"
+    }
+
+    /// The folder tab: bold (solid colour) or quiet (the card's own glass, a dot and a grey label).
+    private var tab: some View {
+        HStack {
+            Spacer()
+            if marker == .boldTab {
+                Text(kindWord.uppercased())
                     .font(.caption.weight(.semibold)).tracking(1)
                     .foregroundStyle(event.moment == .okay ? .primary : Color.white)
                     .padding(.horizontal, 14).padding(.vertical, 7)
                     .background(tabColor, in: UnevenRoundedRectangle(topLeadingRadius: 12, topTrailingRadius: 12))
+            } else {
+                HStack(spacing: 6) {
+                    MomentDot(moment: event.moment, size: 7)
+                    Text(kindWord).font(.caption.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: UnevenRoundedRectangle(topLeadingRadius: 12, topTrailingRadius: 12))
             }
-            .padding(.trailing, 18)
+        }
+        .padding(.trailing, 18)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if marker == .boldTab || marker == .quietTab { tab }
 
             VStack(alignment: .leading, spacing: 14) {
                 Button(action: onOpen) {
                     VStack(alignment: .leading, spacing: 4) {
+                        if marker == .dot {
+                            HStack(spacing: 6) {
+                                MomentDot(moment: event.moment, size: 8)
+                                Text(kindWord).font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+                            }
+                            .padding(.bottom, 2)
+                        }
                         Text(whenWhere).font(.headline).multilineTextAlignment(.leading)
                         Text(event.airLine).font(.subheadline).foregroundStyle(Theme.secondaryText)
                     }
@@ -78,20 +106,27 @@ struct FolderCard: View {
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                if marker == .glow {
+                    LinearGradient(colors: [tabColor.opacity(0.28), .clear], startPoint: .top, endPoint: .center)
+                        .clipShape(.rect(cornerRadius: 22, style: .continuous))
+                }
+            }
             .frostedCard()
             .overlay(alignment: .top) {
-                // The tab's colour runs along the card's top edge, like a folder.
-                UnevenRoundedRectangle(topLeadingRadius: 22, topTrailingRadius: 22)
-                    .fill(tabColor).frame(height: 3).padding(.horizontal, 1)
+                if marker == .boldTab {
+                    UnevenRoundedRectangle(topLeadingRadius: 22, topTrailingRadius: 22)
+                        .fill(tabColor).frame(height: 3).padding(.horizontal, 1)
+                }
             }
         }
         .scaleEffect(pinch)
         .gesture(
             MagnifyGesture()
-                .onChanged { v in pinch = min(1.12, max(1, v.magnification)) }
+                .onChanged { v in pinch = min(1.12, max(0.9, v.magnification)) }
                 .onEnded { v in
                     withAnimation(.snappy) { pinch = 1 }
-                    if v.magnification > 1.08 { onOpen() }
+                    if v.magnification > 1.08 { onOpen() } else if v.magnification < 0.85 { onOverview() }
                 }
         )
         .task { await PlaceNames.lookUp(event) }

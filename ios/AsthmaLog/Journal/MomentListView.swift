@@ -2,14 +2,26 @@ import AsthmaCore
 import SwiftData
 import SwiftUI
 
-/// Every moment as a plain list, newest first. Pushed from the Journal; swipe to delete.
+/// All moments: a month calendar with a dot per moment, and the full list below (tap a day to
+/// filter it). Opened by pinching in on the Journal; Settings lives here too. Swipe a row to delete.
 struct MomentListView: View {
+    @State private var day: Date?
+    @State private var month = Calendar.current.dateInterval(of: .month, for: .now)!.start
     @Environment(\.modelContext) private var context
     @Environment(LogService.self) private var services
     @Query(sort: \LogEvent.loggedAt, order: .reverse) private var events: [LogEvent]
 
     var body: some View {
             List {
+                Section {
+                    MonthCalendar(month: $month, events: Array(events), selected: $day)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                } footer: {
+                    if day != nil {
+                        Button("Show all days") { withAnimation { day = nil } }.font(.footnote.weight(.semibold))
+                    }
+                }
+
                 if let error = services.lastError {
                     Text(error).font(Theme.caption).foregroundStyle(.orange)
                 }
@@ -41,11 +53,14 @@ struct MomentListView: View {
             }
             .navigationTitle("All moments")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.visible, for: .navigationBar)
+            .settingsToolbar()
     }
 
     private var days: [(day: Date, events: [LogEvent])] {
         let cal = Calendar.current
-        let grouped = Dictionary(grouping: events) { cal.startOfDay(for: $0.loggedAt) }
+        let shown = day.map { d in events.filter { cal.isDate($0.loggedAt, inSameDayAs: d) } } ?? Array(events)
+        let grouped = Dictionary(grouping: shown) { cal.startOfDay(for: $0.loggedAt) }
         return grouped.keys.sorted(by: >).map { ($0, grouped[$0]!) }
     }
 }
@@ -99,5 +114,72 @@ struct EventRow: View {
         if let o3 = c.best(.ozone) { out.append("O₃ \(Int(o3.value.rounded()))") }
         if !c.alerts.isEmpty { out.append("Alert") }
         return out
+    }
+}
+
+/// A month of days; each day shows up to three dots (orange rescue, blue standard). Tap a day to filter.
+struct MonthCalendar: View {
+    @Binding var month: Date
+    let events: [LogEvent]
+    @Binding var selected: Date?
+
+    private let cal = Calendar.current
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Text(month.formatted(.dateTime.month(.wide).year())).font(.headline)
+                Spacer()
+                Button { shift(-1) } label: { Image(systemName: "chevron.left") }
+                Button { shift(1) } label: { Image(systemName: "chevron.right") }
+                    .disabled(cal.isDate(month, equalTo: .now, toGranularity: .month))
+            }
+            .buttonStyle(.borderless)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 6) {
+                ForEach(Array(cal.veryShortWeekdaySymbols.enumerated()), id: \.offset) { _, s in
+                    Text(s).font(.caption2).foregroundStyle(Theme.secondaryText)
+                }
+                ForEach(0..<leadingBlanks, id: \.self) { _ in Color.clear.frame(height: 40) }
+                ForEach(days, id: \.self) { d in dayCell(d) }
+            }
+        }
+    }
+
+    private func dayCell(_ d: Date) -> some View {
+        let ms = events.filter { cal.isDate($0.loggedAt, inSameDayAs: d) && $0.moment != .okay }
+        let isSel = selected.map { cal.isDate($0, inSameDayAs: d) } ?? false
+        return Button {
+            withAnimation(.snappy) { selected = isSel ? nil : d }
+        } label: {
+            VStack(spacing: 4) {
+                Text("\(cal.component(.day, from: d))")
+                    .font(.subheadline.weight(cal.isDateInToday(d) ? .bold : .regular))
+                    .foregroundStyle(d > .now ? Theme.secondaryText : .primary)
+                HStack(spacing: 2) {
+                    ForEach(Array(ms.prefix(3).enumerated()), id: \.offset) { _, m in
+                        Circle().fill(m.moment == .rescue ? Theme.rescue : Theme.standard).frame(width: 5, height: 5)
+                    }
+                }
+                .frame(height: 5)
+            }
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(isSel ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: .rect(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .disabled(d > .now)
+        .accessibilityLabel("\(d.formatted(date: .complete, time: .omitted)), \(ms.count) inhaler moments")
+    }
+
+    private var days: [Date] {
+        let range = cal.range(of: .day, in: .month, for: month)!
+        return range.compactMap { cal.date(byAdding: .day, value: $0 - 1, to: month) }
+    }
+
+    private var leadingBlanks: Int {
+        (cal.component(.weekday, from: month) - cal.firstWeekday + 7) % 7
+    }
+
+    private func shift(_ n: Int) {
+        if let m = cal.date(byAdding: .month, value: n, to: month) { withAnimation { month = m } }
     }
 }

@@ -14,10 +14,46 @@ struct SettingsView: View {
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
     @State private var demoNote: String?
     @AppStorage(LevelStyle.key) private var levelStyle = LevelStyle.signal
+    @AppStorage(Crit.Header.key) private var critHeader = Crit.Header.now
+    @AppStorage(Crit.CardMarker.key) private var critMarker = Crit.CardMarker.quietTab
+    @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather
+    @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
+    @AppStorage(Crit.InsightsEntry.key) private var critInsights = Crit.InsightsEntry.bottomStrip
+    @AppStorage(Crit.CaptureOrder.key) private var critOrder = Crit.CaptureOrder.rescueFirst
 
     var body: some View {
         NavigationStack {
             Form {
+                #if DEBUG
+                Section {
+                    Picker("Header", selection: $critHeader) {
+                        ForEach(Crit.Header.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Colour field", selection: $critField) {
+                        ForEach(Crit.FieldStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Pollen (demo)", selection: $demoPollen) {
+                        ForEach(DemoPollen.Season.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Card label", selection: $critMarker) {
+                        ForEach(Crit.CardMarker.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Good / OK / Not good", selection: $levelStyle) {
+                        ForEach(LevelStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Insights", selection: $critInsights) {
+                        ForEach(Crit.InsightsEntry.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("+ pull order", selection: $critOrder) {
+                        ForEach(Crit.CaptureOrder.allCases) { Text($0.title).tag($0) }
+                    }
+                } header: {
+                    Text("Design crit")
+                } footer: {
+                    Text("Debug builds only. Switch variants live to compare them in a review. Demo pollen is made up (realistic Midwest seasons), labelled Demo, and never used for patterns. \(levelStyle.note)")
+                }
+                #endif
+
                 Section {
                     Slider(
                         value: Binding(get: { Double(styleScore) }, set: { styleScore = NarratorStyle.clamp($0) }),
@@ -51,14 +87,6 @@ struct SettingsView: View {
                 }
 
                 ButtonSection()
-
-                Section {
-                    Picker("Level style", selection: $levelStyle) {
-                        ForEach(LevelStyle.allCases) { Text($0.title).tag($0) }
-                    }
-                } footer: {
-                    Text("How Good / OK / Not good is drawn on the details sheet. \(levelStyle.note)")
-                }
 
                 Section("Data sources") {
                     LabeledContent("Apple Weather", value: "On")

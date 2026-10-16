@@ -1,59 +1,33 @@
 import AsthmaCore
+import CoreLocation
 import SwiftData
 import SwiftUI
 
-/// The Journal, in two modes (switch at the top):
-/// - Ambient: the outdoor conditions as a soft colour field, one sentence, and this week's moments as
-///   cards you swipe through. Pinch a card for everything about it, leading with the weather.
-/// - Data: temperature, humidity and air as scrollable hourly line charts, with inhaler moments marked.
-/// Logging lives in the tab bar accessory, on Apple Watch, and on the felt button.
+/// The Journal: the outdoor conditions as a soft colour field, one live sentence, and this week's
+/// moments as cards you swipe through. Pinch a card open for everything about it (weather first);
+/// pinch the room closed for the calendar of all moments. Turn the phone sideways for the Data view.
+/// Logging is the + at the bottom (RootView), the felt button and Apple Watch.
 struct JournalView: View {
     @Environment(LogService.self) private var services
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @State private var selectedID: UUID?
     @State private var opened: LogEvent?
     @Namespace private var zoom
-    @AppStorage("journalMode") private var mode = Mode.ambient
-
-    enum Mode: String { case ambient, data }
+    @State private var showOverview = false
+    @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
 
     private let days = 7
 
     var body: some View {
         NavigationStack {
-            Group {
-                switch mode {
-                case .ambient: ambient
-                case .data:
-                    ScrollView {
-                        AirChartsView()
-                            .padding(.horizontal, 16)
-                            .padding(.top, 4)
-                            .padding(.bottom, 110)
-                    }
-                    .background(Theme.stage.ignoresSafeArea())
+            ambient
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
+                .navigationDestination(item: $opened) { e in
+                    MomentDetailsView(event: e)
+                        .navigationTransition(.zoom(sourceID: e.id, in: zoom))
                 }
-            }
-            .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    NavigationLink { MomentListView() } label: { Image(systemName: "list.bullet") }
-                        .accessibilityLabel("All moments")
-                }
-                ToolbarItem(placement: .principal) {
-                    Picker("View", selection: $mode.animation(.easeInOut)) {
-                        Text("Ambient").tag(Mode.ambient)
-                        Text("Data").tag(Mode.data)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 190)
-                }
-            }
-            .settingsToolbar()
-            .navigationDestination(item: $opened) { e in
-                MomentDetailsView(event: e)
-                    .navigationTransition(.zoom(sourceID: e.id, in: zoom))
-            }
+                .navigationDestination(isPresented: $showOverview) { MomentListView() }
         }
     }
 
@@ -66,9 +40,9 @@ struct JournalView: View {
             if cards.isEmpty {
                 emptyState.padding(.horizontal, 20)
             } else {
-                MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom) { opened = $0 }
+                MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, onOverview: { showOverview = true }) { opened = $0 }
                     .frame(height: 400)
-                Text("Pinch a card for details")
+                Text("Pinch a card open for details · pinch in for all moments")
                     .font(.footnote).foregroundStyle(Theme.secondaryText)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 10)
@@ -79,11 +53,17 @@ struct JournalView: View {
             Spacer(minLength: 0)
         }
         .padding(.top, 8)
-        .padding(.bottom, 110)  // clear the floating log bar
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            MagnifyGesture().onEnded { v in if v.magnification < 0.85 { showOverview = true } }
+        )
         .background {
             // The room takes on the current card's air (today's, until you swipe).
-            AmbientField(weave: selected.map { $0.weave.isEmpty ? todayWeave : $0.weave } ?? todayWeave)
+            AmbientField(weave: selected.map { $0.weave.isEmpty ? todayWeave : $0.weave } ?? todayWeave,
+                         temperatureF: selected?.conditions?.best(.temperature)?.value ?? now?.temp,
+                         pollen: DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason))
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 0.8), value: selected?.id)
         }
@@ -97,24 +77,80 @@ struct JournalView: View {
 
     // MARK: Header
 
+    @AppStorage(Crit.Header.key) private var headerStyle = Crit.Header.now
+    @State private var now: (weave: WeaveSpec, temp: Double?, place: String?)?
+    @State private var showSettings = false
+
     private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Theme.secondaryText)
-            Text(airSentence)
-                .font(.system(.title, design: .serif, weight: .medium))
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                stat(count(.rescue), "Rescue", Theme.rescue)
-                stat(count(.maintenance), "Standard", Theme.standard)
+                // Settings is tucked away: long-press the date (or open it from the calendar view).
+                .onLongPressGesture { showSettings = true }
+            switch headerStyle {
+            case .now, .nowWithCounts:
+                if let now, let sentence = nowSentence(now.weave) {
+                    Text(sentence)
+                        .font(.system(.title, design: .serif, weight: .medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let detail = nowDetail(now) {
+                        Text(detail).font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    }
+                }
+                if headerStyle == .nowWithCounts {
+                    HStack(spacing: 10) {
+                        stat(count(.rescue), "Rescue", Theme.rescue)
+                        stat(count(.maintenance), "Standard", Theme.standard)
+                    }
+                    .padding(.top, 4)
+                }
+            case .lastMoment:
+                Text(lastSentence)
+                    .font(.system(.title, design: .serif, weight: .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    stat(count(.rescue), "Rescue", Theme.rescue)
+                    stat(count(.maintenance), "Standard", Theme.standard)
+                }
+            case .dateOnly:
+                EmptyView()
             }
         }
         .padding(.horizontal, 20)
+        .animation(.easeInOut, value: now?.temp)
+        .task { await loadNow() }
+        .sheet(isPresented: $showSettings) { SettingsView() }
     }
 
-    /// One plain sentence about the latest air, e.g. "Good air, 63° and comfortable."
-    private var airSentence: String {
+    /// "The air is good right now." Present tense, outdoor, no number.
+    private func nowSentence(_ w: WeaveSpec) -> String? {
+        guard let air = w.levels[.air] else { return nil }
+        return ["The air is good right now.", "The air is OK right now.", "The air isn't great right now."][air.rawValue]
+    }
+
+    /// "65° and comfortable · University City, MO"
+    private func nowDetail(_ n: (weave: WeaveSpec, temp: Double?, place: String?)) -> String? {
+        var parts: [String] = []
+        var feel: [String] = []
+        if let t = n.temp { feel.append("\(Int(t.rounded()))°") }
+        if let h = n.weave.words[.humidity] { feel.append(h) }
+        if !feel.isEmpty { parts.append(feel.joined(separator: " and ")) }
+        if let p = n.place { parts.append(p) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The air where you are now, for the header only (nothing is saved).
+    private func loadNow() async {
+        guard now == nil, let fix = try? await services.location.currentLocation(timeout: .seconds(6)) else { return }
+        let c = await services.conditions.conditions(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude)
+        let marks = try? await CLGeocoder().reverseGeocodeLocation(fix)
+        let place = marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
+        now = (WeaveSpec(c.input), c.best(.temperature)?.value, place)
+    }
+
+    /// The old header: the latest moment's air.
+    private var lastSentence: String {
         guard let latest = events.last(where: { !$0.weave.isEmpty }) else { return "Nothing logged yet." }
         let line = latest.airLine
         return Calendar.current.isDateInToday(latest.loggedAt) ? line : "Last time: " + line.prefix(1).lowercased() + line.dropFirst()
@@ -123,7 +159,7 @@ struct JournalView: View {
     /// Today's air for the ambient field: the latest moment today with a reading, else the latest one.
     private var todayWeave: WeaveSpec {
         let today = events.last { Calendar.current.isDateInToday($0.loggedAt) && !$0.weave.isEmpty }
-        return (today ?? events.last { !$0.weave.isEmpty })?.weave ?? WeaveSpec()
+        return (today ?? events.last { !$0.weave.isEmpty })?.weave ?? now?.weave ?? WeaveSpec()
     }
 
     private func count(_ kind: MomentKind) -> Int {
@@ -144,7 +180,7 @@ struct JournalView: View {
     }
 
     private var emptyState: some View {
-        Text("Tap Rescue or Standard below, or use the buttons on your Apple Watch.")
+        Text("Press + and pull up to log, or use your felt button or Apple Watch.")
             .font(.subheadline)
             .foregroundStyle(Theme.secondaryText)
     }

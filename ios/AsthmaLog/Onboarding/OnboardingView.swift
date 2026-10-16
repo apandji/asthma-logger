@@ -57,7 +57,7 @@ struct OnboardingView: View {
     @ViewBuilder private var backdrop: some View {
         if step == .here, let fix {
             Map(position: $camera, interactionModes: []) {
-                Marker("", systemImage: "wind", coordinate: fix).tint(Theme.accent)
+                Marker("", systemImage: "wind", coordinate: fix).tint(Color.primary)
             }
             .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
             .environment(\.colorScheme, .dark)
@@ -146,7 +146,7 @@ struct OnboardingView: View {
                     tierRow(m, .temperature, "Temperature", m.conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°F" })
                     tierRow(m, .humidity, "Humidity", m.conditions?.best(.humidity).map { "\(Int($0.value.rounded()))%" })
                 }
-                Text("Outdoors, from \(sources(m)). Saved as your first \"I'm okay\" moment, a calm baseline to compare against.")
+                Text("Outdoors, from \(sources(m)). Saved as your first calm moment: a time without your inhaler, so there's something to compare the hard times with.")
                     .font(.footnote).foregroundStyle(.secondary)
                 WeatherAttributionView()
                 primary("Continue") { step = .health }
@@ -243,7 +243,7 @@ struct OnboardingView: View {
             Text(name)
             Spacer()
             VStack(alignment: .trailing, spacing: 1) {
-                Text(level.map { Tier($0).word } ?? "No reading")
+                Text(Tier.label(f, m.weave) ?? "No reading")
                 if let value { Text(value).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
             }
         }

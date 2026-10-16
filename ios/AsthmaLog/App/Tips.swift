@@ -5,6 +5,8 @@ struct PullToLogTip: Tip {
     var title: Text { Text("Pull up to log") }
     var message: Text? { Text("A short pull logs Rescue. All the way up logs Standard. Let go low to cancel.") }
     var image: Image? { Image(systemName: "hand.draw") }
+    /// For anyone who'd rather tap: switches the + to two labelled buttons (also in Settings).
+    var actions: [Action] { [Action(id: "buttons", title: "Use buttons instead")] }
 }
 
 struct MomentsTip: Tip {

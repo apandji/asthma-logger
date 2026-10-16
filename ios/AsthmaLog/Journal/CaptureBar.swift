@@ -13,6 +13,8 @@ struct CaptureBar: View {
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
     @State private var toast: LogEvent?
     @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.ringButton
+    @AppStorage(Prefs.logButtons) private var useButtons = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 12) {
@@ -23,19 +25,25 @@ struct CaptureBar: View {
                 InsightsRingButton(open: { showInsights = true })
             case .edgeTab: Spacer()
             }
-            CaptureControl { moment in
-                PullToLogTip().invalidate(reason: .actionPerformed)
-                Task {
-                    let e: LogEvent = await services.log(moment, in: context, writeToHealth: writeToHealth)
-                    withAnimation(.snappy) { toast = e }
-                    try? await Task.sleep(for: .seconds(4))
-                    if toast?.id == e.id { withAnimation(.snappy) { toast = nil } }
+            if useButtons || typeSize.isAccessibilitySize {
+                // Two labelled buttons: chosen in Settings (or from the tip), and always at accessibility text sizes.
+                HStack(spacing: 8) {
+                    logButton(.rescue, "Rescue", Theme.rescue)
+                    logButton(.maintenance, "Standard", Theme.standard)
+                }
+            } else {
+                CaptureControl { moment in
+                    PullToLogTip().invalidate(reason: .actionPerformed)
+                    log(moment)
+                }
+                .popoverTip(tip, arrowEdge: .bottom) { action in
+                    if action.id == "buttons" { useButtons = true; tip?.invalidate(reason: .actionPerformed) }
                 }
             }
-            .popoverTip(tip, arrowEdge: .bottom)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
+        .animation(.snappy, value: useButtons)
         .overlay(alignment: .top) {
             if let e = toast {
                 HStack(spacing: 12) {
@@ -55,6 +63,28 @@ struct CaptureBar: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+    }
+}
+
+extension CaptureBar {
+    fileprivate func log(_ moment: MomentKind) {
+        Task {
+            let e: LogEvent = await services.log(moment, in: context, writeToHealth: writeToHealth)
+            withAnimation(.snappy) { toast = e }
+            try? await Task.sleep(for: .seconds(4))
+            if toast?.id == e.id { withAnimation(.snappy) { toast = nil } }
+        }
+    }
+
+    fileprivate func logButton(_ moment: MomentKind, _ title: String, _ color: Color) -> some View {
+        Button { log(moment) } label: {
+            Label(title, systemImage: "plus")
+                .font(.headline)
+                .foregroundStyle(color)
+                .frame(maxWidth: .infinity, minHeight: 56)
+        }
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .accessibilityHint("Logs a \(title.lowercased()) inhaler moment now")
     }
 }
 

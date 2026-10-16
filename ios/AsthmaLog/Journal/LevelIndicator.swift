@@ -11,6 +11,16 @@ enum Tier: Int {
     }
 
     var word: String { ["Good", "OK", "Not good"][rawValue] }
+
+    /// Air and pollen are judged (Good / OK / Not good). Temperature and humidity are weather, not a
+    /// health call: they get their plain word (Mild, Hot, Humid…) instead.
+    static func isJudged(_ f: WeaveSpec.Factor) -> Bool { f == .air || f == .pollen }
+
+    static func label(_ f: WeaveSpec.Factor, _ weave: WeaveSpec) -> String? {
+        guard let level = weave.levels[f] else { return nil }
+        if isJudged(f) { return Tier(level).word }
+        return weave.words[f].map { $0.prefix(1).uppercased() + $0.dropFirst() }
+    }
 }
 
 /// Ways to show a tier, so they can be compared in review (Settings › Level style, or the menu on the
@@ -46,6 +56,8 @@ struct LevelIndicator: View {
     let level: WeaveSpec.Level?
     let ink: Color
     let style: LevelStyle
+    /// For the Word style: what to print (a tier word, or a weather word like "Mild").
+    var text: String? = nil
 
     var body: some View {
         Group {
@@ -82,7 +94,7 @@ struct LevelIndicator: View {
     }
 
     private func word(_ t: Tier) -> some View {
-        Text(t.word)
+        Text(text ?? t.word)
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 7).padding(.vertical, 3)
             .foregroundStyle(t == .good ? ink : .primary)

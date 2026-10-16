@@ -366,7 +366,8 @@ struct MomentCard: View {
     /// and the plain word with the reading underneath.
     private func factorRow(_ f: WeaveSpec.Factor, _ name: String, value: String?) -> some View {
         let level = event.weave.levels[f]
-        let detail = [event.weave.words[f].map { $0.prefix(1).uppercased() + $0.dropFirst() }, value]
+        // Air shows its plain word under the tier; weather shows just the reading.
+        let detail = [Tier.isJudged(f) ? event.weave.words[f].map { $0.prefix(1).uppercased() + $0.dropFirst() } : nil, value]
             .compactMap { $0 }.joined(separator: " · ")
         return HStack(spacing: 12) {
             LevelIndicator(level: level, ink: WeaveSwatch.ink(f), style: style)
@@ -374,8 +375,8 @@ struct MomentCard: View {
             Text(name)
             Spacer()
             VStack(alignment: .trailing, spacing: 1) {
-                if style != .word || level == nil {
-                    Text(level.map { Tier($0).word } ?? (f == .pollen ? "Not yet" : "No reading"))
+                if style != .word || level == nil || !Tier.isJudged(f) {
+                    Text(Tier.label(f, event.weave) ?? (f == .pollen ? "Not yet" : "No reading"))
                         .foregroundStyle(level == nil ? Theme.secondaryText : .primary)
                 }
                 if !detail.isEmpty {

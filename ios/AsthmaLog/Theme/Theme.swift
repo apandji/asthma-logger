@@ -27,7 +27,8 @@ enum Theme {
 
     static let background = Color(uiColor: .systemGroupedBackground)
     static let surface = Color(uiColor: .secondarySystemGroupedBackground)
-    static let secondaryText = Color.secondary
+    // A step above the system grey: it has to clear WCAG AA over frosted glass on the colour field.
+    static let secondaryText = Color(light: 0x4A4A52, dark: 0xC2C2CC)
 
     static let elevated = accent
     static let usual = Color.secondary

@@ -30,7 +30,7 @@ struct EventDetailView: View {
                 if let lat = event.latitude, let lon = event.longitude {
                     let center = CLLocationCoordinate2D(latitude: lat, longitude: lon)
                     Map(initialPosition: .region(MKCoordinateRegion(center: center, latitudinalMeters: 800, longitudinalMeters: 800))) {
-                        Marker("", systemImage: "lungs.fill", coordinate: center).tint(Theme.accent)
+                        Marker("", systemImage: "mappin", coordinate: center).tint(event.moment == .rescue ? Theme.rescue : event.moment == .maintenance ? Theme.standard : Color.secondary)
                     }
                     .frame(height: 180)
                     .listRowInsets(EdgeInsets())

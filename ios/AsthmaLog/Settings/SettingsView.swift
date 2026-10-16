@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.narratorStyle) private var styleScore = NarratorStyle.defaultScore
     @AppStorage(Prefs.useOnDeviceModel) private var useModel = true
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
+    @AppStorage(Prefs.logButtons) private var useButtons = false
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.useDemoData) private var demo = false
     @Environment(\.modelContext) private var context
@@ -90,6 +91,7 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Log with two buttons instead of the +", isOn: $useButtons)
                     Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
                     Toggle("Add I'm okay moments automatically", isOn: $autoBaseline)
                 } header: {

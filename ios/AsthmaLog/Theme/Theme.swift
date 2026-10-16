@@ -43,14 +43,15 @@ enum Theme {
     static let spacing: CGFloat = 12
 
     // MARK: Type. One serif voice (New York) for the sentence, SF for everything else.
-    /// The small line above a title: type, time, place.
-    static let kicker = Font.subheadline.weight(.medium)
-    /// The sentence. Medium, never bold; tracked a touch tight (`Theme.serifKerning`).
-    static let serifTitle = Font.system(.title2, design: .serif, weight: .medium)
-    static let serifTitleLarge = Font.system(.title, design: .serif, weight: .medium)
-    static let serifKerning: CGFloat = -0.4
+    /// The small line above a title: type, time, place. Set as tracked small caps, like a dateline.
+    static let kicker = Font.system(size: 12, weight: .semibold, design: .default)
+    static let kickerTracking: CGFloat = 1.1
+    /// The sentence. New York, regular weight (medium reads machine-set), a size up, tracked tight.
+    static let serifTitle = Font.system(size: 28, weight: .regular, design: .serif)
+    static let serifTitleLarge = Font.system(size: 32, weight: .regular, design: .serif)
+    static let serifKerning: CGFloat = -0.6
     /// Numbers that change in place (counts, times).
-    static let figures = Font.system(.title3, design: .serif, weight: .medium)
+    static let figures = Font.system(size: 22, weight: .regular, design: .serif)
 
     // MARK: Motion. Three springs, used everywhere, so the whole app moves with one hand.
     /// Small things settling: pills, chips, dots. Quick, a hint of bounce.

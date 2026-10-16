@@ -180,8 +180,8 @@ struct NowHomeView: View {
                     // Just logged: the moment's own reading, in the present.
                     ScaleHeader(title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
                                 reserveTwoLines: true, byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, onByline: { showInsights = true }, compact: true) {
-                        MomentDot(moment: j.moment, size: 8)
-                        Text(["Just now", j.moment == .rescue ? "Rescue" : "Standard", j.placeName ?? here?.place].compactMap { $0 }.joined(separator: " · "))
+                        MomentTag(moment: j.moment)
+                        Text(["Just now", j.placeName ?? here?.place].compactMap { $0 }.joined(separator: " · "))
                     }
                     .onTapGesture { pinDetails = j }
                 } else {
@@ -194,8 +194,8 @@ struct NowHomeView: View {
                 }
             case .moment(let m):
                 ScaleHeader(title: m.pastStatement, reserveTwoLines: true, reserveByline: true, compact: true) {
-                    MomentDot(moment: m.moment, size: 8)
-                    Text(m.detailsLine)
+                    MomentTag(moment: m.moment)
+                    Text(m.whenAndWhere)
                 }
             case .hour(let h):
                 // The look-ahead: what the forecast says, then how it compares (or that we're still learning).
@@ -514,9 +514,9 @@ struct NowSky: View {
                         .clipped()
                         .allowsHitTesting(false)
                     // You are here: the map is centred on the place.
-                    Circle().fill(captureInk ?? Theme.standard).frame(width: 12, height: 12)
-                        .overlay(Circle().strokeBorder(.white, lineWidth: 2))
-                        .shadow(color: .black.opacity(0.5), radius: 3)
+                    Circle().fill((captureInk ?? Theme.standard).opacity(0.85)).frame(width: 7, height: 7)
+                        .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.2).frame(width: 13, height: 13))
+                        .shadow(color: .black.opacity(0.25), radius: 2)
                 }
                 ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
                               selected: row.flatMap { $0 > 0 ? $0 - 1 : nil },

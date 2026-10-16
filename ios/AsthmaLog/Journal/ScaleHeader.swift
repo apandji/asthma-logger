@@ -1,3 +1,4 @@
+import AsthmaCore
 import SwiftUI
 
 /// The top-left line every scale shares, in the same place and style: a small details line, then one
@@ -21,7 +22,8 @@ struct ScaleHeader<Kicker: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) { kicker }
-                .font(Theme.kicker).foregroundStyle(Theme.secondaryText)
+                .font(Theme.kicker).tracking(Theme.kickerTracking).textCase(.uppercase)
+                .foregroundStyle(Theme.secondaryText)
                 .lineLimit(1).truncationMode(.middle)  // fixed size: a long place name clips, the type never shrinks
                 .contentTransition(.opacity)
             let hasByline = byline != nil || reserveByline
@@ -32,6 +34,7 @@ struct ScaleHeader<Kicker: View>: View {
                     .kerning(Theme.serifKerning)
                     // Two lines, always: the byline sits in the same place whatever the title says.
                     .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)
+                    .lineSpacing(-1)
                     .id(title)
                     .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
             }
@@ -77,6 +80,32 @@ extension LogEvent {
         return ["\(kind) · \(day), \(time)", placeName].compactMap { $0 }.joined(separator: " · ")
     }
 
+    /// "Mon, 8:15 AM · Tower Grove South": the details line when the kind is shown as a tag.
+    var whenAndWhere: String {
+        let cal = Calendar.current
+        let time = loggedAt.formatted(date: .omitted, time: .shortened)
+        let day = cal.isDateInToday(loggedAt) ? "Today" : cal.isDateInYesterday(loggedAt) ? "Yesterday"
+            : loggedAt.formatted(.dateTime.weekday(.abbreviated))
+        return ["\(day), \(time)", placeName].compactMap { $0 }.joined(separator: " · ")
+    }
+
     /// The moment's one-line statement, or why there isn't one.
     var statement: String { weave.isEmpty ? "No air reading." : headline }
+}
+
+/// Which inhaler, as a small tag in the kicker: the word in a rounded rectangle, in the moment's ink.
+/// Replaces the orange / blue dot, which said less and shouted more.
+struct MomentTag: View {
+    let moment: MomentKind
+    var text: String? = nil
+
+    var body: some View {
+        let ink = moment == .rescue ? Theme.rescue : moment == .maintenance ? Theme.standard : Theme.secondaryText
+        Text(text ?? (moment == .rescue ? "Rescue" : moment == .maintenance ? "Standard" : "Baseline"))
+            .font(.system(size: 10, weight: .bold)).tracking(0.9).textCase(.uppercase)
+            .foregroundStyle(ink)
+            .padding(.horizontal, 6).padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(ink.opacity(0.14)))
+            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(ink.opacity(0.45), lineWidth: 0.8))
+    }
 }

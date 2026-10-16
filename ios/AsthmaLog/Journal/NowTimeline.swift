@@ -48,18 +48,16 @@ struct NowTimeline: View {
                 Color.clear.frame(width: viewport / 2)
                 ZStack(alignment: .topLeading) {
                     Canvas { ctx, size in
-                        // The forecast: a strip of sky color per hour, ahead of now.
-                        for h in hours {
-                            let t = h.conditions.best(.temperature)?.value
-                            var c = WeatherColor.light(WeatherColor.temperature(t ?? 65), at: h.date)
-                            if let rh = h.conditions.best(.humidity)?.value, rh > 70 { c = c.opacity(0.9) }
-                            let rect = CGRect(x: x(h.date), y: axis - 5, width: dayWidth / 24 + 0.5, height: 10)
-                            ctx.fill(Path(rect), with: .color(c.opacity(0.55)))
-                        }
-                        // Axis.
+                        // The axis: solid behind now, dotted ahead. The forecast's colours live in the sky
+                        // and the details, not down here.
                         var line = Path()
                         line.move(to: CGPoint(x: 0, y: axis)); line.addLine(to: CGPoint(x: x(now), y: axis))
-                        ctx.stroke(line, with: .color(ink.opacity(0.12)), lineWidth: 1)
+                        ctx.stroke(line, with: .color(ink.opacity(0.14)), lineWidth: 1)
+                        if let last = hours.last {
+                            var ahead = Path()
+                            ahead.move(to: CGPoint(x: x(now), y: axis)); ahead.addLine(to: CGPoint(x: x(last.date), y: axis))
+                            ctx.stroke(ahead, with: .color(ink.opacity(0.14)), style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                        }
                         // Now: a short bright tick.
                         var nowTick = Path()
                         nowTick.move(to: CGPoint(x: x(now), y: axis - 12)); nowTick.addLine(to: CGPoint(x: x(now), y: axis + 12))
@@ -85,13 +83,8 @@ struct NowTimeline: View {
 
                     ForEach(moments) { e in
                         let on = e.id == currentMoment?.id
-                        MomentSwatch(event: e, size: on ? 16 : 11, ringWidth: on ? 2.5 : 1.8)
-                            .background {
-                                if on {
-                                    Circle().fill(ink).frame(width: 22, height: 22)
-                                        .shadow(color: (e.moment == .rescue ? Theme.rescue : Theme.standard).opacity(0.8), radius: 8)
-                                }
-                            }
+                        MomentSwatch(event: e, size: on ? 13 : 8, ringWidth: on ? 2 : 1.2)
+                            .background { if on { Circle().fill(ink).frame(width: 18, height: 18) } }
                             .position(x: x(e.loggedAt), y: axis)
                             .animation(.snappy(duration: 0.2), value: on)
                             .onTapGesture { go(to: e.loggedAt) }
@@ -101,10 +94,10 @@ struct NowTimeline: View {
                 // After the forecast: a hint that there's more this way.
                 Color.clear.frame(width: viewport / 2)
                     .overlay(alignment: .leading) {
-                        Label("Insights", systemImage: "sparkles")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(ink.opacity(0.45))
-                            .padding(.leading, 18)
+                        Image(systemName: "sparkles")
+                            .font(.caption)
+                            .foregroundStyle(ink.opacity(0.35))
+                            .padding(.leading, 22)
                             .offset(y: axis - height / 2)
                     }
             }
@@ -138,9 +131,8 @@ struct NowTimeline: View {
         }
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
-                Capsule().fill(ink).frame(width: 3, height: 34)
-                    .shadow(color: .black.opacity(0.5), radius: 2)
-                    .offset(y: axis - 17)
+                Capsule().fill(ink).frame(width: 2, height: 30)
+                    .offset(y: axis - 15)
                     .allowsHitTesting(false)
                 // The pill is a button: tap it to step back through your moments, newest first.
                 Button(action: stepBack) {
@@ -169,9 +161,10 @@ struct NowTimeline: View {
             if focusTime != nil {
                 Button { go(to: nil) } label: {
                     Image(systemName: current < now ? "chevron.right.2" : "chevron.left.2")
-                        .font(.caption.weight(.bold))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(ink.opacity(0.7))
                         .frame(width: 34, height: 28)
-                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(PressStyle())
                 .padding(.horizontal, 12)

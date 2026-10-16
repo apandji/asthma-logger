@@ -10,8 +10,10 @@ struct SettingsView: View {
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.useDemoData) private var demo = false
     @Environment(\.modelContext) private var context
+    @Environment(ButtonLink.self) private var button
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
     @State private var demoNote: String?
+    @AppStorage(LevelStyle.key) private var levelStyle = LevelStyle.signal
 
     var body: some View {
         NavigationStack {
@@ -50,6 +52,14 @@ struct SettingsView: View {
 
                 ButtonSection()
 
+                Section {
+                    Picker("Level style", selection: $levelStyle) {
+                        ForEach(LevelStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                } footer: {
+                    Text("How Good / OK / Not good is drawn on the details sheet. \(levelStyle.note)")
+                }
+
                 Section("Data sources") {
                     LabeledContent("Apple Weather", value: "On")
                     LabeledContent("OpenAQ (PM2.5, ozone)", value: Secrets.openAQ == nil ? "No key" : "On")
@@ -78,6 +88,18 @@ struct SettingsView: View {
                 }
 
                 #if DEBUG
+                Section {
+                    Button("Reset onboarding and button", role: .destructive) {
+                        button.resetForOnboarding()
+                        dismiss()
+                        Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
+                    }
+                } header: {
+                    Text("Onboarding (debug)")
+                } footer: {
+                    Text("Forgets the paired button and starts onboarding again. Your moments stay. iOS only shows each permission sheet once per install: to see them again, reinstall with ios/scripts/fresh-install.sh (this erases the Journal).")
+                }
+
                 Section {
                     NavigationLink("Voice effect") { VoiceOrbPrototype() }
                 } header: {

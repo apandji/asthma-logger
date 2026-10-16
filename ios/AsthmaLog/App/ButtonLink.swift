@@ -16,6 +16,10 @@ final class ButtonLink: NSObject {
     private(set) var status: Status = .notPaired
     private(set) var lastPress: Date?
     private(set) var name: String?
+    /// Onboarding's "press to sync": presses confirm the link and aren't logged as inhaler use.
+    private(set) var isSyncing = false
+    private(set) var syncPresses = 0
+    private(set) var lastSyncCap: ButtonPacket.Cap?
 
     var isPaired: Bool { UserDefaults.standard.string(forKey: Self.pairedKey) != nil }
 
@@ -52,6 +56,25 @@ final class ButtonLink: NSObject {
             self.wantsScan = false
             self.status = self.isPaired ? .away : .notPaired
         }
+    }
+
+    /// Start onboarding's sync: pair if needed, then count presses instead of logging them.
+    func beginSync() {
+        isSyncing = true
+        syncPresses = 0
+        if isPaired { makeCentral() } else if status != .searching { pair() }
+    }
+
+    func endSync() { isSyncing = false }
+
+    /// Debug: forget the button and everything it sent, so onboarding's sync can run again.
+    func resetForOnboarding() {
+        forget()
+        isSyncing = false
+        syncPresses = 0
+        lastSyncCap = nil
+        lastPress = nil
+        UserDefaults.standard.removeObject(forKey: Self.handledKey)
     }
 
     func forget() {
@@ -110,10 +133,21 @@ final class ButtonLink: NSObject {
         let received = Date()
         if !alreadyHandled(packet.key) {
             markHandled(packet.key)
-            lastPress = packet.pressedAt(receivedAt: received)
-            onPress?(packet, received)
+            if isSyncing {
+                // Presses queued on the button before setup are dropped; only a fresh press confirms the link.
+                guard packet.ageMs < 10_000 else { return ackOnly(packet, p) }
+                syncPresses += 1
+                lastSyncCap = packet.cap
+            } else {
+                lastPress = packet.pressedAt(receivedAt: received)
+                onPress?(packet, received)
+            }
         }
-        // Ack every time, even repeats, so the button stops resending.
+        ackOnly(packet, p)
+    }
+
+    /// Ack every time, even repeats, so the button stops resending.
+    private func ackOnly(_ packet: ButtonPacket, _ p: CBPeripheral) {
         if let ack = ackCharacteristic {
             p.writeValue(Data(packet.ack), for: ack, type: .withResponse)
         }

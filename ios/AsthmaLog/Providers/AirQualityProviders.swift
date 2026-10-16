@@ -36,7 +36,7 @@ struct OpenAQProvider {
 
     private var headers: [String: String] { ["X-API-Key": key, "Accept": "application/json"] }
 
-    private func search(_ lat: Double, _ lon: Double, monitor: Bool) async throws -> [OpenAQ.Location] {
+    func search(_ lat: Double, _ lon: Double, monitor: Bool) async throws -> [OpenAQ.Location] {
         var c = URLComponents(string: "\(OpenAQ.baseURL)/locations")!
         c.queryItems = [
             URLQueryItem(name: "coordinates", value: String(format: "%.4f,%.4f", lat, lon)),

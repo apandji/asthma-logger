@@ -2,56 +2,36 @@ import AsthmaCore
 import SwiftData
 import SwiftUI
 
-/// The ambient Journal: a full-bleed stage with this week's moments as a horizontal strip of woven
-/// cards (one per moment, grouped by day, scrolled to now), and the selected moment underneath.
-/// Logging lives in the tab bar accessory and on Apple Watch. Wireframe: Figma "10.2 Journal View".
+/// The Journal, in two modes (switch at the top):
+/// - Ambient: the day's outdoor conditions as a soft colour field, one sentence, and today's moments.
+///   Tap anywhere for the details, each condition as Good / OK / Not good.
+/// - Data: temperature, humidity and air as scrollable hourly line charts, with inhaler moments marked.
+/// Logging lives in the tab bar accessory, on Apple Watch, and on the felt button.
 struct JournalView: View {
     @Environment(LogService.self) private var services
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @State private var selectedID: UUID?
+    @State private var showDetails = false
+    @AppStorage("journalMode") private var mode = Mode.ambient
+
+    enum Mode: String { case ambient, data }
 
     private let days = 7
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    header
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("This week").font(.title3.weight(.semibold))
-                            Spacer()
-                            Button { showKey = true } label: {
-                                Image(systemName: "info.circle").font(.body)
-                            }
-                            .foregroundStyle(Theme.secondaryText)
-                            .accessibilityLabel("How to read the weaves")
-                            .popover(isPresented: $showKey) { WeaveKey().presentationCompactAdaptation(.popover) }
-                        }
-                        .padding(.horizontal, 20)
-                        MomentStrip(days: week, selectedID: selected?.id) { id in
-                            withAnimation(.snappy) { selectedID = id }
-                        }
-                    }
-                    if let event = selected {
-                        NavigationLink(value: event) { MomentCard(event: event) }
-                            .buttonStyle(.plain)
+            Group {
+                switch mode {
+                case .ambient: ambient
+                case .data:
+                    ScrollView {
+                        AirChartsView()
                             .padding(.horizontal, 16)
-                    } else if events.isEmpty {
-                        emptyState.padding(.horizontal, 20)
+                            .padding(.top, 4)
+                            .padding(.bottom, 110)
                     }
-                    if let error = services.lastError {
-                        Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20)
-                    }
+                    .background(Theme.stage.ignoresSafeArea())
                 }
-                .padding(.top, 4)
-                .padding(.bottom, 110)  // clear the floating log bar
-            }
-            .background {
-                // The room takes on the selected moment's air (today's, until you pick one).
-                AmbientField(weave: selected.map { $0.weave.isEmpty ? todayWeave : $0.weave } ?? todayWeave)
-                    .ignoresSafeArea()
-                    .animation(.easeInOut(duration: 0.8), value: selected?.id)
             }
             .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
             .toolbar {
@@ -59,12 +39,93 @@ struct JournalView: View {
                     NavigationLink { MomentListView() } label: { Image(systemName: "list.bullet") }
                         .accessibilityLabel("All moments")
                 }
+                ToolbarItem(placement: .principal) {
+                    Picker("View", selection: $mode.animation(.easeInOut)) {
+                        Text("Ambient").tag(Mode.ambient)
+                        Text("Data").tag(Mode.data)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 190)
+                }
             }
             .settingsToolbar()
+            .sheet(isPresented: $showDetails) {
+                if let event = selected {
+                    DetailsSheet(event: event)
+                        .presentationDetents([.medium, .large])
+                        .presentationBackground(.ultraThinMaterial)
+                }
+            }
         }
     }
 
-    @State private var showKey = false
+    // MARK: Ambient
+
+    private var ambient: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Spacer(minLength: 24)
+            if events.isEmpty {
+                emptyState.padding(.horizontal, 20)
+            } else {
+                todayMoments
+            }
+            if let error = services.lastError {
+                Text(error).font(.footnote).foregroundStyle(.orange).padding(.horizontal, 20).padding(.top, 8)
+            }
+            Text("Tap anywhere for details")
+                .font(.footnote).foregroundStyle(Theme.secondaryText)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 18)
+                .padding(.bottom, 120)  // clear the floating log bar
+        }
+        .padding(.top, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .contentShape(Rectangle())
+        .onTapGesture { if selected != nil { showDetails = true } }
+        .background {
+            // The room takes on the selected moment's air (today's, until you pick one).
+            AmbientField(weave: selected.map { $0.weave.isEmpty ? todayWeave : $0.weave } ?? todayWeave)
+                .ignoresSafeArea()
+                .animation(.easeInOut(duration: 0.8), value: selected?.id)
+        }
+    }
+
+    /// Today's moments as quiet glass chips; tapping one tints the room with its air and opens it.
+    private var todayMoments: some View {
+        let today = events.filter { Calendar.current.isDateInToday($0.loggedAt) && $0.moment != .okay }
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(today.isEmpty ? "No inhaler use today" : "Today")
+                .font(.footnote.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+                .padding(.horizontal, 20)
+            if !today.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(today) { e in
+                            Button {
+                                withAnimation(.snappy) { selectedID = e.id }
+                                showDetails = true
+                            } label: {
+                                HStack(spacing: 6) {
+                                    MomentDot(moment: e.moment, size: 8)
+                                    Text(e.loggedAt.formatted(date: .omitted, time: .shortened))
+                                        .font(.subheadline.monospacedDigit())
+                                }
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .glassEffect(.regular, in: .capsule)
+                                .overlay(Capsule().strokeBorder(.primary.opacity(e.id == selected?.id ? 0.5 : 0), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(e.moment.title) at \(e.loggedAt.formatted(date: .omitted, time: .shortened))")
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .contentMargins(.horizontal, 20, for: .scrollContent)
+                .defaultScrollAnchor(.trailing)
+            }
+        }
+    }
 
     // MARK: Header
 
@@ -74,7 +135,7 @@ struct JournalView: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Theme.secondaryText)
             Text(airSentence)
-                .font(Theme.headlineSerif)
+                .font(.system(.title, design: .serif, weight: .medium))
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
                 stat(count(.rescue), "Rescue", Theme.rescue)
@@ -122,123 +183,9 @@ struct JournalView: View {
 
     // MARK: Data
 
-    /// The last `days` days, oldest first, each with its moments in time order (empty days kept).
-    private var week: [MomentDay] {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: .now)
-        return (0..<days).reversed().map { back in
-            let day = cal.date(byAdding: .day, value: -back, to: today)!
-            let next = cal.date(byAdding: .day, value: 1, to: day)!
-            return MomentDay(day: day, events: events.filter { $0.loggedAt >= day && $0.loggedAt < next })
-        }
-    }
-
     private var selected: LogEvent? {
         if let id = selectedID, let e = events.first(where: { $0.id == id }) { return e }
-        return events.last
-    }
-}
-
-struct MomentDay: Identifiable {
-    let day: Date
-    let events: [LogEvent]
-    var id: Date { day }
-}
-
-// MARK: - Strip
-
-/// This week's moments as woven tiles, grouped by day, starting scrolled to now.
-struct MomentStrip: View {
-    let days: [MomentDay]
-    let selectedID: UUID?
-    let onSelect: (UUID) -> Void
-
-    private let tile: CGFloat = 92
-
-    var body: some View {
-        ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: 20) {  // not Lazy: a week of tiles is cheap, and Lazy + a trailing anchor can lay out blank
-                ForEach(days) { day in
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(label(day.day))
-                            .font(.footnote.weight(Calendar.current.isDateInToday(day.day) ? .semibold : .regular))
-                            .foregroundStyle(Calendar.current.isDateInToday(day.day) ? .primary : Theme.secondaryText)
-                        if day.events.isEmpty {
-                            Capsule().fill(Theme.secondaryText.opacity(0.18))
-                                .frame(width: 4, height: tile)
-                                .frame(width: 28)
-                                .accessibilityLabel("No moments")
-                        } else {
-                            HStack(alignment: .top, spacing: 8) {
-                                ForEach(day.events) { event in
-                                    Button { onSelect(event.id) } label: {
-                                        MomentTile(event: event, size: tile, isSelected: event.id == selectedID)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .scrollTargetLayout()
-        }
-        .scrollIndicators(.hidden)
-        .contentMargins(.horizontal, 20, for: .scrollContent)
-        .defaultScrollAnchor(.trailing)
-        .scrollTargetBehavior(.viewAligned)
-        .frame(height: tile + 62)
-    }
-
-    private func label(_ day: Date) -> String {
-        if Calendar.current.isDateInToday(day) { return "Today" }
-        if Calendar.current.isDateInYesterday(day) { return "Yesterday" }
-        return day.formatted(.dateTime.weekday(.abbreviated).day())
-    }
-}
-
-/// One moment: its weave, and below it the kind and time. Selection lifts the tile and outlines it.
-struct MomentTile: View {
-    let event: LogEvent
-    let size: CGFloat
-    let isSelected: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Group {
-                switch event.envStatus {
-                case .pending:
-                    RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.card)
-                        .overlay { ProgressView() }
-                case .ready, .partial, .failed:
-                    if event.weave.isEmpty {
-                        RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.card)
-                            .overlay { Image(systemName: "wind").foregroundStyle(Theme.secondaryText) }
-                    } else {
-                        WeaveSwatch(weave: event.weave, cornerRadius: 24)
-                    }
-                }
-            }
-            .frame(width: size, height: size)
-            .overlay {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(isSelected ? Color.primary : Color.primary.opacity(0.06), lineWidth: isSelected ? 2 : 0.5)
-            }
-            .scaleEffect(isSelected ? 1.0 : 0.94)
-            .shadow(color: .black.opacity(isSelected ? 0.18 : 0), radius: 10, y: 4)
-
-            HStack(spacing: 5) {
-                MomentDot(moment: event.moment, size: 7)
-                Text(event.loggedAt.formatted(date: .omitted, time: .shortened))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(isSelected ? .primary : Theme.secondaryText)
-            }
-            .padding(.leading, 4)
-        }
-        .animation(.snappy, value: isSelected)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(event.moment.title), \(event.loggedAt.formatted(date: .omitted, time: .shortened)), \(event.weave.isEmpty ? "no outdoor readings" : event.weave.summary)")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        return events.last { !$0.weave.isEmpty } ?? events.last
     }
 }
 
@@ -259,52 +206,13 @@ struct MomentDot: View {
     }
 }
 
-/// How to read a weave. Opened from the info button, so the Journal stays quiet.
-struct WeaveKey: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Each square is one moment. Its pattern shows the air outside at the time.")
-                .font(.subheadline).fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: 8) {
-                row(.air, "Air quality")
-                row(.humidity, "Humidity")
-                row(.temperature, "Temperature")
-                row(.pollen, "Pollen (not yet)")
-            }
-            HStack(spacing: 10) {
-                ForEach(WeaveSpec.Level.allCases, id: \.self) { l in
-                    VStack(spacing: 4) {
-                        WeaveSwatch(weave: WeaveSpec(levels: [.air: l]), cornerRadius: 8).frame(width: 36, height: 36)
-                        Text(["Low", "Medium", "High"][l.rawValue]).font(.caption2).foregroundStyle(Theme.secondaryText)
-                    }
-                }
-            }
-            Text("Denser means higher. For temperature and humidity, it means further from comfortable.")
-                .font(.caption).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 12) {
-                HStack(spacing: 5) { MomentDot(moment: .rescue, size: 8); Text("Rescue") }
-                HStack(spacing: 5) { MomentDot(moment: .maintenance, size: 8); Text("Standard") }
-                HStack(spacing: 5) { MomentDot(moment: .okay, size: 8); Text("I'm okay") }
-            }
-            .font(.caption)
-        }
-        .padding(18)
-        .frame(width: 300)
-    }
-
-    private func row(_ f: WeaveSpec.Factor, _ label: String) -> some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 3).fill(WeaveSwatch.ink(f)).frame(width: 12, height: 12)
-            Text(label).font(.subheadline)
-        }
-    }
-}
-
 // MARK: - Selected moment
 
 /// The selected moment in plain iOS: kind, time, the weave in words, and every outdoor value with its source.
 struct MomentCard: View {
     let event: LogEvent
+    var showsChevron = true
+    @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -318,7 +226,9 @@ struct MomentCard: View {
                         .font(.subheadline).foregroundStyle(Theme.secondaryText)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                if showsChevron {
+                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                }
             }
             .padding(.bottom, 12)
 
@@ -349,24 +259,30 @@ struct MomentCard: View {
         .contentShape(.rect(cornerRadius: 22))
     }
 
-    /// One condition: a small weave swatch, its name, the plain word, and the reading.
+    /// One condition: its tier as a small graphic (style from Settings), the name, Good / OK / Not good,
+    /// and the plain word with the reading underneath.
     private func factorRow(_ f: WeaveSpec.Factor, _ name: String, value: String?) -> some View {
         let level = event.weave.levels[f]
-        // Air in everyday words (good / moderate / poor), matching the headline.
-        let word = f == .air ? level.map { ["good", "moderate", "poor"][$0.rawValue] } : event.weave.words[f]
+        let detail = [event.weave.words[f].map { $0.prefix(1).uppercased() + $0.dropFirst() }, value]
+            .compactMap { $0 }.joined(separator: " · ")
         return HStack(spacing: 12) {
-            LevelMeter(level: level, ink: WeaveSwatch.ink(f))
-                .frame(width: 26)
+            LevelIndicator(level: level, ink: WeaveSwatch.ink(f), style: style)
+                .frame(minWidth: 30)
             Text(name)
             Spacer()
             VStack(alignment: .trailing, spacing: 1) {
-                Text(word.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? (f == .pollen ? "Not yet" : "No reading"))
-                    .foregroundStyle(word == nil ? Theme.secondaryText : .primary)
-                if let value { Text(value).font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText) }
+                if style != .word || level == nil {
+                    Text(level.map { Tier($0).word } ?? (f == .pollen ? "Not yet" : "No reading"))
+                        .foregroundStyle(level == nil ? Theme.secondaryText : .primary)
+                }
+                if !detail.isEmpty {
+                    Text(detail).font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
+                }
             }
         }
         .font(.subheadline)
         .padding(.vertical, 9)
+        .accessibilityElement(children: .combine)
     }
 
     private func airValue(_ c: Conditions) -> String? {
@@ -386,24 +302,6 @@ struct MomentCard: View {
     }
 }
 
-/// Three short bars: how many are filled is the level (low, medium, high). Dashed when there's no reading.
-struct LevelMeter: View {
-    let level: WeaveSpec.Level?
-    let ink: Color
-
-    var body: some View {
-        HStack(alignment: .bottom, spacing: 3) {
-            ForEach(0..<3, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(level.map { i <= $0.rawValue } == true ? ink : Theme.secondaryText.opacity(0.22))
-                    .frame(width: 5, height: CGFloat(8 + i * 5))
-            }
-        }
-        .frame(height: 20, alignment: .bottom)
-        .accessibilityHidden(true)
-    }
-}
-
 extension LogEvent {
     /// The air at this moment as a short phrase: "Good air, 63° and comfortable."
     var airLine: String {
@@ -415,5 +313,47 @@ extension LogEvent {
         if let h = w.words[.humidity] { tail.append(h) }
         if !tail.isEmpty { parts.append(tail.joined(separator: " and ")) }
         return parts.isEmpty ? "No air reading." : parts.joined(separator: ", ") + "."
+    }
+}
+
+/// Opened by tapping the ambient Journal: the moment's conditions as tiers, a switcher for the tier
+/// style (for comparing in review), and a link to everything about the moment.
+struct DetailsSheet: View {
+    let event: LogEvent
+    @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    MomentCard(event: event, showsChevron: false)
+                    NavigationLink(value: event) {
+                        Label("Everything about this moment", systemImage: "chevron.right")
+                            .labelStyle(.titleOnly)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                }
+                .padding(16)
+            }
+            .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
+            .navigationTitle(event.moment == .okay ? "Conditions" : event.moment.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Picker("Level style", selection: $style) {
+                            ForEach(LevelStyle.allCases) { s in
+                                Text(s.title).tag(s)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }
+                    .accessibilityLabel("Level style")
+                }
+            }
+        }
     }
 }

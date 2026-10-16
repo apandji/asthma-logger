@@ -62,7 +62,7 @@ struct JournalView: View {
                 .overlay(alignment: .bottom) {
                     CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, spot: spot, toast: $toast)
                 }
-                .overlay(alignment: .topTrailing) { topRail }
+                .overlay(alignment: .bottomLeading) { topRail }
                 .overlay(alignment: .top) {
                     if let e = toast {
                         LoggedToast(event: e) {
@@ -374,10 +374,11 @@ struct JournalView: View {
     }
 
     /// A standard ••• menu, top right: All moments and Settings.
+    /// Bottom-left, under nothing, so the header can run the full width.
     private var topRail: some View {
-        VStack(spacing: 10) {
+        HStack(spacing: 10) {
             if insightsEntry == .topBar {
-                InsightsRingButton(open: { showInsights = true }, size: 44, bubbleBelow: true)
+                InsightsRingButton(open: { showInsights = true }, size: 44)
             }
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
@@ -388,8 +389,8 @@ struct JournalView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
         }
-        .padding(.trailing, Self.railAxis - 22)
-        .padding(.top, 2)
+        .padding(.leading, 16)
+        .padding(.bottom, 16)
     }
 
     /// The right-edge column (Insights, Settings, the scale dots, the +) shares one center line,
@@ -421,7 +422,7 @@ struct JournalView: View {
                         MomentDot(moment: m.moment, size: 8)
                         Text(m.detailsLine)
                     }
-                    .padding(.leading, -20).padding(.trailing, -(Self.railAxis + 30)).padding(.top, -6)  // the block already pads
+                    .padding(.horizontal, -20).padding(.top, -6)  // the block already pads
                 } else {
                     nowLines
                 }
@@ -451,8 +452,7 @@ struct JournalView: View {
                     .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
             }
         }
-        .padding(.leading, 20)
-        .padding(.trailing, Self.railAxis + 30)  // clear the glass column
+        .padding(.horizontal, 20)
         .padding(.top, 6)
         .animation(.easeInOut(duration: 0.35), value: selected?.id)
         // Only the "right now" headers need a live reading; don't spend launch on it otherwise.

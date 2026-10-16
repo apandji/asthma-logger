@@ -13,6 +13,10 @@ struct NowHomeView: View {
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @AppStorage(Prefs.useDemoData) private var demo = false
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
+    @AppStorage(Crit.InsightsState.key) private var forced = Crit.InsightsState.auto
+    /// Reading the air somewhere other than here (an address, Home, Work). Nil is the phone's location.
+    @State private var chosen = SavedPlace.load(SavedPlace.chosenKey)
+    @State private var showPlaces = false
 
     @State private var here: NowReading?
     @State private var hours: [NowHour] = []
@@ -64,7 +68,7 @@ struct NowHomeView: View {
             .overlay(alignment: .bottom) {
                 CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, toast: $toast)
             }
-            .overlay(alignment: .topTrailing) { rail }
+            .overlay(alignment: .bottomLeading) { rail }
             .overlay(alignment: .top) {
                 if let e = toast {
                     LoggedToast(event: e) {
@@ -77,6 +81,8 @@ struct NowHomeView: View {
                 InsightsView().presentationDragIndicator(.visible).presentationBackground(.ultraThinMaterial)
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showPlaces) { PlacePicker(chosen: $chosen).presentationDetents([.medium, .large]) }
+            .onChange(of: chosen) { _, _ in here = nil; hours = []; Task { await load() } }
             .sheet(isPresented: $showMonth) {
                 MomentsOverview(events: Array(events), namespace: month, anchorDay: focusTime,
                                 open: { e in focusTime = e.loggedAt; showMonth = false },
@@ -134,9 +140,11 @@ struct NowHomeView: View {
         Group {
             switch focus {
             case .now:
-                ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true, byline: sentence, compact: true) {
+                ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true,
+                            byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
                     Circle().fill(.white).frame(width: 8, height: 8)
-                    Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
+                    Text("Now ·")
+                    placeChip
                 }
                 .onTapGesture { showInsights = true }
             case .moment(let m):
@@ -146,9 +154,11 @@ struct NowHomeView: View {
                 }
             case .hour(let h):
                 // The look-ahead: what the forecast says, then how it compares (or that we're still learning).
-                ScaleHeader(title: h.statement, reserveTwoLines: true, byline: sentence, compact: true) {
+                ScaleHeader(title: h.statement, reserveTwoLines: true,
+                            byline: outlook(at: h.date).text, bylineTint: outlook(at: h.date).tint, compact: true) {
                     Image(systemName: "arrow.right").font(.caption2.weight(.bold))
-                    Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour().minute()))\(here?.place.map { " · \($0)" } ?? "")")
+                    Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour().minute())) ·")
+                    placeChip
                 }
                 .onTapGesture { showInsights = true }
             }
@@ -157,17 +167,51 @@ struct NowHomeView: View {
         .animation(.easeInOut(duration: 0.25), value: focusTime)
     }
 
-    /// The one sentence. Never a percent, never "attack", never a cause.
-    private var sentence: String {
-        if let window = model.days.flatMap(\.windows).first(where: { $0.end > .now && $0.start < Date.now.addingTimeInterval(48 * 3600) }) {
-            return "\(Self.when(window.start)) looks more like your rescue days than your usual ones."
-        }
-        if let today = model.days.first, today.isPersonal {
-            switch today.band {
-            case .quiet: return "Today looks quieter than your usual days."
-            case .usual, .elevated: return "Today looks like your usual days."
+    /// Tap to read the air somewhere else.
+    private var placeChip: some View {
+        Button { showPlaces = true } label: {
+            HStack(spacing: 3) {
+                Text(here?.place ?? chosen?.name ?? "Here")
+                Image(systemName: "chevron.down").font(.caption2.weight(.bold))
             }
+            .foregroundStyle(chosen == nil ? Theme.secondaryText : Theme.tint)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Change place")
+    }
+
+    /// The one sentence for a time, with its color once felt air has learned. Never a percent, never
+    /// "attack", never a cause. Green: like your okay days. Yellow: a bit like your rescue days.
+    /// Red: matches the days you reached for your rescue.
+    private func outlook(at t: Date) -> (text: String, tint: Color?) {
+        let learned = forced == .learned || (forced == .auto && (model.progress?.isMet ?? false))
+        if learned {
+            if forced == .learned, !(model.progress?.isMet ?? false) {
+                // Demo: a rough afternoon, so every color can be seen on the track.
+                let h = Calendar.current.component(.hour, from: t)
+                if (14...17).contains(h) { return ("Matches days you reached for your rescue.", Self.red) }
+                if (11...13).contains(h) || (18...19).contains(h) { return ("A bit like your rescue days.", Self.yellow) }
+                return ("Looks like one of your okay days.", Self.green)
+            }
+            if let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }) {
+                // A window's peak is a summed log likelihood ratio; past 1 it's clearly a rescue-day pattern.
+                return w.peakScore >= 1 ? ("Matches days you reached for your rescue.", Self.red)
+                                        : ("A bit like your rescue days.", Self.yellow)
+            }
+            if let day = model.days.first(where: { Calendar.current.isDate($0.day, inSameDayAs: t) }), day.isPersonal {
+                return day.band == .elevated ? ("A bit like your rescue days.", Self.yellow) : ("Looks like one of your okay days.", Self.green)
+            }
+            return ("Looks like one of your okay days.", Self.green)
+        }
+        return (sentence, nil)
+    }
+
+    private static let green = Color(red: 0.36, green: 0.80, blue: 0.47)
+    private static let yellow = Color(red: 0.98, green: 0.80, blue: 0.25)
+    private static let red = Color(red: 1.0, green: 0.36, blue: 0.32)
+
+    /// Before felt air has learned: how far along it is.
+    private var sentence: String {
         if let p = model.progress, !p.isMet {
             let needRescue = max(0, p.minAttacks - p.attacks), needCalm = max(0, p.minBaselines - p.baselines)
             var parts: [String] = []
@@ -194,7 +238,7 @@ struct NowHomeView: View {
         case .now:
             NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
                    pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
-                   mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
+                   mapID: mapID, coordinate: here.map { ($0.lat, $0.lon) })
                 .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
         case .moment(let m):
             NowSky(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
@@ -206,21 +250,24 @@ struct NowHomeView: View {
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
                    pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
-                   mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
+                   mapID: mapID, coordinate: here.map { ($0.lat, $0.lon) })
                 .id(h.date)
         }
     }
 
+    private var mapID: String { chosen.map { "place-\($0.lat)-\($0.lon)" } ?? "here" }
+
     // MARK: Right edge
 
+    /// Bottom-left, where nothing else lives, so the header can run the full width.
     private var rail: some View {
-        VStack(spacing: 10) {
+        HStack(spacing: 10) {
             Button { showMonth = true } label: { railIcon("calendar") }.accessibilityLabel("Month")
             Button { showSettings = true } label: { railIcon("gearshape") }.accessibilityLabel("Settings")
         }
         .buttonStyle(.plain)
-        .padding(.trailing, JournalView.railAxis - 22)
-        .padding(.top, 2)
+        .padding(.leading, 16)
+        .padding(.bottom, 16)
     }
 
     private func railIcon(_ name: String) -> some View {
@@ -231,12 +278,17 @@ struct NowHomeView: View {
     // MARK: Data
 
     private func load() async {
-        guard let fix = try? await services.location.currentLocation(timeout: .seconds(6)) else { return }
-        let lat = fix.coordinate.latitude, lon = fix.coordinate.longitude
-        async let c = services.conditions.conditions(latitude: lat, longitude: lon)
-        async let marks = try? CLGeocoder().reverseGeocodeLocation(fix)
-        let place = await marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
-        here = NowReading(lat: lat, lon: lon, place: place, conditions: await c)
+        let lat: Double, lon: Double, place: String?
+        if let chosen {
+            (lat, lon, place) = (chosen.lat, chosen.lon, chosen.name)
+        } else {
+            guard let fix = try? await services.location.currentLocation(timeout: .seconds(6)) else { return }
+            (lat, lon) = (fix.coordinate.latitude, fix.coordinate.longitude)
+            let marks = try? await CLGeocoder().reverseGeocodeLocation(fix)
+            place = marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
+        }
+        let c = await services.conditions.conditions(latitude: lat, longitude: lon)
+        here = NowReading(lat: lat, lon: lon, place: place, conditions: c)
         hours = await NowHour.forecast(latitude: lat, longitude: lon)
         await model.loadForecast(latitude: lat, longitude: lon, placeLabel: place ?? "here")
     }

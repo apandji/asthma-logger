@@ -9,6 +9,8 @@ struct ScaleHeader<Kicker: View>: View {
     /// One quiet line under the title, with its space kept so it can come and go without a jump.
     var byline: String? = nil
     var reserveByline = false
+    /// Color for a byline that carries a verdict (okay / a bit like / matches your rescue days).
+    var bylineTint: Color? = nil
     /// A step smaller, for two-sentence titles that have to fit two lines.
     var compact = false
     @ViewBuilder let kicker: Kicker
@@ -27,7 +29,8 @@ struct ScaleHeader<Kicker: View>: View {
             if hasByline {
                 // felt air's own voice, marked with the sparkle so it reads as the app thinking, not data.
                 Label { Text(byline ?? " ") } icon: { Image(systemName: "sparkles").font(.caption).padding(.top, 2) }
-                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    .font(.subheadline.weight(bylineTint == nil ? .regular : .medium))
+                    .foregroundStyle(bylineTint ?? Theme.secondaryText)
                     .lineLimit(2)
                     .contentTransition(.opacity)
                     .opacity(byline == nil ? 0 : 1)
@@ -35,8 +38,7 @@ struct ScaleHeader<Kicker: View>: View {
         }
 
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, 20)
-        .padding(.trailing, JournalView.railAxis + 30)  // clear the glass column
+        .padding(.horizontal, 20)
         .padding(.top, 6)
     }
 }

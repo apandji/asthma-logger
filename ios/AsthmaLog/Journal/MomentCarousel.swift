@@ -18,9 +18,8 @@ struct MomentCarousel: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 14) {
                 ForEach(events) { e in
-                    FolderCard(event: e, isCurrent: e.id == selectedID, onOpen: { onOpen(e) }, onOverview: onOverview)
+                    FolderCard(event: e, isCurrent: e.id == selectedID, zoom: namespace, onOpen: { onOpen(e) }, onOverview: onOverview)
                         .matchedGeometryEffect(id: e.id, in: morph)
-                        .matchedTransitionSource(id: e.id, in: namespace)
                         .containerRelativeFrame(.horizontal) { w, _ in w * 0.76 }
                         .scrollTransition(.interactive, axis: .horizontal) { content, phase in
                             content
@@ -45,6 +44,8 @@ struct MomentCarousel: View {
 struct FolderCard: View {
     let event: LogEvent
     let isCurrent: Bool
+    /// The zoom-transition namespace: the details page grows out of the round map (open style) or the card.
+    let zoom: Namespace.ID
     let onOpen: () -> Void
     var onOverview: () -> Void = {}
 
@@ -60,7 +61,7 @@ struct FolderCard: View {
     var body: some View {
         Group {
             switch cardStyle {
-            case .card: card
+            case .card: card.matchedTransitionSource(id: event.id, in: zoom)
             case .open: open
             }
         }
@@ -93,8 +94,14 @@ struct FolderCard: View {
                 }
             }
             .frame(width: 240, height: 240)
-            // A feathered edge: the place fades into the sky rather than sitting in a frame.
-            .mask(RadialGradient(colors: [.black, .black, .clear], center: .center, startRadius: 0, endRadius: 120))
+            // A feathered edge: the place fades into the sky rather than sitting in a frame. The fade is
+            // relative to the frame (so it scales with pinches and the calendar morph), and a circular
+            // clip underneath guarantees the square map never shows at its corners.
+            .clipShape(Circle())
+            .mask(EllipticalGradient(colors: [.black, .black, .clear], center: .center,
+                                     startRadiusFraction: 0, endRadiusFraction: 0.5))
+            .compositingGroup()
+            .matchedTransitionSource(id: event.id, in: zoom) { $0.clipShape(RoundedRectangle(cornerRadius: 120)) }
             HStack(spacing: 6) {
                 MomentDot(moment: event.moment, size: 8)
                 Text("\(kindWord) · \(time)").font(.subheadline.weight(.medium))

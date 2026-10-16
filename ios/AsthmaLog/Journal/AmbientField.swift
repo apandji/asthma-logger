@@ -114,6 +114,8 @@ struct AirLayers {
         /// Where the reading sits inside its level, 0…1 (used by the "smooth" strength).
         var fraction: Double = 0.5
         var smooth = false
+        /// Nothing in the air (zero pollen): readable as "0 · Good", but adds no color to the sky.
+        var empty = false
 
         /// Color strength. Steps: one strength per level. Smooth: rises with the amount inside the
         /// level's own range, never reaching the next level's, so the jump between levels stays clear.
@@ -127,7 +129,10 @@ struct AirLayers {
     var pm25: Layer?, pm10: Layer?, no2: Layer?, ozone: Layer?
     var tree: Layer?, grass: Layer?, weed: Layer?
 
-    var all: [Layer] { [pm25, pm10, no2, ozone, tree, grass, weed].compactMap { $0 } }
+    /// Layers that color the sky.
+    var all: [Layer] { [pm25, pm10, no2, ozone, tree, grass, weed].compactMap { $0 }.filter { !$0.empty } }
+    /// Layers you can read, zero pollen included, so every sky has the same strata.
+    var readable: [Layer] { [pm25, pm10, no2, ozone, tree, grass, weed].compactMap { $0 } }
 
     /// Level edges per layer (start of low, moderate, high, and a ceiling for "high"):
     /// EPA for pollutants (µg/m³ or ppb), Ambee's risk thresholds for pollen (grains/m³).
@@ -171,9 +176,14 @@ struct AirLayers {
         }
         if let p = pollen {
             let kinds = p.kinds
-            if kinds[0].count > 0 { tree = layer("Tree pollen", WeatherColor.pollen[0], kinds[0].level, Double(kinds[0].count)) }
-            if kinds[1].count > 0 { grass = layer("Grass pollen", WeatherColor.pollen[1], kinds[1].level, Double(kinds[1].count)) }
-            if kinds[2].count > 0 { weed = layer("Weed pollen", WeatherColor.pollen[2], kinds[2].level, Double(kinds[2].count)) }
+            func pollenLayer(_ i: Int, _ name: String) -> Layer {
+                var l = layer(name, WeatherColor.pollen[i], kinds[i].level, Double(kinds[i].count))
+                l.empty = kinds[i].count == 0
+                return l
+            }
+            tree = pollenLayer(0, "Tree pollen")
+            grass = pollenLayer(1, "Grass pollen")
+            weed = pollenLayer(2, "Weed pollen")
         }
     }
 }

@@ -49,7 +49,7 @@ enum SkyExplorer {
 
     static func probe(at p: CGPoint, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
                       temperatureF: Double?, pollen: PollenSample?) -> SkyProbe? {
-        let present = Dictionary(layers.all.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
+        let present = Dictionary(layers.readable.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
         if p.y > 0.16 && p.y < 0.82 {
             let nearest = anchors.filter { present[$0.name] != nil }
                 .min { hypot($0.x - p.x, ($0.y - p.y) * 1.6) < hypot($1.x - p.x, ($1.y - p.y) * 1.6) }
@@ -76,7 +76,7 @@ enum SkyExplorer {
     static func strata(at y: Double, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
                        temperatureF: Double?, pollen: PollenSample?) -> (probe: SkyProbe, band: ClosedRange<Double>)? {
         let order = ["Ozone", "PM2.5", "PM10", "NO₂", "Tree pollen", "Grass pollen", "Weed pollen"]
-        let present = Dictionary(layers.all.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
+        let present = Dictionary(layers.readable.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
         let stack = order.compactMap { present[$0] }
         let top = 0.14, bottom = 0.86
         let weatherBottom = stack.isEmpty ? bottom : top + (bottom - top) / Double(stack.count + 1)

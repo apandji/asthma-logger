@@ -199,7 +199,7 @@ struct NowHomeView: View {
                 } else {
                     ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true,
                                 byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
-                        Circle().fill(.white).frame(width: 8, height: 8)
+                        Circle().fill(.primary).frame(width: 8, height: 8)
                         Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
                     }
                     .onTapGesture { showInsights = true }

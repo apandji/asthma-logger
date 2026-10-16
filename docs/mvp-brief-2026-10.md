@@ -4,6 +4,19 @@ Written Oct 16, 2026 from a conversation with the owner, for the orchestrating a
 
 Three things have to work on the phone, in this order of importance. Everything else waits.
 
+## Decisions (owner, Oct 16)
+
+| Question | Decision |
+|---|---|
+| Words for the two sides of the comparison | **Baseline** (ordinary days, no rescue use) and **flare days** (days with rescue use). Moments keep their inhaler names: **Rescue** and **Standard**. Never "attack". |
+| First capture in onboarding | Saved as a **baseline** moment with a `firstCapture` flag, labelled "Your first capture", neutral ring. It counts toward baseline. |
+| Double press on the felt button (within ~2 s) | **One moment, 2 puffs.** The moment carries a puff count; the header says "2 puffs". |
+| Insights for the presentation | A **labelled demo state** (Design crit) with a closed ring and a profile, beside the owner's real, still-filling ring. Demo stays out of real patterns. |
+| Heavy reliever use | **Count + guideline line.** Show today's rescue count; above a cited guideline threshold, one plain line pointing to care and the person's action plan, source named. No notification in the MVP. |
+| Archetype research | A **short cited doc**: 3–5 archetypes, 2–3 real citations each, the Ambee signals behind each, about a page each. |
+| Presentation | **Live pairing on stage** from a fresh install (needs a reliable reset), a **recorded pairing** as backup, and the **doctor table**. |
+
+
 1. **Onboarding**: no data → pair the button → first capture.
 2. **The capture**: pressing the button (software or felt) makes a moment, every time, with no doubt that it happened.
 3. **Insights**: how far felt air has learned, what it needs, and the start of a profile you could hand a provider.
@@ -45,7 +58,7 @@ Protocol note: `ButtonPacket` carries `cap`, `bootID`, `seq`, `force`, `ageMs`; 
 
 ### Open
 
-- Does the first capture save as a moment of a new kind (`firstCapture`), or as a calm moment with a flag? It must never count as rescue in the pattern. Suggest: `MomentKind.okay` with `isFirstCapture = true`, shown with its own label and a neutral ring.
+- ~~Kind of the first capture~~ Decided: `MomentKind.okay` (baseline) with `isFirstCapture = true`, its own label, a neutral ring; counts toward baseline, never toward flare days.
 - Watch pairing in onboarding or only on the Devices page? Suggest Devices only; keep onboarding to one device.
 
 ---
@@ -69,7 +82,7 @@ Pressing the button, physical or the +, always produces a moment and the person 
 
 ### Open
 
-- Double press on the felt button within 2 s: one moment or two? Suggest one, with `puffs: 2`, since a double press is the usual way to take two puffs. Ask the owner.
+- ~~Double press~~ Decided: one moment with `puffs: 2`. Needs a `puffs` field on `LogEvent` (default 1), merged by the phone when two presses of the same cap arrive within ~2 s (by `ageMs`), and written to Health as two puffs.
 
 ---
 
@@ -79,15 +92,15 @@ Pressing the button, physical or the +, always produces a moment and the person 
 
 An Insights page (the sheet exists; this is a redesign of what's in it) with three parts:
 
-**a. Progress.** A ring, Apple Watch style, with the sparkle in the middle, that closes as felt air learns. It is honest about what it's waiting for: two counters under it, "3 of 8 rescue moments" and "12 of 20 calm days", from `GateProgress` (`minAttacks`, `minBaselines`), plus a line about time ("about two more weeks at this pace"). The ring fills by the smaller of the two fractions. When it closes, it stays closed and the page changes to b and c.
+**a. Progress.** A ring, Apple Watch style, with the sparkle in the middle, that closes as felt air learns. It is honest about what it's waiting for: two counters under it, "3 of 8 flare days" and "12 of 20 baseline days", from `GateProgress` (`minAttacks`, `minBaselines`), plus a line about time ("about two more weeks at this pace"). The ring fills by the smaller of the two fractions. When it closes, it stays closed and the page changes to b and c. For the presentation, a labelled demo person shows the closed ring and a profile (Design crit › Insights state).
 
-**b. Patterns.** What we have today: the lift table narrated, raw counts always shown, "8 of 14 rescue days vs 3 of 40 calm days".
+**b. Patterns.** What we have today: the lift table narrated, raw counts always shown, "8 of 14 flare days vs 3 of 40 baseline days".
 
 **c. Your profile.** The new part. As the pattern table fills in, felt air says what kind of air you react to, in plain words: "Your rescue days line up with pollen more than anything else", "Cold, dry mornings show up on your rescue days", "Ozone afternoons". These are **archetypes**, and the orchestrator should do the literature work before we name them (see Research below). The profile is also what a person hands a provider, together with the table of moments that already exists (`Journal/DoctorSheet.swift`).
 
-**Language.** The owner wants to explore "baseline" and "rescue mode" as the two states. Today the vocabulary doc says *calm moment* on screen and keeps *baseline* for docs. Decide once, in `docs/design/felt-air-language.md`, then use it everywhere. Suggestion to test with users: **Rescue** for the moments, **calm days** for the comparison, and "baseline" only when talking to providers.
+**Language.** Decided: **baseline** and **flare days** on screen (see Decisions). Update `docs/design/felt-air-language.md` and every string that says "calm", "usual days", "okay days" or "I'm okay". The verdict line becomes e.g. "Looks like your baseline" / "A bit like your flare days" / "Matches your flare days". Keep testing it with users, per Kate's note that the rescue / maintenance words need testing too.
 
-**Alerts.** Someone said today that more than X rescue uses in a day is an emergency. We will not diagnose. What we can do, honestly: show the count ("4 rescue moments today") and, above a threshold taken from published guidance, a plain line pointing to care and to the person's own action plan, with the source named. The number and the wording must come from the literature (below), be reviewed by the owner, and never say "attack" or a percentage. Local notification only if the owner approves the permission prompt (`AGENTS.md`: ask before a new permission).
+**Alerts.** Decided: count + guideline line, no notification. Show today's count ("4 rescue moments today"); above a threshold taken from published guidance, one plain line pointing to care and to the person's own action plan, with the source named. The number and wording come from the research doc, are reviewed by the owner, and never say "attack" or a percentage.
 
 ### What exists
 
@@ -100,7 +113,9 @@ Find and cite, with links, in a short doc `docs/research/archetypes.md`:
 1. **Asthma phenotypes and triggers** in the clinical literature that map to environmental signals we can measure: allergic (pollen, mould), pollution-sensitive (PM2.5, ozone, NO₂), weather-sensitive (cold dry air, humidity, temperature swings, thunderstorm asthma), exercise-induced, viral-triggered (which we can't see). Start with the GINA report, Wenzel's phenotype work, and reviews on outdoor air pollution and asthma. Say which phenotypes are evidence-backed and which are folk categories.
 2. **Reliever overuse thresholds** used in guidelines (per day, per week, canisters per year) and the wording guidelines use for when to seek care. Quote the sources; we will paraphrase, not invent.
 3. **What Ambee gives us** per hour and place (pollen by type and species, air quality by pollutant, weather, fire, soil) from `docs/ambee-trigger-datasets.md`, and which of the phenotypes in (1) each dataset can support. Pollen is the big one: tree / grass / weed by species is exactly the allergic-phenotype signal.
-4. A proposed **profile shape**: a small set of named archetypes (3–5), each with the signals that define it, the minimum evidence before felt air may say it (reuse the gate: 8 rescue, 20 calm, lift > 1.25 on that signal), and a plain-words sentence template. A person can match more than one, or none.
+4. A proposed **profile shape**: a small set of named archetypes (3–5), each with the signals that define it, the minimum evidence before felt air may say it (reuse the gate: 8 flare days, 20 baseline, lift > 1.25 on that signal), and a plain-words sentence template. A person can match more than one, or none.
+
+Keep it short: about a page per archetype, 2–3 real citations each.
 
 Rules for the research: real citations only (title, authors, year, link); mark anything not verified; no medical advice in the app copy; the archetype is "what your rescue days have in common", never "what you have".
 
@@ -117,9 +132,10 @@ Rules for the research: real citations only (title, authors, year, link); mark a
 
 ## Suggested order of work
 
-1. Devices page and multi-button routing (unblocks demo day with two phones).
-2. Onboarding pairing moment with the first capture.
+1. Onboarding pairing moment with the first capture, and a **reliable reset** for a fresh install on stage (Settings › Design crit, and `ios/scripts/fresh-install.sh`).
+2. Devices page and multi-button routing.
 3. Cluster swatches and the "2 puffs" header.
 4. Insights progress ring with the real counters.
 5. Research doc on archetypes and thresholds.
-6. Profile copy, only after 5.
+6. Profile copy and the demo person, only after 5.
+7. Record the pairing moment as a backup video for the presentation (`docs/demo-runbook.md`).

@@ -9,7 +9,8 @@ Names for the pieces of the app, so we can talk about them (and so code, docs an
 | **Moment** | One saved time: when, where, and the air around it. | "log", "entry", "event" |
 | **Rescue** | A moment with the rescue inhaler. Orange. | "attack" (never on screen) |
 | **Standard** | A moment with the daily (maintenance) inhaler. Blue. | "maintenance" on screen |
-| **Calm moment** | A moment felt air saves on its own, without an inhaler, to compare against. | "I'm okay", "baseline" on screen |
+| **Baseline** | The ordinary days felt air compares against: moments it saves on its own, without an inhaler, and your first capture. | "calm", "I'm okay", "usual days" on screen (decided Oct 16, 2026) |
+| **Flare day** | A day with rescue use. Patterns compare flare days with your baseline. | "attack", "bad day" |
 
 ## The picture of the air
 

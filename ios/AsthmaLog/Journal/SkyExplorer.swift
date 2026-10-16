@@ -73,36 +73,45 @@ enum SkyExplorer {
     /// Strata: the sky as a core sample. Weather on top, then each present layer as a horizontal band
     /// down the field. Only the finger's height matters; left-right says nothing, because every layer is
     /// one regional reading, not a spot on the map. Returns the probe and its band (unit y).
-    static func strata(at y: Double, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
-                       temperatureF: Double?, pollen: PollenSample?) -> (probe: SkyProbe, band: ClosedRange<Double>)? {
-        // Worst on top, just under the weather: the band nearest your eye is the one that matters most
-        // today. Ties keep a fixed order so the stack doesn't shuffle between similar skies.
+    /// The layers in reading order: worst on top, just under the weather, so the band nearest your eye is
+    /// the one that matters most today. Ties keep a fixed order so the stack doesn't shuffle between skies.
+    static func stack(_ layers: AirLayers) -> [AirLayers.Layer] {
         let order = ["Ozone", "PM2.5", "PM10", "NO₂", "Tree pollen", "Grass pollen", "Weed pollen"]
         let present = Dictionary(layers.readable.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
-        let stack = order.compactMap { present[$0] }.enumerated().sorted { a, b in
+        return order.compactMap { present[$0] }.enumerated().sorted { a, b in
             let la = a.element.level.rawValue, lb = b.element.level.rawValue
             if la != lb { return la > lb }
             if a.element.empty != b.element.empty { return !a.element.empty }
             if a.element.fraction != b.element.fraction { return a.element.fraction > b.element.fraction }
             return a.offset < b.offset
         }.map(\.element)
-        let top = 0.14, bottom = 0.86
-        let weatherBottom = stack.isEmpty ? bottom : top + (bottom - top) / Double(stack.count + 1)
-        if y < weatherBottom {
+    }
+
+    /// The bands (unit y), weather first: a compact stack of equal rows centred in the sky, so the icons
+    /// on the scale sit evenly whatever the count. Touches above or below the stack read its ends.
+    static func bands(count layers: Int, height: Double) -> [ClosedRange<Double>] {
+        let n = layers + 1
+        let row = min(0.11, 0.72 / Double(n))      // ~44 pt of a 400 pt sky, tighter when there are many
+        let start = 0.5 - row * Double(n) / 2
+        return (0..<n).map { (start + row * Double($0))...(start + row * Double($0 + 1)) }
+    }
+
+    static func strata(at y: Double, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
+                       temperatureF: Double?, pollen: PollenSample?) -> (probe: SkyProbe, band: ClosedRange<Double>)? {
+        let stack = stack(layers)
+        let bands = bands(count: stack.count, height: 1)
+        let i = max(0, min(bands.count - 1, bands.firstIndex { $0.contains(y) } ?? (y < bands[0].lowerBound ? 0 : bands.count - 1)))
+        if i == 0 {
             guard let w = probe(at: CGPoint(x: 0.5, y: 0.1), layers: layers, conditions: conditions, weave: weave,
                                 temperatureF: temperatureF, pollen: pollen) else { return nil }
-            return (w, 0...weatherBottom)
+            return (w, bands[0])
         }
-        let each = (bottom - weatherBottom) / Double(max(1, stack.count))
-        let i = min(stack.count - 1, Int((min(y, bottom - 0.001) - weatherBottom) / each))
-        guard i >= 0, i < stack.count else { return nil }
-        let layer = stack[i]
+        let layer = stack[i - 1]
         let (v, unit) = reading(layer.name, conditions, pollen)
         let position = (Double(layer.level.rawValue) + max(0, min(1, layer.fraction))) / 3
         let p = SkyProbe(name: layer.name, kind: kind(layer.name, pollen), value: v, unit: unit,
                          level: layer.level, note: note(layer.name), color: layer.color, intensity: position)
-        let start = weatherBottom + each * Double(i)
-        return (p, start...(i == stack.count - 1 ? 1 : start + each))
+        return (p, bands[i])
     }
 
     /// The number and its unit, apart, so the number can be set large.
@@ -124,6 +133,21 @@ enum SkyExplorer {
         case "Grass pollen": return (pollen.map { "\($0.grass.count)" } ?? "–", "grains/m³")
         case "Weed pollen": return (pollen.map { "\($0.weed.count)" } ?? "–", "grains/m³")
         default: return ("–", "")
+        }
+    }
+
+    /// One symbol per layer, shared by the scale and the label so they read as the same thing.
+    static func icon(_ name: String) -> String {
+        switch name {
+        case "Weather": "cloud.sun.fill"
+        case "PM2.5", "Air": "smoke.fill"
+        case "PM10": "wind"
+        case "NO₂": "car.fill"
+        case "Ozone": "sun.haze.fill"
+        case "Tree pollen": "tree.fill"
+        case "Grass pollen": "leaf.fill"
+        case "Weed pollen": "allergens"
+        default: "circle.fill"
         }
     }
 
@@ -173,14 +197,14 @@ struct SkyProbeOverlay: View {
             if showsGlow, let band {
                 // One regional reading: the layer lights up edge to edge, not a spot.
                 Rectangle()
-                    .fill(LinearGradient(colors: [.clear, probe.levelInk.opacity(0.4), probe.levelInk.opacity(0.4), .clear],
+                    .fill(LinearGradient(colors: [.clear, probe.color.opacity(0.4), probe.color.opacity(0.4), .clear],
                                          startPoint: .top, endPoint: .bottom))
                     .frame(width: width, height: band.upperBound - band.lowerBound)
                     .blur(radius: 8)
                     .position(x: width / 2, y: (band.lowerBound + band.upperBound) / 2)
             } else if showsGlow {
             Circle()
-                .fill(RadialGradient(colors: [probe.levelInk.opacity(0.5), probe.levelInk.opacity(0.15), .clear],
+                .fill(RadialGradient(colors: [probe.color.opacity(0.5), probe.color.opacity(0.15), .clear],
                                      center: .center, startRadius: 0, endRadius: 80))
                 .frame(width: 160, height: 160)
                 .blur(radius: 6)
@@ -202,7 +226,7 @@ struct SkyProbeOverlay: View {
     private var label: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(probe.name).font(.subheadline.weight(.semibold))
+                Label(probe.name, systemImage: SkyExplorer.icon(probe.name)).font(.subheadline.weight(.semibold))
                 Text(probe.kind).font(.caption).foregroundStyle(Theme.secondaryText)
                 Spacer(minLength: 0)
             }
@@ -212,7 +236,7 @@ struct SkyProbeOverlay: View {
                 Spacer(minLength: 8)
                 if let level = probe.level {
                     VStack(alignment: .trailing, spacing: 2) {
-                        LevelIndicator(level: level, ink: probe.levelInk, style: .signal)
+                        LevelIndicator(level: level, ink: probe.color, style: .signal)
                         Text(Tier(level).word).font(.caption2.weight(.semibold))
                     }
                 }
@@ -224,5 +248,46 @@ struct SkyProbeOverlay: View {
         .padding(12)
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
         .contentTransition(.numericText())
+    }
+}
+
+/// The strata, as a column of riso dots on the right edge of the sky: weather on top, then one dot per
+/// layer in reading order. Each dot's size is how much of that layer there is now; its ink is its level.
+/// The one under the finger grows and names itself. The scale is the legend and the affordance: it shows
+/// there's something to read and which way to slide.
+struct StrataScale: View {
+    let layers: AirLayers
+    let probe: SkyProbe?
+    let height: CGFloat
+
+    var body: some View {
+        let stack = SkyExplorer.stack(layers)
+        let mids = SkyExplorer.bands(count: stack.count, height: 1).map { CGFloat($0.lowerBound + $0.upperBound) / 2 * height }
+        ZStack(alignment: .topTrailing) {
+            dot(name: "Weather", level: nil, amount: 0.25, on: probe?.name == "Weather")
+                .position(x: 0, y: mids[0])
+            ForEach(Array(stack.enumerated()), id: \.offset) { i, layer in
+                dot(name: layer.name, level: layer.level, amount: layer.empty ? 0 : (Double(layer.level.rawValue) + layer.fraction) / 3,
+                    on: probe?.name == layer.name)
+                    .position(x: 0, y: mids[i + 1])
+            }
+        }
+        .frame(width: 0, height: height)
+        .allowsHitTesting(false)
+    }
+
+    /// An icon per layer: size says how much of it there is, color says which layer (its own ink, the
+    /// same one it paints the sky with). The one being read is full-strength and ringed; its name lives
+    /// in the label, not here.
+    private func dot(name: String, level: WeaveSpec.Level?, amount: Double, on: Bool) -> some View {
+        let ink: Color = name == "Weather" ? .primary : WeatherColor.ink(for: name)
+        let size = 11 + 11 * CGFloat(amount)
+        return Image(systemName: SkyExplorer.icon(name))
+            .font(.system(size: on ? size + 3 : size, weight: .semibold))
+            .foregroundStyle(on ? ink : ink.opacity(0.6))
+            .frame(width: 30, height: 30)
+            .background { if on { Circle().strokeBorder(ink.opacity(0.9), lineWidth: 1.5) } }
+            .animation(.snappy(duration: 0.2), value: on)
+            .accessibilityLabel(name)
     }
 }

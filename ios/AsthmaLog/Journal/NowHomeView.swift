@@ -17,6 +17,9 @@ struct NowHomeView: View {
     /// Reading the air somewhere other than here (an address, Home, Work). Nil is the phone's location.
     @State private var chosen = SavedPlace.load(SavedPlace.chosenKey)
     @State private var showPlaces = false
+    @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
+    /// The full air details, opened from the pin.
+    @State private var pinDetails: LogEvent?
 
     /// The air where the phone is. Now is always here.
     @State private var here: NowReading?
@@ -34,8 +37,6 @@ struct NowHomeView: View {
     @State private var probing = false
     /// The clock. Ticks so "now" creeps along the track while you watch.
     @State private var now = Date()
-    /// A moment's details, in place, with the timeline still under it.
-    @State private var expanded = false
     @Namespace private var mapZoom
     @State private var tips = TipGroup(.ordered) { PullToLogTip() }
     @Namespace private var month
@@ -49,18 +50,8 @@ struct NowHomeView: View {
                 header
                     .opacity(probing ? 0.4 : 1)
                     .animation(.easeOut(duration: 0.2), value: probing)
-                Group {
-                    if expanded, case .moment(let m) = focus {
-                        MomentDetailsView(event: m, onClose: { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = false } }, airOnly: true)
-                            .id(m.id)
-                            // Tap the table to go back to the sky.
-                            .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = false } }
-                            .transition(.opacity)
-                    } else {
-                        sky.transition(.opacity)
-                    }
-                }
-                .frame(maxHeight: .infinity)
+                sky
+                    .frame(maxHeight: .infinity)
                 .padding(.top, 4)
                 NowTimeline(moments: moments, hours: hours, now: now, focusTime: $focusTime)
                     .frame(height: 104)
@@ -69,7 +60,13 @@ struct NowHomeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
                 // The grain is the paper's, not the map's: it runs under the whole page.
-                ZStack { Color.black; SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
+                ZStack { Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
+            }
+            // Linen is a light page whatever the system says; black is a dark one.
+            .environment(\.colorScheme, paper == .linen ? .light : .dark)
+            .sheet(item: $pinDetails) { e in
+                NavigationStack { MomentDetailsView(event: e) }
+                    .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) {
                 CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, toast: $toast)
@@ -123,10 +120,7 @@ struct NowHomeView: View {
                     now = Date()
                 }
             }
-            // Scrubbing off a moment while its details are open closes them.
-            .onChange(of: focusTime) { _, _ in
-                if expanded, case .moment = focus {} else if expanded { withAnimation(.easeOut(duration: 0.25)) { expanded = false } }
-            }
+
             .task(id: events.count) {
                 try? await Task.sleep(for: .seconds(1.2))
                 guard !Task.isCancelled else { return }
@@ -186,11 +180,11 @@ struct NowHomeView: View {
                         MomentDot(moment: j.moment, size: 8)
                         Text(["Just now", j.moment == .rescue ? "Rescue" : "Standard", j.placeName ?? here?.place].compactMap { $0 }.joined(separator: " · "))
                     }
-                    .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { focusTime = j.loggedAt; expanded = true } }
+                    .onTapGesture { pinDetails = j }
                 } else {
                     ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true,
                                 byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
-                        Circle().fill(.white).frame(width: 8, height: 8)
+                        Circle().fill(.primary).frame(width: 8, height: 8)
                         Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
                     }
                     .onTapGesture { showInsights = true }
@@ -282,25 +276,34 @@ struct NowHomeView: View {
     @ViewBuilder private var sky: some View {
         switch focus {
         case .now:
-            if let j = justNow, !j.weave.isEmpty {
-                NowSky(conditions: j.conditions, weave: j.weave, date: j.loggedAt,
-                       pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
-                       mapID: j.latitude == nil ? "here" : j.id.uuidString,
-                       coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
-                       captureInk: j.moment == .rescue ? Theme.rescue : Theme.standard)
-                    .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { focusTime = j.loggedAt; expanded = true } }
+            if let j = justNow {
+                // The new moment's sky wipes in from the + behind the ripple; the live sky stays beneath.
+                ZStack {
+                    NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
+                           pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: .constant(false),
+                           mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
+                        .allowsHitTesting(false)
+                    NowSky(conditions: j.conditions ?? here?.conditions, weave: j.weave.isEmpty ? (here?.weave ?? WeaveSpec()) : j.weave, date: j.loggedAt,
+                           pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
+                           mapID: j.latitude == nil ? "here" : j.id.uuidString,
+                           coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
+                           captureInk: j.moment == .rescue ? Theme.rescue : Theme.standard, onPin: { pinDetails = j })
+                        .modifier(CaptureReveal())
+                        .id(j.id)
+                }
+                .onTapGesture { pinDetails = j }
             } else {
                 NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
                        pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
-                       mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
+                       mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() })
                     .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
             }
         case .moment(let m):
             NowSky(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
                    pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason), probing: $probing,
                    mapID: m.id.uuidString, coordinate: m.latitude.flatMap { lat in m.longitude.map { (lat, $0) } },
-                   mapNamespace: mapZoom)
-                .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = true } }
+                   mapNamespace: mapZoom, onPin: { pinDetails = m })
+                .onTapGesture { pinDetails = m }
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
                    pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
@@ -309,6 +312,18 @@ struct NowHomeView: View {
     }
 
     private var mapID: String { chosen.map { "place-\($0.lat)-\($0.lon)" } ?? "here" }
+
+    /// The live reading as an unsaved moment, so the details page can show it. Never inserted.
+    private func liveSnapshot() -> LogEvent? {
+        guard let here else { return nil }
+        let e = LogEvent(moment: .okay, loggedAt: now)
+        e.conditions = here.conditions
+        e.envStatus = .ready
+        e.placeName = here.place
+        e.latitude = here.lat
+        e.longitude = here.lon
+        return e
+    }
     /// Straight from the choice, so the map id and its coordinates can never disagree mid-reload.
     private var forecastCoordinate: (Double, Double)? { chosen.map { ($0.lat, $0.lon) } ?? here.map { ($0.lat, $0.lon) } }
 
@@ -460,6 +475,9 @@ struct NowSky: View {
     var mapNamespace: Namespace.ID? = nil
     /// Set while this sky is a moment logged seconds ago: its ripple takes the moment's color.
     var captureInk: Color? = nil
+    /// Tapping the pin opens the full air details for this place and time.
+    var onPin: (() -> Void)? = nil
+    @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var point: CGPoint?
@@ -467,6 +485,8 @@ struct NowSky: View {
     @State private var pulse: Task<Void, Never>?
     @State private var rippleAt: Date?
     @State private var rippleInk: Color = .white
+    /// The dent under the finger, 0 up, 1 pressed.
+    @State private var press: CGFloat = 0
     @AppStorage("sky.touched") private var touched = false
     @AppStorage(Crit.SkyReading.key) private var reading = Crit.SkyReading.strata
     /// Strata: the band (points) under the finger.
@@ -482,26 +502,33 @@ struct NowSky: View {
                 if let (lat, lon) = coordinate {
                     // Pinned: the map never moves with the finger, so reading the sky can't feel like
                     // exploring the map. The air is one regional reading, not a spot on a street.
-                    PlaceMap(id: mapID, latitude: lat, longitude: lon)
+                    PlaceMap(id: paper == .linen ? mapID + "-light" : mapID, latitude: lat, longitude: lon, dark: paper == .black)
                         .frame(width: size.width, height: size.height)
                         .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
                         .saturation(0)
-                        .blendMode(.screen)
-                        .opacity(point == nil ? 0.45 : 0.75)
+                        .blendMode(paper == .linen ? .multiply : .screen)
+                        .opacity(point == nil ? 0.7 : 0.85)
                         .frame(width: size.width, height: size.height)
                         .clipped()
                         .allowsHitTesting(false)
+                    // You are here: the map is centred on the place.
+                    Circle().fill(captureInk ?? Theme.standard).frame(width: 12, height: 12)
+                        .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                        .shadow(color: .black.opacity(0.5), radius: 3)
                 }
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && rippleInk == .white, band: band, sweeps: reading == .strata,
+                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && rippleInk == .white, band: band, sweeps: reading == .strata,
                              rippleInk: rippleInk, rippleFromCapture: rippleInk != .white)
                 }
                 if let point, let probe {
-                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false, band: band).transition(.opacity)
+                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: texture == .plain, showsLabel: false, band: band).transition(.opacity)
                 }
             }
             .frame(width: size.width, height: size.height)
             .drawingGroup()
+            // Pressing in: the surface dents under the finger.
+            .distortionEffect(ShaderLibrary.dent(.float2(point ?? .zero), .float(150), .float(press)),
+                              maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: point != nil)
             .onAppear { rippleInk = captureInk ?? .white; rippleAt = .now }
             // Every new sky (a moment, a forecast hour, now) ripples once; a fresh log ripples in its color.
             .onChange(of: date) { _, _ in rippleInk = captureInk ?? .white; rippleAt = .now }
@@ -517,8 +544,24 @@ struct NowSky: View {
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: false).transition(.opacity)
                 }
             }
+            // The strata, as a scale on the right edge.
+            .overlay(alignment: .trailing) {
+                if reading == .strata {
+                    StrataScale(layers: AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth),
+                                probe: probe, height: size.height)
+                        .padding(.trailing, 18)
+                }
+            }
             .contentShape(Rectangle())
             .gesture(explore(size))
+            // The pin wants a tap: the full details for here and now.
+            .overlay {
+                if let onPin {
+                    Button(action: onPin) { Color.clear.frame(width: 48, height: 48).contentShape(Circle()) }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Air details")
+                }
+            }
         }
         .padding(.horizontal, 8)
         .onDisappear { stopPulse() }
@@ -527,7 +570,7 @@ struct NowSky: View {
     private func explore(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { drag in
-                if !probing { probing = true; touched = true; startPulse() }
+                if !probing { probing = true; touched = true; startPulse(); withAnimation(.snappy(duration: 0.25)) { press = 1 } }
                 let unit = CGPoint(x: drag.location.x / size.width, y: drag.location.y / size.height)
                 let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
                 withAnimation(.easeOut(duration: 0.12)) {
@@ -545,7 +588,7 @@ struct NowSky: View {
             }
             .onEnded { _ in
                 stopPulse()
-                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil }
+                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil; press = 0 }
                 probing = false
             }
     }

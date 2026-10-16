@@ -60,6 +60,23 @@ enum Crit {
         static let key = "crit.fieldStyle"
     }
 
+    /// The page: black (ink on night) or linen, a warm off-white paper that suits the riso grain.
+    enum Paper: String, CaseIterable, Identifiable {
+        case black, linen
+        var id: String { rawValue }
+        var title: String { self == .black ? "Black" : "Linen (light)" }
+        static let key = "crit.paper"
+    }
+
+    /// Where a layer's color sits: at its own spot in the field (spots), or everywhere, as a haze over the
+    /// whole place (vibe), so no particle reads as a position on the map.
+    enum LayerSpread: String, CaseIterable, Identifiable {
+        case vibe, spots
+        var id: String { rawValue }
+        var title: String { self == .vibe ? "Haze over the whole place" : "Each layer at its own spot" }
+        static let key = "crit.layerSpread"
+    }
+
     /// How the sky is read: a blob under the finger (a spot), or strata (horizontal layers, finger slides up and down).
     enum SkyReading: String, CaseIterable, Identifiable {
         case blob, strata

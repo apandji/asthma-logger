@@ -17,6 +17,10 @@ struct NowTimeline: View {
     @State private var viewport: CGFloat = 0
     @State private var dragging = false
 
+    @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
+    /// The track's ink: white on black paper, near-black on linen.
+    private var ink: Color { paper == .linen ? Color(red: 0.12, green: 0.1, blue: 0.09) : .white }
+
     private let dayWidth: CGFloat = 64
     private let axis: CGFloat = 46
     private let height: CGFloat = 86
@@ -51,11 +55,11 @@ struct NowTimeline: View {
                         // Axis.
                         var line = Path()
                         line.move(to: CGPoint(x: 0, y: axis)); line.addLine(to: CGPoint(x: x(now), y: axis))
-                        ctx.stroke(line, with: .color(.white.opacity(0.12)), lineWidth: 1)
+                        ctx.stroke(line, with: .color(ink.opacity(0.12)), lineWidth: 1)
                         // Now: a short bright tick.
                         var nowTick = Path()
                         nowTick.move(to: CGPoint(x: x(now), y: axis - 12)); nowTick.addLine(to: CGPoint(x: x(now), y: axis + 12))
-                        ctx.stroke(nowTick, with: .color(.white.opacity(0.6)), lineWidth: 1.5)
+                        ctx.stroke(nowTick, with: .color(ink.opacity(0.6)), lineWidth: 1.5)
                         // Ticks every 6 h, day names beneath.
                         var t = start
                         while t <= end {
@@ -63,11 +67,11 @@ struct NowTimeline: View {
                             let half: CGFloat = isDay ? 10 : 4
                             var p = Path()
                             p.move(to: CGPoint(x: x(t), y: axis - half)); p.addLine(to: CGPoint(x: x(t), y: axis + half))
-                            ctx.stroke(p, with: .color(.white.opacity(isDay ? 0.4 : 0.18)), lineWidth: 1)
+                            ctx.stroke(p, with: .color(ink.opacity(isDay ? 0.4 : 0.18)), lineWidth: 1)
                             if isDay {
                                 let label = cal.isDateInToday(t) ? "Today" : cal.isDateInTomorrow(t) ? "Tomorrow"
                                     : t.formatted(.dateTime.weekday(.abbreviated).day())
-                                ctx.draw(Text(label).font(.caption2).foregroundStyle(.white.opacity(t > now ? 0.3 : 0.45)),
+                                ctx.draw(Text(label).font(.caption2).foregroundStyle(ink.opacity(t > now ? 0.3 : 0.45)),
                                          at: CGPoint(x: x(t) + dayWidth / 2, y: axis + 26))
                             }
                             t = cal.date(byAdding: .hour, value: 6, to: t)!
@@ -80,7 +84,7 @@ struct NowTimeline: View {
                         MomentSwatch(event: e, size: on ? 16 : 11, ringWidth: on ? 2.5 : 1.8)
                             .background {
                                 if on {
-                                    Circle().fill(.white).frame(width: 22, height: 22)
+                                    Circle().fill(ink).frame(width: 22, height: 22)
                                         .shadow(color: (e.moment == .rescue ? Theme.rescue : Theme.standard).opacity(0.8), radius: 8)
                                 }
                             }
@@ -117,7 +121,7 @@ struct NowTimeline: View {
         }
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
-                Capsule().fill(.white).frame(width: 3, height: 34)
+                Capsule().fill(ink).frame(width: 3, height: 34)
                     .shadow(color: .black.opacity(0.5), radius: 2)
                     .offset(y: axis - 17)
                     .allowsHitTesting(false)
@@ -125,9 +129,9 @@ struct NowTimeline: View {
                 Button(action: stepBack) {
                     Text(focusTime == nil ? "Now" : current.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
                         .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.black)
+                        .foregroundStyle(Theme.paper(paper))
                         .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(.white, in: Capsule())
+                        .background(ink, in: Capsule())
                         .contentTransition(.numericText())
                         .animation(.snappy(duration: 0.2), value: focusTime == nil)
                         .fixedSize()

@@ -307,10 +307,11 @@ struct PlaceMap: View {
     let id: String
     let latitude: Double
     let longitude: Double
+    var dark = true
     @State private var image: UIImage?
 
     var body: some View {
-        let shown = image ?? MapSnapshots.cached(id: id, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale)
+        let shown = image ?? MapSnapshots.cached(id: id, size: SkyPanel.mapSize, dark: dark, scale: SkyPanel.mapScale)
         GeometryReader { geo in
             if let shown {
                 Image(uiImage: shown).resizable().scaledToFill()
@@ -321,9 +322,9 @@ struct PlaceMap: View {
         .task(id: id) {
             // A new place: swap in its map at once if it's drawn; otherwise keep the old one up until
             // the new one is ready, so there's never a blank.
-            if let hit = MapSnapshots.cached(id: id, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale) { image = hit; return }
+            if let hit = MapSnapshots.cached(id: id, size: SkyPanel.mapSize, dark: dark, scale: SkyPanel.mapScale) { image = hit; return }
             let fresh = await MapSnapshots.image(id: id, latitude: latitude, longitude: longitude,
-                                                 size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale)
+                                                 size: SkyPanel.mapSize, dark: dark, scale: SkyPanel.mapScale)
             if !Task.isCancelled, let fresh { image = fresh }
         }
         .animation(.easeInOut(duration: 0.25), value: image != nil)

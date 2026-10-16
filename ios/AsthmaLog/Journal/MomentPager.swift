@@ -49,6 +49,8 @@ struct MomentPager: View {
                              zoom: zoom, mapNamespace: mapNamespace, probing: $probing, onOpen: { onOpen(e) }, onOverview: onOverview,
                              onStep: step)
                         .id(e.id)
+                        // A fresh log wipes in from the + behind its ripple; otherwise a cross-fade.
+                        .modifier(CaptureRevealIf(on: Date().timeIntervalSince(e.loggedAt) < 20))
                         .transition(.opacity)
                 }
             }
@@ -227,6 +229,7 @@ struct SkyPanel: View {
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var rippleAt: Date?
+    @State private var press: CGFloat = 0
     @AppStorage("sky.touched") private var touched = false
     @AppStorage(Crit.SkyReading.key) private var reading = Crit.SkyReading.strata
     /// Logged seconds ago: the ripple takes the moment's color and runs from the +.
@@ -251,25 +254,31 @@ struct SkyPanel: View {
                         .matchedGeometryEffect(id: "map-\(event.id)", in: mapNamespace)
                         .saturation(0)
                         .blendMode(.screen)
-                        .opacity(point == nil ? 0.45 : 0.75)
+                        .opacity(point == nil ? 0.7 : 0.85)
                         .frame(width: size.width, height: size.height)
                         .clipped()
                         .allowsHitTesting(false)
+                    // You were here.
+                    Circle().fill(event.moment == .rescue ? Theme.rescue : Theme.standard).frame(width: 12, height: 12)
+                        .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                        .shadow(color: .black.opacity(0.5), radius: 3)
                 }
 
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && captureInk == nil, band: band, sweeps: reading == .strata,
+                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && captureInk == nil, band: band, sweeps: reading == .strata,
                              rippleInk: captureInk ?? .white, rippleFromCapture: captureInk != nil)
                 }
                 if let point, let probe {
                     // The glow belongs to the sky, so it fades with it.
-                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false, band: band)
+                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: texture == .plain, showsLabel: false, band: band)
                         .transition(.opacity)
                 }
             }
             .frame(width: size.width, height: size.height)
             // One offscreen pass for the sky, map and glow, instead of a pass per mask.
             .drawingGroup()
+            .distortionEffect(ShaderLibrary.dent(.float2(point ?? .zero), .float(150), .float(press)),
+                              maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: point != nil)
             .onAppear { rippleAt = .now }
             // Self-contained: fades to black at every edge, most of all toward the top.
             .mask {
@@ -286,8 +295,20 @@ struct SkyPanel: View {
                         .transition(.opacity)
                 }
             }
+            .overlay(alignment: .trailing) {
+                if reading == .strata {
+                    StrataScale(layers: AirLayers(conditions: event.conditions, weave: event.weave, pollen: pollen, smooth: strengthStyle == .smooth),
+                                probe: probe, height: size.height)
+                        .padding(.trailing, 18)
+                }
+            }
             .contentShape(Rectangle())
             .onTapGesture(perform: onOpen)
+            .overlay {
+                Button(action: onOpen) { Color.clear.frame(width: 48, height: 48).contentShape(Circle()) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Air details")
+            }
             // Drag across the sky to read it, straight away. Moving through time is the timeline's job.
             .gesture(explore(size))
         }
@@ -309,7 +330,7 @@ struct SkyPanel: View {
     private func explore(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { drag in
-                if !probing { probing = true; touched = true; SkyTip().invalidate(reason: .actionPerformed); startPulse() }
+                if !probing { probing = true; touched = true; SkyTip().invalidate(reason: .actionPerformed); startPulse(); withAnimation(.snappy(duration: 0.25)) { press = 1 } }
                 let unit = CGPoint(x: drag.location.x / size.width, y: drag.location.y / size.height)
                 let layers = AirLayers(conditions: event.conditions, weave: event.weave, pollen: pollen,
                                        smooth: strengthStyle == .smooth)
@@ -328,7 +349,7 @@ struct SkyPanel: View {
             }
             .onEnded { _ in
                 stopPulse()
-                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil }
+                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil; press = 0 }
                 probing = false
             }
     }
@@ -390,5 +411,12 @@ struct AnchorReport: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+struct CaptureRevealIf: ViewModifier {
+    let on: Bool
+    func body(content: Content) -> some View {
+        if on { content.modifier(CaptureReveal()) } else { content }
     }
 }

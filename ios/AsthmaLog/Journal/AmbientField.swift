@@ -27,6 +27,8 @@ struct AmbientField: View {
     @Environment(\.colorScheme) private var scheme
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
+    @AppStorage(Crit.LayerSpread.key) private var spread = Crit.LayerSpread.vibe
+    @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
 
     var body: some View {
         if reduceTransparency {
@@ -42,19 +44,25 @@ struct AmbientField: View {
     // MARK: Weather
 
     private var weatherField: some View {
-        let base = Theme.stage
+        // Linen: ink on paper. Light colors wash out on an off-white page, so the sky is laid down fuller
+        // (near-opaque), a touch darker, more saturated, and the layers overprint harder, like riso inks.
+        let linen = paper == .linen
+        let base = linen ? Theme.linen : Theme.stage
         let humidity = weave.words[.humidity]
         var sky = WeatherColor.light(WeatherColor.temperature(temperatureF ?? WeatherColor.fallbackTemp(weave)), at: date)
-        if humidity == "humid" { sky = sky.mix(with: .white, by: 0.16) }
-        let strength = scheme == .dark ? 0.75 : 0.66
+        if humidity == "humid" { sky = sky.mix(with: .white, by: linen ? 0.08 : 0.16) }
+        if linen { sky = sky.mix(with: Color(red: 0.16, green: 0.14, blue: 0.2), by: 0.14) }
+        let strength = linen ? 0.96 : (scheme == .dark ? 0.75 : 0.66)
+        let overprint = linen ? 1.5 : 1.0
 
         let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
         func tint(_ c: Color, _ layer: AirLayers.Layer?) -> Color {
             guard let layer else { return c }
-            return c.mix(with: layer.color, by: layer.amount)
+            return c.mix(with: layer.color, by: min(0.9, layer.amount * overprint))
         }
-        let mid = sky.mix(with: base, by: 0.3)
-        let low = sky.mix(with: base, by: 0.55)
+        // On linen the sky holds its color further down the field instead of fading to the paper.
+        let mid = sky.mix(with: base, by: linen ? 0.12 : 0.3)
+        let low = sky.mix(with: base, by: linen ? 0.3 : 0.55)
         // Rows: sky · pollutants · pollen · ground.
         let points: [SIMD2<Float>] = [
             [0, 0], [0.33, 0], [0.67, 0], [1, 0],
@@ -62,17 +70,23 @@ struct AmbientField: View {
             [0, 0.56], [0.33, 0.6], [0.67, 0.56], [1, 0.6],
             [0, 1], [0.33, 1], [0.67, 1], [1, 1],
         ]
-        let colors: [Color] = [
-            sky, sky, sky, sky,
-            tint(mid, layers.pm25), tint(mid, layers.no2), tint(mid, layers.ozone), tint(mid, layers.pm10),
-            tint(low, layers.tree), tint(low, layers.weed), tint(low, layers.grass), tint(low, layers.pm25),
-            base, base, base, base,
-        ].enumerated().map { $0.offset < 12 ? $0.element.opacity(strength) : $0.element }
+        // Vibe: every layer is folded into every point, so the air is a haze over the whole place and no
+        // color can be read as a position. A little unevenness per point keeps it from going flat.
+        func haze(_ c: Color, _ weight: Double) -> Color {
+            layers.all.reduce(c) { $0.mix(with: $1.color, by: min(0.85, $1.amount * 0.7 * weight * overprint)) }
+        }
+        let middle: [Color] = spread == .spots
+            ? [tint(mid, layers.pm25), tint(mid, layers.no2), tint(mid, layers.ozone), tint(mid, layers.pm10),
+               tint(low, layers.tree), tint(low, layers.weed), tint(low, layers.grass), tint(low, layers.pm25)]
+            : [haze(mid, 1.0), haze(mid, 1.15), haze(mid, 0.9), haze(mid, 1.05),
+               haze(low, 1.1), haze(low, 0.95), haze(low, 1.2), haze(low, 1.0)]
+        let colors: [Color] = ([sky, sky, sky, sky] + middle + [base, base, base, base])
+            .enumerated().map { $0.offset < 12 ? $0.element.opacity(strength) : $0.element }
 
         return MeshGradient(width: 4, height: 4, points: points, colors: colors, background: base)
             // Humidity is the softness: dry crisp and saturated, humid paler.
-            .saturation(humidity == "dry" ? 1.15 : humidity == "humid" ? 0.8 : 1)
-            .contrast(humidity == "dry" ? 1.06 : 1)
+            .saturation((humidity == "dry" ? 1.15 : humidity == "humid" ? 0.8 : 1) * (linen ? 1.3 : 1))
+            .contrast((humidity == "dry" ? 1.06 : 1) * (linen ? 1.08 : 1))
             .accessibilityHidden(true)
     }
 
@@ -190,6 +204,20 @@ struct AirLayers {
 
 /// The weather color language, shared by the field and its legend.
 enum WeatherColor {
+    /// Each layer's own ink, by name: the color it paints the sky with, the scale and the grain.
+    static func ink(for name: String) -> Color {
+        switch name {
+        case "PM2.5", "Air": pm25
+        case "PM10": pm10
+        case "NO₂": no2
+        case "Ozone": ozone
+        case "Tree pollen": pollen[0]
+        case "Grass pollen": pollen[1]
+        case "Weed pollen": pollen[2]
+        default: .white
+        }
+    }
+
     /// Blue (cold) → sky → sage (mild) → amber (warm) → red (hot), by °F.
     /// Spread so ordinary days differ: 45° sky blue, 55° teal, 63° green, 70° gold, 78° orange, 88° red.
     static let stops: [(f: Double, color: Color)] = [
@@ -329,14 +357,16 @@ struct SkyGrain: View {
         let breath = reduceMotion || !responds ? 0.0 : time.timeIntervalSinceReferenceDate
         return Canvas(rendersAsynchronously: true) { ctx, size in
             let cosA = cos(angle), sinA = sin(angle)
-            let centre = rippleFromCapture ? CGPoint(x: size.width - 24, y: size.height + 40) : CGPoint(x: size.width / 2, y: size.height * 0.55)
-            let radius = wave.map { CGFloat($0) * hypot(size.width, size.height) * (rippleFromCapture ? 1.1 : 0.6) }
-            let sweeps = sweeps && !rippleFromCapture
+            // A new sky's ripple starts at the pin (the map is centred on the place): "you are here", then
+            // the air around it. A fresh log's starts at the +.
+            let centre = rippleFromCapture ? CaptureReveal.origin(in: size) : CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = wave.map { rippleFromCapture ? CaptureReveal.radius(CGFloat($0), in: size) : CGFloat($0) * hypot(size.width, size.height) * 0.6 }
+            let sweeps = false  // the ring from the pin says more than a sweep did; kept as a flag for the crit
             let strong: CGFloat = rippleFromCapture ? 1.6 : 1
             let fade = wave.map { 1 - $0 } ?? 0
             let diag = hypot(size.width, size.height)
             let n = Int(diag / spacing) + 2
-            let rest: CGFloat = 1.5
+            let rest: CGFloat = 0.9   // small, so the map reads through
             let ink = ink ?? .white
             // A turned grid, big enough to cover the corners.
             for i in -n...n {
@@ -348,31 +378,20 @@ struct SkyGrain: View {
                     // Printed, not plotted: each dot a little different.
                     let wobble = CGFloat((i &* 73 &+ j &* 151) & 7) / 7
                     var r = rest * (0.7 + 0.5 * wobble)
-                    var color = Color.black.opacity(0.32)
+                    var color = Color.black.opacity(0.26)
                     if breath > 0 {
                         // A slow swell drifting across the field, like breathing.
                         let phase = breath * 1.1 + Double(x + y) / 90
                         let b = CGFloat(0.5 + 0.5 * sin(phase))
-                        r += 0.6 * b
-                        color = Color.black.opacity(0.24 + 0.16 * Double(b))
+                        r += 0.35 * b
+                        color = Color.black.opacity(0.2 + 0.12 * Double(b))
                     }
-                    if responds, let band, point != nil {
-                        // The whole layer answers: strongest at the band's centre, fading to its edges.
-                        let mid = (band.lowerBound + band.upperBound) / 2, half = max(1, (band.upperBound - band.lowerBound) / 2)
-                        let d = abs(y - mid) / half
-                        if d < 1 {
-                            let t = 1 - d * d
-                            r += t * (1.0 + 1.8 * CGFloat(intensity)) * 1.6
-                            color = ink.opacity(0.3 + 0.55 * Double(t))
-                        }
-                    } else if responds, let p = point {
-                        let d = hypot(x - p.x, y - p.y)
-                        if d < reach {
-                            let t = 1 - d / reach                 // 1 at the finger, 0 at the edge
-                            let swell = t * t * (1.2 + 2.2 * CGFloat(intensity))
-                            r += swell * 2.2
-                            color = ink.opacity(0.35 + 0.6 * Double(t))
-                        }
+                    if responds, point != nil {
+                        // Reading a layer: every dot in the field becomes that layer, the same everywhere.
+                        // Size and ink say how much of it there is, never where. The finger only chose which.
+                        let amount = CGFloat(intensity)
+                        r += (0.5 + 2.6 * amount) * (0.75 + 0.5 * wobble)
+                        color = ink.opacity(0.3 + 0.55 * Double(amount))
                     } else if let radius {
                         // Dots near the wavefront swell and go white, then settle back. The front is a ring
                         // from the centre (blob) or a line sweeping top to bottom (strata).
@@ -391,5 +410,27 @@ struct SkyGrain: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// A fresh log wipes the new sky in from the +: a circle grows from the button's spot over the same
+/// 1.6 s as the grain's ripple, so the ring is the wavefront and the new sky is what it leaves behind.
+struct CaptureReveal: ViewModifier {
+    @State private var t: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The + sits below the sky's bottom-right corner (under the timeline).
+    static func origin(in size: CGSize) -> CGPoint { CGPoint(x: size.width - 36, y: size.height + 150) }
+    static func radius(_ t: CGFloat, in size: CGSize) -> CGFloat { t * hypot(size.width, size.height) * 1.1 }
+
+    func body(content: Content) -> some View {
+        content
+            .mask {
+                GeometryReader { g in
+                    let r = reduceMotion ? Self.radius(1, in: g.size) : Self.radius(t, in: g.size)
+                    Circle().frame(width: 2 * r, height: 2 * r).position(Self.origin(in: g.size))
+                }
+            }
+            .onAppear { withAnimation(.linear(duration: 1.6)) { t = 1 } }
     }
 }

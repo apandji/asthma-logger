@@ -247,6 +247,11 @@ enum DemoSeeder {
             e.conditions = m.conditions
             e.envStatus = .ready
             e.isDemoMoment = true
+            let place = DemoRoute.place(at: m.at)
+            (e.latitude, e.longitude) = DemoRoute.coordinate(for: place, at: m.at)
+            e.horizontalAccuracy = 15
+            e.placeName = place.name
+            e.indoorGuessRaw = (place.outdoor ? IndoorOutdoor.outdoor : .indoor).rawValue
             context.insert(e)
         }
         try? context.save()

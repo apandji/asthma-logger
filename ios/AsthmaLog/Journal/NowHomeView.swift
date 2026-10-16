@@ -44,7 +44,7 @@ struct NowHomeView: View {
                     .animation(.easeOut(duration: 0.2), value: probing)
                 Group {
                     if expanded, case .moment(let m) = focus {
-                        MomentDetailsView(event: m, mapNamespace: mapZoom, onClose: { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = false } })
+                        MomentDetailsView(event: m, onClose: { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { expanded = false } }, airOnly: true)
                             .id(m.id)
                             .transition(.opacity)
                     } else {
@@ -132,19 +132,19 @@ struct NowHomeView: View {
         Group {
             switch focus {
             case .now:
-                ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true, byline: sentence) {
+                ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true, byline: sentence, compact: true) {
                     Circle().fill(.white).frame(width: 8, height: 8)
                     Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
                 }
                 .onTapGesture { showInsights = true }
             case .moment(let m):
-                ScaleHeader(title: m.pastStatement, reserveTwoLines: true, reserveByline: true) {
+                ScaleHeader(title: m.pastStatement, reserveTwoLines: true, reserveByline: true, compact: true) {
                     MomentDot(moment: m.moment, size: 8)
                     Text(m.detailsLine)
                 }
             case .hour(let h):
                 // The look-ahead: what the forecast says, then how it compares (or that we're still learning).
-                ScaleHeader(title: h.statement, reserveTwoLines: true, byline: sentence) {
+                ScaleHeader(title: h.statement, reserveTwoLines: true, byline: sentence, compact: true) {
                     Image(systemName: "arrow.right").font(.caption2.weight(.bold))
                     Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour()))\(here?.place.map { " · \($0)" } ?? "")")
                 }

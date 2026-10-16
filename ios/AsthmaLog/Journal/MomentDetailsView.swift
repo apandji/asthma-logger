@@ -9,6 +9,8 @@ struct MomentDetailsView: View {
     /// In-place mode (the Journal's zoom): the map is the hero, shared with the sky panel, on black.
     var mapNamespace: Namespace.ID? = nil
     var onClose: (() -> Void)? = nil
+    /// The Now home: just the air table, every pollutant with a reading, under the sky you tapped.
+    var airOnly = false
     @State private var pull: CGFloat = 0
     @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
     @State private var around: HourlyHistory?
@@ -16,7 +18,36 @@ struct MomentDetailsView: View {
     private var pollen: PollenSample? { DemoPollen.sample(at: event.loggedAt, season: pollenSeason) }
 
     var body: some View {
-        if let mapNamespace { inPlace(mapNamespace) } else { page }
+        if airOnly { airPage } else if let mapNamespace { inPlace(mapNamespace) } else { page }
+    }
+
+    private var airPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if let c = event.conditions, !c.observations.isEmpty {
+                    air(c).padding(16).frostedCard()
+                    if !missingPollutants(c).isEmpty {
+                        Text("No \(missingPollutants(c).joined(separator: " or ")) from nearby monitors.")
+                            .font(.caption).foregroundStyle(Theme.secondaryText).padding(.horizontal, 4)
+                    }
+                } else {
+                    Text(event.envError ?? (event.envStatus == .pending ? "Checking the air…" : "No outdoor readings for this moment."))
+                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                        .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
+        }
+        .scrollIndicators(.hidden)
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in
+            if y < -90 { onClose?() }   // pull down past the top to go back
+        }
+    }
+
+    /// Pollutants we look for but had no reading here: missing, not "good".
+    private func missingPollutants(_ c: Conditions) -> [String] {
+        [(Signal.pm25, "PM2.5"), (.pm10, "PM10"), (.ozone, "ozone"), (.no2, "NO₂")].filter { c.best($0.0) == nil }.map(\.1)
     }
 
     /// The Journal's zoom: the map grows out of the sky into a sharp hero, the details rise beneath it.

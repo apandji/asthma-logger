@@ -9,6 +9,8 @@ struct ScaleHeader<Kicker: View>: View {
     /// One quiet line under the title, with its space kept so it can come and go without a jump.
     var byline: String? = nil
     var reserveByline = false
+    /// A step smaller, for two-sentence titles that have to fit two lines.
+    var compact = false
     @ViewBuilder let kicker: Kicker
 
     var body: some View {
@@ -17,7 +19,7 @@ struct ScaleHeader<Kicker: View>: View {
                 .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
                 .lineLimit(1).minimumScaleFactor(0.8)
             Text(title)
-                .font(.system(.title, design: .serif, weight: .medium))
+                .font(.system(compact ? .title2 : .title, design: .serif, weight: .medium))
                 .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)
                 .minimumScaleFactor(0.85)
                 .contentTransition(.opacity)

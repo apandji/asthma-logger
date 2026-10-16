@@ -284,30 +284,31 @@ struct SkyGrain: View {
     var intensity: Double = 0
     /// Static grain only, no response.
     var responds = true
-    /// When the sky appeared: a wave runs out through the dots, once, to say "touch me".
+    /// When the sky appeared: a wave runs out through the dots to say "touch me". Until the sky has
+    /// been touched once it runs again every few seconds.
     var rippleAt: Date? = nil
+    var inviting = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let spacing: CGFloat = 10
     private let angle: CGFloat = 12 * .pi / 180
     private let reach: CGFloat = 80
     private let rippleSeconds = 1.6
+    private let rippleEvery = 5.0
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: !rippling)) { frame in
+        // Alive at rest: a slow breath moves through the grain (24 fps is plenty; off with Reduce Motion).
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion || !responds)) { frame in
             grain(at: frame.date)
         }
     }
 
-    private var rippling: Bool {
-        guard responds, !reduceMotion, let rippleAt else { return false }
-        return Date().timeIntervalSince(rippleAt) < rippleSeconds
-    }
-
     private func grain(at time: Date) -> some View {
         // The wavefront: a ring that grows from the centre and fades as it goes.
-        let age = rippleAt.map { time.timeIntervalSince($0) } ?? rippleSeconds
+        var age = rippleAt.map { time.timeIntervalSince($0) } ?? rippleSeconds
+        if inviting, age >= rippleSeconds { age = age.truncatingRemainder(dividingBy: rippleEvery) }
         let wave = (responds && !reduceMotion && age < rippleSeconds) ? age / rippleSeconds : nil
+        let breath = reduceMotion || !responds ? 0.0 : time.timeIntervalSinceReferenceDate
         return Canvas(rendersAsynchronously: true) { ctx, size in
             let cosA = cos(angle), sinA = sin(angle)
             let centre = CGPoint(x: size.width / 2, y: size.height * 0.55)
@@ -315,7 +316,7 @@ struct SkyGrain: View {
             let fade = wave.map { 1 - $0 } ?? 0
             let diag = hypot(size.width, size.height)
             let n = Int(diag / spacing) + 2
-            let rest: CGFloat = 1.0
+            let rest: CGFloat = 1.5
             let ink = ink ?? .white
             // A turned grid, big enough to cover the corners.
             for i in -n...n {
@@ -327,7 +328,14 @@ struct SkyGrain: View {
                     // Printed, not plotted: each dot a little different.
                     let wobble = CGFloat((i &* 73 &+ j &* 151) & 7) / 7
                     var r = rest * (0.7 + 0.5 * wobble)
-                    var color = Color.black.opacity(0.22)
+                    var color = Color.black.opacity(0.32)
+                    if breath > 0 {
+                        // A slow swell drifting across the field, like breathing.
+                        let phase = breath * 1.1 + Double(x + y) / 90
+                        let b = CGFloat(0.5 + 0.5 * sin(phase))
+                        r += 0.6 * b
+                        color = Color.black.opacity(0.24 + 0.16 * Double(b))
+                    }
                     if responds, let p = point {
                         let d = hypot(x - p.x, y - p.y)
                         if d < reach {

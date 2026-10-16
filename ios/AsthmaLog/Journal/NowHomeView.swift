@@ -462,6 +462,7 @@ struct NowSky: View {
     @State private var probe: SkyProbe?
     @State private var pulse: Task<Void, Never>?
     @State private var rippleAt: Date?
+    @AppStorage("sky.touched") private var touched = false
 
     private var temperature: Double? { conditions?.best(.temperature)?.value }
 
@@ -483,7 +484,7 @@ struct NowSky: View {
                         .allowsHitTesting(false)
                 }
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt)
+                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched)
                 }
                 if let point, let probe {
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false).transition(.opacity)
@@ -514,7 +515,7 @@ struct NowSky: View {
     private func explore(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { drag in
-                if !probing { probing = true; startPulse() }
+                if !probing { probing = true; touched = true; startPulse() }
                 let unit = CGPoint(x: drag.location.x / size.width, y: drag.location.y / size.height)
                 let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
                 withAnimation(.easeOut(duration: 0.12)) {

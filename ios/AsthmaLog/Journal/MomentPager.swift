@@ -227,6 +227,7 @@ struct SkyPanel: View {
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var rippleAt: Date?
+    @AppStorage("sky.touched") private var touched = false
 
     var body: some View {
         GeometryReader { geo in
@@ -250,7 +251,7 @@ struct SkyPanel: View {
                 }
 
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt)
+                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched)
                 }
                 if let point, let probe {
                     // The glow belongs to the sky, so it fades with it.
@@ -300,7 +301,7 @@ struct SkyPanel: View {
     private func explore(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { drag in
-                if !probing { probing = true; SkyTip().invalidate(reason: .actionPerformed); startPulse() }
+                if !probing { probing = true; touched = true; SkyTip().invalidate(reason: .actionPerformed); startPulse() }
                 let unit = CGPoint(x: drag.location.x / size.width, y: drag.location.y / size.height)
                 let layers = AirLayers(conditions: event.conditions, weave: event.weave, pollen: pollen,
                                        smooth: strengthStyle == .smooth)

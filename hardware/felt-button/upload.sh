@@ -14,8 +14,10 @@ PORT="${1:-$("$CLI" board list | awk '/nano_nora|Nano ESP32/ {print $1; exit}')}
 [ -n "$PORT" ] || PORT="$(ls /dev/cu.usbmodem* 2>/dev/null | head -1 || true)"
 [ -n "$PORT" ] || { echo "No Nano ESP32 found. Plug it in with a data USB-C cable (not charge-only)."; exit 1; }
 
-echo "Uploading to $PORT…"
+echo "Uploading to ${PORT}…"
 "$CLI" compile --fqbn "$FQBN" .
 "$CLI" upload --fqbn "$FQBN" --port "$PORT" .
 echo "Done. It's saved on the board: unplug it and power it from any USB power bank."
-echo "To watch presses: \"$CLI\" monitor --port $PORT --config baudrate=115200"
+# The upload may go over DFU (port like 0-1); the Serial Monitor needs the USB serial port.
+SERIAL="$(ls /dev/cu.usbmodem* 2>/dev/null | head -1 || true)"
+echo "To watch presses: \"$CLI\" monitor --port ${SERIAL:-<the /dev/cu.usbmodem port>} --config baudrate=115200"

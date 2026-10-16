@@ -228,7 +228,13 @@ struct SkyProbeOverlay: View {
     private var label: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Label(probe.name, systemImage: SkyExplorer.icon(probe.name)).font(.subheadline.weight(.semibold))
+                Label {
+                    Text(probe.name)
+                } icon: {
+                    // The connection to the field: this is the ink of the particles you're reading.
+                    Image(systemName: SkyExplorer.icon(probe.name)).foregroundStyle(probe.level == nil ? .primary : probe.color)
+                }
+                .font(.subheadline.weight(.semibold))
                 Text(probe.kind).font(.caption).foregroundStyle(Theme.secondaryText)
                 Spacer(minLength: 0)
             }
@@ -237,8 +243,8 @@ struct SkyProbeOverlay: View {
                 Text(probe.unit).font(.caption).foregroundStyle(Theme.secondaryText).lineLimit(1).fixedSize()
                 Spacer(minLength: 8)
                 if let level = probe.level {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        LevelIndicator(level: level, ink: probe.color, style: .signal)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        AmountDots(level: level, ink: probe.color)
                         Text(Tier(level).word).font(.caption2.weight(.semibold))
                     }
                 }
@@ -282,14 +288,35 @@ struct StrataScale: View {
     /// same one it paints the sky with). The one being read is full-strength and ringed; its name lives
     /// in the label, not here.
     private func dot(name: String, level: WeaveSpec.Level?, amount: Double, on: Bool) -> some View {
-        let ink: Color = name == "Weather" ? .primary : WeatherColor.ink(for: name)
+        // One ink for the whole scale (the weather's), so it sits quietly on the field. Size is the amount;
+        // the layer's own colour appears in the label once you're reading it.
         let size = 11 + 11 * CGFloat(amount)
         return Image(systemName: SkyExplorer.icon(name))
             .font(.system(size: on ? size + 3 : size, weight: .semibold))
-            .foregroundStyle(on ? ink : ink.opacity(0.6))
+            .foregroundStyle(on ? Color.primary : Color.primary.opacity(0.55))
             .frame(width: 30, height: 30)
-            .background { if on { Circle().strokeBorder(ink.opacity(0.9), lineWidth: 1.5) } }
+            .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.5) } }
             .animation(.snappy(duration: 0.2), value: on)
             .accessibilityLabel(name)
+    }
+}
+
+/// How much, in the field's own language: three particles, each bigger than the last, filled up to the
+/// level in the layer's ink. One a little, three a lot.
+struct AmountDots: View {
+    let level: WeaveSpec.Level
+    let ink: Color
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 4) {
+            ForEach(0..<3, id: \.self) { i in
+                let on = i <= level.rawValue
+                let d: CGFloat = [6, 9, 12][i]
+                Circle()
+                    .fill(on ? ink : ink.opacity(0.18))
+                    .frame(width: d, height: d)
+            }
+        }
+        .accessibilityLabel("\(level.rawValue + 1) of 3")
     }
 }

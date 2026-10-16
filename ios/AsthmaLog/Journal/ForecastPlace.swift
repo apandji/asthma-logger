@@ -10,7 +10,11 @@ nonisolated struct SavedPlace: Codable, Hashable, Sendable {
     var lon: Double
 
     static func load(_ key: String) -> SavedPlace? {
-        UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(SavedPlace.self, from: $0) }
+        guard var p = UserDefaults.standard.data(forKey: key).flatMap({ try? JSONDecoder().decode(SavedPlace.self, from: $0) }) else { return nil }
+        // Earlier builds saved "Boston, Boston, MA".
+        let parts = p.name.components(separatedBy: ", ")
+        if parts.count > 1, parts[0] == parts[1] { p.name = parts.dropFirst().joined(separator: ", ") }
+        return p
     }
 
     func save(_ key: String) { UserDefaults.standard.set(try? JSONEncoder().encode(self), forKey: key) }

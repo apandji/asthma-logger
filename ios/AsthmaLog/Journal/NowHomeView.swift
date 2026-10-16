@@ -18,7 +18,10 @@ struct NowHomeView: View {
     @State private var chosen = SavedPlace.load(SavedPlace.chosenKey)
     @State private var showPlaces = false
 
+    /// The air where the phone is. Now is always here.
     @State private var here: NowReading?
+    /// The forecast's place when you've picked one (Home, Work, an address); nil means here.
+    @State private var away: NowReading?
     @State private var hours: [NowHour] = []
     @State private var model = InsightsModel()
     /// Where the playhead is. Nil means now.
@@ -82,7 +85,7 @@ struct NowHomeView: View {
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showPlaces) { PlacePicker(chosen: $chosen).presentationDetents([.medium, .large]) }
-            .onChange(of: chosen) { _, _ in here = nil; hours = []; Task { await load() } }
+            .onChange(of: chosen) { _, _ in hours = []; Task { await loadForecastPlace() } }
             .sheet(isPresented: $showMonth) {
                 MomentsOverview(events: Array(events), namespace: month, anchorDay: focusTime,
                                 open: { e in focusTime = e.loggedAt; showMonth = false },
@@ -113,7 +116,7 @@ struct NowHomeView: View {
                 guard !Task.isCancelled else { return }
                 model.rebuild(events: events, demo: demo)
                 await model.narrate(styleScore: 50, useModel: false)
-                if let here { await model.loadForecast(latitude: here.lat, longitude: here.lon, placeLabel: here.place ?? "here") }
+                if let p = away ?? here { await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here") }
             }
             // A new moment brings the playhead back to now.
             .onChange(of: events.last?.id) { _, _ in withAnimation(.smooth(duration: 0.6)) { focusTime = nil } }
@@ -143,8 +146,7 @@ struct NowHomeView: View {
                 ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true,
                             byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
                     Circle().fill(.white).frame(width: 8, height: 8)
-                    Text("Now ·")
-                    placeChip
+                    Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
                 }
                 .onTapGesture { showInsights = true }
             case .moment(let m):
@@ -171,7 +173,7 @@ struct NowHomeView: View {
     private var placeChip: some View {
         Button { showPlaces = true } label: {
             HStack(spacing: 3) {
-                Text(here?.place ?? chosen?.name ?? "Here")
+                Text(chosen?.name ?? here?.place ?? "Here")
                 Image(systemName: "chevron.down").font(.caption2.weight(.bold))
             }
             .foregroundStyle(chosen == nil ? Theme.secondaryText : Theme.tint)
@@ -238,8 +240,7 @@ struct NowHomeView: View {
         case .now:
             NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
                    pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
-                   mapID: mapID, coordinate: here.map { ($0.lat, $0.lon) })
-                .id(mapID)  // a new place is a new sky and a new map
+                   mapID: "here", coordinate: here.map { ($0.lat, $0.lon) })
                 .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
         case .moment(let m):
             NowSky(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
@@ -251,7 +252,7 @@ struct NowHomeView: View {
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
                    pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
-                   mapID: mapID, coordinate: here.map { ($0.lat, $0.lon) })
+                   mapID: mapID, coordinate: (away ?? here).map { ($0.lat, $0.lon) })
                 .id("\(mapID)-\(h.date.timeIntervalSinceReferenceDate)")
         }
     }
@@ -279,19 +280,25 @@ struct NowHomeView: View {
     // MARK: Data
 
     private func load() async {
-        let lat: Double, lon: Double, place: String?
+        guard let fix = try? await services.location.currentLocation(timeout: .seconds(6)) else { return }
+        let lat = fix.coordinate.latitude, lon = fix.coordinate.longitude
+        async let c = services.conditions.conditions(latitude: lat, longitude: lon)
+        async let marks = try? CLGeocoder().reverseGeocodeLocation(fix)
+        let place = await marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
+        here = NowReading(lat: lat, lon: lon, place: place, conditions: await c)
+        await loadForecastPlace()
+    }
+
+    /// The forecast for the chosen place, or for here.
+    private func loadForecastPlace() async {
         if let chosen {
-            (lat, lon, place) = (chosen.lat, chosen.lon, chosen.name)
+            away = NowReading(lat: chosen.lat, lon: chosen.lon, place: chosen.name, conditions: Conditions())
         } else {
-            guard let fix = try? await services.location.currentLocation(timeout: .seconds(6)) else { return }
-            (lat, lon) = (fix.coordinate.latitude, fix.coordinate.longitude)
-            let marks = try? await CLGeocoder().reverseGeocodeLocation(fix)
-            place = marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
+            away = nil
         }
-        let c = await services.conditions.conditions(latitude: lat, longitude: lon)
-        here = NowReading(lat: lat, lon: lon, place: place, conditions: c)
-        hours = await NowHour.forecast(latitude: lat, longitude: lon)
-        await model.loadForecast(latitude: lat, longitude: lon, placeLabel: place ?? "here")
+        guard let p = away ?? here else { return }
+        hours = await NowHour.forecast(latitude: p.lat, longitude: p.lon)
+        await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here")
     }
 }
 

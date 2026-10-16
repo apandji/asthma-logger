@@ -10,6 +10,7 @@ struct FieldLegend: View {
     var conditions: Conditions? = nil
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
     @AppStorage("legend.expanded") private var expanded = false
+    @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.steps
 
     var body: some View {
         if style == .weather {
@@ -32,7 +33,7 @@ struct FieldLegend: View {
                                          startPoint: .leading, endPoint: .trailing),
                           at: humidityPosition)
                     Text("Colours on top: what's in the air").font(.subheadline).padding(.top, 2)
-                    let present = AirLayers(conditions: conditions, weave: weave, pollen: pollen)
+                    let present = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
                     LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 8) {
                         ForEach(Self.palette, id: \.name) { item in
                             let layer = present.all.first { $0.name == item.name }
@@ -47,7 +48,7 @@ struct FieldLegend: View {
                             }
                         }
                     }
-                    Text("Each layer is faint when low and fuller when high.\(pollen == nil ? "" : " Pollen is demo data.")")
+                    Text("Each layer is faint when low and fuller when high\(strengthStyle == .smooth ? ", rising a little with the amount" : "").\(pollen == nil ? "" : " Pollen is demo data.")")
                         .font(.caption).foregroundStyle(Theme.secondaryText)
                 }
             }

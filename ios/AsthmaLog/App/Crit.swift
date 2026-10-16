@@ -79,4 +79,13 @@ enum Crit {
         }
         static let key = "crit.insightsState"
     }
+
+    /// How strongly each pollutant / pollen colour shows: one step per level, or rising smoothly with
+    /// the amount inside its level (never into the next level's range).
+    enum LayerStrength: String, CaseIterable, Identifiable {
+        case steps, smooth
+        var id: String { rawValue }
+        var title: String { self == .steps ? "Steps (by level)" : "Smooth within level" }
+        static let key = "crit.layerStrength"
+    }
 }

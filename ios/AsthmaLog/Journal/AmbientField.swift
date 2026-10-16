@@ -26,6 +26,7 @@ struct AmbientField: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var scheme
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
+    @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.steps
 
     var body: some View {
         if reduceTransparency {
@@ -47,7 +48,7 @@ struct AmbientField: View {
         if humidity == "humid" { sky = sky.mix(with: .white, by: 0.16) }
         let strength = scheme == .dark ? 0.75 : 0.66
 
-        let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen)
+        let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
         func tint(_ c: Color, _ layer: AirLayers.Layer?) -> Color {
             guard let layer else { return c }
             return c.mix(with: layer.color, by: layer.amount)
@@ -110,7 +111,17 @@ struct AirLayers {
         let name: String
         let color: Color
         let level: WeaveSpec.Level
-        var amount: Double { [0.14, 0.36, 0.6][level.rawValue] }
+        /// Where the reading sits inside its level, 0…1 (used by the "smooth" strength).
+        var fraction: Double = 0.5
+        var smooth = false
+
+        /// Colour strength. Steps: one strength per level. Smooth: rises with the amount inside the
+        /// level's own range, never reaching the next level's, so the jump between levels stays clear.
+        var amount: Double {
+            guard smooth else { return [0.14, 0.36, 0.6][level.rawValue] }
+            let range = [(0.08, 0.2), (0.3, 0.45), (0.55, 0.7)][level.rawValue]
+            return range.0 + (range.1 - range.0) * max(0, min(1, fraction))
+        }
     }
 
     var pm25: Layer?, pm10: Layer?, no2: Layer?, ozone: Layer?
@@ -118,23 +129,38 @@ struct AirLayers {
 
     var all: [Layer] { [pm25, pm10, no2, ozone, tree, grass, weed].compactMap { $0 } }
 
-    init(conditions c: Conditions?, weave: WeaveSpec, pollen: PollenSample?) {
+    /// Level edges per layer (start of low, moderate, high, and a ceiling for "high"):
+    /// EPA for pollutants (µg/m³ or ppb), Ambee's risk thresholds for pollen (grains/m³).
+    static let edges: [String: [Double]] = [
+        "PM2.5": [0, 12, 35, 150], "PM10": [0, 55, 155, 355], "NO₂": [0, 54, 101, 360], "Ozone": [0, 55, 71, 125],
+        "Tree pollen": [0, 100, 213, 940], "Grass pollen": [0, 30, 61, 342], "Weed pollen": [0, 44, 80, 296],
+    ]
+
+    init(conditions c: Conditions?, weave: WeaveSpec, pollen: PollenSample?, smooth: Bool = false) {
         func level(_ b: PollutantBand) -> WeaveSpec.Level? {
             switch b { case .low: .low; case .moderate: .medium; case .high: .high; case .unknown: nil }
         }
-        if let v = c?.best(.pm25)?.value, let l = level(Banding.pm25(v)) { pm25 = Layer(name: "PM2.5", color: WeatherColor.pm25, level: l) }
-        if let v = c?.best(.pm10)?.value, let l = level(Banding.pm10(v)) { pm10 = Layer(name: "PM10", color: WeatherColor.pm10, level: l) }
-        if let v = c?.best(.no2)?.value, let l = level(Banding.no2(ppb: v)) { no2 = Layer(name: "NO₂", color: WeatherColor.no2, level: l) }
-        if let v = c?.best(.ozone)?.value, let l = level(Banding.ozone(ppb: v)) { ozone = Layer(name: "Ozone", color: WeatherColor.ozone, level: l) }
+        func layer(_ name: String, _ color: Color, _ l: WeaveSpec.Level, _ value: Double?) -> Layer {
+            var f = 0.5
+            if let value, let e = Self.edges[name] {
+                let lo = e[l.rawValue], hi = e[l.rawValue + 1]
+                f = (value - lo) / max(0.001, hi - lo)
+            }
+            return Layer(name: name, color: color, level: l, fraction: f, smooth: smooth)
+        }
+        if let v = c?.best(.pm25)?.value, let l = level(Banding.pm25(v)) { pm25 = layer("PM2.5", WeatherColor.pm25, l, v) }
+        if let v = c?.best(.pm10)?.value, let l = level(Banding.pm10(v)) { pm10 = layer("PM10", WeatherColor.pm10, l, v) }
+        if let v = c?.best(.no2)?.value, let l = level(Banding.no2(ppb: v)) { no2 = layer("NO₂", WeatherColor.no2, l, v) }
+        if let v = c?.best(.ozone)?.value, let l = level(Banding.ozone(ppb: v)) { ozone = layer("Ozone", WeatherColor.ozone, l, v) }
         // No per-pollutant readings (older moments, AQI only): the overall air level drives the PM2.5 layer.
         if pm25 == nil && pm10 == nil && no2 == nil && ozone == nil, let air = weave.levels[.air] {
-            pm25 = Layer(name: "Air", color: WeatherColor.pm25, level: air)
+            pm25 = Layer(name: "Air", color: WeatherColor.pm25, level: air, smooth: smooth)
         }
         if let p = pollen {
             let kinds = p.kinds
-            if kinds[0].count > 0 { tree = Layer(name: "Tree pollen", color: WeatherColor.pollen[0], level: kinds[0].level) }
-            if kinds[1].count > 0 { grass = Layer(name: "Grass pollen", color: WeatherColor.pollen[1], level: kinds[1].level) }
-            if kinds[2].count > 0 { weed = Layer(name: "Weed pollen", color: WeatherColor.pollen[2], level: kinds[2].level) }
+            if kinds[0].count > 0 { tree = layer("Tree pollen", WeatherColor.pollen[0], kinds[0].level, Double(kinds[0].count)) }
+            if kinds[1].count > 0 { grass = layer("Grass pollen", WeatherColor.pollen[1], kinds[1].level, Double(kinds[1].count)) }
+            if kinds[2].count > 0 { weed = layer("Weed pollen", WeatherColor.pollen[2], kinds[2].level, Double(kinds[2].count)) }
         }
     }
 }

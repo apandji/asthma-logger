@@ -20,6 +20,7 @@ struct SettingsView: View {
     @AppStorage(Crit.CardMarker.key) private var critMarker = Crit.CardMarker.quietTab
     @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
+    @AppStorage(Crit.LayerStrength.key) private var critStrength = Crit.LayerStrength.steps
     @AppStorage(Crit.InsightsEntry.key) private var critInsights = Crit.InsightsEntry.ringButton
     @AppStorage(Crit.CaptureOrder.key) private var critOrder = Crit.CaptureOrder.rescueFirst
 
@@ -33,6 +34,9 @@ struct SettingsView: View {
                     }
                     Picker("Colour field", selection: $critField) {
                         ForEach(Crit.FieldStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Colour strength", selection: $critStrength) {
+                        ForEach(Crit.LayerStrength.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Pollen (demo)", selection: $demoPollen) {
                         ForEach(DemoPollen.Season.allCases) { Text($0.title).tag($0) }

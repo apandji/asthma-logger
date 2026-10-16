@@ -286,7 +286,8 @@ struct NowHomeView: View {
                 NowSky(conditions: j.conditions, weave: j.weave, date: j.loggedAt,
                        pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
                        mapID: j.latitude == nil ? "here" : j.id.uuidString,
-                       coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) })
+                       coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
+                       captureInk: j.moment == .rescue ? Theme.rescue : Theme.standard)
                     .onTapGesture { withAnimation(.spring(duration: 0.5, bounce: 0.1)) { focusTime = j.loggedAt; expanded = true } }
             } else {
                 NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
@@ -457,12 +458,15 @@ struct NowSky: View {
     var mapID: String = "here"
     var coordinate: (Double, Double)? = nil
     var mapNamespace: Namespace.ID? = nil
+    /// Set while this sky is a moment logged seconds ago: its ripple takes the moment's color.
+    var captureInk: Color? = nil
     @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var point: CGPoint?
     @State private var probe: SkyProbe?
     @State private var pulse: Task<Void, Never>?
     @State private var rippleAt: Date?
+    @State private var rippleInk: Color = .white
     @AppStorage("sky.touched") private var touched = false
     @AppStorage(Crit.SkyReading.key) private var reading = Crit.SkyReading.strata
     /// Strata: the band (points) under the finger.
@@ -489,7 +493,8 @@ struct NowSky: View {
                         .allowsHitTesting(false)
                 }
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band, sweeps: reading == .strata)
+                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && rippleInk == .white, band: band, sweeps: reading == .strata,
+                             rippleInk: rippleInk, rippleFromCapture: rippleInk != .white)
                 }
                 if let point, let probe {
                     SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false, band: band).transition(.opacity)
@@ -497,9 +502,9 @@ struct NowSky: View {
             }
             .frame(width: size.width, height: size.height)
             .drawingGroup()
-            .onAppear { rippleAt = .now }
-            // Every new sky (a moment, a forecast hour, now) ripples once.
-            .onChange(of: date) { _, _ in rippleAt = .now }
+            .onAppear { rippleInk = captureInk ?? .white; rippleAt = .now }
+            // Every new sky (a moment, a forecast hour, now) ripples once; a fresh log ripples in its color.
+            .onChange(of: date) { _, _ in rippleInk = captureInk ?? .white; rippleAt = .now }
             .mask {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),
                                    startRadiusFraction: 0, endRadiusFraction: 0.7)

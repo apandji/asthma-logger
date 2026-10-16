@@ -229,6 +229,11 @@ struct SkyPanel: View {
     @State private var rippleAt: Date?
     @AppStorage("sky.touched") private var touched = false
     @AppStorage(Crit.SkyReading.key) private var reading = Crit.SkyReading.strata
+    /// Logged seconds ago: the ripple takes the moment's color and runs from the +.
+    private var captureInk: Color? {
+        guard Date().timeIntervalSince(event.loggedAt) < 20 else { return nil }
+        return event.moment == .rescue ? Theme.rescue : Theme.standard
+    }
     /// Strata: the band (points) under the finger.
     @State private var band: ClosedRange<CGFloat>?
 
@@ -253,7 +258,8 @@ struct SkyPanel: View {
                 }
 
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band, sweeps: reading == .strata)
+                    SkyGrain(point: point, ink: probe?.levelInk, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && captureInk == nil, band: band, sweeps: reading == .strata,
+                             rippleInk: captureInk ?? .white, rippleFromCapture: captureInk != nil)
                 }
                 if let point, let probe {
                     // The glow belongs to the sky, so it fades with it.

@@ -302,6 +302,10 @@ struct SkyGrain: View {
     var band: ClosedRange<CGFloat>? = nil
     /// Strata: the ripple is a horizontal wave sweeping down through the layers, not a ring.
     var sweeps = false
+    /// The ripple's ink. White to invite touch; the moment's orange or blue when a log has just landed,
+    /// when it also runs as a ring from the + (bottom right), whatever the reading mode.
+    var rippleInk: Color = .white
+    var rippleFromCapture = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let spacing: CGFloat = 10
@@ -325,8 +329,10 @@ struct SkyGrain: View {
         let breath = reduceMotion || !responds ? 0.0 : time.timeIntervalSinceReferenceDate
         return Canvas(rendersAsynchronously: true) { ctx, size in
             let cosA = cos(angle), sinA = sin(angle)
-            let centre = CGPoint(x: size.width / 2, y: size.height * 0.55)
-            let radius = wave.map { CGFloat($0) * hypot(size.width, size.height) * 0.6 }
+            let centre = rippleFromCapture ? CGPoint(x: size.width - 24, y: size.height + 40) : CGPoint(x: size.width / 2, y: size.height * 0.55)
+            let radius = wave.map { CGFloat($0) * hypot(size.width, size.height) * (rippleFromCapture ? 1.1 : 0.6) }
+            let sweeps = sweeps && !rippleFromCapture
+            let strong: CGFloat = rippleFromCapture ? 1.6 : 1
             let fade = wave.map { 1 - $0 } ?? 0
             let diag = hypot(size.width, size.height)
             let n = Int(diag / spacing) + 2
@@ -372,10 +378,11 @@ struct SkyGrain: View {
                         // from the centre (blob) or a line sweeping top to bottom (strata).
                         let d = sweeps ? abs(y - radius / 0.6 / hypot(size.width, size.height) * size.height)
                                        : abs(hypot(x - centre.x, y - centre.y) - radius)
-                        if d < 36 {
-                            let t = (1 - d / 36) * fade
-                            r += t * t * 2.4
-                            color = Color.white.opacity(0.15 + 0.6 * Double(t))
+                        let width = 36 * strong
+                        if d < width {
+                            let t = (1 - d / width) * fade
+                            r += t * t * 2.4 * strong
+                            color = rippleInk.opacity(0.15 + 0.7 * Double(t))
                         }
                     }
                     ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)), with: .color(color))

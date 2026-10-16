@@ -23,6 +23,7 @@ struct SettingsView: View {
     @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
     @AppStorage(Crit.Home.key) private var critHome = Crit.Home.journal
     @AppStorage(Crit.SkyTexture.key) private var critTexture = Crit.SkyTexture.dots
+    @AppStorage(Crit.SkyReading.key) private var critReading = Crit.SkyReading.strata
     @AppStorage(Crit.CardMarker.key) private var critMarker = Crit.CardMarker.quietTab
     @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
@@ -51,6 +52,9 @@ struct SettingsView: View {
                     }
                     Picker("Header", selection: $critHeader) {
                         ForEach(Crit.Header.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Sky reading", selection: $critReading) {
+                        ForEach(Crit.SkyReading.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Sky surface", selection: $critTexture) {
                         ForEach(Crit.SkyTexture.allCases) { Text($0.title).tag($0) }

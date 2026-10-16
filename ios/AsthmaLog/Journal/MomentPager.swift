@@ -228,6 +228,9 @@ struct SkyPanel: View {
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var rippleAt: Date?
     @AppStorage("sky.touched") private var touched = false
+    @AppStorage(Crit.SkyReading.key) private var reading = Crit.SkyReading.strata
+    /// Strata: the band (points) under the finger.
+    @State private var band: ClosedRange<CGFloat>?
 
     var body: some View {
         GeometryReader { geo in
@@ -250,11 +253,11 @@ struct SkyPanel: View {
                 }
 
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched)
+                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band)
                 }
                 if let point, let probe {
                     // The glow belongs to the sky, so it fades with it.
-                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false)
+                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false, band: band)
                         .transition(.opacity)
                 }
             }
@@ -306,13 +309,20 @@ struct SkyPanel: View {
                                        smooth: strengthStyle == .smooth)
                 withAnimation(.easeOut(duration: 0.12)) {
                     point = drag.location
-                    probe = SkyExplorer.probe(at: unit, layers: layers, conditions: event.conditions, weave: event.weave,
-                                              temperatureF: temperature, pollen: pollen)
+                    if reading == .strata {
+                        let hit = SkyExplorer.strata(at: unit.y, layers: layers, conditions: event.conditions, weave: event.weave,
+                                                     temperatureF: temperature, pollen: pollen)
+                        probe = hit?.probe
+                        band = hit.map { ($0.band.lowerBound * size.height)...($0.band.upperBound * size.height) }
+                    } else {
+                        probe = SkyExplorer.probe(at: unit, layers: layers, conditions: event.conditions, weave: event.weave,
+                                                  temperatureF: temperature, pollen: pollen)
+                    }
                 }
             }
             .onEnded { _ in
                 stopPulse()
-                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil }
+                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil }
                 probing = false
             }
     }

@@ -182,8 +182,8 @@ struct JournalView: View {
 
         .background {
             if momentStyle == .panel {
-                // The sky lives in its panel; the page is black.
-                Color.black.ignoresSafeArea()
+                // The sky lives in its panel; the page is black paper with a faint riso grain.
+                ZStack { Color.black; SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
             } else {
             // The room takes on the moment you're on.
             AmbientField(weave: fieldWeave,

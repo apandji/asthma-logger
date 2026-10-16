@@ -52,6 +52,33 @@ enum SkyExplorer {
                         note: detail.isEmpty ? "" : detail + ".", color: .white, intensity: 0)
     }
 
+    /// Strata: the sky as a core sample. Weather on top, then each present layer as a horizontal band
+    /// down the field. Only the finger's height matters; left-right says nothing, because every layer is
+    /// one regional reading, not a spot on the map. Returns the probe and its band (unit y).
+    static func strata(at y: Double, layers: AirLayers, conditions: Conditions?, weave: WeaveSpec,
+                       temperatureF: Double?, pollen: PollenSample?) -> (probe: SkyProbe, band: ClosedRange<Double>)? {
+        let order = ["Ozone", "PM2.5", "PM10", "NO₂", "Tree pollen", "Grass pollen", "Weed pollen"]
+        let present = Dictionary(layers.all.map { ($0.name == "Air" ? "PM2.5" : $0.name, $0) }, uniquingKeysWith: { a, _ in a })
+        let stack = order.compactMap { present[$0] }
+        let top = 0.14, bottom = 0.86
+        let weatherBottom = stack.isEmpty ? bottom : top + (bottom - top) / Double(stack.count + 1)
+        if y < weatherBottom {
+            guard let w = probe(at: CGPoint(x: 0.5, y: 0.1), layers: layers, conditions: conditions, weave: weave,
+                                temperatureF: temperatureF, pollen: pollen) else { return nil }
+            return (w, 0...weatherBottom)
+        }
+        let each = (bottom - weatherBottom) / Double(max(1, stack.count))
+        let i = min(stack.count - 1, Int((min(y, bottom - 0.001) - weatherBottom) / each))
+        guard i >= 0, i < stack.count else { return nil }
+        let layer = stack[i]
+        let (v, unit) = reading(layer.name, conditions, pollen)
+        let position = (Double(layer.level.rawValue) + max(0, min(1, layer.fraction))) / 3
+        let p = SkyProbe(name: layer.name, kind: kind(layer.name, pollen), value: v, unit: unit,
+                         level: layer.level, note: note(layer.name), color: layer.color, intensity: position)
+        let start = weatherBottom + each * Double(i)
+        return (p, start...(i == stack.count - 1 ? 1 : start + each))
+    }
+
     /// The number and its unit, apart, so the number can be set large.
     private static func reading(_ name: String, _ c: Conditions?, _ pollen: PollenSample?) -> (String, String) {
         func obs(_ s: Signal) -> (String, String) {
@@ -111,11 +138,21 @@ struct SkyProbeOverlay: View {
     let width: CGFloat
     var showsGlow = true
     var showsLabel = true
+    /// Strata: the band (in points) the finger is in. The glow is then the whole band, full width.
+    var band: ClosedRange<CGFloat>? = nil
     @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            if showsGlow {
+            if showsGlow, let band {
+                // One regional reading: the layer lights up edge to edge, not a spot.
+                Rectangle()
+                    .fill(LinearGradient(colors: [.clear, probe.color.opacity(0.45), probe.color.opacity(0.45), .clear],
+                                         startPoint: .top, endPoint: .bottom))
+                    .frame(width: width, height: band.upperBound - band.lowerBound)
+                    .blur(radius: 8)
+                    .position(x: width / 2, y: (band.lowerBound + band.upperBound) / 2)
+            } else if showsGlow {
             Circle()
                 .fill(RadialGradient(colors: [probe.color.opacity(0.55), probe.color.opacity(0.15), .clear],
                                      center: .center, startRadius: 0, endRadius: 80))
@@ -133,6 +170,7 @@ struct SkyProbeOverlay: View {
         }
         .allowsHitTesting(false)
         .animation(.interactiveSpring(duration: 0.2), value: point)
+        .animation(.snappy(duration: 0.25), value: band)
     }
 
     private var label: some View {

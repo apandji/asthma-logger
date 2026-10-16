@@ -288,6 +288,8 @@ struct SkyGrain: View {
     /// been touched once it runs again every few seconds.
     var rippleAt: Date? = nil
     var inviting = true
+    /// Strata: the band (in points) being read. The swell then runs the full width of the band.
+    var band: ClosedRange<CGFloat>? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let spacing: CGFloat = 10
@@ -336,7 +338,16 @@ struct SkyGrain: View {
                         r += 0.6 * b
                         color = Color.black.opacity(0.24 + 0.16 * Double(b))
                     }
-                    if responds, let p = point {
+                    if responds, let band, point != nil {
+                        // The whole layer answers: strongest at the band's centre, fading to its edges.
+                        let mid = (band.lowerBound + band.upperBound) / 2, half = max(1, (band.upperBound - band.lowerBound) / 2)
+                        let d = abs(y - mid) / half
+                        if d < 1 {
+                            let t = 1 - d * d
+                            r += t * (1.0 + 1.8 * CGFloat(intensity)) * 1.6
+                            color = ink.opacity(0.3 + 0.55 * Double(t))
+                        }
+                    } else if responds, let p = point {
                         let d = hypot(x - p.x, y - p.y)
                         if d < reach {
                             let t = 1 - d / reach                 // 1 at the finger, 0 at the edge

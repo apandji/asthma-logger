@@ -67,7 +67,10 @@ struct NowHomeView: View {
                     .padding(.bottom, 84)  // clear the +
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color.black.ignoresSafeArea())
+            .background {
+                // The grain is the paper's, not the map's: it runs under the whole page.
+                ZStack { Color.black; SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
+            }
             .overlay(alignment: .bottom) {
                 CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, toast: $toast)
             }
@@ -463,6 +466,9 @@ struct NowSky: View {
     @State private var pulse: Task<Void, Never>?
     @State private var rippleAt: Date?
     @AppStorage("sky.touched") private var touched = false
+    @AppStorage(Crit.SkyReading.key) private var reading = Crit.SkyReading.strata
+    /// Strata: the band (points) under the finger.
+    @State private var band: ClosedRange<CGFloat>?
 
     private var temperature: Double? { conditions?.best(.temperature)?.value }
 
@@ -485,10 +491,10 @@ struct NowSky: View {
                         .allowsHitTesting(false)
                 }
                 if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched)
+                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched, band: band)
                 }
                 if let point, let probe {
-                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false).transition(.opacity)
+                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsLabel: false, band: band).transition(.opacity)
                 }
             }
             .frame(width: size.width, height: size.height)
@@ -523,13 +529,20 @@ struct NowSky: View {
                 let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
                 withAnimation(.easeOut(duration: 0.12)) {
                     point = drag.location
-                    probe = SkyExplorer.probe(at: unit, layers: layers, conditions: conditions, weave: weave,
-                                              temperatureF: temperature, pollen: pollen)
+                    if reading == .strata {
+                        let hit = SkyExplorer.strata(at: unit.y, layers: layers, conditions: conditions, weave: weave,
+                                                     temperatureF: temperature, pollen: pollen)
+                        probe = hit?.probe
+                        band = hit.map { ($0.band.lowerBound * size.height)...($0.band.upperBound * size.height) }
+                    } else {
+                        probe = SkyExplorer.probe(at: unit, layers: layers, conditions: conditions, weave: weave,
+                                                  temperatureF: temperature, pollen: pollen)
+                    }
                 }
             }
             .onEnded { _ in
                 stopPulse()
-                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil }
+                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil }
                 probing = false
             }
     }

@@ -60,6 +60,14 @@ enum Crit {
         static let key = "crit.fieldStyle"
     }
 
+    /// How the sky is read: a blob under the finger (a spot), or strata (horizontal layers, finger slides up and down).
+    enum SkyReading: String, CaseIterable, Identifiable {
+        case blob, strata
+        var id: String { rawValue }
+        var title: String { self == .blob ? "Blob under the finger" : "Strata (layers, slide up and down)" }
+        static let key = "crit.skyReading"
+    }
+
     /// The sky's surface: plain, a riso grain, or grain that swells under the finger.
     enum SkyTexture: String, CaseIterable, Identifiable {
         case plain, grain, dots

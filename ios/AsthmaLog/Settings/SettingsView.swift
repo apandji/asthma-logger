@@ -16,22 +16,10 @@ struct SettingsView: View {
     @State private var demoNote: String?
     @State private var tutorialNote: String?
     @AppStorage(Crit.performanceHUD) private var perfHUD = false
-    @AppStorage(Crit.Gestures.key) private var critGestures = Crit.Gestures.zoom
-    @AppStorage(LevelStyle.key) private var levelStyle = LevelStyle.signal
-    @AppStorage(Crit.Header.key) private var critHeader = Crit.Header.moment
-    @AppStorage(Crit.CardStyle.key) private var critCard = Crit.CardStyle.panel
     @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
-    @AppStorage(Crit.Home.key) private var critHome = Crit.Home.journal
     @AppStorage(Crit.SkyTexture.key) private var critTexture = Crit.SkyTexture.dots
-    @AppStorage(Crit.SkyReading.key) private var critReading = Crit.SkyReading.strata
-    @AppStorage(Crit.LayerSpread.key) private var critSpread = Crit.LayerSpread.vibe
     @AppStorage(Crit.Paper.key) private var critPaper = Crit.Paper.black
-    @AppStorage(Crit.CardMarker.key) private var critMarker = Crit.CardMarker.quietTab
-    @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
-    @AppStorage(Crit.LayerStrength.key) private var critStrength = Crit.LayerStrength.smooth
-    @AppStorage(Crit.InsightsEntry.key) private var critInsights = Crit.InsightsEntry.topBar
-    @AppStorage(Crit.CaptureOrder.key) private var critOrder = Crit.CaptureOrder.rescueFirst
 
     var body: some View {
         NavigationStack {
@@ -46,58 +34,22 @@ struct SettingsView: View {
                     if let tutorialNote {
                         Text(tutorialNote).font(.footnote).foregroundStyle(Theme.secondaryText)
                     }
-                    Picker("Home", selection: $critHome) {
-                        ForEach(Crit.Home.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Gestures", selection: $critGestures) {
-                        ForEach(Crit.Gestures.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Header", selection: $critHeader) {
-                        ForEach(Crit.Header.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Sky reading", selection: $critReading) {
-                        ForEach(Crit.SkyReading.allCases) { Text($0.title).tag($0) }
-                    }
                     Picker("Paper", selection: $critPaper) {
                         ForEach(Crit.Paper.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Layer spread", selection: $critSpread) {
-                        ForEach(Crit.LayerSpread.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Sky surface", selection: $critTexture) {
                         ForEach(Crit.SkyTexture.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("Color field", selection: $critField) {
-                        ForEach(Crit.FieldStyle.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Color strength", selection: $critStrength) {
-                        ForEach(Crit.LayerStrength.allCases) { Text($0.title).tag($0) }
-                    }
                     Picker("Pollen (demo)", selection: $demoPollen) {
                         ForEach(DemoPollen.Season.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Moment style", selection: $critCard) {
-                        ForEach(Crit.CardStyle.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Card label", selection: $critMarker) {
-                        ForEach(Crit.CardMarker.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Good / OK / Not good", selection: $levelStyle) {
-                        ForEach(LevelStyle.allCases) { Text($0.title).tag($0) }
-                    }
-                    Picker("Insights", selection: $critInsights) {
-                        ForEach(Crit.InsightsEntry.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Insights state", selection: $critInsightsState) {
                         ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("+ pull order", selection: $critOrder) {
-                        ForEach(Crit.CaptureOrder.allCases) { Text($0.title).tag($0) }
-                    }
                 } header: {
                     Text("Design crit")
                 } footer: {
-                    Text("Debug builds only. Switch variants live to compare them in a review. Demo pollen is made up (realistic Midwest seasons), labelled Demo, and never used for patterns. \(levelStyle.note)")
+                    Text("Debug builds only. Switch variants live to compare them in a review. Demo pollen is made up (realistic Midwest seasons), labelled Demo, and never used for patterns.")
                 }
                 #endif
 

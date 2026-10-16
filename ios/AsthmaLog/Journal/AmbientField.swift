@@ -23,6 +23,8 @@ struct AmbientField: View {
     var conditions: Conditions? = nil
     /// Demo pollen, when switched on in Design crit (pollen isn't connected yet).
     var pollen: PollenSample? = nil
+    /// False: the field is weather only (the air is drawn as particles on top).
+    var tintsLayers = true
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var scheme
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
@@ -75,7 +77,7 @@ struct AmbientField: View {
         func haze(_ c: Color, _ weight: Double) -> Color {
             layers.all.reduce(c) { $0.mix(with: $1.color, by: min(0.85, $1.amount * 0.7 * weight * overprint)) }
         }
-        let middle: [Color] = spread == .spots
+        let middle: [Color] = !tintsLayers ? [mid, mid, mid, mid, low, low, low, low] : spread == .spots
             ? [tint(mid, layers.pm25), tint(mid, layers.no2), tint(mid, layers.ozone), tint(mid, layers.pm10),
                tint(low, layers.tree), tint(low, layers.weed), tint(low, layers.grass), tint(low, layers.pm25)]
             : [haze(mid, 1.0), haze(mid, 1.15), haze(mid, 0.9), haze(mid, 1.05),

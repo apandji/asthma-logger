@@ -11,6 +11,9 @@ struct NowTimeline: View {
     let now: Date
     /// Nil is now.
     @Binding var focusTime: Date?
+    /// Swiping on past the end of the forecast reveals Insights.
+    var onPastEnd: () -> Void = {}
+    @State private var pastEndArmed = true
 
     @State private var position = ScrollPosition(edge: .trailing)
     @State private var centerX: CGFloat = 0
@@ -94,12 +97,25 @@ struct NowTimeline: View {
                     }
                 }
                 .frame(width: contentWidth, height: height)
+                // After the forecast: a hint that there's more this way.
                 Color.clear.frame(width: viewport / 2)
+                    .overlay(alignment: .leading) {
+                        Label("Insights", systemImage: "sparkles")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(ink.opacity(0.45))
+                            .padding(.leading, 18)
+                            .offset(y: axis - height / 2)
+                    }
             }
         }
         .scrollIndicators(.hidden)
         .scrollPosition($position)
         .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.width } action: { _, w in viewport = w }
+        // Pulled past the forecast's end (the bounce): open Insights, once per drag.
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x - ($0.contentSize.width - $0.containerSize.width) } action: { _, over in
+            if over > 56, dragging, pastEndArmed { pastEndArmed = false; UIImpactFeedbackGenerator(style: .medium).impactOccurred(); onPastEnd() }
+            if over < 8 { pastEndArmed = true }
+        }
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, cx in
             centerX = cx
             guard dragging else { return }

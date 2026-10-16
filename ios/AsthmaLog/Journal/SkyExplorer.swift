@@ -190,6 +190,8 @@ struct SkyProbeOverlay: View {
     var showsLabel = true
     /// Strata: the band (in points) the finger is in. The glow is then the whole band, full width.
     var band: ClosedRange<CGFloat>? = nil
+    /// The label sits level with `point` (beside a scale icon) instead of above or below a finger.
+    var beside = false
     @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
 
     var body: some View {
@@ -215,7 +217,7 @@ struct SkyProbeOverlay: View {
                 label
                     .frame(width: 224, alignment: .leading)
                     .position(x: min(max(point.x, 124), width - 124),
-                              y: point.y > 150 ? point.y - 104 : point.y + 104)
+                              y: beside ? max(64, point.y) : (point.y > 150 ? point.y - 104 : point.y + 104))
             }
         }
         .allowsHitTesting(false)

@@ -9,8 +9,10 @@ struct ScaleHeader<Kicker: View>: View {
     /// One quiet line under the title, with its space kept so it can come and go without a jump.
     var byline: String? = nil
     var reserveByline = false
-    /// Color for a byline that carries a verdict (okay / a bit like / matches your rescue days).
+    /// Color for a byline that carries a verdict (baseline / a bit like / matches your flare days).
     var bylineTint: Color? = nil
+    /// The byline is a way in (to Insights): drawn as a pill you can tap.
+    var onByline: (() -> Void)? = nil
     /// A step smaller, for two-sentence titles that have to fit two lines.
     var compact = false
     @ViewBuilder let kicker: Kicker
@@ -28,12 +30,23 @@ struct ScaleHeader<Kicker: View>: View {
                 .contentTransition(.opacity)
             if hasByline {
                 // felt air's own voice, marked with the sparkle so it reads as the app thinking, not data.
-                Label { Text(byline ?? " ") } icon: { Image(systemName: "sparkles").font(.caption).padding(.top, 2) }
+                let tint = bylineTint ?? Theme.secondaryText
+                Button { onByline?() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles").font(.caption)
+                        Text(byline ?? " ").lineLimit(2).multilineTextAlignment(.leading)
+                        if onByline != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.7) }
+                    }
                     .font(.subheadline.weight(bylineTint == nil ? .regular : .medium))
-                    .foregroundStyle(bylineTint ?? Theme.secondaryText)
-                    .lineLimit(2)
-                    .contentTransition(.opacity)
-                    .opacity(byline == nil ? 0 : 1)
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, onByline == nil ? 0 : 12).padding(.vertical, onByline == nil ? 0 : 7)
+                    .background { if onByline != nil { Capsule().fill(tint.opacity(0.14)).overlay(Capsule().strokeBorder(tint.opacity(0.35))) } }
+                }
+                .buttonStyle(.plain)
+                .disabled(onByline == nil)
+                .contentTransition(.opacity)
+                .opacity(byline == nil ? 0 : 1)
+                .accessibilityHint(onByline == nil ? "" : "Opens Insights")
             }
         }
 

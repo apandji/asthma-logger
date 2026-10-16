@@ -31,7 +31,6 @@ struct NowHomeView: View {
     @State private var focusTime: Date?
     @State private var showInsights = false
     @State private var showSettings = false
-    @State private var showMonth = false
     @State private var openDay: Date?
     @State private var toast: LogEvent?
     @State private var probing = false
@@ -39,7 +38,6 @@ struct NowHomeView: View {
     @State private var now = Date()
     @Namespace private var mapZoom
     @State private var tips = TipGroup(.ordered) { PullToLogTip() }
-    @Namespace private var month
 
     /// Inhaler moments only; calm moments stay in the comparison, not on the track.
     private var moments: [LogEvent] { events.filter { $0.moment != .okay } }
@@ -53,7 +51,7 @@ struct NowHomeView: View {
                 sky
                     .frame(maxHeight: .infinity)
                 .padding(.top, 4)
-                NowTimeline(moments: moments, hours: hours, now: now, focusTime: $focusTime)
+                NowTimeline(moments: moments, hours: hours, now: now, focusTime: $focusTime, onPastEnd: { showInsights = true })
                     .frame(height: 104)
                     .padding(.bottom, 84)  // clear the +
             }
@@ -90,14 +88,7 @@ struct NowHomeView: View {
                 hours = []
                 Task { await loadForecastPlace() }
             }
-            .sheet(isPresented: $showMonth) {
-                MomentsOverview(events: Array(events), namespace: month, anchorDay: focusTime,
-                                open: { e in focusTime = e.loggedAt; showMonth = false },
-                                close: { showMonth = false })
-                    .padding(.top, 12)
-                    .presentationDragIndicator(.visible)
-                    .presentationBackground(.black)
-            }
+
             .sheet(item: $openDay) { day in
                 DaySheet(day: day, moments: moments.filter { Calendar.current.isDate($0.loggedAt, inSameDayAs: day) })
                     .presentationDragIndicator(.visible)
@@ -176,14 +167,14 @@ struct NowHomeView: View {
                 if let j = justNow {
                     // Just logged: the moment's own reading, in the present.
                     ScaleHeader(title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
-                                reserveTwoLines: true, byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
+                                reserveTwoLines: true, byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, onByline: { showInsights = true }, compact: true) {
                         MomentDot(moment: j.moment, size: 8)
                         Text(["Just now", j.moment == .rescue ? "Rescue" : "Standard", j.placeName ?? here?.place].compactMap { $0 }.joined(separator: " · "))
                     }
                     .onTapGesture { pinDetails = j }
                 } else {
                     ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true,
-                                byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, compact: true) {
+                                byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, onByline: { showInsights = true }, compact: true) {
                         Circle().fill(.primary).frame(width: 8, height: 8)
                         Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
                     }
@@ -197,7 +188,7 @@ struct NowHomeView: View {
             case .hour(let h):
                 // The look-ahead: what the forecast says, then how it compares (or that we're still learning).
                 ScaleHeader(title: h.statement, reserveTwoLines: true,
-                            byline: outlook(at: h.date).text, bylineTint: outlook(at: h.date).tint, compact: true) {
+                            byline: outlook(at: h.date).text, bylineTint: outlook(at: h.date).tint, onByline: { showInsights = true }, compact: true) {
                     Image(systemName: "arrow.right").font(.caption2.weight(.bold))
                     Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour().minute())) ·")
                     placeChip
@@ -231,19 +222,19 @@ struct NowHomeView: View {
             if forced == .learned, !(model.progress?.isMet ?? false) {
                 // Demo: a rough afternoon, so every color can be seen on the track.
                 let h = Calendar.current.component(.hour, from: t)
-                if (14...17).contains(h) { return ("Matches days you reached for your rescue.", Self.red) }
-                if (11...13).contains(h) || (18...19).contains(h) { return ("A bit like your rescue days.", Self.yellow) }
-                return ("Looks like one of your okay days.", Self.green)
+                if (14...17).contains(h) { return ("Matches your flare days.", Self.red) }
+                if (11...13).contains(h) || (18...19).contains(h) { return ("A bit like your flare days.", Self.yellow) }
+                return ("Looks like your baseline.", Self.green)
             }
             if let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }) {
                 // A window's peak is a summed log likelihood ratio; past 1 it's clearly a rescue-day pattern.
-                return w.peakScore >= 1 ? ("Matches days you reached for your rescue.", Self.red)
-                                        : ("A bit like your rescue days.", Self.yellow)
+                return w.peakScore >= 1 ? ("Matches your flare days.", Self.red)
+                                        : ("A bit like your flare days.", Self.yellow)
             }
             if let day = model.days.first(where: { Calendar.current.isDate($0.day, inSameDayAs: t) }), day.isPersonal {
-                return day.band == .elevated ? ("A bit like your rescue days.", Self.yellow) : ("Looks like one of your okay days.", Self.green)
+                return day.band == .elevated ? ("A bit like your flare days.", Self.yellow) : ("Looks like your baseline.", Self.green)
             }
-            return ("Looks like one of your okay days.", Self.green)
+            return ("Looks like your baseline.", Self.green)
         }
         return (sentence, nil)
     }
@@ -255,7 +246,7 @@ struct NowHomeView: View {
         if let p = model.progress, !p.isMet {
             let needRescue = max(0, p.minAttacks - p.attacks), needCalm = max(0, p.minBaselines - p.baselines)
             var parts: [String] = []
-            if needCalm > 0 { parts.append("\(needCalm) calm day\(needCalm == 1 ? "" : "s")") }
+            if needCalm > 0 { parts.append("\(needCalm) baseline moment\(needCalm == 1 ? "" : "s")") }
             if needRescue > 0 { parts.append("\(needRescue) rescue moment\(needRescue == 1 ? "" : "s")") }
             // "14 calm days and 1 rescue moment to go." Short enough for two lines.
             return parts.joined(separator: " and ") + " to go before felt air can compare."
@@ -332,7 +323,6 @@ struct NowHomeView: View {
     /// Bottom-left, where nothing else lives, so the header can run the full width.
     private var rail: some View {
         HStack(spacing: 10) {
-            Button { showMonth = true } label: { railIcon("calendar") }.accessibilityLabel("Month")
             Button { showSettings = true } label: { railIcon("gearshape") }.accessibilityLabel("Settings")
         }
         .buttonStyle(.plain)
@@ -461,8 +451,10 @@ struct NowHour: Identifiable, Sendable {
     }
 }
 
-/// A sky you can touch, without a moment behind it: the same colors, mask and hold-to-read as the
-/// Journal's panel, for the air right now or a forecast hour.
+/// A sky for a place and time, without a moment behind it, or for a moment. The colour underneath is
+/// the weather only. The air is particles: each layer is its own coloured dots, sprinkled evenly over
+/// the whole place (colour = which, how many and how big = how much), so nothing reads as a spot on the
+/// map. You read it on the scale of icons at the right edge, never by touching the map.
 struct NowSky: View {
     let conditions: Conditions?
     let weave: WeaveSpec
@@ -478,36 +470,33 @@ struct NowSky: View {
     /// Tapping the pin opens the full air details for this place and time.
     var onPin: (() -> Void)? = nil
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
-    @AppStorage(Crit.LayerStrength.key) private var strengthStyle = Crit.LayerStrength.smooth
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
-    @State private var point: CGPoint?
     @State private var probe: SkyProbe?
+    /// The row of the scale being read: 0 weather, then the layers in reading order.
+    @State private var row: Int?
     @State private var pulse: Task<Void, Never>?
     @State private var rippleAt: Date?
     @State private var rippleInk: Color = .white
-    /// The dent under the finger, 0 up, 1 pressed.
-    @State private var press: CGFloat = 0
     @AppStorage("sky.touched") private var touched = false
-    @AppStorage(Crit.SkyReading.key) private var reading = Crit.SkyReading.strata
-    /// Strata: the band (points) under the finger.
-    @State private var band: ClosedRange<CGFloat>?
 
     private var temperature: Double? { conditions?.best(.temperature)?.value }
+    private var layers: AirLayers { AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: true) }
 
     var body: some View {
         GeometryReader { geo in
             let size = geo.size
+            let stack = SkyExplorer.stack(layers)
+            let mids = SkyExplorer.bands(count: stack.count, height: 1).map { CGFloat($0.lowerBound + $0.upperBound) / 2 * size.height }
             ZStack {
-                AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen)
+                AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
                 if let (lat, lon) = coordinate {
-                    // Pinned: the map never moves with the finger, so reading the sky can't feel like
-                    // exploring the map. The air is one regional reading, not a spot on a street.
+                    // Pinned: the map never moves; the air is one regional reading, not a spot on a street.
                     PlaceMap(id: paper == .linen ? mapID + "-light" : mapID, latitude: lat, longitude: lon, dark: paper == .black)
                         .frame(width: size.width, height: size.height)
                         .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
                         .saturation(0)
                         .blendMode(paper == .linen ? .multiply : .screen)
-                        .opacity(point == nil ? 0.7 : 0.85)
+                        .opacity(0.75)
                         .frame(width: size.width, height: size.height)
                         .clipped()
                         .allowsHitTesting(false)
@@ -516,19 +505,14 @@ struct NowSky: View {
                         .overlay(Circle().strokeBorder(.white, lineWidth: 2))
                         .shadow(color: .black.opacity(0.5), radius: 3)
                 }
-                if texture != .plain {
-                    SkyGrain(point: point, ink: probe?.color, intensity: probe?.intensity ?? 0, responds: texture == .dots, rippleAt: rippleAt, inviting: !touched && rippleInk == .white, band: band, sweeps: reading == .strata,
-                             rippleInk: rippleInk, rippleFromCapture: rippleInk != .white)
-                }
-                if let point, let probe {
-                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: texture == .plain, showsLabel: false, band: band).transition(.opacity)
-                }
+                ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
+                              selected: row.flatMap { $0 > 0 ? $0 - 1 : nil },
+                              animated: texture == .dots,
+                              rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
+                              rippleInk: rippleInk, rippleFromCapture: rippleInk != .white)
             }
             .frame(width: size.width, height: size.height)
             .drawingGroup()
-            // Pressing in: the surface dents under the finger.
-            .distortionEffect(ShaderLibrary.dent(.float2(point ?? .zero), .float(150), .float(press)),
-                              maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: point != nil)
             .onAppear { rippleInk = captureInk ?? .white; rippleAt = .now }
             // Every new sky (a moment, a forecast hour, now) ripples once; a fresh log ripples in its color.
             .onChange(of: date) { _, _ in rippleInk = captureInk ?? .white; rippleAt = .now }
@@ -539,21 +523,14 @@ struct NowSky: View {
                                                  .init(color: .black, location: 0.78), .init(color: .clear, location: 1)],
                                          startPoint: .top, endPoint: .bottom))
             }
+            // The label sits beside the icon being read, never at a spot on the map.
             .overlay {
-                if let point, let probe {
-                    SkyProbeOverlay(point: point, probe: probe, width: size.width, showsGlow: false).transition(.opacity)
+                if let probe, let row, row < mids.count {
+                    SkyProbeOverlay(point: CGPoint(x: size.width - 64 - 118, y: mids[row]), probe: probe, width: size.width,
+                                    showsGlow: false, beside: true)
+                        .transition(.opacity)
                 }
             }
-            // The strata, as a scale on the right edge.
-            .overlay(alignment: .trailing) {
-                if reading == .strata {
-                    StrataScale(layers: AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth),
-                                probe: probe, height: size.height)
-                        .padding(.trailing, 18)
-                }
-            }
-            .contentShape(Rectangle())
-            .gesture(explore(size))
             // The pin wants a tap: the full details for here and now.
             .overlay {
                 if let onPin {
@@ -562,35 +539,46 @@ struct NowSky: View {
                         .accessibilityLabel("Air details")
                 }
             }
+            // The scale: the legend, and the only place you read the air. Slide up and down it.
+            .overlay(alignment: .trailing) {
+                StrataScale(layers: layers, probe: probe, height: size.height)
+                    .padding(.trailing, 18)
+                    .frame(width: 64, height: size.height, alignment: .trailing)
+                    .contentShape(Rectangle())
+                    .gesture(scrub(size, mids: mids, stack: stack))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Air layers")
+                    .accessibilityAdjustableAction { dir in
+                        let n = stack.count + 1
+                        select(dir == .increment ? min(n - 1, (row ?? -1) + 1) : max(0, (row ?? 1) - 1), size: size)
+                    }
+            }
         }
         .padding(.horizontal, 8)
         .onDisappear { stopPulse() }
     }
 
-    private func explore(_ size: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 4)
+    private func scrub(_ size: CGSize, mids: [CGFloat], stack: [AirLayers.Layer]) -> some Gesture {
+        DragGesture(minimumDistance: 0)
             .onChanged { drag in
-                if !probing { probing = true; touched = true; startPulse(); withAnimation(.snappy(duration: 0.25)) { press = 1 } }
-                let unit = CGPoint(x: drag.location.x / size.width, y: drag.location.y / size.height)
-                let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
-                withAnimation(.easeOut(duration: 0.12)) {
-                    point = drag.location
-                    if reading == .strata {
-                        let hit = SkyExplorer.strata(at: unit.y, layers: layers, conditions: conditions, weave: weave,
-                                                     temperatureF: temperature, pollen: pollen)
-                        probe = hit?.probe
-                        band = hit.map { ($0.band.lowerBound * size.height)...($0.band.upperBound * size.height) }
-                    } else {
-                        probe = SkyExplorer.probe(at: unit, layers: layers, conditions: conditions, weave: weave,
-                                                  temperatureF: temperature, pollen: pollen)
-                    }
-                }
+                if !probing { probing = true; touched = true; startPulse() }
+                let nearest = mids.enumerated().min { abs($0.element - drag.location.y) < abs($1.element - drag.location.y) }?.offset ?? 0
+                if nearest != row { select(nearest, size: size) }
             }
             .onEnded { _ in
                 stopPulse()
-                withAnimation(.easeOut(duration: 0.25)) { point = nil; probe = nil; band = nil; press = 0 }
+                withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil }
                 probing = false
             }
+    }
+
+    private func select(_ r: Int, size: CGSize) {
+        let bands = SkyExplorer.bands(count: SkyExplorer.stack(layers).count, height: 1)
+        guard r < bands.count else { return }
+        let y = (bands[r].lowerBound + bands[r].upperBound) / 2
+        let hit = SkyExplorer.strata(at: y, layers: layers, conditions: conditions, weave: weave, temperatureF: temperature, pollen: pollen)
+        UISelectionFeedbackGenerator().selectionChanged()
+        withAnimation(.snappy(duration: 0.2)) { row = r; probe = hit?.probe }
     }
 
     private func startPulse() {
@@ -612,6 +600,83 @@ struct NowSky: View {
     }
 
     private func stopPulse() { pulse?.cancel(); pulse = nil }
+}
+
+/// The air as particles: every cell of a fine grid gets at most one dot, given to a layer by a fixed
+/// hash with odds that rise with that layer's amount, so each layer is an even sprinkle over the whole
+/// place in its own ink. More of it means more dots and bigger ones. The layer being read stays lit and
+/// the rest fade back. A ripple runs through the dots when a sky appears.
+struct ParticleField: View {
+    /// Each layer's ink and amount (0 none … 1 high), in reading order.
+    let particles: [(Color, Double)]
+    var selected: Int? = nil
+    var animated = true
+    var rippleAt: Date? = nil
+    var inviting = true
+    var rippleInk: Color = .white
+    var rippleFromCapture = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let spacing: CGFloat = 8
+    private let rippleSeconds = 1.6
+    private let rippleEvery = 5.0
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion || !animated)) { frame in
+            canvas(at: frame.date)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func canvas(at time: Date) -> some View {
+        var age = rippleAt.map { time.timeIntervalSince($0) } ?? rippleSeconds
+        if inviting, age >= rippleSeconds { age = age.truncatingRemainder(dividingBy: rippleEvery) }
+        let wave = (animated && !reduceMotion && age < rippleSeconds) ? age / rippleSeconds : nil
+        let breath = (animated && !reduceMotion) ? time.timeIntervalSinceReferenceDate : 0
+        // Odds per layer: a floor so any present layer shows, rising with amount; capped so the map shows.
+        var weights = particles.map { $0.1 > 0 ? 0.03 + 0.2 * $0.1 : 0 }
+        let total = weights.reduce(0, +)
+        if total > 0.6 { weights = weights.map { $0 * 0.6 / total } }
+        let cumulative = weights.reduce(into: [Double]()) { $0.append(($0.last ?? 0) + $1) }
+        return Canvas(rendersAsynchronously: true) { ctx, size in
+            let centre = rippleFromCapture ? CaptureReveal.origin(in: size) : CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = wave.map { rippleFromCapture ? CaptureReveal.radius(CGFloat($0), in: size) : CGFloat($0) * hypot(size.width, size.height) * 0.6 }
+            let fade = wave.map { 1 - $0 } ?? 0
+            let cols = Int(size.width / spacing) + 1, rows = Int(size.height / spacing) + 1
+            for i in 0..<cols {
+                for j in 0..<rows {
+                    var h = UInt32(truncatingIfNeeded: i &* 73856093 ^ j &* 19349663)
+                    h = (h ^ (h >> 13)) &* 1274126177
+                    let u = Double(h & 0xFFFF) / 65535, jx = Double((h >> 16) & 0xFF) / 255, jy = Double((h >> 24) & 0xFF) / 255
+                    let x = (CGFloat(i) + 0.2 + 0.6 * jx) * spacing, y = (CGFloat(j) + 0.2 + 0.6 * jy) * spacing
+                    let k = cumulative.firstIndex { u < $0 }
+                    var r: CGFloat, color: Color
+                    if let k {
+                        let amount = CGFloat(particles[k].1)
+                        r = 0.9 + 1.5 * amount
+                        let dim = selected != nil && selected != k
+                        color = particles[k].0.opacity(dim ? 0.15 : 0.9)
+                        if selected == k { r *= 1.6 }
+                        if breath > 0, !dim { r += 0.3 * CGFloat(0.5 + 0.5 * sin(breath * 1.3 + Double(x + y) / 70)) }
+                    } else {
+                        r = 0.55
+                        color = Color.black.opacity(0.18)
+                    }
+                    if let radius {
+                        let d = abs(hypot(x - centre.x, y - centre.y) - radius)
+                        let width = rippleFromCapture ? 58.0 : 36.0
+                        if d < width {
+                            let t = (1 - d / width) * fade
+                            r += t * t * 2.2
+                            if k == nil { color = rippleInk.opacity(0.15 + 0.6 * Double(t)) }
+                        }
+                    }
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)), with: .color(color))
+                }
+            }
+        }
+    }
 }
 
 /// One day's moments, under the sky you tapped.

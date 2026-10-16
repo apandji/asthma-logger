@@ -10,6 +10,10 @@ struct InsightsView: View {
     @AppStorage(Prefs.useOnDeviceModel) private var useModel = true
     @AppStorage(Prefs.useDemoData) private var demo = false
     @State private var model = InsightsModel()
+    @AppStorage(Crit.InsightsState.key) private var forced = Crit.InsightsState.auto
+    @State private var month = Calendar.current.dateInterval(of: .month, for: .now)!.start
+    @State private var day: Date?
+    @State private var showDoctor = false
 
     var body: some View {
         NavigationStack {
@@ -18,11 +22,15 @@ struct InsightsView: View {
                     if demo {
                         Chip(text: "Demo data — turn off in Settings", color: Theme.ink2)
                     }
+                    LearningRing(progress: model.progress, forcedLearned: forced == .learned)
+                    if demoLearned { Chip(text: "Demo person: learned", color: Theme.secondaryText) }
                     patternCard
+                    profileCard
                     lookAheadCard
+                    calendarCard
                     evidenceCard
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Compares the times you used your inhaler with your I'm okay moments. Outdoor air only. Not medical advice, and not a prediction of an attack.")
+                        Text("Compares your flare days (rescue use) with your baseline. Outdoor air only. Not medical advice, and not a prediction.")
                         WeatherAttributionView()
                     }
                     .font(Theme.caption)
@@ -53,7 +61,11 @@ struct InsightsView: View {
 
     private var patternCard: some View {
         Card(title: "Your pattern", systemImage: "sparkles") {
-            if let p = model.progress, !p.isMet {
+            if demoLearned {
+                Chip(text: "Demo", color: Theme.secondaryText)
+                Text("Weed pollen showed up on 9 of 14 flare days vs 6 of 40 baseline days.").font(Theme.headlineSerif)
+                Text("A made-up person, for the presentation. Not your data.").font(Theme.caption).foregroundStyle(Theme.secondaryText)
+            } else if let p = model.progress, !p.isMet {
                 learning(p)
             } else if let n = model.narration {
                 Text(n.headline).font(Theme.headlineSerif)
@@ -114,10 +126,43 @@ struct InsightsView: View {
         }
     }
 
+    /// Who you are with the air. Named archetypes wait for the research (docs/mvp-brief-2026-10.md).
+    private var profileCard: some View {
+        Card(title: "Your profile", systemImage: "person.crop.circle") {
+            if demoLearned {
+                Chip(text: "Demo", color: Theme.secondaryText)
+                Text("Pollen-led").font(Theme.headlineSerif)
+                Text("Your flare days line up with pollen more than anything else, weed pollen most of all. A placeholder until the research names the profiles.")
+                    .font(Theme.caption).foregroundStyle(Theme.secondaryText)
+            } else if let p = model.progress, !p.isMet {
+                Text("Once felt air has learned, this says which air your flare days line up with: pollen, particles, ozone, or cold and humid days.")
+                    .font(Theme.caption).foregroundStyle(Theme.secondaryText)
+            } else if let n = model.narration {
+                Text(n.headline).font(Theme.headline)
+                Text("Named profiles come next, from the research.").font(Theme.caption).foregroundStyle(Theme.secondaryText)
+            }
+        }
+    }
+
+    /// The month, moved here from the home: your moments as swatches, and the table for your doctor.
+    private var calendarCard: some View {
+        Card(title: "Your moments", systemImage: "calendar") {
+            MonthCalendar(month: $month, events: Array(events), selected: $day)
+            Button { showDoctor = true } label: {
+                Label("Table for your doctor", systemImage: "tablecells").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered).buttonBorderShape(.capsule)
+            .sheet(isPresented: $showDoctor) { DoctorSheet(events: Array(events)) }
+        }
+    }
+
+    /// Design crit › Insights state › learned, while the real gate isn't met: a labelled demo person.
+    private var demoLearned: Bool { forced == .learned && !(model.progress?.isMet ?? false) }
+
     private var evidenceCard: some View {
         Card(title: "Evidence", systemImage: "tablecells") {
             let c = model.frameCount
-            Text("\(c.attacks) inhaler logs · \(c.baselines) I'm okay moments" + (c.skipped > 0 ? " · \(c.skipped) without conditions" : ""))
+            Text("\(c.attacks) rescue moments · \(c.baselines) baseline moments" + (c.skipped > 0 ? " · \(c.skipped) without conditions" : ""))
                 .font(Theme.caption).foregroundStyle(Theme.secondaryText)
             if let rows = model.report?.rows.prefix(8), !rows.isEmpty {
                 ForEach(Array(rows)) { r in
@@ -137,7 +182,7 @@ struct InsightsView: View {
                     }
                 }
             } else {
-                Text("Log each time you use your inhaler. felt air adds I'm okay moments on its own.").font(Theme.caption)
+                Text("Log each time you use your inhaler. felt air adds baseline moments on its own.").font(Theme.caption)
             }
         }
     }
@@ -145,9 +190,9 @@ struct InsightsView: View {
     /// Before the sample gate: no sentence to read yet, just honest progress.
     @ViewBuilder private func learning(_ p: GateProgress) -> some View {
         Text("Still learning your pattern").font(Theme.headline)
-        progressRow("Times you used your inhaler", p.attacks, p.minAttacks)
-        progressRow("I'm okay moments", p.baselines, p.minBaselines)
-        Text("I'm okay moments are added automatically when you open the app. Outdoor air only, not a diagnosis.")
+        progressRow("Rescue moments", p.attacks, p.minAttacks)
+        progressRow("Baseline moments", p.baselines, p.minBaselines)
+        Text("Baseline moments are added on their own when you open the app. Outdoor air only, not a diagnosis.")
             .font(Theme.caption).foregroundStyle(Theme.secondaryText)
     }
 
@@ -191,6 +236,50 @@ struct InsightsView: View {
         case .elevated: Theme.elevated
         case .usual: Theme.usual
         case .quiet: Theme.quiet
+        }
+    }
+}
+
+/// Learning, as an Apple Watch-style ring with the sparkle in the middle. It fills by the smaller of
+/// the two counts it's waiting for, and says both, so you know exactly what it needs.
+struct LearningRing: View {
+    let progress: GateProgress?
+    var forcedLearned = false
+
+    var body: some View {
+        let a = progress.map { min(1, Double($0.attacks) / Double(max(1, $0.minAttacks))) } ?? 0
+        let b = progress.map { min(1, Double($0.baselines) / Double(max(1, $0.minBaselines))) } ?? 0
+        let fill = forcedLearned ? 1 : min(a, b)
+        let done = fill >= 1
+        VStack(spacing: 14) {
+            ZStack {
+                Circle().stroke(Theme.secondaryText.opacity(0.18), lineWidth: 14)
+                Circle().trim(from: 0, to: fill)
+                    .stroke(AngularGradient(colors: [Theme.standard, Theme.accent, Theme.rescue, Theme.standard], center: .center),
+                            style: StrokeStyle(lineWidth: 14, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.smooth(duration: 1.2), value: fill)
+                Image(systemName: done ? "sparkles" : "sparkle").font(.system(size: 34, weight: .semibold))
+                    .symbolEffect(.pulse, isActive: done)
+            }
+            .frame(width: 132, height: 132)
+            Text(done ? "felt air knows your pattern" : "Learning your pattern").font(Theme.headline)
+            if let p = progress, !done {
+                HStack(spacing: 24) {
+                    count("Rescue moments", p.attacks, p.minAttacks)
+                    count("Baseline moments", p.baselines, p.minBaselines)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func count(_ label: String, _ n: Int, _ goal: Int) -> some View {
+        VStack(spacing: 2) {
+            Text("\(min(n, goal)) of \(goal)").font(Theme.number)
+            Text(label).font(Theme.caption).foregroundStyle(Theme.secondaryText)
         }
     }
 }

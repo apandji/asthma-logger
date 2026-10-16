@@ -16,7 +16,7 @@ struct MomentDetailsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 if let c = event.conditions, !c.observations.isEmpty {
-                    FieldLegend(weave: event.weave, temperatureF: c.best(.temperature)?.value, pollen: pollen)
+                    FieldLegend(weave: event.weave, temperatureF: c.best(.temperature)?.value, pollen: pollen, conditions: c)
                     weather(c)
                     air(c)
                     aroundChart
@@ -38,7 +38,7 @@ struct MomentDetailsView: View {
             .padding(16)
             .padding(.bottom, 40)
         }
-        .background { AmbientField(weave: event.weave, temperatureF: event.conditions?.best(.temperature)?.value, date: event.loggedAt, pollen: pollen).ignoresSafeArea() }
+        .background { AmbientField(weave: event.weave, temperatureF: event.conditions?.best(.temperature)?.value, date: event.loggedAt, conditions: event.conditions, pollen: pollen).ignoresSafeArea() }
         .navigationTitle(event.moment == .okay ? "I'm okay" : event.moment.title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadAround() }
@@ -99,9 +99,13 @@ struct MomentDetailsView: View {
     private func air(_ c: Conditions) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Air").font(.headline).padding(.bottom, 6)
-            airRow("PM2.5", c.best(.pm25), level: c.best(.pm25).map { band(Banding.pm25($0.value)) } ?? nil)
+            airRow("PM2.5", c.best(.pm25), level: c.best(.pm25).map { band(Banding.pm25($0.value)) } ?? nil, ink: WeatherColor.pm25)
             Divider()
-            airRow("Ozone", c.best(.ozone), level: c.best(.ozone).map { band(Banding.ozone(ppb: $0.value)) } ?? nil)
+            airRow("PM10", c.best(.pm10), level: c.best(.pm10).map { band(Banding.pm10($0.value)) } ?? nil, ink: WeatherColor.pm10)
+            Divider()
+            airRow("Ozone", c.best(.ozone), level: c.best(.ozone).map { band(Banding.ozone(ppb: $0.value)) } ?? nil, ink: WeatherColor.ozone)
+            Divider()
+            airRow("NO₂", c.best(.no2), level: c.best(.no2).map { band(Banding.no2(ppb: $0.value)) } ?? nil, ink: WeatherColor.no2)
             Divider()
             airRow("AQI", c.best(.aqi), level: c.best(.aqi).map { $0.value <= 50 ? .low : $0.value <= 100 ? .medium : .high })
             Divider()
@@ -137,9 +141,9 @@ struct MomentDetailsView: View {
         .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
     }
 
-    private func airRow(_ name: String, _ o: EnvObservation?, level: WeaveSpec.Level?) -> some View {
+    private func airRow(_ name: String, _ o: EnvObservation?, level: WeaveSpec.Level?, ink: Color = WeaveSwatch.ink(.air)) -> some View {
         HStack(spacing: 12) {
-            LevelIndicator(level: level, ink: WeaveSwatch.ink(.air), style: style).frame(minWidth: 30)
+            LevelIndicator(level: level, ink: ink, style: style).frame(minWidth: 30)
             Text(name)
             Spacer()
             VStack(alignment: .trailing, spacing: 1) {

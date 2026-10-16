@@ -103,6 +103,7 @@ struct JournalView: View {
             AmbientField(weave: fieldWeave,
                          temperatureF: selected?.conditions?.best(.temperature)?.value ?? now?.temp,
                          date: selected?.loggedAt ?? .now,
+                         conditions: selected?.conditions,
                          pollen: DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason))
                 .ignoresSafeArea()
                 .animation(.easeInOut(duration: 0.8), value: selected?.id)

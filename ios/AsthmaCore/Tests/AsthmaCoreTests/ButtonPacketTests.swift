@@ -44,3 +44,27 @@ import Testing
         #expect(a.key != afterReboot.key)
     }
 }
+
+@Suite struct PollutantBandTests {
+    @Test func pm10UsesEPABreakpoints() {
+        #expect(Banding.pm10(20) == .low)
+        #expect(Banding.pm10(54.9) == .low)
+        #expect(Banding.pm10(55) == .moderate)
+        #expect(Banding.pm10(155) == .high)
+        #expect(Banding.pm10(nil) == .unknown)
+    }
+
+    @Test func no2UsesEPABreakpoints() {
+        #expect(Banding.no2(ppb: 53) == .low)
+        #expect(Banding.no2(ppb: 54) == .moderate)
+        #expect(Banding.no2(ppb: 101) == .high)
+        #expect(Banding.no2(ppb: .nan) == .unknown)
+    }
+
+    @Test func openAQRecognisesPM10AndNO2Sensors() {
+        let pm10 = OpenAQ.Sensor(id: 1, name: "pm10 µg/m³", parameter: .init(id: 1, name: "pm10", units: "µg/m³"))
+        let no2 = OpenAQ.Sensor(id: 2, name: "no2 ppm", parameter: .init(id: 7, name: "no2", units: "ppm"))
+        #expect(pm10.measuresPM10 && !pm10.measuresPM25)
+        #expect(no2.measuresNO2 && !no2.measuresOzone)
+    }
+}

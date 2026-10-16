@@ -206,25 +206,55 @@ struct FolderCard: View {
     }
 }
 
-/// A small map of where the moment was logged (or a quiet placeholder).
+/// Where the moment was logged, as a still map image (MKMapSnapshotter): cheap to scale and animate,
+/// unlike a live map. Cached per moment and appearance. A quiet placeholder without a location.
 struct MomentMap: View {
     let event: LogEvent
+    @Environment(\.colorScheme) private var scheme
+    @State private var image: UIImage?
 
     var body: some View {
-        if let lat = event.latitude, let lon = event.longitude {
-            let c = CLLocationCoordinate2D(latitude: lat, longitude: lon)
-            Map(initialPosition: .camera(MapCamera(centerCoordinate: c, distance: 1_400, pitch: 40)), interactionModes: []) {
-                Annotation("", coordinate: c) {
-                    Circle().fill(event.moment == .rescue ? Theme.rescue : event.moment == .maintenance ? Theme.standard : .secondary)
+        GeometryReader { geo in
+            ZStack {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height).clipped()
+                        .transition(.opacity)
+                    Circle()
+                        .fill(event.moment == .rescue ? Theme.rescue : event.moment == .maintenance ? Theme.standard : .secondary)
                         .frame(width: 14, height: 14)
                         .overlay(Circle().strokeBorder(.white, lineWidth: 2))
+                } else if event.latitude == nil {
+                    Rectangle().fill(.quaternary)
+                        .overlay { Label("No location", systemImage: "location.slash").font(.footnote).foregroundStyle(Theme.secondaryText) }
+                } else {
+                    Rectangle().fill(.quaternary)
                 }
             }
-            .mapStyle(.standard(pointsOfInterest: .excludingAll))
-        } else {
-            RoundedRectangle(cornerRadius: 16).fill(.quaternary)
-                .overlay { Label("No location", systemImage: "location.slash").font(.footnote).foregroundStyle(Theme.secondaryText) }
+            .task(id: "\(event.id)-\(scheme)-\(Int(geo.size.width))") {
+                image = await MapSnapshots.image(for: event, size: geo.size, dark: scheme == .dark)
+            }
         }
+        .animation(.easeInOut(duration: 0.25), value: image != nil)
+    }
+}
+
+enum MapSnapshots {
+    private static let cache = NSCache<NSString, UIImage>()
+
+    static func image(for event: LogEvent, size: CGSize, dark: Bool) async -> UIImage? {
+        guard let lat = event.latitude, let lon = event.longitude, size.width > 1, size.height > 1 else { return nil }
+        let key = "\(event.id)-\(dark)-\(Int(size.width))x\(Int(size.height))" as NSString
+        if let hit = cache.object(forKey: key) { return hit }
+        let options = MKMapSnapshotter.Options()
+        options.camera = MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                                     fromDistance: 1_400, pitch: 40, heading: 0)
+        options.size = size
+        options.pointOfInterestFilter = .excludingAll
+        options.traitCollection = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+        guard let snap = try? await MKMapSnapshotter(options: options).start() else { return nil }
+        cache.setObject(snap.image, forKey: key)
+        return snap.image
     }
 }
 

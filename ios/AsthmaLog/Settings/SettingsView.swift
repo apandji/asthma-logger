@@ -127,13 +127,14 @@ struct SettingsView: View {
                 Section {
                     Button("Reset onboarding and button", role: .destructive) {
                         button.resetForOnboarding()
+                        UserDefaults.standard.set(true, forKey: AppTips.resetKey)
                         dismiss()
                         Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
                     }
                 } header: {
                     Text("Onboarding (debug)")
                 } footer: {
-                    Text("Forgets the paired button and starts onboarding again. Your moments stay. iOS only shows each permission sheet once per install: to see them again, reinstall with ios/scripts/fresh-install.sh (this erases the Journal).")
+                    Text("Forgets the paired button, starts onboarding again and brings the tips back next launch. Your moments stay. iOS only shows each permission sheet once per install: to see them again, reinstall with ios/scripts/fresh-install.sh (this erases the Journal).")
                 }
 
                 Section {

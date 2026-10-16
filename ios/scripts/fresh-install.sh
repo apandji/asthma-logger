@@ -17,6 +17,6 @@ APP="$(xcodebuild -project AsthmaLog.xcodeproj -scheme AsthmaLog -configuration 
 echo "Removing felt air from the phone (permissions and Journal reset)…"
 xcrun devicectl device uninstall app --device "$DEVICE" "$BUNDLE" >/dev/null 2>&1 || true
 xcrun devicectl device install app --device "$DEVICE" "$APP" >/dev/null
-xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE" -- -demoWeek -showOnboarding >/dev/null \
+xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE" -- -demoWeek -showOnboarding -resetTips >/dev/null \
   || echo "Installed. Unlock the phone and open felt air."
 echo "Fresh install done: onboarding and every permission sheet will show again."

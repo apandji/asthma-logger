@@ -141,9 +141,10 @@ Mirror the target model in [docs/data-architecture.md §3](../docs/data-architec
   - **Insights:** a ring button by the + fills while learning; when there's a pattern a speech bubble offers it. Opens as a sheet (swipe down to close).
   - **Tap or pinch a moment open:** `MomentDetailsView`, weather first. **Pinch in:** the moments shrink into dots on a month calendar with the full list (`MomentsOverview`, shared `matchedGeometryEffect` ids).
   - **Turn sideways:** the Data view (`AirChartsView(wide:)`, hourly temperature / humidity / PM2.5 with inhaler moments marked).
-  - **"felt air" mark (top left):** a menu with All moments and Settings.
+  - **••• (top right):** a menu with All moments and Settings. First-use hints are TipKit tips, one at a time.
 - Logging should always work offline and never wait on the network.
-- **Colour field = weather.** Hue is temperature (blue cold → red hot), grey haze and grain is dirtier air, milky mist is humidity, specks are pollen (green tree, yellow grass, purple weed). `WeatherColor` holds the language; `FieldLegend` explains it on the details page.
+- **Colour field = weather, calm like the Weather app's sky.** Hue is temperature (blue cold → green mild → gold warm → red hot), the hour sets the light (indigo night, rose dawn and dusk), dirtier air drains the colour toward grey, humid air adds a soft haze, pollen tints the upper corners (green tree, gold grass, violet weed). No particles or grain. `WeatherColor` holds the language; `FieldLegend` explains it on the details page.
+- **Look: Apple chrome, felt air character.** System pieces for chrome (TipKit tips, a ••• menu, glass buttons); the character lives in the colour field and the moment (map in a feathered circle). Avoid decorative effects that don't carry data.
 - **Design crit switches** (Settings › Design crit, Debug only; `App/Crit.swift`): header, colour field, demo pollen, moment style (no card / card), card label, Good / OK / Not good style, Insights entry and state, + pull order. Add new open design questions here as switches instead of forking views, and keep the default as the current proposal.
 - **Demo pollen** (`Providers/DemoPollen.swift`) is display-only: realistic Midwest seasons, labelled "Demo" wherever shown, never in frames, Insights or patterns.
 - **Conditions read Good / OK / Not good** (`Tier`); each level uses its own scale (EPA for air, Ambee / NAB for pollen). Raw values and units are shown, never compared.

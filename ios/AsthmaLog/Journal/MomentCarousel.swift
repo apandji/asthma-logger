@@ -40,8 +40,8 @@ struct MomentCarousel: View {
     }
 }
 
-/// One moment. Card style: frosted glass with a quiet tab. Open style: no card at all, the map is a
-/// soft circle floating on the colour field with the time and voice note beneath it.
+/// One moment. Card style: frosted glass with a quiet tab. Open style: no card, just the map in a
+/// feathered circle on the colour field with the kind, time and voice note beneath it.
 struct FolderCard: View {
     let event: LogEvent
     let isCurrent: Bool
@@ -84,20 +84,17 @@ struct FolderCard: View {
 
     private var open: some View {
         VStack(spacing: 14) {
-            ZStack {
+            Group {
                 if event.latitude != nil {
-                    MomentMap(event: event)
-                        .allowsHitTesting(false)
-                        .mask(RadialGradient(colors: [.black, .black, .clear], center: .center, startRadius: 0, endRadius: 120))
+                    MomentMap(event: event).allowsHitTesting(false)
                 } else {
-                    Circle().fill(.white.opacity(0.06))
+                    Rectangle().fill(.white.opacity(0.08))
                         .overlay { Image(systemName: "location.slash").foregroundStyle(Theme.secondaryText) }
                 }
             }
-            .frame(width: 230, height: 230)
-            .overlay {
-                Circle().strokeBorder(tabColor.opacity(isCurrent ? 0.55 : 0.25), lineWidth: 1.5).padding(18)
-            }
+            .frame(width: 240, height: 240)
+            // A feathered edge: the place fades into the sky rather than sitting in a frame.
+            .mask(RadialGradient(colors: [.black, .black, .clear], center: .center, startRadius: 0, endRadius: 120))
             HStack(spacing: 6) {
                 MomentDot(moment: event.moment, size: 8)
                 Text("\(kindWord) · \(time)").font(.subheadline.weight(.medium))

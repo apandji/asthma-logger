@@ -1,11 +1,13 @@
 import AsthmaCore
 import SwiftData
 import SwiftUI
+import TipKit
 
 /// The bottom of the Journal: the + capture control, with Insights beside it (a ring button by default;
 /// the peek strip and edge tab are crit variants).
 struct CaptureBar: View {
     @Binding var showInsights: Bool
+    var tip: PullToLogTip? = nil
     @Environment(LogService.self) private var services
     @Environment(\.modelContext) private var context
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
@@ -22,6 +24,7 @@ struct CaptureBar: View {
             case .edgeTab: Spacer()
             }
             CaptureControl { moment in
+                PullToLogTip().invalidate(reason: .actionPerformed)
                 Task {
                     let e: LogEvent = await services.log(moment, in: context, writeToHealth: writeToHealth)
                     withAnimation(.snappy) { toast = e }
@@ -29,6 +32,7 @@ struct CaptureBar: View {
                     if toast?.id == e.id { withAnimation(.snappy) { toast = nil } }
                 }
             }
+            .popoverTip(tip, arrowEdge: .bottom)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
@@ -167,12 +171,12 @@ struct CaptureControl: View {
     /// The + that becomes a bead riding up the track with your finger, coloured by the zone it's in.
     private var knob: some View {
         ZStack {
-            // A liquid level: a little at rest (there's something to pull up), rising with your finger.
+            // Fills with the zone's colour as you pull up.
             ZStack(alignment: .bottom) {
                 Color.clear
                 Rectangle()
-                    .fill(active ? zoneColor : Color.primary.opacity(0.12))
-                    .frame(height: size * (active ? max(0.35, min(1, 0.35 + lift / standardAt)) : 0.22))
+                    .fill(zoneColor)
+                    .frame(height: active ? size * max(0.35, min(1, 0.35 + lift / standardAt)) : 0)
             }
             .clipShape(Circle())
             Image(systemName: "plus")
@@ -182,13 +186,6 @@ struct CaptureControl: View {
         }
         .frame(width: size, height: size)
         .glassEffect(.regular.interactive(), in: .circle)
-        .overlay(alignment: .top) {
-            if !active {
-                Image(systemName: "chevron.up").font(.caption2.weight(.bold)).foregroundStyle(Theme.secondaryText)
-                    .offset(y: -14)
-                    .phaseAnimator([0.0, -5.0, 0.0]) { v, y in v.offset(y: y) } animation: { _ in .easeInOut(duration: 1.4) }
-            }
-        }
         .scaleEffect(active ? 1 + 0.12 * min(1, lift / standardAt) : 1)
         .offset(y: -lift)
         .animation(.interactiveSpring(duration: 0.18), value: lift)
@@ -333,11 +330,6 @@ struct InsightsRingButton: View {
         }
         .padding(12)
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
-        .overlay(alignment: .bottomTrailing) {
-            // The bubble's tail points at the button.
-            Image(systemName: "triangle.fill").font(.caption).rotationEffect(.degrees(180))
-                .foregroundStyle(.ultraThinMaterial).offset(x: -86, y: 9)
-        }
     }
 
     private var learned: Bool {

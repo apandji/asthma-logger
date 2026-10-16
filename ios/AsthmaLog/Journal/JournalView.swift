@@ -2,12 +2,13 @@ import AsthmaCore
 import CoreLocation
 import SwiftData
 import SwiftUI
+import TipKit
 
 /// The Journal: one moment at a time. The colour field and the header follow the moment you're on
 /// (swipe sideways between them; a new moment slides in as soon as it's logged, from the +, the felt
 /// button or the watch). Pinch a moment open for everything about it; pinch in and the moments shrink
 /// into dots on a calendar with the full list. Turn sideways for the Data view.
-/// The "felt air" mark top-left opens All moments and Settings.
+/// The ••• button top-right opens All moments and Settings.
 struct JournalView: View {
     @Environment(LogService.self) private var services
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
@@ -16,6 +17,8 @@ struct JournalView: View {
     @Namespace private var zoom
     @Namespace private var morph
     @State private var overview = false
+    /// First-use tips, one at a time: pull to log, then moments.
+    @State private var tips = TipGroup(.ordered) { PullToLogTip(); MomentsTip() }
     @State private var showInsights = false
     @State private var showSettings = false
     @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.ringButton
@@ -29,7 +32,7 @@ struct JournalView: View {
             ambient
                 // The + and Insights live on the home only, not on pushed pages.
                 .safeAreaInset(edge: .bottom) {
-                    if !overview { CaptureBar(showInsights: $showInsights) }
+                    if !overview { CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip) }
                 }
                 .overlay(alignment: .trailing) {
                     if insightsEntry == .edgeTab && !overview { InsightEdgeTab { showInsights = true } }
@@ -76,9 +79,8 @@ struct JournalView: View {
                     MomentCarousel(events: cards, selectedID: $selectedID, namespace: zoom, morph: morph,
                                    onOverview: zoomOut) { opened = $0 }
                         .frame(height: 380)
-                    Text("Tap or pinch open for details · pinch in for the calendar")
-                        .font(.footnote).foregroundStyle(Theme.secondaryText)
-                        .frame(maxWidth: .infinity)
+                    TipView(tips.currentTip as? MomentsTip)
+                        .padding(.horizontal, 20)
                         .padding(.top, 8)
                 }
                 if let error = services.lastError {
@@ -108,29 +110,28 @@ struct JournalView: View {
     }
 
     private func zoomOut() {
+        MomentsTip().invalidate(reason: .actionPerformed)
         withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = true }
     }
 
-    /// The quiet "felt air" mark: a menu for All moments and Settings. Findable, not in the way.
+    /// A standard ••• menu, top right: All moments and Settings.
     private var topBar: some View {
         HStack {
+            Spacer()
             Menu {
                 Button(overview ? "Back to moments" : "All moments", systemImage: overview ? "rectangle.stack" : "calendar") {
                     overview ? withAnimation(.spring(duration: 0.55, bounce: 0.15)) { overview = false } : zoomOut()
                 }
                 Button("Settings", systemImage: "gearshape") { showSettings = true }
             } label: {
-                HStack(spacing: 4) {
-                    Text("felt air").font(.system(.subheadline, weight: .light)).tracking(1)
-                    Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-                }
-                .foregroundStyle(Theme.secondaryText)
-                .padding(.vertical, 6).padding(.horizontal, 10)
-                .contentShape(Rectangle())
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
-            Spacer()
+            .accessibilityLabel("More")
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 16)
         .padding(.top, 2)
     }
 

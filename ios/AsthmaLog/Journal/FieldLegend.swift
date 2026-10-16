@@ -26,18 +26,18 @@ struct FieldLegend: View {
                     strip("Hue is temperature", "Cold", "Hot",
                           LinearGradient(colors: WeatherColor.stops.map(\.color), startPoint: .leading, endPoint: .trailing),
                           at: temperatureF.map { (min(88, max(30, $0)) - 30) / 58 } ?? fallbackTemp)
-                    strip("Grey haze is dirtier air", "Clean", "Dirty",
+                    strip("A greyer, duller sky is dirtier air", "Clean", "Dirty",
                           LinearGradient(colors: [WeatherColor.temperature(65), WeatherColor.temperature(65).mix(with: WeatherColor.smog, by: 0.85)],
                                          startPoint: .leading, endPoint: .trailing),
                           at: weave.levels[.air].map { [0.1, 0.5, 0.9][$0.rawValue] })
-                    strip("Mist is humidity", "Dry, crisp", "Humid, misty",
+                    strip("A paler sky is humid air", "Dry", "Humid",
                           LinearGradient(colors: [WeatherColor.temperature(65), WeatherColor.temperature(65).mix(with: .white, by: 0.6)],
                                          startPoint: .leading, endPoint: .trailing),
                           at: humidityPosition)
                     HStack(spacing: 8) {
                         ForEach(0..<3) { i in Circle().fill(WeatherColor.pollen[i]).frame(width: 6, height: 6) }
-                        Text(pollen.map { p in "Colour blooms are pollen: green tree, gold grass, violet weed. Stronger bloom, more pollen. Now: " + p.kinds.map { "\($0.name.lowercased()) \(Tier($0.level).word.lowercased())" }.joined(separator: ", ") + " (demo)." }
-                             ?? "Colour blooms are pollen: green tree, gold grass, violet weed. Not connected yet.")
+                        Text(pollen.map { p in "Tints in the upper corners are pollen: green tree, gold grass, violet weed. Stronger tint, more pollen. Now: " + p.kinds.map { "\($0.name.lowercased()) \(Tier($0.level).word.lowercased())" }.joined(separator: ", ") + " (demo)." }
+                             ?? "Tints in the upper corners are pollen: green tree, gold grass, violet weed. Not connected yet.")
                             .font(.caption).foregroundStyle(Theme.secondaryText)
                     }
                 }

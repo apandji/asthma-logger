@@ -10,6 +10,7 @@ struct AsthmaLogApp: App {
     @State private var button = ButtonLink()
 
     init() {
+        AppTips.configure()
         do { container = try ModelContainer(for: LogEvent.self) }
         catch { fatalError("Couldn't open the journal store: \(error)") }
     }

@@ -45,6 +45,7 @@ struct JournalView: View {
     @AppStorage(Crit.CardStyle.key) private var momentStyle = Crit.CardStyle.panel
     @State private var ambientFrame: CGRect = .zero
     @State private var showInsights = false
+    @State private var toast: LogEvent?
     @State private var showSettings = false
     @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.topBar
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
@@ -58,9 +59,17 @@ struct JournalView: View {
                 // One column of glass controls on the right edge, the same on every scale and over
                 // everything: Insights and Settings at the top, the + at the bottom. The left is for words.
                 .overlay(alignment: .bottom) {
-                    CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, spot: spot)
+                    CaptureBar(showInsights: $showInsights, toast: $toast, tip: tips.currentTip as? PullToLogTip, spot: spot)
                 }
                 .overlay(alignment: .topTrailing) { topRail }
+                .overlay(alignment: .top) {
+                    if let e = toast {
+                        LoggedToast(event: e) {
+                            withAnimation(.snappy) { toast = nil }
+                            Task { await services.delete(e, in: context) }
+                        }
+                    }
+                }
                 .overlay(alignment: .trailing) {
                     if insightsEntry == .edgeTab && !overview { InsightEdgeTab { showInsights = true } }
                 }

@@ -12,7 +12,8 @@ struct CaptureBar: View {
     @Environment(LogService.self) private var services
     @Environment(\.modelContext) private var context
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
-    @State private var toast: LogEvent?
+    /// The "logged" toast, owned by the Journal so it can drop in from the top over everything.
+    @Binding var toast: LogEvent?
     @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.topBar
     @AppStorage(Prefs.logButtons) private var useButtons = false
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -47,25 +48,6 @@ struct CaptureBar: View {
         .padding(.trailing, JournalView.railAxis - 32)  // the 64pt + centers on the rail axis
         .padding(.bottom, 6)
         .animation(.snappy, value: useButtons)
-        .overlay(alignment: .top) {
-            if let e = toast {
-                HStack(spacing: 12) {
-                    MomentDot(moment: e.moment, size: 9)
-                    Text("\(e.moment == .rescue ? "Rescue" : "Standard") logged").font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Button("Undo") {
-                        withAnimation(.snappy) { toast = nil }
-                        Task { await services.delete(e, in: context) }
-                    }
-                    .font(.subheadline.weight(.semibold))
-                }
-                .padding(.horizontal, 16).padding(.vertical, 12)
-                .glassEffect(.regular, in: .capsule)
-                .padding(.horizontal, 16)
-                .offset(y: -64)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
     }
 }
 
@@ -392,5 +374,24 @@ struct InsightsRingButton: View {
             let b = min(1, Double(p.baselines) / Double(max(1, p.minBaselines)))
             return (a + b) / 2
         }
+    }
+}
+
+/// "Rescue logged · Undo", dropping in from the top edge.
+struct LoggedToast: View {
+    let event: LogEvent
+    let undo: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            MomentDot(moment: event.moment, size: 9)
+            Text("\(event.moment == .rescue ? "Rescue" : "Standard") logged").font(.subheadline.weight(.semibold))
+            Spacer()
+            Button("Undo", action: undo).font(.subheadline.weight(.semibold))
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .glassEffect(.regular, in: .capsule)
+        .padding(.horizontal, 16)
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }

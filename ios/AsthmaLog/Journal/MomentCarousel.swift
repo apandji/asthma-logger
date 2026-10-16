@@ -211,14 +211,22 @@ struct FolderCard: View {
 struct MomentMap: View {
     let event: LogEvent
     var snapshotSize = CGSize(width: 520, height: 520)
+    /// Force dark (the black Journal page) so it matches the prefetched maps whatever the system look.
+    var forceDark = false
+    /// The faint map under the sky doesn't need full resolution, and draws much faster without it.
+    var scale: CGFloat = 3
     @Environment(\.colorScheme) private var scheme
     @State private var image: UIImage?
 
+    private var dark: Bool { forceDark || scheme == .dark }
+
     var body: some View {
+        // A map that's already drawn shows on the first frame, with no fade.
+        let shown = image ?? MapSnapshots.cached(for: event, size: snapshotSize, dark: dark, scale: scale)
         GeometryReader { geo in
             ZStack {
-                if let image {
-                    Image(uiImage: image).resizable().scaledToFill()
+                if let shown {
+                    Image(uiImage: shown).resizable().scaledToFill()
                         .frame(width: geo.size.width, height: geo.size.height).clipped()
                         .transition(.opacity)
                     Circle()
@@ -232,10 +240,11 @@ struct MomentMap: View {
                     Rectangle().fill(.quaternary)
                 }
             }
-            .task(id: "\(event.id)-\(scheme)") {
-                // One generous square, cropped to fit: the view can grow and shrink (the zoom) without
+            .task(id: "\(event.id)-\(dark)") {
+                guard shown == nil else { return }
+                // One generous size, cropped to fit: the view can grow and shrink (the zoom) without
                 // asking for a new snapshot every frame.
-                image = await MapSnapshots.image(for: event, size: snapshotSize, dark: scheme == .dark)
+                image = await MapSnapshots.image(for: event, size: snapshotSize, dark: dark, scale: scale)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: image != nil)
@@ -244,14 +253,26 @@ struct MomentMap: View {
 
 enum MapSnapshots {
     private static let cache = NSCache<NSString, UIImage>()
+    /// Snapshots already on their way, so the view and the prefetch never draw the same map twice.
+    private static var inFlight: [NSString: Task<UIImage?, Never>] = [:]
     /// One snapshot at a time: run concurrently, MKMapSnapshotter sometimes ignores the requested
     /// dark appearance and returns a light map.
     private static let queue = SnapshotQueue()
 
-    static func image(for event: LogEvent, size: CGSize, dark: Bool) async -> UIImage? {
+    private static func key(_ event: LogEvent, _ size: CGSize, _ dark: Bool, _ scale: CGFloat) -> NSString {
+        "\(event.id)-\(dark ? "dark" : "light")-\(Int(size.width))x\(Int(size.height))@\(scale)" as NSString
+    }
+
+    /// A map that's already drawn, without waiting: lets a view show it on its first frame.
+    static func cached(for event: LogEvent, size: CGSize, dark: Bool, scale: CGFloat = 3) -> UIImage? {
+        cache.object(forKey: key(event, size, dark, scale))
+    }
+
+    static func image(for event: LogEvent, size: CGSize, dark: Bool, scale: CGFloat = 3) async -> UIImage? {
         guard let lat = event.latitude, let lon = event.longitude, size.width > 1, size.height > 1 else { return nil }
-        let key = "\(event.id)-\(dark ? "dark" : "light")-\(Int(size.width))x\(Int(size.height))" as NSString
+        let key = key(event, size, dark, scale)
         if let hit = cache.object(forKey: key) { return hit }
+        if let running = inFlight[key] { return await running.value }
         let options = MKMapSnapshotter.Options()
         options.camera = MKMapCamera(lookingAtCenter: CLLocationCoordinate2D(latitude: lat, longitude: lon),
                                      fromDistance: 1_400, pitch: 40, heading: 0)
@@ -260,10 +281,13 @@ enum MapSnapshots {
         options.preferredConfiguration = MKStandardMapConfiguration(emphasisStyle: .muted)
         options.traitCollection = UITraitCollection(traitsFrom: [
             UITraitCollection(userInterfaceStyle: dark ? .dark : .light),
-            UITraitCollection(displayScale: 3),
+            UITraitCollection(displayScale: scale),
         ])
-        guard let image = await queue.run(options) else { return nil }
-        cache.setObject(image, forKey: key)
+        let task = Task { await queue.run(options) }
+        inFlight[key] = task
+        let image = await task.value
+        inFlight[key] = nil
+        if let image { cache.setObject(image, forKey: key) }
         return image
     }
 }

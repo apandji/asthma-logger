@@ -19,6 +19,15 @@ struct MomentPager: View {
 
     private var current: LogEvent? { events.first { $0.id == selectedID } ?? events.last }
 
+    /// Snapshot the maps either side of the current moment, so scrubbing never waits on one.
+    private func prefetchNeighbours() async {
+        guard let i = events.firstIndex(where: { $0.id == current?.id }) else { return }
+        let dark = true  // the Journal page is black
+        for j in [i - 1, i + 1, i - 2, i + 2] where events.indices.contains(j) {
+            _ = await MapSnapshots.image(for: events[j], size: CGSize(width: 520, height: 520), dark: dark)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 10) {
             ZStack {
@@ -31,6 +40,7 @@ struct MomentPager: View {
             }
             .modifier(SpotIf(id: "sky", spot: spot))
             .animation(.easeInOut(duration: 0.35), value: current?.id)
+            .task(id: current?.id) { await prefetchNeighbours() }
 
             TimelineTrack(events: events, selectedID: $selectedID)
                 .frame(height: 58)
@@ -198,6 +208,8 @@ struct SkyPanel: View {
                 }
             }
             .frame(width: size.width, height: size.height)
+            // One offscreen pass for the sky, map and glow, instead of a pass per mask.
+            .drawingGroup()
             // Self-contained: fades to black at the edges, and most of all toward the top.
             .mask {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),

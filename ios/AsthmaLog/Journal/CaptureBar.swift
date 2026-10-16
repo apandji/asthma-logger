@@ -125,6 +125,9 @@ struct InsightPeek: View {
         .accessibilityHint("Opens Insights")
         .accessibilityAddTraits(.isButton)
         .task(id: events.count) {
+            // Wait out the log animation (and any burst of logs) before recomputing patterns.
+            try? await Task.sleep(for: .seconds(1.2))
+            guard !Task.isCancelled else { return }
             model.rebuild(events: events, demo: demo)
             await model.narrate(styleScore: 50, useModel: false)
         }
@@ -349,6 +352,9 @@ struct InsightsRingButton: View {
         .animation(.spring(duration: 0.45, bounce: 0.3), value: learned)
         .accessibilityLabel(learned ? "Insights: a pattern is ready" : "Insights: still learning, \(Int(progress * 100)) percent")
         .task(id: events.count) {
+            // Wait out the log animation (and any burst of logs) before recomputing patterns.
+            try? await Task.sleep(for: .seconds(1.2))
+            guard !Task.isCancelled else { return }
             model.rebuild(events: events, demo: demo)
             await model.narrate(styleScore: 50, useModel: false)
         }

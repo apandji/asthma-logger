@@ -294,7 +294,8 @@ struct JournalView: View {
         .padding(.horizontal, 20)
         .padding(.top, 6)
         .animation(.easeInOut(duration: 0.35), value: selected?.id)
-        .task { await loadNow() }
+        // Only the "right now" headers need a live reading; don't spend launch on it otherwise.
+        .task(id: headerStyle) { if headerStyle == .now || headerStyle == .nowWithCounts || cards.isEmpty { await loadNow() } }
     }
 
     @ViewBuilder private var nowLines: some View {

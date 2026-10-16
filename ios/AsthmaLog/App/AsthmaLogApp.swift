@@ -50,6 +50,7 @@ struct RootView: View {
     @Environment(LogService.self) private var services
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
+    @AppStorage(Crit.performanceHUD) private var perfHUD = false
 
     var body: some View {
         Group {
@@ -60,6 +61,12 @@ struct RootView: View {
                 JournalView()
             }
         }
+        #if DEBUG
+        .overlay(alignment: .top) {
+            // Tap it to reset the dropped-frame count.
+            if perfHUD { PerformanceHUD().padding(.top, 2) }
+        }
+        #endif
         .fullScreenCover(isPresented: Binding(get: { !didOnboard }, set: { _ in })) {
             OnboardingView()
         }

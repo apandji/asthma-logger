@@ -94,4 +94,6 @@ enum Crit {
         var title: String { self == .steps ? "Steps (by level)" : "Smooth within level" }
         static let key = "crit.layerStrength"
     }
+
+    static let performanceHUD = "crit.performanceHUD"
 }

@@ -95,7 +95,7 @@ struct JournalView: View {
                 // Tutorial: dim everything the current tip isn't about.
                 .overlay {
                     if expanded == nil && !overview && !showDays, let ids = spotlightIDs {
-                        SpotlightDim(holes: ids.compactMap { spot.frames[$0] })
+                        SpotlightDim(holes: ids.compactMap { spot.frames[$0] }) { tips.currentTip?.invalidate(reason: .tipClosed) }
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: spotlightIDs)

@@ -16,6 +16,8 @@ extension View {
 /// A dark veil over the whole screen with soft rounded holes where the targets are.
 struct SpotlightDim: View {
     let holes: [CGRect]
+    /// Tap the veil to skip the tip. It also lifts on its own, so a tip that never shows can't trap you.
+    var dismiss: () -> Void = {}
 
     var body: some View {
         Canvas { ctx, size in
@@ -27,7 +29,9 @@ struct SpotlightDim: View {
             ctx.fill(veil, with: .color(.black.opacity(0.62)), style: FillStyle(eoFill: true))
         }
         .ignoresSafeArea()
-        .allowsHitTesting(false)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: dismiss)
+        .task { try? await Task.sleep(for: .seconds(8)); dismiss() }
         .transition(.opacity)
     }
 }

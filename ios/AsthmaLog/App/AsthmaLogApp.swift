@@ -51,12 +51,15 @@ struct RootView: View {
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
     @AppStorage(Crit.performanceHUD) private var perfHUD = false
+    @AppStorage(Crit.Home.key) private var home = Crit.Home.journal
 
     var body: some View {
         Group {
             if verticalSize == .compact {
                 // Sideways: the Data view. Turn back upright for the Journal.
                 LandscapeDataView()
+            } else if home == .now {
+                NowHomeView()
             } else {
                 JournalView()
             }

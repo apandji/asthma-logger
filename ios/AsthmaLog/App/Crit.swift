@@ -98,6 +98,19 @@ enum Crit {
 
     static let performanceHUD = "crit.performanceHUD"
 
+    /// Which home: the Journal (moments and scales) or the sky-first "Now" screen.
+    enum Home: String, CaseIterable, Identifiable {
+        case journal, now
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .journal: "Journal (moments and scales)"
+            case .now: "Now (sky first, one timeline)"
+            }
+        }
+        static let key = "crit.home"
+    }
+
     /// Three gesture models for the Journal, to compare in a crit.
     enum Gestures: String, CaseIterable, Identifiable {
         case axis, zoom, quiet

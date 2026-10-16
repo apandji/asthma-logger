@@ -21,6 +21,7 @@ struct SettingsView: View {
     @AppStorage(Crit.Header.key) private var critHeader = Crit.Header.moment
     @AppStorage(Crit.CardStyle.key) private var critCard = Crit.CardStyle.panel
     @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
+    @AppStorage(Crit.Home.key) private var critHome = Crit.Home.journal
     @AppStorage(Crit.CardMarker.key) private var critMarker = Crit.CardMarker.quietTab
     @AppStorage(Crit.FieldStyle.key) private var critField = Crit.FieldStyle.weather
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
@@ -40,6 +41,9 @@ struct SettingsView: View {
                     }
                     if let tutorialNote {
                         Text(tutorialNote).font(.footnote).foregroundStyle(Theme.secondaryText)
+                    }
+                    Picker("Home", selection: $critHome) {
+                        ForEach(Crit.Home.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Gestures", selection: $critGestures) {
                         ForEach(Crit.Gestures.allCases) { Text($0.title).tag($0) }

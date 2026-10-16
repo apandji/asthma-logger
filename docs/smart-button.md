@@ -78,7 +78,7 @@ The program is saved in the board's flash memory, so it stays there after you un
 |-------|---------|
 | Quick dim flash, warm (rescue) or teal (standard) | The button felt the press |
 | One slow breath in the same colour | The phone acked it: the log is saved with the air. Serial prints `captured` |
-| Faint pulse every 4 s in the press colour | A press is queued (phone away or app closed); it sends when the phone reconnects |
+| Soft pulse every 4 s in the press colour | A press is queued (phone away or app closed); it sends when the phone reconnects |
 | Slow blue blink | Not paired, nothing queued |
 
 The LED sits on top of the board by the USB-C port. In a housing, a small window with frosted acrylic or tracing paper over it diffuses it well.

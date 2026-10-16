@@ -142,7 +142,9 @@ const unsigned long PRESS_MS = 150;
 const unsigned long CAPTURED_MS = 1200;
 const unsigned long WAIT_AFTER_MS = 2000;  // a press counts as waiting once it's gone this long without an ack
 const unsigned long WAIT_EVERY_MS = 4000;
-const unsigned long WAIT_PULSE_MS = 500;
+const unsigned long WAIT_PULSE_MS = 800;
+const float WAIT_LEVEL = 0.75;             // peak brightness of the waiting pulse (0–1)
+unsigned long lastWaitLog = 0;
 
 Pattern pattern = NONE;
 Rgb patternColor;
@@ -193,7 +195,11 @@ void updateLed() {
   int w = oldestWaiting(now);
   if (w >= 0) {
     unsigned long p = now % WAIT_EVERY_MS;
-    led(capColor(queue[w].cap), p < WAIT_PULSE_MS ? 0.4 * sin(PI * p / WAIT_PULSE_MS) : 0);
+    led(capColor(queue[w].cap), p < WAIT_PULSE_MS ? WAIT_LEVEL * sin(PI * p / WAIT_PULSE_MS) : 0);
+    if (p < WAIT_PULSE_MS && now - lastWaitLog > WAIT_PULSE_MS) {
+      lastWaitLog = now;
+      Serial.printf("waiting pending=%d connected=%d\n", pending(), connected);
+    }
     return;
   }
 

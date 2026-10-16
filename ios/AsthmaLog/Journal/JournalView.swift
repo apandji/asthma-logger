@@ -14,6 +14,8 @@ struct JournalView: View {
     @State private var opened: LogEvent?
     @Namespace private var zoom
     @State private var showOverview = false
+    @State private var showInsights = false
+    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.bottomStrip
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
 
     private let days = 7
@@ -21,6 +23,16 @@ struct JournalView: View {
     var body: some View {
         NavigationStack {
             ambient
+                // The + and Insights live on the home only, not on pushed pages.
+                .safeAreaInset(edge: .bottom) { CaptureBar(showInsights: $showInsights) }
+                .overlay(alignment: .trailing) {
+                    if insightsEntry == .edgeTab { InsightEdgeTab { showInsights = true } }
+                }
+                .sheet(isPresented: $showInsights) {
+                    InsightsView()
+                        .presentationDragIndicator(.visible)
+                        .presentationBackground(.ultraThinMaterial)
+                }
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }
                 .navigationDestination(item: $opened) { e in

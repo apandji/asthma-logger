@@ -49,8 +49,6 @@ struct RootView: View {
     @Environment(LogService.self) private var services
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
-    @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.bottomStrip
-    @State private var showInsights = false
 
     var body: some View {
         Group {
@@ -59,16 +57,7 @@ struct RootView: View {
                 LandscapeDataView()
             } else {
                 JournalView()
-                    .safeAreaInset(edge: .bottom) { CaptureBar(showInsights: $showInsights) }
-                    .overlay(alignment: .trailing) {
-                        if insightsEntry == .edgeTab { InsightEdgeTab { showInsights = true } }
-                    }
             }
-        }
-        .sheet(isPresented: $showInsights) {
-            InsightsView()
-                .presentationDragIndicator(.visible)
-                .presentationBackground(.ultraThinMaterial)
         }
         .fullScreenCover(isPresented: Binding(get: { !didOnboard }, set: { _ in })) {
             OnboardingView()

@@ -56,7 +56,7 @@ struct NowHomeView: View {
                     .animation(Theme.smooth, value: probing)
                 // One sky at a time; the next settles in with a breath, not a cut.
                 ZStack { sky.id(focusKey).transition(.opacity) }
-                    .animation(Theme.smooth, value: focusKey)
+                    .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
                     // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
                     .distortionEffect(ShaderLibrary.dent(.float2(skyDrag?.point ?? .zero), .float(170), .float(skyPress)),
                                       maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: skyDrag != nil && !reduceMotion)
@@ -246,7 +246,7 @@ struct NowHomeView: View {
             }
         }
         .padding(.top, 2)
-        .animation(Theme.smooth, value: focusKey)
+        .animation(scrubbing ? nil : .easeInOut(duration: 0.22), value: focusKey)
     }
 
     /// The place as words: Home or Work (with their icon) when it's within 150 m of the saved one, else the
@@ -897,6 +897,7 @@ struct VerdictHeader: View {
     /// A moment's date and time, on the line where the verdict would be: "Monday, Oct 12, 8:15 AM".
     var when: String? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.skySettled) private var settled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -905,19 +906,19 @@ struct VerdictHeader: View {
                 place
             }
             .frame(minHeight: 30, alignment: .leading)
-            // The Weather app's way: digits roll, words crossfade in place. No scale, no blur.
+            // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
             Text(title)
                 .font(Theme.serifTitle).kerning(Theme.serifKerning)
                 .lineLimit(2)
-                .contentTransition(reduceMotion ? .opacity : .numericText())
-                .animation(.snappy(duration: 0.3), value: title)
+                .contentTransition(.opacity)
+                .animation(settled ? .easeInOut(duration: 0.22) : nil, value: title)
             let ink = tint ?? Theme.secondaryText
             Button { onVerdict?() } label: {
                 HStack(spacing: 7) {
                     Circle().fill(ink).frame(width: 7, height: 7)
                     Text(verdict ?? " ").lineLimit(1)
-                        .contentTransition(.interpolate)
-                        .animation(.snappy(duration: 0.3), value: verdict)
+                        .contentTransition(.opacity)
+                        .animation(settled ? .easeInOut(duration: 0.22) : nil, value: verdict)
                     if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }
                 }
                 .font(.subheadline.weight(.semibold))
@@ -943,7 +944,7 @@ struct VerdictHeader: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.top, 6)
-        .animation(Theme.smooth, value: tint)
+        .animation(settled ? .easeInOut(duration: 0.22) : nil, value: tint)
     }
 }
 

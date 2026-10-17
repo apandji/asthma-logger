@@ -502,23 +502,25 @@ struct NowHomeView: View {
         // What was in the air in the two days before (the look-back, docs/air-outlook.md): a flare often
         // trails the air, so a high the day before is worth a clause even when the moment itself was clean.
         let before = Self.before(m.conditions?.lookBack)
-        guard learned else {
-            guard let before else { return nil }
-            let temp = m.conditions?.best(.temperature).map { "It was \(Int($0.value.rounded()))°. " } ?? ""
-            return temp + before
-        }
+        // On a flare, the weather sentence alone would judge the air ("the air was clear") and discount what
+        // happened. So: the facts, then what we saw, or didn't: outdoor air is the only thing felt air can see.
+        let weather = AirWords.weatherOnly(tense: .past, weave: m.weave, conditions: m.conditions)
+        let nothing = "Nothing outdoors stood out this time."
+        guard learned else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         if forced == .learned, !(model.progress?.isMet ?? false) {
             // The demo person's story, for moments without a real pattern behind them.
             return ["Weed pollen was high, as on most of your flare days.", before].compactMap { $0 }.joined(separator: " ")
         }
-        guard let frame = m.frame(), let rows = model.report?.gatedRows, !rows.isEmpty else { return before }
+        guard let frame = m.frame(), let rows = model.report?.gatedRows, !rows.isEmpty else {
+            return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ")
+        }
         let hits = Bins.all.compactMap { def -> (String, Double)? in
             guard let level = def.levelOf(frame),
                   let row = rows.first(where: { $0.bin == def.bin && $0.level == level && $0.lift > 1.25 }) else { return nil }
             return (Self.phrase(def.bin, level), row.lift)
         }
         .sorted { $0.1 > $1.1 }
-        guard !hits.isEmpty else { return before }
+        guard !hits.isEmpty else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         let named = hits.prefix(2).map(\.0)
         let joined = named.count == 1 ? named[0] : "\(named[0]) and \(named[1])"
         let now = joined.prefix(1).uppercased() + joined.dropFirst() + ", as on most of your flare days."
@@ -535,9 +537,9 @@ struct NowHomeView: View {
         var parts: [String] = []
         if !names.isEmpty {
             let joined = names.count == 1 ? names[0] : "\(names[0]) and \(names[1])"
-            parts.append(joined.prefix(1).uppercased() + joined.dropFirst() + (names.count == 1 && names[0] == "ozone" ? " was" : " were") + " high in the two days before.")
+            parts.append(joined.prefix(1).uppercased() + joined.dropFirst() + (names.count == 1 && names[0] == "ozone" ? " was" : " were") + " high the two days before.")
         }
-        if lb.tempDropLevel == .earlier { parts.append("The temperature had dropped fast the day before.") }
+        if lb.tempDropLevel == .earlier { parts.append("The temperature dropped fast the day before.") }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
@@ -638,6 +640,15 @@ struct NowReading {
 /// One voice across past, present and forecast: "It was… / It's… / It will be…".
 nonisolated enum AirWords {
     enum Tense { case past, present, future, carried }
+
+    /// "It was 58° and humid." The weather alone, no judgement of the air: for flare moments.
+    static func weatherOnly(tense: Tense, weave: WeaveSpec, conditions: Conditions?) -> String? {
+        let it = switch tense { case .past: "It was"; case .present: "It's"; case .future, .carried: "It will be" }
+        let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
+        let feel = weave.words[.humidity].flatMap { ["humid", "dry", "very humid", "very dry"].contains($0) ? $0 : nil }
+        let weather = [temp, feel].compactMap { $0 }.joined(separator: " and ")
+        return weather.isEmpty ? nil : "\(it) \(weather)."
+    }
 
     /// "54°, humid, clear air": the conditions as one plain line under the verdict.
     static func short(_ weave: WeaveSpec, _ conditions: Conditions?) -> String {
@@ -1163,10 +1174,9 @@ struct VerdictHeader: View {
             }
             .frame(minHeight: 30, alignment: .leading)
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
-            // Recursive runs wide: three lines allowed, so a sentence is never cut. The sky takes the slack.
+            // Never cut: the sentence takes the lines it needs and the sky gives up the room.
             Text(title)
                 .font(Theme.serifTitle).kerning(Theme.serifKerning)
-                .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(settled ? .easeInOut(duration: 0.22) : nil, value: title)

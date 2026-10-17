@@ -402,24 +402,24 @@ struct NowHomeView: View {
     private func outlook(at t: Date) -> (text: String, tint: Color?) {
         let learned = forced == .learned || (forced == .auto && (model.progress?.isMet ?? false))
         // The demo event is the presentation's story: with the demo person learned, now matches their flare days.
-        if learned, demoEvent != .none, abs(t.timeIntervalSince(now)) < 30 * 60 { return ("Matches your flare days.", Self.red) }
+        if learned, demoEvent != .none, abs(t.timeIntervalSince(now)) < 30 * 60 { return ("Matches your flare days", Self.red) }
         if learned {
             if forced == .learned, !(model.progress?.isMet ?? false) {
                 // Demo: a rough afternoon, so every color can be seen on the track.
                 let h = Calendar.current.component(.hour, from: t)
-                if (14...17).contains(h) { return ("Matches your flare days.", Self.red) }
-                if (11...13).contains(h) || (18...19).contains(h) { return ("A bit like your flare days.", Self.yellow) }
-                return ("Looks like your baseline.", Self.green)
+                if (14...17).contains(h) { return ("Matches your flare days", Self.red) }
+                if (11...13).contains(h) || (18...19).contains(h) { return ("A bit like your flare days", Self.yellow) }
+                return ("Looks like your baseline days", Self.green)
             }
             if let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }) {
                 // A window's peak is a summed log likelihood ratio; past 1 it's clearly a rescue-day pattern.
-                return w.peakScore >= 1 ? ("Matches your flare days.", Self.red)
-                                        : ("A bit like your flare days.", Self.yellow)
+                return w.peakScore >= 1 ? ("Matches your flare days", Self.red)
+                                        : ("A bit like your flare days", Self.yellow)
             }
             if let day = model.days.first(where: { Calendar.current.isDate($0.day, inSameDayAs: t) }), day.isPersonal {
-                return day.band == .elevated ? ("A bit like your flare days.", Self.yellow) : ("Looks like your baseline.", Self.green)
+                return day.band == .elevated ? ("A bit like your flare days", Self.yellow) : ("Looks like your baseline days", Self.green)
             }
-            return ("Looks like your baseline.", Self.green)
+            return ("Looks like your baseline days", Self.green)
         }
         return (sentence, nil)
     }
@@ -430,14 +430,14 @@ struct NowHomeView: View {
     private var sentence: String {
         if let p = model.progress, !p.isMet {
             let needRescue = max(0, p.minAttacks - p.attacks), needCalm = max(0, p.minBaselines - p.baselines)
+            // "Learning: 1 rescue and 14 baseline moments to go"
             var parts: [String] = []
-            if needCalm > 0 { parts.append("\(needCalm) baseline moment\(needCalm == 1 ? "" : "s")") }
-            if needRescue > 0 { parts.append("\(needRescue) rescue moment\(needRescue == 1 ? "" : "s")") }
-            // "14 calm days and 1 rescue moment to go." Short enough for two lines.
-            // Short enough for one line on the pill: "14 baseline and 1 rescue moment to go."
-            return parts.joined(separator: " and ").replacingOccurrences(of: " moments and", with: " and") + " to go."
+            if needRescue > 0 { parts.append("\(needRescue) rescue") }
+            if needCalm > 0 { parts.append("\(needCalm) baseline") }
+            let total = needRescue + needCalm
+            return "Learning: " + parts.joined(separator: " and ") + (total == 1 ? " moment to go" : " moments to go")
         }
-        return "Still learning your days."
+        return "Learning your days"
     }
 
     private static func when(_ d: Date) -> String {
@@ -566,26 +566,26 @@ nonisolated enum AirWords {
         let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
         // Facts, not feelings: "humid" or "dry" when it is, never "comfortable" (it may not have been for you).
         let feel = weave.words[.humidity].flatMap { ["humid", "dry", "very humid", "very dry"].contains($0) ? $0 : nil }
-        let air = weave.levels[.air].map { ["clear", "a bit hazy", "heavy"][$0.rawValue] + " air" }
+        let air = weave.levels[.air].map { ["clear air", "a little haze", "haze"][$0.rawValue] }
         let parts = [temp, feel, air].compactMap { $0 }
         return parts.isEmpty ? "No air reading" : parts.joined(separator: ", ")
     }
 
     /// "It was 51° and comfortable. The air was a bit hazy." / "It's… The air is…" / "It will be… The air will be…"
     static func sentence(tense: Tense, weave: WeaveSpec, conditions: Conditions?) -> String {
-        let verb = switch tense { case .past: "was"; case .present: "is"; case .future: "will be"; case .carried: "should stay" }
+        let verb = switch tense { case .past: "was"; case .present: "is"; case .future: "will be"; case .carried: "should be" }
         let it = switch tense { case .past: "It was"; case .present: "It's"; case .future, .carried: "It will be" }
         let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
         // Facts, not feelings: "humid" or "dry" when it is, never "comfortable" (it may not have been for you).
         let feel = weave.words[.humidity].flatMap { ["humid", "dry", "very humid", "very dry"].contains($0) ? $0 : nil }
         let weather = [temp, feel].compactMap { $0 }.joined(separator: " and ")
-        let air = weave.levels[.air].map { ["clear", "a bit hazy", "heavy"][$0.rawValue] }
-        // One sentence: "It's 54° and humid, with clear air."
-        _ = verb
+        let air = weave.levels[.air].map { ["clear", "a little hazy", "hazy"][$0.rawValue] }
+        // One sentence, two clauses: "It's 54° and humid, and the air is clear."
+        let theAir = "the air \(verb)"
         switch (weather.isEmpty, air) {
-        case (false, let air?): return "\(it) \(weather), with \(air) air."
+        case (false, let air?): return "\(it) \(weather), and \(theAir) \(air)."
         case (false, nil): return "\(it) \(weather)."
-        case (true, let air?): return "\(it.replacingOccurrences(of: "It's", with: "The air is").replacingOccurrences(of: "It was", with: "The air was").replacingOccurrences(of: "It will be", with: "The air will be")) \(air)."
+        case (true, let air?): return "The air \(verb) \(air)."
         case (true, nil): return "No air reading."
         }
     }
@@ -1093,7 +1093,7 @@ enum AirEvent: Equatable {
 
     var label: String {
         switch self {
-        case .storm: "Storm, high pollen"
+        case .storm: "Storm and pollen"
         case .smoke: "Wildfire smoke"
         case .tempDrop: "Temperature drop"
         }
@@ -1104,9 +1104,9 @@ enum AirEvent: Equatable {
         let t = temperature.map { "It's \(Int($0.rounded()))°" }
         switch self {
         case .storm: return "A thunderstorm while pollen is high."
-        case .smoke: return [t, "with wildfire smoke in the air."].compactMap { $0 }.joined(separator: ", ")
+        case .smoke: return [t, "and there's wildfire smoke in the air."].compactMap { $0 }.joined(separator: ", ")
         case .tempDrop:
-            let fall = fallF.map { "down \(Int($0.rounded()))° in three hours." } ?? "and dropping fast."
+            let fall = fallF.map { "\(Int($0.rounded()))° colder than three hours ago." } ?? "and getting colder fast."
             return [t, fall].compactMap { $0 }.joined(separator: ", ")
         }
     }

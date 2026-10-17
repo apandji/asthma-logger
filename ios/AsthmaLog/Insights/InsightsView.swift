@@ -119,9 +119,10 @@ struct InsightsView: View {
     private func needs(_ p: GateProgress) -> String {
         let r = max(0, p.minAttacks - p.attacks), b = max(0, p.minBaselines - p.baselines)
         var parts: [String] = []
-        if r > 0 { parts.append("\(r) more rescue") }
-        if b > 0 { parts.append("\(b) more baseline") }
-        return parts.isEmpty ? "Almost there" : parts.joined(separator: " and ") + " to go"
+        if r > 0 { parts.append("\(r) rescue") }
+        if b > 0 { parts.append("\(b) baseline") }
+        let total = max(0, p.minAttacks - p.attacks) + max(0, p.minBaselines - p.baselines)
+        return parts.isEmpty ? "Almost there" : parts.joined(separator: " and ") + (total == 1 ? " moment to go" : " moments to go")
     }
 
     // MARK: Tiles
@@ -131,7 +132,7 @@ struct InsightsView: View {
     private var tiles: some View {
         VStack(spacing: 10) {
             NavigationLink(value: Page.profile) {
-                row("person.crop.circle", "Your profile", demoLearned ? "Pollen-led" : learned ? "Ready" : "After learning")
+                row("person.crop.circle", "Your profile", demoLearned ? "Pollen-led" : learned ? "Ready" : "Soon")
             }
             NavigationLink(value: Page.moments) {
                 row("calendar", "Your moments", "\(monthCount) this month")
@@ -238,10 +239,10 @@ struct InsightsView: View {
             if demoLearned {
                 Chip(text: "Demo", color: Theme.secondaryText)
                 Text("Pollen-led").font(Theme.headlineSerif)
-                Text("Your flare days line up with pollen more than anything else, weed pollen most of all. A placeholder until the research names the profiles.")
+                Text("Your flare days line up with pollen more than anything else, weed pollen most of all.")
                     .font(Theme.caption).foregroundStyle(Theme.secondaryText)
             } else if let p = model.progress, !p.isMet {
-                Text("Once felt air has learned, this says which air your flare days line up with: pollen, particles, ozone, or cold and humid days.")
+                Text("Once felt air has learned, this shows what your flare days have in common: pollen, particles, ozone, or cold or humid days.")
                     .font(Theme.caption).foregroundStyle(Theme.secondaryText)
             } else if let n = model.narration {
                 Text(n.headline).font(Theme.headline)
@@ -298,9 +299,9 @@ struct InsightsView: View {
 
     /// Before the sample gate: no sentence to read yet. The ring above already shows the counts.
     @ViewBuilder private func learning(_ p: GateProgress) -> some View {
-        Text("Your pattern appears here once there are \(p.minAttacks) rescue and \(p.minBaselines) baseline moments to compare.")
+        Text("Your pattern shows here once there are \(p.minAttacks) rescue and \(p.minBaselines) baseline moments to compare.")
             .font(Theme.headlineSerif)
-        Text("Baseline moments are added on their own when you open the app. Outdoor air only, not a diagnosis.")
+        Text("felt air saves a baseline moment on its own when you open the app. Outdoor air only, not a diagnosis.")
             .font(Theme.caption).foregroundStyle(Theme.secondaryText)
     }
 

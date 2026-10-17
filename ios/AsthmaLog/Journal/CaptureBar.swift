@@ -118,7 +118,7 @@ struct InsightPeek: View {
 
     private var line: String {
         if let p = model.progress, !p.isMet {
-            return "Learning your pattern: \(p.attacks) of \(p.minAttacks) inhaler uses, \(p.baselines) of \(p.minBaselines) calm moments."
+            return "Learning your pattern: \(p.attacks) of \(p.minAttacks) rescue and \(p.baselines) of \(p.minBaselines) baseline moments."
         }
         return model.narration?.headline ?? "Swipe up for Insights"
     }

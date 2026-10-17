@@ -257,7 +257,7 @@ struct NowHomeView: View {
         let icon = known?.icon ?? (current ? "location.fill" : "location")
         let text = known?.name ?? name.map(Self.clean) ?? "Here"
         return HStack(spacing: 6) {
-            if let icon { Image(systemName: icon).font(.caption) }
+            Image(systemName: icon).font(.caption)
             Text(text).lineLimit(1)
         }
         .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)

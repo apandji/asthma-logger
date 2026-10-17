@@ -72,10 +72,11 @@ public struct NarratorOutput: Sendable, Equatable {
 
 public enum Narrator {
     public static let rules = [
-        "Do not claim causation or predict an attack.",
+        "Do not claim causation or predict a flare.",
         "Always mention the counts for the top driver when gated rows exist.",
-        "If no gated rows, say we need more usual days or more inhaler logs.",
+        "If no gated rows, say we need more baseline days or more inhaler logs.",
         "Outdoor air only — not indoor, not a diagnosis.",
+        "Never use the word attack. Say baseline days (or baseline moments), not usual days or I'm okay.",
     ]
 
     /// Added when a row has its own nAttacks / nBaselines (journal tags count only moments with a note).
@@ -83,26 +84,26 @@ public enum Narrator {
         "A row with its own nAttacks and nBaselines counts only moments with a journal note; use that row's totals."
 
     public static let caveat =
-        "Outdoor air only — not a medical diagnosis. Comparison to your usual logged days, not a prediction."
+        "Outdoor air only — not a medical diagnosis. Comparison to your baseline days, not a prediction."
 
     /// Fixed factual sentence; always available. Ignores style.
     public static func template(_ input: NarratorInput) -> NarratorOutput {
         let gated = input.rows.filter(\.gated)
         guard let top = gated.first else {
             let headline = input.nBaselines < 12
-                ? "You've used your inhaler \(input.nAttacks) times and logged \(input.nBaselines) usual moments. Keep logging usual days so there's something to compare."
-                : "Nothing stands out yet (\(input.nAttacks) inhaler uses, \(input.nBaselines) usual days). Patterns need more repeats."
+                ? "You've used your inhaler \(input.nAttacks) times and logged \(input.nBaselines) baseline moments. Keep logging baseline days so there's something to compare."
+                : "Nothing stands out yet (\(input.nAttacks) inhaler uses, \(input.nBaselines) baseline days). Patterns need more repeats."
             return NarratorOutput(headline: headline, caveat: caveat, drivers: [], source: .template)
         }
         // Plain counts, no ratio: "8 of the 10 times you used your inhaler, ozone was high. …"
         // Journal-tag rows count only moments with a reviewed note, and say so.
         let nA = top.attacksTotal(input), nB = top.baselinesTotal(input)
         let uses = top.isSubset ? "times you used your inhaler and added a note" : "times you used your inhaler"
-        let usual = top.isSubset ? "On usual days with a note" : "On usual days"
+        let baseline = top.isSubset ? "On baseline days with a note" : "On baseline days"
         var headline = "\(top.attacksWith) of the \(nA) \(uses), \(clause(top.bin, top.level))."
         headline += top.baselinesWith == 0
-            ? " \(usual), that never happened (0 of \(nB))."
-            : " \(usual), that only happened \(top.baselinesWith) of \(nB) times."
+            ? " \(baseline), that never happened (0 of \(nB))."
+            : " \(baseline), that only happened \(top.baselinesWith) of \(nB) times."
         if gated.count > 1 {
             headline += " Also common: \(clause(gated[1].bin, gated[1].level))."
         }
@@ -152,7 +153,7 @@ public enum Narrator {
         }
         let instructions = ([
             "You write one honest insight for an asthma inhaler diary.",
-            "You are given a precomputed table comparing inhaler days to usual days. Do not invent counts or new drivers.",
+            "You are given a precomputed table comparing inhaler days to baseline days. Do not invent counts or new drivers.",
             "Fill headline (the insight), caveat (one short honest limit), drivers (ids like \"ozone:high\" copied from the table).",
             "",
             style.promptBlock(example: example),

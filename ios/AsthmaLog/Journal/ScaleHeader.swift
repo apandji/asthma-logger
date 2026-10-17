@@ -82,7 +82,7 @@ extension LogEvent {
         let time = loggedAt.formatted(date: .omitted, time: .shortened)
         let day = cal.isDateInToday(loggedAt) ? "Today" : cal.isDateInYesterday(loggedAt) ? "Yesterday"
             : loggedAt.formatted(.dateTime.weekday(.abbreviated))
-        let kind = moment == .rescue ? "Rescue" : moment == .maintenance ? "Standard" : "I'm okay"
+        let kind = moment.title
         return ["\(kind) · \(day), \(time)", placeName].compactMap { $0 }.joined(separator: " · ")
     }
 

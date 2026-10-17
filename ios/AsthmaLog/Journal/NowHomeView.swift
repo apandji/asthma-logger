@@ -48,7 +48,7 @@ struct NowHomeView: View {
     @Namespace private var mapZoom
     @State private var tips = TipGroup(.ordered) { PullToLogTip() }
 
-    /// Inhaler moments only; calm moments stay in the comparison, not on the track.
+    /// Inhaler moments only; baseline moments stay in the comparison, not on the track.
     private var moments: [LogEvent] { events.filter { $0.moment != .okay } }
 
     var body: some View {
@@ -390,7 +390,7 @@ struct NowHomeView: View {
     }
 
     /// The one sentence for a time, with its color once felt air has learned. Never a percent, never
-    /// "attack", never a cause. Green: like your okay days. Yellow: a bit like your rescue days.
+    /// Never say "attack", never a cause. Green: like your baseline. Yellow / red: like your flare days.
     /// Red: matches the days you reached for your rescue.
     /// The air's level as the verdict's colours: green clear, yellow hazy, red heavy.
     /// How heavy the air was, 0 … 1, for the rail's single ink.

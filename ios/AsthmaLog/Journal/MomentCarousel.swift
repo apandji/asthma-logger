@@ -55,7 +55,7 @@ struct FolderCard: View {
     @AppStorage(Crit.Header.key) private var headerStyle = Crit.Header.moment
 
     private var kindWord: String {
-        event.moment == .rescue ? "Rescue" : event.moment == .maintenance ? "Standard" : "I'm okay"
+        event.moment.title
     }
 
     var body: some View {

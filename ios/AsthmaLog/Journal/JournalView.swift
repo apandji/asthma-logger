@@ -553,7 +553,7 @@ struct JournalView: View {
     }
 }
 
-/// Orange dot = rescue, blue dot = standard, open ring = I'm okay. Same colors as the watch.
+/// Orange dot = rescue, blue dot = standard, open ring = baseline. Same colors as the watch.
 struct MomentDot: View {
     let moment: MomentKind
     var size: CGFloat = 10

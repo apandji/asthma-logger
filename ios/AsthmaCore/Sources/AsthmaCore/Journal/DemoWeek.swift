@@ -1,7 +1,7 @@
 import Foundation
 
 /// A made-up week of moments for demos and critiques: standard doses morning and evening, a few rescue
-/// moments, and I'm okay samples, each with outdoor values labelled source "Demo". Deterministic, so a
+/// moments, and baseline samples, each with outdoor values labelled source "Demo". Deterministic, so a
 /// demo looks the same every time. Never mixed into real data silently: the app tags these and can remove them.
 public enum DemoWeek {
     public struct Moment: Sendable {

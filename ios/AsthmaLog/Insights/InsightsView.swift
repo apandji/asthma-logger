@@ -279,7 +279,7 @@ struct InsightsView: View {
                     HStack(alignment: .firstTextBaseline) {
                         VStack(alignment: .leading) {
                             Text("\(Bins.label(r.bin)) · \(r.level)")
-                            Text("\(r.attacksWith) of \(r.nAttacks) inhaler · \(r.baselinesWith) of \(r.nBaselines) usual")
+                            Text("\(r.attacksWith) of \(r.nAttacks) inhaler · \(r.baselinesWith) of \(r.nBaselines) baseline")
                                 .font(Theme.caption).foregroundStyle(Theme.secondaryText)
                         }
                         Spacer()

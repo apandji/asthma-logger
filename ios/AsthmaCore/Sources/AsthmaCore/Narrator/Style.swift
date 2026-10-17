@@ -51,17 +51,17 @@ public enum NarratorStyle: String, Sendable, CaseIterable {
         case .clinical:
             return """
             Example headline in THIS register (same facts, your voice must match this density):
-            "\(f.binLabel) \(f.level): present on \(f.attacksWith) of \(f.nAttacks) inhaler uses and \(f.baselinesWith) of \(f.nBaselines) usual days. An association in your log, not a cause."
+            "\(f.binLabel) \(f.level): present on \(f.attacksWith) of \(f.nAttacks) inhaler uses and \(f.baselinesWith) of \(f.nBaselines) baseline days. An association in your log, not a cause."
             """
         case .plain:
             return """
             Example headline in THIS register (same facts, your voice must match this warmth):
-            "Here's what stands out: \(f.clause) on \(f.attacksWith) of the \(f.nAttacks) times you used your inhaler, and on only \(f.baselinesWith) of \(f.nBaselines) usual days."
+            "Here's what stands out: \(f.clause) on \(f.attacksWith) of the \(f.nAttacks) times you used your inhaler, and on only \(f.baselinesWith) of \(f.nBaselines) baseline days."
             """
         case .poetic:
             return """
             Example headline in THIS register (same facts, your voice must match this lyric shape):
-            "Some days the outdoor air feels heavier. \(f.clause.prefix(1).uppercased() + f.clause.dropFirst()) on \(f.attacksWith) of the \(f.nAttacks) times you reached for your inhaler, and on just \(f.baselinesWith) of \(f.nBaselines) ordinary days. Not a cause, just something your log keeps noticing."
+            "Some days the outdoor air feels heavier. \(f.clause.prefix(1).uppercased() + f.clause.dropFirst()) on \(f.attacksWith) of the \(f.nAttacks) times you reached for your inhaler, and on just \(f.baselinesWith) of \(f.nBaselines) baseline days. Not a cause, just something your log keeps noticing."
             """
         }
     }
@@ -70,8 +70,8 @@ public enum NarratorStyle: String, Sendable, CaseIterable {
         let shared = [
             "CRITICAL: The three registers must sound OBVIOUSLY different. Do not write a bland middle sentence for every style.",
             "Voice only — the lift table is ground truth.",
-            "You MUST include the exact counts for the top gated driver: how many of the times they used their inhaler, and how many usual days (e.g. 8 of 10 vs 3 of 24).",
-            "Count inhaler uses as 'times you used your inhaler'. Never use the word 'attack'.",
+            "You MUST include the exact counts for the top gated driver: how many of the times they used their inhaler, and how many baseline days (e.g. 8 of 10 vs 3 of 24).",
+            "Count inhaler uses as 'times you used your inhaler'. Never use the word 'attack'. Say baseline days, not usual days or I'm okay.",
             "Never state a ratio or multiplier like '3×' or 'twice as often'. Give the two counts instead.",
             "Never invent drivers, counts, diagnoses, or predictions.",
             "Never say the weather caused anything. Never say lungs know / remember / warn / whisper.",
@@ -80,7 +80,7 @@ public enum NarratorStyle: String, Sendable, CaseIterable {
         let voice: String
         switch self {
         case .clinical:
-            voice = "Register: CLINICAL (sound like a short methods note). Precise and neutral: name the condition and level, then the two counts. Words like 'present on', 'inhaler uses', 'usual days', 'association'. No metaphors. No second-person coaching. One or two short sentences."
+            voice = "Register: CLINICAL (sound like a short methods note). Precise and neutral: name the condition and level, then the two counts. Words like 'present on', 'inhaler uses', 'baseline days', 'association'. No metaphors. No second-person coaching. One or two short sentences."
         case .plain:
             voice = "Register: PLAIN (sound like a friend reading your log back to you). Use you/your. Short sentences, everyday words. No jargon (no 'prevalence', 'co-occurrence', 'lift'). No stock openers like 'Quick read'. Say what stands out, with the two counts in the same sentence."
         case .poetic:

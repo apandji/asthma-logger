@@ -1,7 +1,7 @@
 import Foundation
 
 /// Synthetic late-summer diary, identical to `web/src/lib/insights/demo-frames.ts`.
-/// Story: high ozone + afternoons on inhaler days; usual days are milder mornings.
+/// Story: high ozone + afternoons on inhaler days; baseline days are milder mornings.
 public enum DemoData {
     public static func frames() -> [FeatureFrame] {
         typealias A = (Int, PollutantBand, PollutantBand, PollenLevel, TempBand, HumidityBand, Bool, Bool)

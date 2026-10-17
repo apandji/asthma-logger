@@ -83,7 +83,7 @@ Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web pr
 | HealthKit inhaler usage write + delete | Photos |
 | Insights: lift, template + Foundation Models narration with output checks | Full visual style pass ([docs/design/visual-style.md](../docs/design/visual-style.md)) |
 | Look-ahead: 72 h WeatherKit + AirNow categories, personal windows or cold-start hazards | Notifications |
-| Settings: voice slider, model toggle, Health, auto usual moments, demo data | |
+| Settings: voice slider, model toggle, Health, auto baseline moments, demo data | |
 | Apple Watch logging (Rescue / Standard → phone) | Watch complications |
 | First-run onboarding; Journal week strip with woven tiles and ambient field | |
 
@@ -165,7 +165,7 @@ Record new crit feedback here, dated, and move items out when they're resolved (
 - Debug: Settings › Reset onboarding and button. `ios/scripts/fresh-install.sh` reinstalls on the phone so every permission sheet shows again (erases the Journal; adds the demo week back).
 - **The design system is [docs/design/design-system.md](../docs/design/design-system.md).** Tokens, type, the three springs, the sky, the header, the timeline, the controls, the words. Read it before building any screen; it supersedes visual-style.md where they differ.
 - **All styling goes through `Theme/`.** No hard-coded colors or fonts in views. Colors are `Color(light:dark:)` tokens; riso inks are for data marks only.
-- **Demo moments** (Settings → Demo moments) are marked by `LogEvent.isDemoMoment`, never by `note`. They show in the Journal but never feed Insights, I'm okay sampling, or a trend line next to real readings.
+- **Demo moments** (Settings → Demo moments) are marked by `LogEvent.isDemoMoment`, never by `note`. They show in the Journal but never feed Insights, baseline sampling, or a trend line next to real readings.
 - Copy follows the "Say / Do not say" table in [docs/predictive-engine.md §2](../docs/predictive-engine.md).
 
 ## Apple-side setup checklist (owner, in Xcode / developer portal)

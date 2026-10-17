@@ -7,7 +7,7 @@ import SwiftUI
 /// The week is a necklace of 21 beads, one per part of the day. A bead grows and gets spikier as the
 /// worst particle or gas level rises: small and smooth is clean air. Pollen hangs below as a flower
 /// charm, only when it's moderate or high. Inhaler moments sit just inside the thread at their hour;
-/// "I'm okay" moments are warm spots. Tap a bead for that day.
+/// Baseline moments are warm spots. Tap a bead for that day.
 struct StrandPrototype: View {
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -71,7 +71,7 @@ struct StrandPrototype: View {
             HStack(spacing: 14) {
                 HStack(spacing: 6) { MomentGlyph(moment: .rescue, size: 13); Text("Rescue") }
                 HStack(spacing: 6) { Circle().fill(Theme.standard).frame(width: 7, height: 7); Text("Standard") }
-                HStack(spacing: 6) { Circle().fill(StrandBuild.okay).frame(width: 7, height: 7); Text("I'm okay") }
+                HStack(spacing: 6) { Circle().fill(StrandBuild.okay).frame(width: 7, height: 7); Text("Baseline") }
             }
         }
         .font(.caption).foregroundStyle(Theme.secondaryText)

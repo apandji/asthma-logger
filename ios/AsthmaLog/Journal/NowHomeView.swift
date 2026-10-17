@@ -76,11 +76,16 @@ struct NowHomeView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
-                // The grain is the paper's, not the map's: it runs under the whole page.
-                // The future is printed on a different paper: deep purple, crossfading as you cross now.
-                ZStack { inFuture ? Theme.forecastPaper : Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }
-                    .ignoresSafeArea()
-                    .animation(.smooth(duration: 0.9), value: inFuture)
+                // The page takes the weather's colour, as in Apple Weather: hue from the temperature, light from
+                // the hour (rose dawn, blue day, amber dusk, indigo night), deepening to black at the bottom.
+                // The forecast is the same, quieter. The grain runs over all of it.
+                ZStack {
+                    LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), .black],
+                                   startPoint: .top, endPoint: .bottom)
+                    SkyGrain(responds: false).opacity(0.5)
+                }
+                .ignoresSafeArea()
+                .animation(scrubbing ? nil : .easeInOut(duration: 0.5), value: focusKey)
             }
             // Linen is a light page whatever the system says; black is a dark one.
             // Black paper, or linen when chosen; the forecast shifts the paper to warm graphite (above).
@@ -234,6 +239,17 @@ struct NowHomeView: View {
         case .none: break
         }
         return (c, c.map { WeaveSpec($0.input) } ?? here?.weave ?? WeaveSpec(), pollen)
+    }
+
+    /// The top of the page's colour for what the playhead is on.
+    private var pageTop: Color {
+        let (t, d): (Double?, Date) = switch focus {
+        case .now: (liveAir.conditions?.best(.temperature)?.value, now)
+        case .moment(let m): (m.conditions?.best(.temperature)?.value, m.loggedAt)
+        case .hour(let h): (h.conditions.best(.temperature)?.value, h.date)
+        }
+        let c = WeatherColor.light(WeatherColor.temperature(t ?? 62), at: d).mix(with: .black, by: 0.22)
+        return inFuture ? c.mix(with: Color(white: 0.2), by: 0.45) : c
     }
 
     /// What the sky is showing, as a key, so a change can animate as one move.

@@ -54,7 +54,7 @@ struct AmbientField: View {
         var sky = WeatherColor.light(WeatherColor.temperature(temperatureF ?? WeatherColor.fallbackTemp(weave)), at: date)
         if humidity == "humid" { sky = sky.mix(with: .white, by: linen ? 0.08 : 0.16) }
         // Under the particles the weather is the paper, not a colour: a grey that leans warm or cool.
-        if !tintsLayers { sky = sky.mix(with: Color(white: 0.42), by: 0.72) }
+        if !tintsLayers { sky = sky.mix(with: Color(white: 0.42), by: 0.15) }
         if linen { sky = sky.mix(with: Color(red: 0.16, green: 0.14, blue: 0.2), by: 0.14) }
         let strength = linen ? 0.96 : (!tintsLayers ? 0.62 : (scheme == .dark ? 0.75 : 0.66))
         let overprint = linen ? 1.5 : 1.0

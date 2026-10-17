@@ -106,12 +106,13 @@ struct MomentTag: View {
         // The word carries the kind; colour is kept for the air.
         let ink = moment == .rescue ? Color.primary : Theme.secondaryText
         Text(text ?? (moment == .rescue ? "Rescue" : moment == .maintenance ? "Standard" : "Baseline"))
-            .font(.system(size: 10, weight: .bold)).tracking(0.9).textCase(.uppercase)
+            // The same size as the place beside it, so the top line reads as one line.
+            .font(.subheadline.weight(.semibold))
             .foregroundStyle(ink)
             // One width for every kind, so the tag doesn't resize as you scrub between moments.
-            .frame(width: 72)
-            .padding(.vertical, 3)
-            .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(ink.opacity(0.14)))
-            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(ink.opacity(0.45), lineWidth: 0.8))
+            .frame(width: 84)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(ink.opacity(0.12)))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(ink.opacity(0.35), lineWidth: 0.8))
     }
 }

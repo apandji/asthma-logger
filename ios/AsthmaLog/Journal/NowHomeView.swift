@@ -35,6 +35,8 @@ struct NowHomeView: View {
     @State private var openDay: Date?
     @State private var toast: LogEvent?
     @State private var probing = false
+    /// The timeline is moving: skies change without their ripple until it settles.
+    @State private var scrubbing = false
     /// The clock. Ticks so "now" creeps along the track while you watch.
     @State private var now = Date()
     @Namespace private var mapZoom
@@ -57,9 +59,10 @@ struct NowHomeView: View {
                 NowTimeline(moments: moments, baselines: events.filter { $0.moment == .okay }.map(\.loggedAt),
                             tint: { airTint($0.weave) },
                             forecastTints: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
-                            hours: hours, now: now, focusTime: $focusTime, onPastEnd: { showInsights = true })
+                            hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
                     .frame(height: 104)
-                    .padding(.bottom, 84)  // clear the +
+                    // The + and Settings sit on the timeline's row, either side of it; the sky gets the height.
+                    .padding(.horizontal, 80)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
@@ -130,6 +133,7 @@ struct NowHomeView: View {
                 if let p = away ?? here { await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here") }
             }
             // A new moment brings the playhead back to now.
+            .environment(\.skySettled, !scrubbing)
             .sensoryFeedback(.impact(weight: .medium, intensity: 0.9), trigger: inFuture)
             .onChange(of: events.last?.id) { _, _ in
                 withAnimation(.smooth(duration: 0.6)) { focusTime = nil }
@@ -556,6 +560,10 @@ struct NowSky: View {
     var sketch = false
     @Environment(\.colorScheme) private var scheme
     private var light: Bool { scheme == .light }
+    /// False while the timeline is moving.
+    @Environment(\.skySettled) private var settled
+
+    private func ripple() { rippleInk = captureInk ?? .white; rippleAt = .now }
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var probe: SkyProbe?
@@ -602,9 +610,10 @@ struct NowSky: View {
             }
             .frame(width: size.width, height: size.height)
             .drawingGroup()
-            .onAppear { rippleInk = captureInk ?? .white; rippleAt = .now }
-            // Every new sky (a moment, a forecast hour, now) ripples once; a fresh log ripples in its color.
-            .onChange(of: date) { _, _ in rippleInk = captureInk ?? .white; rippleAt = .now }
+            // A sky ripples once you've landed on it, not while the timeline is moving past it.
+            .onAppear { if settled { ripple() } }
+            .onChange(of: date) { _, _ in if settled { ripple() } }
+            .onChange(of: settled) { _, s in if s { ripple() } }
             .mask {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),
                                    startRadiusFraction: 0, endRadiusFraction: 0.7)
@@ -862,7 +871,7 @@ struct VerdictHeader: View {
             ZStack(alignment: .topLeading) {
                 Text(title)
                     .font(Theme.serifTitle).kerning(Theme.serifKerning)
-                    .lineLimit(2, reservesSpace: true)
+                    .lineLimit(2)
                     .id(title)
                     .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
             }
@@ -888,5 +897,14 @@ struct VerdictHeader: View {
         .padding(.horizontal, 20)
         .padding(.top, 6)
         .animation(Theme.smooth, value: tint)
+    }
+}
+
+private struct SkySettledKey: EnvironmentKey { static let defaultValue = true }
+extension EnvironmentValues {
+    /// Whether the timeline has come to rest (skies ripple only then).
+    var skySettled: Bool {
+        get { self[SkySettledKey.self] }
+        set { self[SkySettledKey.self] = newValue }
     }
 }

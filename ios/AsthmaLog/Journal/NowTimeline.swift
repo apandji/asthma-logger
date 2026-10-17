@@ -19,6 +19,8 @@ struct NowTimeline: View {
     let now: Date
     /// Nil is now.
     @Binding var focusTime: Date?
+    /// True while the track is being dragged or is still gliding.
+    @Binding var scrubbing: Bool
     /// Swiping on past the end of the forecast reveals Insights.
     var onPastEnd: () -> Void = {}
     @State private var pastEndArmed = true
@@ -165,6 +167,7 @@ struct NowTimeline: View {
         }
         .onScrollPhaseChange { old, phase in
             dragging = phase == .interacting || phase == .decelerating
+            scrubbing = dragging
             // Settle on a moment if one is near the playhead, else exactly on now if near it.
             if phase == .idle, old == .interacting || old == .decelerating {
                 if let m = moments.min(by: { abs(x($0.loggedAt) - centerX) < abs(x($1.loggedAt) - centerX) }),

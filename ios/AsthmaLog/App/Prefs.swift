@@ -12,4 +12,6 @@ enum Prefs {
     static let logMethod = "logMethod"
     /// Two labelled Rescue / Standard buttons instead of the pull-up +.
     static let logButtons = "logButtons"
+    /// Use bundled Funnel Sans instead of Recursive (sentence) + SF (UI). Default off.
+    static let useFunnelSans = "useFunnelSans"
 }

@@ -48,17 +48,18 @@ enum Theme {
     static let padding: CGFloat = 16
     static let spacing: CGFloat = 12
 
-    // MARK: Type. One Recursive voice for the sentence (Theme/Recursive.swift), SF for everything else.
+    // MARK: Type. Default: Recursive for the sentence (Theme/Recursive.swift), SF for everything else.
+    // Settings › Type can switch the whole stack to Funnel Sans (default off).
     // The "serif" names stayed when New York was swapped out; they mean "the sentence's voice".
     /// The small line above a title: type, time, place. Set as tracked small caps, like a dateline.
-    static let kicker = Font.system(size: 12, weight: .semibold, design: .default)
+    static var kicker: Font { Typeface.ui(size: 12, weight: .semibold, relativeTo: .caption) }
     static let kickerTracking: CGFloat = 1.1
-    /// The sentence. Recursive, regular weight, a size up, tracked a touch tight. How casual it looks follows
+    /// The sentence. Recursive (or Funnel Sans when opted in). How casual Recursive looks follows
     /// Settings › Insight voice, so these are read fresh each time.
     static var serifTitle: Font { Recursive.sentence(size: 26) }
     static var serifTitleLarge: Font { Recursive.sentence(size: 30) }
     static let serifKerning: CGFloat = -0.5
-    /// Numbers that change in place (counts, times): Recursive Mono, always linear.
+    /// Numbers that change in place (counts, times): Recursive Mono (or Funnel Sans when opted in).
     static var figures: Font { Recursive.figures(size: 22) }
     /// A verdict byline under the sentence, in the same voice.
     static var bylineSerif: Font { Recursive.sentence(size: 17) }
@@ -71,13 +72,34 @@ enum Theme {
     /// Things arriving: toasts, tiles, sheets. A little lift.
     static let lift = Animation.spring(duration: 0.55, bounce: 0.22)
 
-    /// One family for everything but the sentence: SF, as on the home. (Rounded is retired.)
-    static let headline = Font.headline
-    /// The sentence on a detail page: Recursive, like the home's but a size down.
+    /// One family for everything but the sentence: SF, or Funnel Sans when opted in.
+    static var headline: Font { Typeface.text(.headline, weight: .semibold) }
+    /// The sentence on a detail page: Recursive (or Funnel Sans), a size down from the home.
     static var headlineSerif: Font { Recursive.sentence(size: 22) }
-    static let body = Font.body
-    static let caption = Font.caption
-    static let number = Font.body.monospacedDigit()
+    static var body: Font { Typeface.text(.body) }
+    static var caption: Font { Typeface.text(.caption) }
+    static var number: Font { Typeface.text(.body).monospacedDigit() }
+
+    /// Central type switch for Settings › Type › Funnel Sans.
+    enum Typeface {
+        static var usesFunnelSans: Bool {
+            UserDefaults.standard.bool(forKey: Prefs.useFunnelSans)
+        }
+
+        static func text(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
+            guard usesFunnelSans else {
+                return .system(style, design: .default, weight: weight)
+            }
+            return FunnelSans.text(style, weight: weight)
+        }
+
+        static func ui(size: CGFloat, weight: Font.Weight, relativeTo _: Font.TextStyle) -> Font {
+            guard usesFunnelSans else {
+                return .system(size: size, weight: weight, design: .default)
+            }
+            return FunnelSans.font(size: size, weight: weight)
+        }
+    }
 }
 
 /// Press feedback for anything tappable that isn't a system button: a small, quick scale and dim,
@@ -102,7 +124,7 @@ struct Card<Content: View>: View {
         VStack(alignment: .leading, spacing: Theme.spacing) {
             Label(title, systemImage: systemImage ?? "circle.fill")
                 .labelStyle(.titleAndIcon)
-                .font(Theme.caption.weight(.semibold))
+                .font(Theme.Typeface.text(.caption, weight: .semibold))
                 .textCase(.uppercase)
                 .foregroundStyle(Theme.secondaryText)
             content
@@ -120,7 +142,7 @@ struct Chip: View {
 
     var body: some View {
         Text(text)
-            .font(Theme.caption.weight(.medium))
+            .font(Theme.Typeface.text(.caption, weight: .medium))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .foregroundStyle(color)

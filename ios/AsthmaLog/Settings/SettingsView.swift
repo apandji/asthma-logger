@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.logButtons) private var useButtons = false
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.useDemoData) private var demo = false
+    @AppStorage(Prefs.useFunnelSans) private var useFunnelSans = false
     @Environment(\.modelContext) private var context
     @Environment(ButtonLink.self) private var button
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
@@ -23,6 +24,16 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Toggle("Funnel Sans", isOn: $useFunnelSans)
+                } header: {
+                    Text("Type")
+                } footer: {
+                    Text(useFunnelSans
+                         ? "Using Funnel Sans for titles and body. Turn off to go back to Recursive and SF."
+                         : "Off keeps the usual look: Recursive for the headline sentence and SF for the rest.")
+                }
+
                 #if DEBUG
                 Section {
                     NavigationLink { DevicesView() } label: {

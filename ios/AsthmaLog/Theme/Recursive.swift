@@ -24,7 +24,11 @@ enum Recursive {
     }
 
     /// The sentence, in the voice chosen in Settings.
+    /// When Settings › Type › Funnel Sans is on, uses Funnel Sans instead (axes are ignored).
     static func sentence(size: CGFloat, slanted: Bool = false, voice: NarratorStyle = .current) -> Font {
+        if Theme.Typeface.usesFunnelSans {
+            return FunnelSans.font(size: size, weight: .regular)
+        }
         var axes = voice.sentenceAxes
         if slanted { axes.slant = -15 }
         return font(size: size, axes)
@@ -32,7 +36,10 @@ enum Recursive {
 
     /// Numbers that change in place: mono so digits hold their columns, linear so they read exact.
     static func figures(size: CGFloat) -> Font {
-        font(size: size, Axes(casual: 0, mono: 1, weight: 400, cursive: 0))
+        if Theme.Typeface.usesFunnelSans {
+            return FunnelSans.font(size: size, weight: .regular)
+        }
+        return font(size: size, Axes(casual: 0, mono: 1, weight: 400, cursive: 0))
     }
 
     static func font(size: CGFloat, _ axes: Axes) -> Font {

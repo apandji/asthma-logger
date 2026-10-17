@@ -51,6 +51,7 @@ struct RootView: View {
     @Environment(LogService.self) private var services
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
+    @AppStorage(Prefs.useFunnelSans) private var useFunnelSans = false
     @AppStorage(Crit.performanceHUD) private var perfHUD = false
 
     var body: some View {
@@ -62,6 +63,8 @@ struct RootView: View {
                 NowHomeView()
             }
         }
+        // Default text style follows Settings › Type; Theme tokens also read the same Prefs key.
+        .environment(\.font, Theme.body)
         #if DEBUG
         .overlay(alignment: .top) {
             // Tap it to reset the dropped-frame count.
@@ -71,6 +74,8 @@ struct RootView: View {
         .fullScreenCover(isPresented: Binding(get: { !didOnboard }, set: { _ in })) {
             OnboardingView()
         }
+        // Keep this view observing the toggle so Theme fonts refresh without remounting (which would dismiss sheets).
+        .animation(nil, value: useFunnelSans)
         .onChange(of: scenePhase, initial: true) { _, phase in
             guard phase == .active, autoBaseline, didOnboard else { return }
             Task { await services.sampleUsualDayIfDue(in: context) }

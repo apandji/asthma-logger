@@ -87,6 +87,15 @@ final class LogService {
                   in: context, writeToHealth: writeToHealth)
     }
 
+    /// Onboarding's first press (or tap): a baseline moment with its own label, air and place stamped.
+    @discardableResult
+    func logFirstCapture(in context: ModelContext) async -> LogEvent {
+        let e = await log(.okay, in: context, writeToHealth: false)
+        e.isFirstCapture = true
+        try? context.save()
+        return e
+    }
+
     /// Safe to call again (Retry) on a failed or partial log. Conditions are for now, so a retry
     /// on an old log stamps current air — only offer it shortly after logging.
     func enrich(_ event: LogEvent) async {

@@ -109,8 +109,10 @@ struct MomentTag: View {
             // The same size as the place beside it, so the top line reads as one line.
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(ink)
-            // One width for every kind, so the tag doesn't resize as you scrub between moments.
-            .frame(width: 84)
+            .lineLimit(1).fixedSize()
+            // One width for every kind, so the tag doesn't resize as you scrub between moments; a custom
+            // word ("First capture") gets what it needs.
+            .frame(minWidth: 84)
             .padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(ink.opacity(0.12)))
             .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(ink.opacity(0.35), lineWidth: 0.8))

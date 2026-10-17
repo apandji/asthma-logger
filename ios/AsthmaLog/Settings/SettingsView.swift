@@ -25,6 +25,14 @@ struct SettingsView: View {
             Form {
                 #if DEBUG
                 Section {
+                    NavigationLink { DevicesView() } label: {
+                        Label { Text("Devices") } icon: { Image(systemName: "button.programmable") }
+                    }
+                } footer: {
+                    Text("Your felt buttons and Apple Watch.")
+                }
+
+                Section {
                     Toggle("Performance readout", isOn: $perfHUD)
                     Button("Replay tutorial") {
                         UserDefaults.standard.set(true, forKey: AppTips.resetKey)
@@ -82,7 +90,6 @@ struct SettingsView: View {
                     Text("I'm okay moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
                 }
 
-                ButtonSection()
 
                 Section("Data sources") {
                     LabeledContent("Apple Weather", value: "On")

@@ -36,6 +36,7 @@ struct NowHomeView: View {
     @State private var openDay: Date?
     @State private var toast: LogEvent?
     @State private var probing = false
+    @AppStorage(Prefs.didOnboard) private var didOnboard = false
     /// The timeline is moving: skies change without their ripple until it settles.
     @State private var scrubbing = false
     /// A sideways drag on the sky: where it started in time, and the finger.
@@ -95,7 +96,8 @@ struct NowHomeView: View {
                     .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) {
-                CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, toast: $toast)
+                // No tips until onboarding is done: they'd pop over the first-run screens.
+                CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
             }
             .overlay(alignment: .bottomLeading) { rail }
             .overlay(alignment: .top) {
@@ -695,6 +697,8 @@ struct NowSky: View {
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var probe: SkyProbe?
+    /// The 48 hours before this sky's time, for the label's lines. Loaded once per sky.
+    @State private var history: HourlyHistory?
     /// The row of the scale being read: 0 weather, then the layers in reading order.
     @State private var row: Int?
     @State private var pulse: Task<Void, Never>?
@@ -806,6 +810,10 @@ struct NowSky: View {
         }
         .padding(.horizontal, 8)
         .onDisappear { stopPulse() }
+        .task(id: "\(mapID)-\(date.timeIntervalSinceReferenceDate)") {
+            guard let (lat, lon) = coordinate else { return }
+            history = await HourlyHistory.load(latitude: lat, longitude: lon, from: date.addingTimeInterval(-48 * 3600), to: date)
+        }
         .onAppear {
             guard !isPast, !sketch, !reduceMotionEnv else { return }
             withAnimation(.easeOut(duration: 2).repeatForever(autoreverses: false)) { pinPulse = true }
@@ -849,7 +857,20 @@ struct NowSky: View {
         let y = (bands[r].lowerBound + bands[r].upperBound) / 2
         let hit = SkyExplorer.strata(at: y, layers: layers, conditions: conditions, weave: weave, temperatureF: temperature, pollen: pollen)
         UISelectionFeedbackGenerator().selectionChanged()
-        withAnimation(.snappy(duration: 0.2)) { row = r; probe = hit?.probe }
+        var p = hit?.probe
+        if var probe = p, let h = history {
+            switch probe.name {
+            case "Weather":
+                probe.lines = [SparkSeries(name: "Temperature", unit: "°", points: h.temperature, ink: .white),
+                               SparkSeries(name: "Humidity", unit: "%", points: h.humidity, ink: Color(red: 0.55, green: 0.7, blue: 0.95))]
+                    .filter { $0.points.count > 1 }
+            case "PM2.5", "Air":
+                probe.lines = h.pm25.count > 1 ? [SparkSeries(name: "PM2.5", unit: "", points: h.pm25, ink: WeatherColor.pm25)] : []
+            default: break
+            }
+            p = probe
+        }
+        withAnimation(.snappy(duration: 0.2)) { row = r; probe = p }
     }
 
     private func startPulse() {

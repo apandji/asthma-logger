@@ -24,6 +24,9 @@ struct SkyProbe: Equatable {
     var symbol: String? = nil
     /// The look-back: what this layer did before, as (window, value) rows. "Last 6 h", "6–48 h before".
     var before: [LookBackRow] = []
+    /// The 48 hours before, as lines: temperature and humidity for Weather, the pollutant's own hours
+    /// for PM2.5 and ozone. Filled in by the sky once its history has loaded.
+    var lines: [SparkSeries] = []
 
     /// What the highlight is tinted with: the level, in the same three colors as the verdict line
     /// (good green, OK yellow, not good red). The layer's own ink stays in the sky; its name is in the label.
@@ -290,6 +293,21 @@ struct SkyProbeOverlay: View {
             if !probe.note.isEmpty {
                 Text(probe.note).font(.caption).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
             }
+            if !probe.lines.isEmpty {
+                // The 48 hours before, drawn: the reading is the right-hand end of each line.
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(probe.lines, id: \.name) { line in
+                        Sparkline(series: line)
+                    }
+                    HStack {
+                        Text("48 h before").font(.caption2).foregroundStyle(Theme.secondaryText)
+                        Spacer()
+                        Text("now").font(.caption2).foregroundStyle(Theme.secondaryText)
+                    }
+                }
+                .padding(.top, 6)
+                .overlay(alignment: .top) { Rectangle().fill(Theme.secondaryText.opacity(0.25)).frame(height: 0.5) }
+            }
             if !probe.before.isEmpty {
                 // The look-back: what came before this reading.
                 VStack(alignment: .leading, spacing: 4) {
@@ -381,4 +399,53 @@ struct AmountDots: View {
 struct LookBackRow: Equatable {
     let window: String
     let value: String
+}
+
+/// One line for the label's sparklines: a name, a unit, the points, and its ink.
+struct SparkSeries: Equatable {
+    let name: String
+    let unit: String
+    let points: [HourPoint]
+    let ink: Color
+    static func == (a: SparkSeries, b: SparkSeries) -> Bool { a.name == b.name && a.points.count == b.points.count }
+}
+
+/// A small line graph of the hours before a reading, with the first and last values labelled. The
+/// moment is the right-hand end.
+struct Sparkline: View {
+    let series: SparkSeries
+
+    var body: some View {
+        let values = series.points.map(\.value)
+        let lo = values.min() ?? 0, hi = values.max() ?? 1
+        HStack(alignment: .center, spacing: 8) {
+            Text(series.name).font(.caption2).foregroundStyle(Theme.secondaryText).frame(width: 60, alignment: .leading)
+            Canvas { ctx, size in
+                guard series.points.count > 1 else { return }
+                let span = max(1, hi - lo)
+                let first = series.points.first!.date, last = series.points.last!.date
+                let total = max(1, last.timeIntervalSince(first))
+                var path = Path()
+                for (i, p) in series.points.enumerated() {
+                    let x = CGFloat(p.date.timeIntervalSince(first) / total) * size.width
+                    let y = size.height - 2 - CGFloat((p.value - lo) / span) * (size.height - 4)
+                    if i == 0 { path.move(to: CGPoint(x: x, y: y)) } else { path.addLine(to: CGPoint(x: x, y: y)) }
+                }
+                ctx.stroke(path, with: .color(series.ink), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                // The reading: a dot at the end.
+                if let p = series.points.last {
+                    let y = size.height - 2 - CGFloat((p.value - lo) / span) * (size.height - 4)
+                    ctx.fill(Path(ellipseIn: CGRect(x: size.width - 3, y: y - 3, width: 6, height: 6)), with: .color(series.ink))
+                }
+            }
+            .frame(height: 26)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text("\(Int((values.last ?? 0).rounded()))\(series.unit)").font(.caption.weight(.semibold)).monospacedDigit()
+                Text("\(Int(lo.rounded()))–\(Int(hi.rounded()))").font(.caption2).foregroundStyle(Theme.secondaryText).monospacedDigit()
+            }
+            .frame(width: 46, alignment: .trailing)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(series.name): from \(Int((values.first ?? 0).rounded())) to \(Int((values.last ?? 0).rounded())) \(series.unit) over the last two days")
+    }
 }

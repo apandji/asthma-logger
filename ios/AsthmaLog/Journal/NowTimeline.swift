@@ -32,7 +32,8 @@ struct NowTimeline: View {
 
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     /// The track's ink: white on black paper, near-black on linen.
-    private var ink: Color { paper == .linen ? Color(red: 0.12, green: 0.1, blue: 0.09) : .white }
+    @Environment(\.colorScheme) private var scheme
+    private var ink: Color { scheme == .light ? Color(red: 0.12, green: 0.1, blue: 0.09) : .white }
 
     private let dayWidth: CGFloat = 64
     private let axis: CGFloat = 46
@@ -178,10 +179,10 @@ struct NowTimeline: View {
                     .allowsHitTesting(false)
                 // The pill is a button: tap it to step back through your moments, newest first.
                 Button(action: stepBack) {
-                    Text(focusTime == nil ? "Now" : current.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+                    Text(focusTime == nil ? "Now" : relative(current))
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .tracking(0.2)
-                        .foregroundStyle(Theme.paper(paper))
+                        .foregroundStyle(scheme == .light ? Theme.linen : Color.black)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(ink, in: Capsule())
                         .contentTransition(.numericText())
@@ -243,6 +244,16 @@ struct NowTimeline: View {
         let past = moments.filter { $0.loggedAt < current - 60 }
         guard let target = past.last else { return }
         go(to: target.loggedAt)
+    }
+
+    /// "+4h", "−6h", "+40m"; past two days, the day: "Wed 14".
+    private func relative(_ t: Date) -> String {
+        let s = t.timeIntervalSince(now)
+        let sign = s >= 0 ? "+" : "−"
+        let a = abs(s)
+        if a < 3600 { return "\(sign)\(max(1, Int((a / 60).rounded())))m" }
+        if a < 48 * 3600 { return "\(sign)\(Int((a / 3600).rounded()))h" }
+        return t.formatted(.dateTime.weekday(.abbreviated).day())
     }
 
     private func go(to t: Date?) {

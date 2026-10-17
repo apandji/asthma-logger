@@ -65,12 +65,13 @@ struct NowHomeView: View {
             .background {
                 // The grain is the paper's, not the map's: it runs under the whole page.
                 // The future is printed on a different paper: deep purple, crossfading as you cross now.
-                ZStack { inFuture ? Theme.forecastPaper : Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }
+                ZStack { inFuture ? Theme.linen : Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }
                     .ignoresSafeArea()
                     .animation(Theme.smooth, value: inFuture)
             }
             // Linen is a light page whatever the system says; black is a dark one.
-            .environment(\.colorScheme, paper == .linen ? .light : .dark)
+            // Past and now are printed in ink on black; the future is a sketch on linen.
+            .environment(\.colorScheme, paper == .linen || inFuture ? .light : .dark)
             .sheet(item: $pinDetails) { e in
                 NavigationStack { MomentDetailsView(event: e) }
                     .presentationDragIndicator(.visible)
@@ -182,40 +183,29 @@ struct NowHomeView: View {
 
     // MARK: Header
 
+    /// The verdict leads; the conditions and the place sit under it in one plain line. The inhaler tag
+    /// appears only on moments. The time lives on the rail's pill.
     private var header: some View {
         Group {
             switch focus {
             case .now:
                 if let j = justNow {
-                    // Just logged: the moment's own reading, in the present.
-                    ScaleHeader(title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
-                                reserveTwoLines: true, byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, onByline: { showInsights = true }, compact: true) {
-                        MomentTag(moment: j.moment)
-                        Text(["Just now", j.placeName ?? here?.place].compactMap { $0 }.joined(separator: " · "))
-                    }
-                    .onTapGesture { pinDetails = j }
+                    VerdictHeader(tag: j.moment, title: outlook(at: now).text, tint: outlook(at: now).tint,
+                                  detail: [AirWords.short(j.weave, j.conditions), j.placeName ?? here?.place].compactMap { $0 }.joined(separator: " · "),
+                                  onTitle: { showInsights = true })
                 } else {
-                    ScaleHeader(title: here?.statement ?? "Checking the air near you…", reserveTwoLines: true,
-                                byline: outlook(at: now).text, bylineTint: outlook(at: now).tint, onByline: { showInsights = true }, compact: true) {
-                        Circle().fill(.primary).frame(width: 8, height: 8)
-                        Text(["Now", here?.place].compactMap { $0 }.joined(separator: " · "))
-                    }
-                    .onTapGesture { showInsights = true }
+                    VerdictHeader(title: outlook(at: now).text, tint: outlook(at: now).tint,
+                                  detail: here.map { [AirWords.short($0.weave, $0.conditions), $0.place].compactMap { $0 }.joined(separator: " · ") }
+                                      ?? "Checking the air near you…",
+                                  onTitle: { showInsights = true })
                 }
             case .moment(let m):
-                ScaleHeader(title: m.pastStatement, reserveTwoLines: true, reserveByline: true, compact: true) {
-                    MomentTag(moment: m.moment)
-                    Text(m.whenAndWhere)
-                }
+                VerdictHeader(tag: m.moment, title: m.pastStatement, tint: nil,
+                              detail: m.placeName ?? "", onTitle: { pinDetails = m })
             case .hour(let h):
-                // The look-ahead: what the forecast says, then how it compares (or that we're still learning).
-                ScaleHeader(title: h.statement, reserveTwoLines: true,
-                            byline: outlook(at: h.date).text, bylineTint: outlook(at: h.date).tint, onByline: { showInsights = true }, compact: true) {
-                    Image(systemName: "arrow.right").font(.caption2.weight(.bold))
-                    Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour().minute())) ·")
-                    placeChip
-                }
-                .onTapGesture { showInsights = true }
+                VerdictHeader(title: outlook(at: h.date).text, tint: outlook(at: h.date).tint,
+                              detail: AirWords.short(h.weave, h.conditions) + " ·", trailing: AnyView(placeChip),
+                              onTitle: { showInsights = true })
             }
         }
         .padding(.top, 2)
@@ -412,6 +402,15 @@ struct NowReading {
 nonisolated enum AirWords {
     enum Tense { case past, present, future, carried }
 
+    /// "54°, humid, clear air": the conditions as one plain line under the verdict.
+    static func short(_ weave: WeaveSpec, _ conditions: Conditions?) -> String {
+        let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
+        let feel = weave.words[.humidity] ?? weave.words[.temperature]
+        let air = weave.levels[.air].map { ["clear", "a bit hazy", "heavy"][$0.rawValue] + " air" }
+        let parts = [temp, feel, air].compactMap { $0 }
+        return parts.isEmpty ? "No air reading" : parts.joined(separator: ", ")
+    }
+
     /// "It was 51° and comfortable. The air was a bit hazy." / "It's… The air is…" / "It will be… The air will be…"
     static func sentence(tense: Tense, weave: WeaveSpec, conditions: Conditions?) -> String {
         let verb = switch tense { case .past: "was"; case .present: "is"; case .future: "will be"; case .carried: "should stay" }
@@ -513,6 +512,8 @@ struct NowSky: View {
     /// A forecast: drawn as a sketch of itself. Hollow particles, a paler map, no pin, since you aren't
     /// there yet.
     var sketch = false
+    @Environment(\.colorScheme) private var scheme
+    private var light: Bool { scheme == .light }
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var probe: SkyProbe?
@@ -535,11 +536,11 @@ struct NowSky: View {
                 AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
                 if let (lat, lon) = coordinate {
                     // Pinned: the map never moves; the air is one regional reading, not a spot on a street.
-                    PlaceMap(id: paper == .linen ? mapID + "-light" : mapID, latitude: lat, longitude: lon, dark: paper == .black)
+                    PlaceMap(id: light ? mapID + "-light" : mapID, latitude: lat, longitude: lon, dark: !light)
                         .frame(width: size.width, height: size.height)
                         .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
                         .saturation(0)
-                        .blendMode(paper == .linen ? .multiply : .screen)
+                        .blendMode(light ? .multiply : .screen)
                         .opacity(sketch ? 0.7 : 1)
                         .frame(width: size.width, height: size.height)
                         .clipped()
@@ -688,9 +689,7 @@ struct ParticleField: View {
         // Every new sky is revealed by its first ripple: no particles until the ring has passed. Later
         // "touch me" ripples run over a sky that's already there.
         let firstPass = rippleAt.map { time.timeIntervalSince($0) < seconds } ?? false
-        // Then the particles emerge, growing in over 0.7 s once the ring has gone.
-        let sinceDone = rippleAt.map { time.timeIntervalSince($0) - seconds } ?? 1
-        let emerge = (reduceMotion || !scan) ? 1.0 : { let t = max(0, min(1, sinceDone / 0.7)); return 1 - pow(1 - t, 3) }()
+
         let breath = (animated && !reduceMotion) ? time.timeIntervalSinceReferenceDate : 0
         // Odds per layer: a floor so any present layer shows, rising with amount; capped so the map shows.
         var weights = particles.map { $0.1 > 0 ? 0.012 + 0.09 * $0.1 : 0 }
@@ -712,8 +711,14 @@ struct ParticleField: View {
                     let k = cumulative.firstIndex { u < $0 }
                     let dist = hypot(x - centre.x, y - centre.y)
                     // The scan: nothing exists ahead of the ring yet.
-                    // The ring runs over bare grain; the air isn't there yet.
-                    if scan, firstPass, k != nil { continue }
+                    // The ring runs ahead over bare grain; inside it, the air fills in, growing up just behind the front.
+                    var emerge = 1.0
+                    if scan, firstPass, k != nil, let radius {
+                        let behind = Double(radius - dist)
+                        if behind < 0 { continue }
+                        let t = min(1, behind / 70)
+                        emerge = 1 - pow(1 - t, 3)
+                    }
                     var r: CGFloat, color: Color
                     if let k {
                         let amount = CGFloat(particles[k].1)
@@ -791,5 +796,56 @@ struct MapZoomSource: ViewModifier {
     let namespace: Namespace.ID?
     func body(content: Content) -> some View {
         if let namespace { content.matchedGeometryEffect(id: "map-\(id)", in: namespace) } else { content }
+    }
+}
+
+/// The home's header. The verdict is the headline (serif, with a small dot in its colour); one plain line of
+/// conditions and place under it. A tag line above is kept even when empty, so nothing jumps.
+struct VerdictHeader: View {
+    var tag: MomentKind? = nil
+    let title: String
+    let tint: Color?
+    let detail: String
+    var trailing: AnyView? = nil
+    var onTitle: (() -> Void)? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .leading) {
+                MomentTag(moment: tag ?? .rescue).hidden()
+                if let tag { MomentTag(moment: tag).transition(.opacity) }
+            }
+            Button { onTitle?() } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    if let tint {
+                        Circle().fill(tint).frame(width: 10, height: 10).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                    ZStack(alignment: .topLeading) {
+                        Text(title)
+                            .font(Theme.serifTitle).kerning(Theme.serifKerning)
+                            .lineLimit(2, reservesSpace: true)
+                            .multilineTextAlignment(.leading)
+                            .id(title)
+                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
+                    }
+                    .animation(Theme.smooth, value: title)
+                }
+                .foregroundStyle(.primary)
+            }
+            .buttonStyle(PressStyle())
+            .disabled(onTitle == nil)
+            HStack(spacing: 4) {
+                Text(detail).lineLimit(1).truncationMode(.middle)
+                if let trailing { trailing }
+            }
+            .font(.subheadline).foregroundStyle(Theme.secondaryText)
+            .contentTransition(.opacity)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+        .animation(Theme.smooth, value: tint)
     }
 }

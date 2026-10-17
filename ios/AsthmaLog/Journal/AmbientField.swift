@@ -48,7 +48,7 @@ struct AmbientField: View {
     private var weatherField: some View {
         // Linen: ink on paper. Light colors wash out on an off-white page, so the sky is laid down fuller
         // (near-opaque), a touch darker, more saturated, and the layers overprint harder, like riso inks.
-        let linen = paper == .linen
+        let linen = paper == .linen || scheme == .light
         let base = linen ? Theme.linen : Theme.stage
         let humidity = weave.words[.humidity]
         var sky = WeatherColor.light(WeatherColor.temperature(temperatureF ?? WeatherColor.fallbackTemp(weave)), at: date)

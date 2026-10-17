@@ -115,6 +115,7 @@ struct SettingsView: View {
                     LabeledContent("Apple Weather", value: "On")
                     LabeledContent("OpenAQ (PM2.5, ozone)", value: Secrets.openAQ == nil ? "No key" : "On")
                     LabeledContent("AirNow (AQI, forecast)", value: Secrets.airNow == nil ? "No key" : "On")
+                    LabeledContent("Ambee (pollen, air, history)", value: Secrets.ambee == nil ? "Demo data" : "On")
                     LabeledContent("Pollen", value: "Not yet")
                 }
 

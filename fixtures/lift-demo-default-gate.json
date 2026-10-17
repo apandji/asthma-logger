@@ -784,7 +784,7 @@
   },
   "expectedTemplate": {
     "headline": "8 of the 10 times you used your inhaler, ozone was high. On baseline days, that never happened (0 of 24). Also common: weed pollen was moderate. Most of these logs are from summer.",
-    "caveat": "Outdoor air only — not a medical diagnosis. Comparison to your usual logged days, not a prediction.",
+    "caveat": "Outdoor air only — not a medical diagnosis. Comparison to your baseline days, not a prediction.",
     "drivers": [
       "ozone:high",
       "pollen_weed:moderate",

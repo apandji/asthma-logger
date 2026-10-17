@@ -5,6 +5,7 @@ import Foundation
 enum Secrets {
     static var openAQ: String? { value("OPENAQ_API_KEY") }
     static var airNow: String? { value("AIRNOW_API_KEY") }
+    static var ambee: String? { value("AMBEE_API_KEY") }
 
     private static func value(_ key: String) -> String? {
         guard let raw = Bundle.main.object(forInfoDictionaryKey: key) as? String else { return nil }

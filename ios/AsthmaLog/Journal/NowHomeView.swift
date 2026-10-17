@@ -250,9 +250,8 @@ struct NowHomeView: View {
             Button { showPlaces = true } label: {
                 HStack(spacing: 6) {
                     Image(systemName: icon).font(.caption)
-                    // The field takes the rest of the row: the place is never cut short.
-                    Text(name).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading)
-                    Spacer(minLength: 4)
+                    // Hugs its text; a long name stops at the screen's edge and truncates.
+                    Text(name).lineLimit(1).truncationMode(.tail)
                     Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Theme.secondaryText)
                 }
                 .foregroundStyle(.primary)
@@ -260,7 +259,7 @@ struct NowHomeView: View {
                 .background(Capsule().fill(Theme.secondaryText.opacity(0.14)))
             }
             .buttonStyle(PressStyle())
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
             .accessibilityLabel("Forecast for \(name). Change place")
         }
         .font(.subheadline.weight(.medium))

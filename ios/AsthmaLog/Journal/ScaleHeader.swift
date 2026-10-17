@@ -34,7 +34,7 @@ struct ScaleHeader<Kicker: View>: View {
             // The sentence: Recursive in the chosen voice, a touch tight, and it blurs between readings instead of cutting.
             ZStack(alignment: .topLeading) {
                 Text(title)
-                    .font(Recursive.sentence(size: compact ? 28 : 32, slanted: italic, voice: NarratorStyle(score: styleScore)))
+                    .font(Recursive.sentence(size: compact ? 26 : 30, slanted: italic, voice: NarratorStyle(score: styleScore)))
                     .kerning(Theme.serifKerning)
                     // Two lines, always: the byline sits in the same place whatever the title says.
                     .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)

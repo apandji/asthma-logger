@@ -55,9 +55,9 @@ enum Theme {
     static let kickerTracking: CGFloat = 1.1
     /// The sentence. Recursive, regular weight, a size up, tracked a touch tight. How casual it looks follows
     /// Settings › Insight voice, so these are read fresh each time.
-    static var serifTitle: Font { Recursive.sentence(size: 28) }
-    static var serifTitleLarge: Font { Recursive.sentence(size: 32) }
-    static let serifKerning: CGFloat = -0.4
+    static var serifTitle: Font { Recursive.sentence(size: 26) }
+    static var serifTitleLarge: Font { Recursive.sentence(size: 30) }
+    static let serifKerning: CGFloat = -0.5
     /// Numbers that change in place (counts, times): Recursive Mono, always linear.
     static var figures: Font { Recursive.figures(size: 22) }
     /// A verdict byline under the sentence, in the same voice.

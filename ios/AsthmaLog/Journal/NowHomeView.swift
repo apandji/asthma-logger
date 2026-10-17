@@ -1091,9 +1091,11 @@ struct VerdictHeader: View {
             }
             .frame(minHeight: 30, alignment: .leading)
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
+            // Recursive runs wide: three lines allowed, so a sentence is never cut. The sky takes the slack.
             Text(title)
                 .font(Theme.serifTitle).kerning(Theme.serifKerning)
-                .lineLimit(2)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(settled ? .easeInOut(duration: 0.22) : nil, value: title)
             let ink = tint ?? Theme.secondaryText

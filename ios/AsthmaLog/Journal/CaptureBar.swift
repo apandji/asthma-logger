@@ -45,7 +45,7 @@ struct CaptureBar: View {
             }
         }
         .padding(.leading, 16)
-        .padding(.trailing, JournalView.railAxis - 32)  // the 64pt + centers on the rail axis
+        .padding(.trailing, JournalView.railAxis - 28)  // the 56pt + centers on the rail axis
         .padding(.bottom, 6)
         .animation(.snappy, value: useButtons)
     }
@@ -134,6 +134,8 @@ struct CaptureControl: View {
     @State private var active = false
     @State private var lift: CGFloat = 0
     @State private var logged = 0
+    /// A tap opens the two choices above the +; pulling up is the shortcut.
+    @State private var choosing = false
     @AppStorage(Crit.CaptureOrder.key) private var order = Crit.CaptureOrder.rescueFirst
 
     /// What the near zone and the far zone log, per the crit setting.
@@ -142,7 +144,8 @@ struct CaptureControl: View {
     private func color(_ m: MomentKind) -> Color { m == .rescue ? Theme.rescue : Theme.standard }
     private func name(_ m: MomentKind) -> String { m == .rescue ? "Rescue" : "Standard" }
 
-    private let size: CGFloat = 64
+    /// The primary action: larger than the 44 pt secondary controls, centred on the same line.
+    private let size: CGFloat = 56
     private let rescueAt: CGFloat = 70
     private let standardAt: CGFloat = 230
     private let trackHeight: CGFloat = 300
@@ -153,6 +156,7 @@ struct CaptureControl: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             if active { track.transition(.scale(scale: 0.2, anchor: .bottom).combined(with: .opacity)) }
+            if choosing && !active { choices.transition(.scale(scale: 0.6, anchor: .bottomTrailing).combined(with: .opacity)) }
             knob
         }
         .frame(width: size, height: size, alignment: .bottom)
@@ -170,11 +174,16 @@ struct CaptureControl: View {
                     if !active { withAnimation(.spring(duration: 0.3, bounce: 0.35)) { active = true } }
                     lift = max(0, min(trackHeight, -v.translation.height))
                 }
-                .onEnded { _ in
+                .onEnded { v in
                     let z = zone
                     if z != .none {
                         logged += 1
                         onLog(z == .near ? near : far)
+                        choosing = false
+                    } else if abs(v.translation.height) < 8 {
+                        // A tap: show the two choices (tap again to close).
+                        UISelectionFeedbackGenerator().selectionChanged()
+                        withAnimation(Theme.lift) { choosing.toggle() }
                     }
                     withAnimation(.spring(duration: 0.4, bounce: 0.3)) { active = false; lift = 0 }
                 }
@@ -184,6 +193,34 @@ struct CaptureControl: View {
         .accessibilityHint("Drag up a little for \(name(near).lowercased()), all the way up for \(name(far).lowercased())")
         .accessibilityAction(named: "Log rescue") { logged += 1; onLog(.rescue) }
         .accessibilityAction(named: "Log standard") { logged += 1; onLog(.maintenance) }
+    }
+
+    /// Tap the +: Rescue and Standard as two buttons above it, with a hint that pulling up does the same.
+    private var choices: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            Text("or pull up").font(.caption2.weight(.medium)).foregroundStyle(Theme.secondaryText)
+            choice(far)
+            choice(near)
+        }
+        .fixedSize()
+        .padding(.bottom, size + 10)
+        .frame(width: size, alignment: .bottomTrailing)
+    }
+
+    private func choice(_ m: MomentKind) -> some View {
+        Button {
+            logged += 1
+            onLog(m)
+            withAnimation(Theme.smooth) { choosing = false }
+        } label: {
+            Text(name(m))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 18).padding(.vertical, 11)
+                .glassEffect(.regular.interactive(), in: .capsule)
+        }
+        .buttonStyle(PressStyle())
+        .accessibilityLabel("Log \(name(m).lowercased())")
     }
 
     /// The + that becomes a bead riding up the track with your finger, colored by the zone it's in.
@@ -199,7 +236,8 @@ struct CaptureControl: View {
             .clipShape(Circle())
             Image(systemName: "plus")
                 .font(.title2.weight(.semibold))
-                .rotationEffect(.degrees(active ? 45 * Double(min(1, lift / rescueAt)) : 0))
+                .rotationEffect(.degrees(choosing ? 45 : active ? 45 * Double(min(1, lift / rescueAt)) : 0))
+                .animation(Theme.snap, value: choosing)
                 .foregroundStyle(active && zone != .none ? .white : .primary)
         }
         .frame(width: size, height: size)

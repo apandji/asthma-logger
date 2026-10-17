@@ -56,7 +56,7 @@ struct NowHomeView: View {
                     .padding(.top, 4)
                 NowTimeline(moments: moments, baselines: events.filter { $0.moment == .okay }.map(\.loggedAt),
                             tint: { airTint($0.weave) },
-                            forecastTints: hours.map { ($0.date, outlook(at: $0.date).tint) },
+                            forecastTints: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
                             hours: hours, now: now, focusTime: $focusTime, onPastEnd: { showInsights = true })
                     .frame(height: 104)
                     .padding(.bottom, 84)  // clear the +
@@ -236,12 +236,18 @@ struct NowHomeView: View {
     /// "attack", never a cause. Green: like your okay days. Yellow: a bit like your rescue days.
     /// Red: matches the days you reached for your rescue.
     /// The air's level as the verdict's colours: green clear, yellow hazy, red heavy.
-    private func airTint(_ w: WeaveSpec) -> Color? {
-        switch w.levels[.air] {
-        case .low?: Verdict.green
-        case .medium?: Verdict.yellow
-        case .high?: Verdict.red
-        case nil: nil
+    /// How heavy the air was, 0 … 1, for the rail's single ink.
+    private func airTint(_ w: WeaveSpec) -> Double? {
+        w.levels[.air].map { Double($0.rawValue) / 2 }
+    }
+
+    /// The verdict as a strength for the rail (nil while still learning).
+    private func verdictStrength(_ tint: Color?) -> Double? {
+        switch tint {
+        case Verdict.green?: 0
+        case Verdict.yellow?: 0.5
+        case Verdict.red?: 1
+        default: nil
         }
     }
 
@@ -532,7 +538,7 @@ struct NowSky: View {
                         .allowsHitTesting(false)
                     // You are here: the map is centred on the place. Not in a forecast: you aren't there yet.
                     if !sketch {
-                        Circle().fill((captureInk ?? Theme.standard).opacity(0.9)).frame(width: 7, height: 7)
+                        Circle().fill(Color.white.opacity(0.9)).frame(width: 7, height: 7)
                             .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.2).frame(width: 13, height: 13))
                             .shadow(color: .black.opacity(0.25), radius: 2)
                     }

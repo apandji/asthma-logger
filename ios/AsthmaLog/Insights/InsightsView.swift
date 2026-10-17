@@ -386,7 +386,7 @@ struct LearningRing: View {
                         let on = t < drawn
                         let r: CGFloat = on ? 3.4 : 1.6
                         // Rescue orange into standard blue as it fills; the rest is faint grain.
-                        let ink = on ? Theme.rescue.mix(with: Theme.standard, by: t) : Theme.secondaryText.opacity(0.35)
+                        let ink = on ? Color.primary.opacity(0.55 + 0.45 * t) : Theme.secondaryText.opacity(0.35)
                         ctx.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)), with: .color(ink))
                     }
                 }
@@ -399,8 +399,8 @@ struct LearningRing: View {
             .onAppear { shownAt = .now }
             if let p = progress, !done {
                 HStack(spacing: 32) {
-                    count("Rescue moments", p.attacks, p.minAttacks, Theme.rescue)
-                    count("Baseline moments", p.baselines, p.minBaselines, Theme.standard)
+                    count("Rescue moments", p.attacks, p.minAttacks, .primary)
+                    count("Baseline moments", p.baselines, p.minBaselines, Theme.secondaryText)
                 }
             }
         }

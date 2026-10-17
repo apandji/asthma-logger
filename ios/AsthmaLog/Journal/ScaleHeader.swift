@@ -103,7 +103,8 @@ struct MomentTag: View {
     var text: String? = nil
 
     var body: some View {
-        let ink = moment == .rescue ? Theme.rescue : moment == .maintenance ? Theme.standard : Theme.secondaryText
+        // The word carries the kind; colour is kept for the air.
+        let ink = moment == .rescue ? Color.primary : Theme.secondaryText
         Text(text ?? (moment == .rescue ? "Rescue" : moment == .maintenance ? "Standard" : "Baseline"))
             .font(.system(size: 10, weight: .bold)).tracking(0.9).textCase(.uppercase)
             .foregroundStyle(ink)

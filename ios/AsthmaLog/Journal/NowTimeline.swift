@@ -10,9 +10,10 @@ struct NowTimeline: View {
     var baselines: [Date] = []
     /// How the air was at each moment: green / yellow / red, so the rail answers "was that comfortable?"
     /// at a glance. Nil when there was no reading.
-    var tint: (LogEvent) -> Color? = { _ in nil }
+    /// 0 light … 1 heavy (nil when there was no reading). Drawn as one ink at three strengths.
+    var tint: (LogEvent) -> Double? = { _ in nil }
     /// The forecast ahead of now, hour by hour, in the verdict's colours (nil while still learning).
-    var forecastTints: [(Date, Color?)] = []
+    var forecastTints: [(Date, Double?)] = []
     let hours: [NowHour]
     /// The clock, passed in so the track creeps forward while you watch.
     let now: Date
@@ -65,19 +66,19 @@ struct NowTimeline: View {
                             ahead.move(to: CGPoint(x: x(now), y: axis)); ahead.addLine(to: CGPoint(x: x(last.date), y: axis))
                             ctx.stroke(ahead, with: .color(ink.opacity(0.14)), style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
                         }
-                        // The forecast as a spectrum: one slot per hour in the verdict's colour. While felt air
-                        // is still learning it's a faint neutral band, so the shape of the day still shows.
-                        for (date, c) in forecastTints where date >= now {
+                        // The forecast: one slot per hour, the same ink at three strengths (light, a bit like,
+                        // matches your flare days). While still learning it's a faint band, so the day's shape shows.
+                        for (date, v) in forecastTints where date >= now {
                             let w = dayWidth / 24 + 0.5
                             let rect = CGRect(x: x(date), y: axis - 4, width: w, height: 8)
-                            ctx.fill(Path(rect), with: .color((c ?? ink).opacity(c == nil ? 0.12 : 0.75)))
+                            ctx.fill(Path(rect), with: .color(ink.opacity(v.map { 0.18 + 0.62 * $0 } ?? 0.1)))
                         }
                         // Moments: a tick per moment in the colour of the air that day. Rescue stands taller than
                         // standard, so the kind reads in the shape and the comfort in the colour.
                         for e in moments {
                             let on = e.id == currentMoment?.id
                             let tall: CGFloat = e.moment == .rescue ? 11 : 7
-                            let c = tint(e) ?? ink.opacity(0.5)
+                            let c = ink.opacity(tint(e).map { 0.3 + 0.7 * $0 } ?? 0.25)
                             let rect = CGRect(x: x(e.loggedAt) - 1.5, y: axis - tall, width: 3, height: 2 * tall)
                             ctx.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(on ? c : c.opacity(0.85)))
                             if on {

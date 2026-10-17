@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var tutorialNote: String?
     @AppStorage(Crit.performanceHUD) private var perfHUD = false
     @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
+    @AppStorage(Crit.DemoEvent.key) private var critEvent = Crit.DemoEvent.none
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
 
     var body: some View {
@@ -34,6 +35,9 @@ struct SettingsView: View {
                     }
                     Picker("Pollen (demo)", selection: $demoPollen) {
                         ForEach(DemoPollen.Season.allCases) { Text($0.title).tag($0) }
+                    }
+                    Picker("Air event (demo)", selection: $critEvent) {
+                        ForEach(Crit.DemoEvent.allCases) { Text($0.title).tag($0) }
                     }
                     Picker("Insights state", selection: $critInsightsState) {
                         ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }

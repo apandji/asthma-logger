@@ -18,6 +18,7 @@ struct NowHomeView: View {
     @State private var chosen = SavedPlace.load(SavedPlace.chosenKey)
     @State private var showPlaces = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
+    @AppStorage(Crit.DemoEvent.key) private var demoEvent = Crit.DemoEvent.none
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The full air details, opened from the pin.
     @State private var pinDetails: LogEvent?
@@ -200,6 +201,41 @@ struct NowHomeView: View {
             }
     }
 
+    /// An air event right now: the demo switch, or what the real data shows (a thunderstorm while pollen is
+    /// high, or a sharp temperature drop). Smoke has no real source yet, so it only appears in the demo.
+    private var liveEvent: AirEvent? {
+        switch demoEvent {
+        case .storm: return .storm
+        case .smoke: return .smoke
+        case .tempDrop: return .tempDrop
+        case .none: break
+        }
+        guard let c = here?.conditions else { return nil }
+        let stormy = (c.weatherCondition ?? "").localizedCaseInsensitiveContains("thunder")
+        let pollenHigh = DemoPollen.sample(at: now, season: pollenSeason)?.kinds.contains { $0.level == .high } ?? false
+        if stormy && pollenHigh { return .storm }
+        if TempDrop.band(c.tempFallF) == .sharp { return .tempDrop }
+        return nil
+    }
+
+    /// The live air, with the demo event's readings added (labelled Demo) so the particles show it too.
+    private var liveAir: (conditions: Conditions?, weave: WeaveSpec, pollen: PollenSample?) {
+        var c = here?.conditions
+        var pollen = DemoPollen.sample(at: now, season: pollenSeason)
+        switch demoEvent {
+        case .storm:
+            pollen = DemoPollen.sample(at: now, season: .ragweed)
+            c?.weatherCondition = "Thunderstorms"
+        case .smoke:
+            c?.observations.append(EnvObservation(signal: .pm25, value: 142, unit: "µg/m³", asOf: now, source: "Demo",
+                                                  spatialScale: .region, confidence: .low))
+        case .tempDrop:
+            c?.tempFallF = 16
+        case .none: break
+        }
+        return (c, c.map { WeaveSpec($0.input) } ?? here?.weave ?? WeaveSpec(), pollen)
+    }
+
     /// What the sky is showing, as a key, so a change can animate as one move.
     private var focusKey: String {
         switch focus {
@@ -230,6 +266,10 @@ struct NowHomeView: View {
                 if let j = justNow {
                     VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place)),
                                   title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
+                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
+                } else if let e = liveEvent {
+                    VerdictHeader(place: AnyView(HStack(spacing: 8) { placeLabel(here?.lat, here?.lon, here?.place, current: true); EventChip(event: e, demo: demoEvent != .none) }),
+                                  title: e.sentence(temperature: liveAir.conditions?.best(.temperature)?.value, fallF: liveAir.conditions?.tempFallF),
                                   verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
                 } else {
                     VerdictHeader(place: AnyView(placeLabel(here?.lat, here?.lon, here?.place, current: true)),
@@ -327,6 +367,8 @@ struct NowHomeView: View {
 
     private func outlook(at t: Date) -> (text: String, tint: Color?) {
         let learned = forced == .learned || (forced == .auto && (model.progress?.isMet ?? false))
+        // The demo event is the presentation's story: with the demo person learned, now matches their flare days.
+        if learned, demoEvent != .none, abs(t.timeIntervalSince(now)) < 30 * 60 { return ("Matches your flare days.", Self.red) }
         if learned {
             if forced == .learned, !(model.progress?.isMet ?? false) {
                 // Demo: a rough afternoon, so every color can be seen on the track.
@@ -388,9 +430,11 @@ struct NowHomeView: View {
                     .id(j.id)
                     .onTapGesture { pinDetails = j }
             } else {
-                NowSky(conditions: here?.conditions, weave: here?.weave ?? WeaveSpec(), date: now,
-                       pollen: DemoPollen.sample(at: now, season: pollenSeason), probing: $probing,
-                       mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() })
+                let air = liveAir
+                NowSky(conditions: air.conditions, weave: air.weave, date: now,
+                       pollen: air.pollen, probing: $probing,
+                       mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() },
+                       event: liveEvent)
                     .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
             }
         case .moment(let m):
@@ -486,7 +530,8 @@ nonisolated enum AirWords {
     /// "54°, humid, clear air": the conditions as one plain line under the verdict.
     static func short(_ weave: WeaveSpec, _ conditions: Conditions?) -> String {
         let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
-        let feel = weave.words[.humidity] ?? weave.words[.temperature]
+        // Facts, not feelings: "humid" or "dry" when it is, never "comfortable" (it may not have been for you).
+        let feel = weave.words[.humidity].flatMap { ["humid", "dry", "very humid", "very dry"].contains($0) ? $0 : nil }
         let air = weave.levels[.air].map { ["clear", "a bit hazy", "heavy"][$0.rawValue] + " air" }
         let parts = [temp, feel, air].compactMap { $0 }
         return parts.isEmpty ? "No air reading" : parts.joined(separator: ", ")
@@ -497,7 +542,8 @@ nonisolated enum AirWords {
         let verb = switch tense { case .past: "was"; case .present: "is"; case .future: "will be"; case .carried: "should stay" }
         let it = switch tense { case .past: "It was"; case .present: "It's"; case .future, .carried: "It will be" }
         let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
-        let feel = weave.words[.humidity] ?? weave.words[.temperature]
+        // Facts, not feelings: "humid" or "dry" when it is, never "comfortable" (it may not have been for you).
+        let feel = weave.words[.humidity].flatMap { ["humid", "dry", "very humid", "very dry"].contains($0) ? $0 : nil }
         let weather = [temp, feel].compactMap { $0 }.joined(separator: " and ")
         let air = weave.levels[.air].map { ["clear", "a bit hazy", "heavy"][$0.rawValue] }
         // One sentence: "It's 54° and humid, with clear air."
@@ -593,6 +639,10 @@ struct NowSky: View {
     /// A forecast: drawn as a sketch of itself. Hollow particles, a paler map, no pin, since you aren't
     /// there yet.
     var sketch = false
+    /// An air event changes the whole field, never a spot: a storm darkens it and breaks the pollen apart,
+    /// smoke lays a warm veil over the map, a temperature drop cools the top of the sky.
+    var event: AirEvent? = nil
+    @State private var flash = 0.0
     @Environment(\.colorScheme) private var scheme
     private var light: Bool { scheme == .light }
     /// False while the timeline is moving.
@@ -637,7 +687,19 @@ struct NowSky: View {
                             .shadow(color: .black.opacity(0.25), radius: 2)
                     }
                 }
+                if event == .smoke {
+                    Color(red: 0.62, green: 0.46, blue: 0.32).opacity(0.32).allowsHitTesting(false)
+                }
+                if event == .tempDrop {
+                    LinearGradient(colors: [Color(red: 0.55, green: 0.75, blue: 1).opacity(0.38), .clear], startPoint: .top, endPoint: .center)
+                        .allowsHitTesting(false)
+                }
+                if event == .storm {
+                    Color.black.opacity(0.28).allowsHitTesting(false)
+                    Color.white.opacity(flash).allowsHitTesting(false)
+                }
                 ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
+                              fragments: stack.map { event == .storm && $0.name.hasSuffix("pollen") },
                               selected: row.flatMap { $0 > 0 ? $0 - 1 : nil },
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
@@ -689,7 +751,19 @@ struct NowSky: View {
         }
         .padding(.horizontal, 8)
         .onDisappear { stopPulse() }
+        // A storm: now and then, a soft flash of lightning across the whole field.
+        .task(id: event) {
+            guard event == .storm, !reduceMotionEnv else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Double.random(in: 4...8)))
+                withAnimation(.easeOut(duration: 0.08)) { flash = 0.35 }
+                try? await Task.sleep(for: .milliseconds(90))
+                withAnimation(.easeOut(duration: 0.6)) { flash = 0 }
+            }
+        }
     }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotionEnv
 
     private func scrub(_ size: CGSize, mids: [CGFloat], stack: [AirLayers.Layer]) -> some Gesture {
         DragGesture(minimumDistance: 0)
@@ -742,6 +816,8 @@ struct NowSky: View {
 struct ParticleField: View {
     /// Each layer's ink and amount (0 none … 1 high), in reading order.
     let particles: [(Color, Double)]
+    /// Layers drawn broken up into fragments (pollen in a storm): three tiny dots instead of one.
+    var fragments: [Bool] = []
     var selected: Int? = nil
     var animated = true
     var rippleAt: Date? = nil
@@ -828,6 +904,13 @@ struct ParticleField: View {
                             // The front wears the ink; in a scan, even the particles take it as they're born.
                             if k == nil || scan { color = rippleInk.opacity(0.2 + 0.7 * Double(t)).mix(with: color, by: scan && k != nil ? 0.4 : 0) }
                         }
+                    }
+                    if let k, k < fragments.count, fragments[k] {
+                        let f = max(0.6, r * 0.45)
+                        for (dx, dy) in [(-2.2, -1.4), (2.0, -0.8), (0.2, 2.2)] as [(CGFloat, CGFloat)] {
+                            ctx.fill(Path(ellipseIn: CGRect(x: x + dx * r * 0.6 - f, y: y + dy * r * 0.6 - f, width: 2 * f, height: 2 * f)), with: .color(color))
+                        }
+                        continue
                     }
                     let dot = Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r))
                     if hollow, k != nil, r > 1.4 {
@@ -954,5 +1037,54 @@ extension EnvironmentValues {
     var skySettled: Bool {
         get { self[SkySettledKey.self] }
         set { self[SkySettledKey.self] = newValue }
+    }
+}
+
+/// Weather that changes the air. Shown across the whole field, with a chip in the header.
+enum AirEvent: Equatable {
+    case storm, smoke, tempDrop
+
+    var icon: String {
+        switch self {
+        case .storm: "cloud.bolt.rain.fill"
+        case .smoke: "smoke.fill"
+        case .tempDrop: "thermometer.low"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .storm: "Storm, high pollen"
+        case .smoke: "Wildfire smoke"
+        case .tempDrop: "Temperature drop"
+        }
+    }
+
+    /// Plain facts, never a cause: "A thunderstorm while pollen is high."
+    func sentence(temperature: Double?, fallF: Double?) -> String {
+        let t = temperature.map { "It's \(Int($0.rounded()))°" }
+        switch self {
+        case .storm: return "A thunderstorm while pollen is high."
+        case .smoke: return [t, "with wildfire smoke in the air."].compactMap { $0 }.joined(separator: ", ")
+        case .tempDrop:
+            let fall = fallF.map { "down \(Int($0.rounded()))° in three hours." } ?? "and dropping fast."
+            return [t, fall].compactMap { $0 }.joined(separator: ", ")
+        }
+    }
+}
+
+/// The event's chip, the tag's size and shape, with its symbol. "Demo" when it comes from the switch.
+struct EventChip: View {
+    let event: AirEvent
+    var demo = false
+
+    var body: some View {
+        Label(event.label + (demo ? " · Demo" : ""), systemImage: event.icon)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.primary.opacity(0.12)))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.primary.opacity(0.3), lineWidth: 0.8))
     }
 }

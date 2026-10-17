@@ -64,6 +64,7 @@ targets:
         UIBackgroundModes: [bluetooth-central]
         OPENAQ_API_KEY: $(OPENAQ_API_KEY)
         AIRNOW_API_KEY: $(AIRNOW_API_KEY)
+        AMBEE_API_KEY: $(AMBEE_API_KEY)
     entitlements:
       path: AsthmaLog/AsthmaLog.entitlements
       properties:

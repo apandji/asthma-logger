@@ -139,3 +139,12 @@ Rules for the research: real citations only (title, authors, year, link); mark a
 5. Research doc on archetypes and thresholds.
 6. Profile copy and the demo person, only after 5.
 7. Record the pairing moment as a backup video for the presentation (`docs/demo-runbook.md`).
+
+## Decisions (owner, Oct 17)
+
+| Question | Decision |
+|---|---|
+| Causal copy | **Facts only.** Nothing says or implies the air *caused* a flare: no "likely triggered", "can cause airways to spasm", "which is likely what happened". We say what was in the air, when, and how often it shows up on flare days. |
+| Advice ("staying put / going out") | **Include it**, from the FigJam copy tables (per event, per pollutant, per pollen type), as a deliberate **provocation for provider testing**: we bring it to clinicians to learn what they'd endorse, change or cut. Every advice line is marked as such in code and docs, carries "Not medical advice", and is not shipped beyond the test group without a cited source and clinical review. |
+| Data source | **Assume Ambee.** Build against Ambee's shapes on pretend data until the key arrives. See [ambee-integration.md](ambee-integration.md). |
+| Build order | 1. Quick Record (button → notification → voice note or quick tag → transcript → evening summary). 2. Event warnings on Now (staying put / going out). 3. Insights, with the radar across four categories, made to sing. |

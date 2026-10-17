@@ -128,136 +128,27 @@ struct InsightPeek: View {
 /// top for Standard (blue). Let go in a zone to log it; let go below the first line to cancel.
 struct CaptureControl: View {
     let onLog: (MomentKind) -> Void
-
-    enum Zone: Int { case none, near, far }
-
-    @State private var active = false
-    @State private var lift: CGFloat = 0
     @State private var logged = 0
-    @AppStorage(Crit.CaptureOrder.key) private var order = Crit.CaptureOrder.rescueFirst
 
-    /// What the near zone and the far zone log, per the crit setting.
-    private var near: MomentKind { order == .rescueFirst ? .rescue : .maintenance }
-    private var far: MomentKind { order == .rescueFirst ? .maintenance : .rescue }
-    private func color(_ m: MomentKind) -> Color { m == .rescue ? Theme.rescue : Theme.standard }
-    private func name(_ m: MomentKind) -> String { m == .rescue ? "Rescue" : "Standard" }
-    private func icon(_ m: MomentKind) -> String { m == .rescue ? "lungs.fill" : "lungs" }
-
-    /// The primary action: larger than the 44 pt secondary controls, centred on the same line.
-    private let size: CGFloat = 56
-    private let rescueAt: CGFloat = 70
-    private let standardAt: CGFloat = 230
-    private let trackHeight: CGFloat = 300
-
-    private var zone: Zone { lift >= standardAt ? .far : lift >= rescueAt ? .near : .none }
-    private var zoneColor: Color { zone == .far ? color(far) : zone == .near ? color(near) : .white.opacity(0.5) }
-
+    /// The + is a system menu: press, slide onto Rescue or Standard, lift to log (or tap, then tap a choice).
+    /// That's Apple's own press-and-slide, so it needs no custom track and works with VoiceOver as is.
+    /// Rescue sits nearest the finger.
     var body: some View {
-        ZStack(alignment: .bottom) {
-            if active { track.transition(.scale(scale: 0.2, anchor: .bottom).combined(with: .opacity)) }
-            // A tap opens the system menu (the HIG pattern for a button that offers a choice); pulling up
-            // is the shortcut, so the drag runs alongside the menu.
-            Menu {
-                Button { logged += 1; onLog(near) } label: { Label("Log \(name(near))", systemImage: icon(near)) }
-                Button { logged += 1; onLog(far) } label: { Label("Log \(name(far))", systemImage: icon(far)) }
-                Section { Text("Or pull up on the + to log without the menu.") }
-            } label: {
-                knob
-            }
-            .menuOrder(.fixed)
-            .buttonStyle(.plain)
-        }
-        .frame(width: size, height: size, alignment: .bottom)
-        .sensoryFeedback(trigger: zone) { _, new in
-            switch new {
-            case .near: .impact(weight: .medium, intensity: 0.8)
-            case .far: .impact(weight: .heavy, intensity: 1)
-            case .none: .selection
-            }
-        }
-        .sensoryFeedback(.success, trigger: logged)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 14)
-                .onChanged { v in
-                    if !active { withAnimation(.spring(duration: 0.3, bounce: 0.35)) { active = true } }
-                    lift = max(0, min(trackHeight, -v.translation.height))
-                }
-                .onEnded { _ in
-                    let z = zone
-                    if z != .none {
-                        logged += 1
-                        onLog(z == .near ? near : far)
-                    }
-                    withAnimation(.spring(duration: 0.4, bounce: 0.3)) { active = false; lift = 0 }
-                }
-        )
-        .accessibilityElement()
-        .accessibilityLabel("Log a moment")
-        .accessibilityHint("Drag up a little for \(name(near).lowercased()), all the way up for \(name(far).lowercased())")
-        .accessibilityAction(named: "Log rescue") { logged += 1; onLog(.rescue) }
-        .accessibilityAction(named: "Log standard") { logged += 1; onLog(.maintenance) }
-    }
-
-    /// The + that becomes a bead riding up the track with your finger, colored by the zone it's in.
-    private var knob: some View {
-        ZStack {
-            // Fills with the zone's color as you pull up.
-            ZStack(alignment: .bottom) {
-                Color.clear
-                Rectangle()
-                    .fill(zoneColor)
-                    .frame(height: active ? size * max(0.35, min(1, 0.35 + lift / standardAt)) : 0)
-            }
-            .clipShape(Circle())
+        Menu {
+            Button { logged += 1; onLog(.rescue) } label: { Label("Rescue", systemImage: "lungs.fill") }
+            Button { logged += 1; onLog(.maintenance) } label: { Label("Standard", systemImage: "lungs") }
+        } label: {
             Image(systemName: "plus")
                 .font(.title2.weight(.semibold))
-                .rotationEffect(.degrees(active ? 45 * Double(min(1, lift / rescueAt)) : 0))
-                .foregroundStyle(active && zone != .none ? .white : .primary)
+                .foregroundStyle(.primary)
+                .frame(width: 56, height: 56)
+                .glassEffect(.regular.interactive(), in: .circle)
         }
-        .frame(width: size, height: size)
-        .glassEffect(.regular.interactive(), in: .circle)
-        .scaleEffect(active ? 1 + 0.12 * min(1, lift / standardAt) : 1)
-        .offset(y: -lift)
-        .animation(.interactiveSpring(duration: 0.18), value: lift)
-        .animation(.snappy, value: zone)
-    }
-
-    /// The track above the button: Rescue starts close (one short pull), Standard sits at the top.
-    private var track: some View {
-        ZStack(alignment: .bottom) {
-            Capsule().fill(.ultraThinMaterial)
-            // Fill rises with the finger.
-            Capsule().fill(zoneColor.opacity(0.35))
-                .frame(height: min(trackHeight + size, lift + size))
-            VStack(spacing: 0) {
-                label(name(far), color(far), on: zone == .far)
-                Spacer()
-                label(name(near), color(near), on: zone == .near)
-                    .padding(.bottom, rescueAt + size * 0.2)
-            }
-            .padding(.top, 18)
-        }
-        .frame(width: size + 10, height: trackHeight + size)
-        .overlay(alignment: .bottom) {
-            // Lines where each zone begins.
-            VStack(spacing: 0) {
-                Capsule().fill(color(far).opacity(0.7)).frame(width: 28, height: 2)
-                    .padding(.bottom, standardAt - rescueAt - 2)
-                Capsule().fill(color(near).opacity(0.7)).frame(width: 28, height: 2)
-            }
-            .padding(.bottom, rescueAt + size / 2)
-        }
-        .offset(y: 0)
-    }
-
-    private func label(_ text: String, _ color: Color, on: Bool) -> some View {
-        Text(text)
-            .font(.caption.weight(.bold))
-            .foregroundStyle(on ? color : .secondary)
-            .scaleEffect(on ? 1.15 : 1)
-            .fixedSize()
-            .rotationEffect(.degrees(-90))
-            .frame(width: 20, height: 70)
+        .menuOrder(.priority)
+        .buttonStyle(.plain)
+        .sensoryFeedback(.success, trigger: logged)
+        .accessibilityLabel("Log a moment")
+        .accessibilityHint("Choose Rescue or Standard")
     }
 }
 

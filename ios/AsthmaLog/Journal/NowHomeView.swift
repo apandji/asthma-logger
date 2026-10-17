@@ -70,7 +70,7 @@ struct NowHomeView: View {
                     .animation(.smooth(duration: 0.9), value: inFuture)
             }
             // Linen is a light page whatever the system says; black is a dark one.
-            // Past and now are printed in ink on black; the future is a sketch on linen.
+            // Black paper, or linen when chosen; the forecast shifts the paper to warm graphite (above).
             .environment(\.colorScheme, paper == .linen ? .light : .dark)
             .sheet(item: $pinDetails) { e in
                 NavigationStack { MomentDetailsView(event: e) }

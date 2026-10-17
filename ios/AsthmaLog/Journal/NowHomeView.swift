@@ -238,7 +238,8 @@ struct NowHomeView: View {
                 }
             case .moment(let m):
                 VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
-                              title: m.pastStatement, verdict: nil, tint: nil)
+                              title: m.pastStatement, verdict: nil, tint: nil,
+                              when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
             case .hour(let h):
                 VerdictHeader(place: AnyView(placeField), title: h.statement,
                               verdict: outlook(at: h.date).text, tint: outlook(at: h.date).tint, onVerdict: { showInsights = true })
@@ -892,6 +893,8 @@ struct VerdictHeader: View {
     let verdict: String?
     let tint: Color?
     var onVerdict: (() -> Void)? = nil
+    /// A moment's date and time, on the line where the verdict would be: "Monday, Oct 12, 8:15 AM".
+    var when: String? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -925,6 +928,14 @@ struct VerdictHeader: View {
             .disabled(onVerdict == nil)
             .opacity(verdict == nil ? 0 : 1)
             .contentTransition(.opacity)
+            .overlay(alignment: .leading) {
+                if verdict == nil, let when {
+                    Label(when, systemImage: "clock")
+                        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                        .lineLimit(1)
+                        .transition(.opacity)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)

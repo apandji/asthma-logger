@@ -10,7 +10,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.logButtons) private var useButtons = false
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.useDemoData) private var demo = false
-    @AppStorage(Prefs.useFunnelSans) private var useFunnelSans = false
+    @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
     @Environment(\.modelContext) private var context
     @Environment(ButtonLink.self) private var button
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
@@ -25,13 +25,18 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Toggle("Funnel Sans", isOn: $useFunnelSans)
+                    Picker("Statement", selection: $statementTypeface) {
+                        ForEach(Theme.Typeface.allCases) { face in
+                            Text(face.title).tag(face.rawValue)
+                        }
+                    }
+                    Text("Ozone was high on 8 of the 14 times you used your inhaler.")
+                        .font(Theme.Typeface.sentence(size: 22, voice: NarratorStyle(score: styleScore)))
+                        .kerning(Theme.serifKerning)
                 } header: {
                     Text("Type")
                 } footer: {
-                    Text(useFunnelSans
-                         ? "Using Funnel Sans for titles and body. Turn off to go back to Recursive and SF."
-                         : "Off keeps the usual look: Recursive for the headline sentence and SF for the rest.")
+                    Text("Only the big statement changes. Everything else stays SF. System uses New York for the sentence.")
                 }
 
                 #if DEBUG
@@ -80,14 +85,14 @@ struct SettingsView: View {
                         Text("Poetic").font(Theme.caption)
                     }
                     LabeledContent("Current", value: NarratorStyle(score: styleScore).label)
-                    // A sample in the sentence's type, which follows this slider: linear when clinical, casual when poetic.
+                    // Sample wording; Recursive casual axes follow this slider when Type is Recursive.
                     Text("Ozone was high on 8 of the 14 times you used your inhaler.")
-                        .font(Recursive.sentence(size: 22, voice: NarratorStyle(score: styleScore)))
+                        .font(Theme.Typeface.sentence(size: 22, voice: NarratorStyle(score: styleScore)))
                         .kerning(Theme.serifKerning)
                 } header: {
                     Text("Insight voice")
                 } footer: {
-                    Text("How the on-device model words your pattern, and how casual the headline type looks. The numbers never change. Without Apple Intelligence you get a plain template sentence.")
+                    Text("How the on-device model words your pattern. With Recursive as the statement type, this also softens the letters a little toward poetic. The numbers never change. Without Apple Intelligence you get a plain template sentence.")
                 }
 
                 Section("On-device model") {

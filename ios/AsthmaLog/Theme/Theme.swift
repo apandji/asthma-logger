@@ -1,3 +1,4 @@
+import AsthmaCore
 import SwiftUI
 
 /// Every color, font and spacing token. Views never hard-code styling.
@@ -48,21 +49,19 @@ enum Theme {
     static let padding: CGFloat = 16
     static let spacing: CGFloat = 12
 
-    // MARK: Type. Default: Recursive for the sentence (Theme/Recursive.swift), SF for everything else.
-    // Settings › Type can switch the whole stack to Funnel Sans (default off).
+    // MARK: Type. SF for UI. The big statement follows Settings › Type (system / Recursive / Funnel Sans).
     // The "serif" names stayed when New York was swapped out; they mean "the sentence's voice".
     /// The small line above a title: type, time, place. Set as tracked small caps, like a dateline.
-    static var kicker: Font { Typeface.ui(size: 12, weight: .semibold, relativeTo: .caption) }
+    static let kicker = Font.system(size: 12, weight: .semibold, design: .default)
     static let kickerTracking: CGFloat = 1.1
-    /// The sentence. Recursive (or Funnel Sans when opted in). How casual Recursive looks follows
-    /// Settings › Insight voice, so these are read fresh each time.
-    static var serifTitle: Font { Recursive.sentence(size: 26) }
-    static var serifTitleLarge: Font { Recursive.sentence(size: 30) }
+    /// The sentence. Typeface from Settings › Type. Recursive's casual look follows Insight voice.
+    static var serifTitle: Font { Typeface.sentence(size: 26) }
+    static var serifTitleLarge: Font { Typeface.sentence(size: 30) }
     static let serifKerning: CGFloat = -0.5
-    /// Numbers that change in place (counts, times): Recursive Mono (or Funnel Sans when opted in).
-    static var figures: Font { Recursive.figures(size: 22) }
+    /// Numbers that change in place (counts, times).
+    static var figures: Font { Typeface.figures(size: 22) }
     /// A verdict byline under the sentence, in the same voice.
-    static var bylineSerif: Font { Recursive.sentence(size: 17) }
+    static var bylineSerif: Font { Typeface.sentence(size: 17) }
 
     // MARK: Motion. Three springs, used everywhere, so the whole app moves with one hand.
     /// Small things settling: pills, chips, dots. Quick, a hint of bounce.
@@ -72,32 +71,71 @@ enum Theme {
     /// Things arriving: toasts, tiles, sheets. A little lift.
     static let lift = Animation.spring(duration: 0.55, bounce: 0.22)
 
-    /// One family for everything but the sentence: SF, or Funnel Sans when opted in.
-    static var headline: Font { Typeface.text(.headline, weight: .semibold) }
-    /// The sentence on a detail page: Recursive (or Funnel Sans), a size down from the home.
-    static var headlineSerif: Font { Recursive.sentence(size: 22) }
-    static var body: Font { Typeface.text(.body) }
-    static var caption: Font { Typeface.text(.caption) }
-    static var number: Font { Typeface.text(.body).monospacedDigit() }
+    /// One family for everything but the sentence: SF.
+    static let headline = Font.headline
+    /// The sentence on a detail page, a size down from the home.
+    static var headlineSerif: Font { Typeface.sentence(size: 22) }
+    static let body = Font.body
+    static let caption = Font.caption
+    static let number = Font.body.monospacedDigit()
 
-    /// Central type switch for Settings › Type › Funnel Sans.
-    enum Typeface {
-        static var usesFunnelSans: Bool {
-            UserDefaults.standard.bool(forKey: Prefs.useFunnelSans)
+    /// Settings › Type: which face draws the big statement. UI chrome stays SF.
+    enum Typeface: String, CaseIterable, Identifiable {
+        case system
+        case recursive
+        case funnelSans
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .system: "System"
+            case .recursive: "Recursive"
+            case .funnelSans: "Funnel Sans"
+            }
         }
 
-        static func text(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
-            guard usesFunnelSans else {
-                return .system(style, design: .default, weight: weight)
+        var detail: String {
+            switch self {
+            case .system: "New York for the sentence, SF for the rest"
+            case .recursive: "Bundled Recursive for the sentence"
+            case .funnelSans: "Bundled Funnel Sans for the sentence"
             }
-            return FunnelSans.text(style, weight: weight)
         }
 
-        static func ui(size: CGFloat, weight: Font.Weight, relativeTo _: Font.TextStyle) -> Font {
-            guard usesFunnelSans else {
-                return .system(size: size, weight: weight, design: .default)
+        /// Current choice. Default Recursive (today's look). Migrates legacy `useFunnelSans`.
+        static var current: Typeface {
+            if let raw = UserDefaults.standard.string(forKey: Prefs.statementTypeface),
+               let value = Typeface(rawValue: raw) {
+                return value
             }
-            return FunnelSans.font(size: size, weight: weight)
+            if UserDefaults.standard.bool(forKey: Prefs.useFunnelSans) {
+                return .funnelSans
+            }
+            return .recursive
+        }
+
+        static func sentence(size: CGFloat, slanted: Bool = false, voice: NarratorStyle = .current) -> Font {
+            switch current {
+            case .system:
+                let base = Font.system(size: size, weight: .regular, design: .serif)
+                return slanted ? base.italic() : base
+            case .recursive:
+                return Recursive.sentence(size: size, slanted: slanted, voice: voice)
+            case .funnelSans:
+                return FunnelSans.font(size: size, weight: .regular)
+            }
+        }
+
+        static func figures(size: CGFloat) -> Font {
+            switch current {
+            case .system:
+                return .system(size: size, weight: .regular, design: .serif).monospacedDigit()
+            case .recursive:
+                return Recursive.figures(size: size)
+            case .funnelSans:
+                return FunnelSans.font(size: size, weight: .regular)
+            }
         }
     }
 }
@@ -124,7 +162,7 @@ struct Card<Content: View>: View {
         VStack(alignment: .leading, spacing: Theme.spacing) {
             Label(title, systemImage: systemImage ?? "circle.fill")
                 .labelStyle(.titleAndIcon)
-                .font(Theme.Typeface.text(.caption, weight: .semibold))
+                .font(Theme.caption.weight(.semibold))
                 .textCase(.uppercase)
                 .foregroundStyle(Theme.secondaryText)
             content
@@ -142,7 +180,7 @@ struct Chip: View {
 
     var body: some View {
         Text(text)
-            .font(Theme.Typeface.text(.caption, weight: .medium))
+            .font(Theme.caption.weight(.medium))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .foregroundStyle(color)

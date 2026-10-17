@@ -12,6 +12,9 @@ enum Prefs {
     static let logMethod = "logMethod"
     /// Two labelled Rescue / Standard buttons instead of the pull-up +.
     static let logButtons = "logButtons"
-    /// Use bundled Funnel Sans instead of Recursive (sentence) + SF (UI). Default off.
+    /// Big-statement typeface: `system` (New York), `recursive` (default), or `funnelSans`.
+    /// UI chrome stays SF. Legacy bool `useFunnelSans` is still read once for migration.
+    static let statementTypeface = "statementTypeface"
+    /// Legacy (bool). Migrated into `statementTypeface` on first read.
     static let useFunnelSans = "useFunnelSans"
 }

@@ -789,10 +789,15 @@ struct NowSky: View {
         .task(id: event) {
             guard event == .storm, !reduceMotionEnv else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(Double.random(in: 4...8)))
-                withAnimation(.easeOut(duration: 0.08)) { flash = 0.35 }
-                try? await Task.sleep(for: .milliseconds(90))
-                withAnimation(.easeOut(duration: 0.6)) { flash = 0 }
+                // More often, and sharper: a quick double strike, then a short fade.
+                try? await Task.sleep(for: .seconds(Double.random(in: 1.6...3.4)))
+                withAnimation(.linear(duration: 0.04)) { flash = 0.42 }
+                try? await Task.sleep(for: .milliseconds(60))
+                withAnimation(.linear(duration: 0.05)) { flash = 0.08 }
+                try? await Task.sleep(for: .milliseconds(70))
+                withAnimation(.linear(duration: 0.04)) { flash = 0.3 }
+                try? await Task.sleep(for: .milliseconds(50))
+                withAnimation(.easeOut(duration: 0.28)) { flash = 0 }
             }
         }
     }

@@ -67,12 +67,13 @@ enum Theme {
     /// Things arriving: toasts, tiles, sheets. A little lift.
     static let lift = Animation.spring(duration: 0.55, bounce: 0.22)
 
-    static let headline = Font.system(.title3, design: .rounded).weight(.semibold)
-    /// The one New York sentence per screen (the insight headline). Never bold.
-    static let headlineSerif = Font.system(.title3, design: .serif, weight: .medium)
+    /// One family for everything but the sentence: SF, as on the home. (Rounded is retired.)
+    static let headline = Font.headline
+    /// The sentence on a detail page: New York, regular, like the home's but a size down.
+    static let headlineSerif = Font.system(size: 22, weight: .regular, design: .serif)
     static let body = Font.body
     static let caption = Font.caption
-    static let number = Font.system(.body, design: .rounded).monospacedDigit()
+    static let number = Font.body.monospacedDigit()
 }
 
 /// Press feedback for anything tappable that isn't a system button: a small, quick scale and dim,

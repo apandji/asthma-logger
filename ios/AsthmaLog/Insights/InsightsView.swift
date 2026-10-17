@@ -15,19 +15,26 @@ struct InsightsView: View {
     @State private var day: Date?
     @State private var showDoctor = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
+    @State private var path: [Page] = []
 
     /// The pages behind the tiles.
     enum Page: Hashable { case pattern, profile, moments }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 32) {
-                    ScaleHeader(title: learned ? "felt air knows your pattern." : "Still learning your pattern.") {
-                        Image(systemName: "sparkles")
-                        Text(["Insights", demo ? "Demo data" : nil, demoLearned ? "Demo person" : nil].compactMap { $0 }.joined(separator: " · "))
-                    }
-                    .padding(.horizontal, -20)
+                VStack(alignment: .leading, spacing: 28) {
+                    // The home's header, word for word in style: where you are (Insights), the serif sentence,
+                    // the status as a pill.
+                    VerdictHeader(place: AnyView(Label(["Insights", demo ? "Demo data" : nil, demoLearned ? "Demo person" : nil]
+                                                            .compactMap { $0 }.joined(separator: " · "), systemImage: "sparkles")
+                                                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)),
+                                  title: learned ? (demoLearned ? "Weed pollen shows up on your flare days." : (model.narration?.headline ?? "felt air knows your pattern."))
+                                                 : "Still learning your pattern.",
+                                  verdict: learned ? "See the evidence" : model.progress.map(needs),
+                                  tint: learned ? Verdict.green : nil,
+                                  onVerdict: learned ? { path.append(Page.pattern) } : nil)
+                        .padding(.horizontal, -20)
                     hero
                     tiles
                     Text("Outdoor air only. Not medical advice, and not a prediction.")
@@ -73,28 +80,10 @@ struct InsightsView: View {
 
     // MARK: Hero
 
-    /// The ring, and one sentence: what it's waiting for, or the pattern (tap for the evidence).
+    /// The ring and its two counts; the sentence lives in the header now.
     private var hero: some View {
-        VStack(spacing: 18) {
-            LearningRing(progress: model.progress, forcedLearned: forced == .learned, size: 184)
-            if learned {
-                NavigationLink(value: Page.pattern) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(demoLearned ? "Weed pollen showed up on 9 of 14 flare days vs 6 of 40 baseline days."
-                                         : (model.narration?.headline ?? "Your pattern is ready."))
-                            .multilineTextAlignment(.center)
-                        Image(systemName: "chevron.right").font(.caption.weight(.bold)).opacity(0.6)
-                    }
-                    .font(Theme.figures).kerning(Theme.serifKerning)
-                    .foregroundStyle(.primary)
-                }
-                .buttonStyle(PressStyle())
-            } else if let p = model.progress {
-                Text(needs(p)).font(Theme.figures).kerning(Theme.serifKerning).multilineTextAlignment(.center)
-                    .contentTransition(.numericText())
-            }
-        }
-        .frame(maxWidth: .infinity)
+        LearningRing(progress: model.progress, forcedLearned: forced == .learned, size: 184)
+            .frame(maxWidth: .infinity)
     }
 
     /// "Needs 1 more rescue and 14 more baseline moments."
@@ -103,7 +92,7 @@ struct InsightsView: View {
         var parts: [String] = []
         if r > 0 { parts.append("\(r) more rescue") }
         if b > 0 { parts.append("\(b) more baseline") }
-        return parts.isEmpty ? "Almost there." : "Needs " + parts.joined(separator: " and ") + " moments."
+        return parts.isEmpty ? "Almost there" : parts.joined(separator: " and ") + " to go"
     }
 
     // MARK: Tiles
@@ -111,20 +100,18 @@ struct InsightsView: View {
     @State private var tilesShown = false
 
     private var tiles: some View {
-        HStack(spacing: 10) {
+        VStack(spacing: 10) {
             NavigationLink(value: Page.profile) {
-                tile("person.crop.circle", "Profile", demoLearned ? "Pollen-led" : learned ? "Ready" : "Soon")
+                row("person.crop.circle", "Your profile", demoLearned ? "Pollen-led" : learned ? "Ready" : "After learning")
             }
             NavigationLink(value: Page.moments) {
-                tile("calendar", "This month", "\(monthCount)")
+                row("calendar", "Your moments", "\(monthCount) this month")
             }
-            Button { showDoctor = true } label: { tile("tablecells", "For your doctor", "Table") }
+            Button { showDoctor = true } label: { row("tablecells", "For your doctor", "Table to share") }
         }
         .buttonStyle(PressStyle())
-        // The tiles lift in after the ring, one after another.
         .opacity(tilesShown ? 1 : 0)
-        .offset(y: tilesShown ? 0 : 14)
-        .onAppear { withAnimation(Theme.lift.delay(0.35)) { tilesShown = true } }
+        .onAppear { withAnimation(.easeOut(duration: 0.3).delay(0.25)) { tilesShown = true } }
         .sheet(isPresented: $showDoctor) { DoctorSheet(events: Array(events)) }
     }
 
@@ -132,17 +119,18 @@ struct InsightsView: View {
         events.filter { $0.moment != .okay && Calendar.current.isDate($0.loggedAt, equalTo: .now, toGranularity: .month) }.count
     }
 
-    private func tile(_ icon: String, _ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: icon).font(.title3)
-            Spacer(minLength: 0)
-            Text(value).font(.system(.headline, design: .serif, weight: .medium)).lineLimit(1)
-            Text(title).font(Theme.caption).foregroundStyle(Theme.secondaryText).lineLimit(1)
+    /// One row, on the same glass as the home's buttons: icon, name, value, chevron.
+    private func row(_ icon: String, _ title: String, _ value: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon).font(.body).frame(width: 24)
+            Text(title).font(.body.weight(.medium))
+            Spacer(minLength: 8)
+            Text(value).font(.subheadline).foregroundStyle(Theme.secondaryText).lineLimit(1)
+            Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(Theme.secondaryText)
         }
-        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Theme.secondaryText.opacity(0.1)))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.secondaryText.opacity(0.18)))
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 16).padding(.vertical, 15)
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
@@ -411,7 +399,7 @@ struct LearningRing: View {
 
     private func count(_ label: String, _ n: Int, _ goal: Int, _ ink: Color) -> some View {
         VStack(spacing: 2) {
-            Text("\(min(n, goal)) of \(goal)").font(Theme.figures).monospacedDigit().contentTransition(.numericText())
+            Text("\(min(n, goal)) of \(goal)").font(.title3.weight(.semibold)).monospacedDigit().contentTransition(.numericText())
             HStack(spacing: 5) {
                 Circle().fill(ink).frame(width: 6, height: 6)
                 Text(label)

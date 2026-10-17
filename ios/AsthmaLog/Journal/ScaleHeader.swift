@@ -108,7 +108,9 @@ struct MomentTag: View {
         Text(text ?? (moment == .rescue ? "Rescue" : moment == .maintenance ? "Standard" : "Baseline"))
             .font(.system(size: 10, weight: .bold)).tracking(0.9).textCase(.uppercase)
             .foregroundStyle(ink)
-            .padding(.horizontal, 6).padding(.vertical, 3)
+            // One width for every kind, so the tag doesn't resize as you scrub between moments.
+            .frame(width: 72)
+            .padding(.vertical, 3)
             .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(ink.opacity(0.14)))
             .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(ink.opacity(0.45), lineWidth: 0.8))
     }

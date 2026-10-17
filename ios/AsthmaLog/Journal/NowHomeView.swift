@@ -183,43 +183,69 @@ struct NowHomeView: View {
 
     // MARK: Header
 
-    /// The conditions lead (serif); the verdict sits under them as one tappable line with its dot; the place
-    /// under that. The inhaler tag appears only on moments. The time lives on the rail's pill.
+    /// Top to bottom: where (a plain line, or a field you can change in the forecast), what the air is (the
+    /// serif sentence), how it compares (the verdict pill). The inhaler tag sits with the place on moments.
     private var header: some View {
         Group {
             switch focus {
             case .now:
                 if let j = justNow {
-                    VerdictHeader(tag: j.moment, title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
-                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint,
-                                  detail: j.placeName ?? here?.place ?? "", onVerdict: { showInsights = true })
+                    VerdictHeader(tag: j.moment, place: AnyView(placeLabel("location.fill", j.placeName ?? here?.place)),
+                                  title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
+                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
                 } else {
-                    VerdictHeader(title: here?.statement ?? "Checking the air near you…",
-                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint,
-                                  detail: here?.place ?? "", onVerdict: { showInsights = true })
+                    VerdictHeader(place: AnyView(placeLabel("location.fill", here?.place)),
+                                  title: here?.statement ?? "Checking the air near you…",
+                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
                 }
             case .moment(let m):
-                VerdictHeader(tag: m.moment, title: m.pastStatement, verdict: nil, tint: nil, detail: m.placeName ?? "")
+                VerdictHeader(tag: m.moment, place: AnyView(placeLabel("mappin", m.placeName)),
+                              title: m.pastStatement, verdict: nil, tint: nil)
             case .hour(let h):
-                VerdictHeader(title: h.statement, verdict: outlook(at: h.date).text, tint: outlook(at: h.date).tint,
-                              detail: "", trailing: AnyView(placeChip), onVerdict: { showInsights = true })
+                VerdictHeader(place: AnyView(placeField), title: h.statement,
+                              verdict: outlook(at: h.date).text, tint: outlook(at: h.date).tint, onVerdict: { showInsights = true })
             }
         }
         .padding(.top, 2)
         .animation(Theme.smooth, value: focusKey)
     }
 
-    /// Tap to read the air somewhere else.
-    private var placeChip: some View {
-        Button { showPlaces = true } label: {
-            HStack(spacing: 3) {
-                Text(chosen?.name ?? here?.place ?? "Here")
-                Image(systemName: "chevron.down").font(.caption2.weight(.bold))
-            }
-            .foregroundStyle(chosen == nil ? Theme.secondaryText : Theme.tint)
+    private func placeLabel(_ icon: String, _ name: String?) -> some View {
+        Label(name.map(Self.clean) ?? "Here", systemImage: icon)
+            .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+            .lineLimit(1)
+    }
+
+    /// The forecast's place, as a field you can change: Here, Home, Work or an address.
+    private var placeField: some View {
+        let home = SavedPlace.load(SavedPlace.homeKey), work = SavedPlace.load(SavedPlace.workKey) ?? SavedPlace.washU
+        let (icon, name): (String, String) = switch chosen {
+        case nil: ("location.fill", here?.place.map(Self.clean) ?? "Here")
+        case let p? where p == home: ("house.fill", "Home")
+        case let p? where p == work: ("building.2.fill", "Work")
+        case let p?: ("mappin", Self.clean(p.name))
         }
-        .buttonStyle(PressStyle())
-        .accessibilityLabel("Change place")
+        return HStack(spacing: 8) {
+            Text("Forecast for").foregroundStyle(Theme.secondaryText)
+            Button { showPlaces = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: icon).font(.caption)
+                    Text(name).lineLimit(1)
+                    Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Theme.secondaryText)
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 11).padding(.vertical, 6)
+                .background(Capsule().fill(Theme.secondaryText.opacity(0.14)))
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityLabel("Forecast for \(name). Change place")
+        }
+        .font(.subheadline.weight(.medium))
+    }
+
+    /// "3336 Salena St," → "3336 Salena St".
+    static func clean(_ name: String) -> String {
+        name.trimmingCharacters(in: CharacterSet(charactersIn: ", ").union(.whitespaces))
     }
 
     /// The one sentence for a time, with its color once felt air has learned. Never a percent, never
@@ -796,25 +822,24 @@ struct MapZoomSource: ViewModifier {
     }
 }
 
-/// The home's header: the conditions as the headline (serif), the verdict as one line under it with a
-/// dot in its colour (tap for Insights), then the place. The tag line and the verdict line keep their
-/// space even when empty, so nothing jumps while you scrub.
+/// The home's header: where, then what (the serif sentence), then the verdict as a pill. Each row keeps
+/// its height, so nothing jumps while you scrub.
 struct VerdictHeader: View {
     var tag: MomentKind? = nil
+    let place: AnyView
     let title: String
     let verdict: String?
     let tint: Color?
-    let detail: String
-    var trailing: AnyView? = nil
     var onVerdict: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .leading) {
-                MomentTag(moment: tag ?? .rescue).hidden()
-                if let tag { MomentTag(moment: tag).transition(.opacity) }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                if let tag { MomentTag(moment: tag) }
+                place
             }
+            .frame(minHeight: 30, alignment: .leading)
             ZStack(alignment: .topLeading) {
                 Text(title)
                     .font(Theme.serifTitle).kerning(Theme.serifKerning)
@@ -823,24 +848,22 @@ struct VerdictHeader: View {
                     .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
             }
             .animation(Theme.smooth, value: title)
+            let ink = tint ?? Theme.secondaryText
             Button { onVerdict?() } label: {
-                HStack(spacing: 8) {
-                    Circle().fill(tint ?? Theme.secondaryText.opacity(0.5)).frame(width: 8, height: 8)
+                HStack(spacing: 7) {
+                    Circle().fill(ink).frame(width: 7, height: 7)
                     Text(verdict ?? " ").lineLimit(1)
-                    if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(Theme.secondaryText) }
+                    if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }
                 }
-                .font(.subheadline.weight(.medium))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(Capsule().fill(ink.opacity(0.16)))
             }
             .buttonStyle(PressStyle())
             .disabled(onVerdict == nil)
             .opacity(verdict == nil ? 0 : 1)
             .contentTransition(.opacity)
-            HStack(spacing: 4) {
-                Text(detail).lineLimit(1).truncationMode(.middle)
-                if let trailing { trailing }
-            }
-            .font(.subheadline).foregroundStyle(Theme.secondaryText)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)

@@ -181,8 +181,14 @@ struct NowTimeline: View {
                     .offset(y: axis - 15)
                     .allowsHitTesting(false)
                 // The pill is a button: tap it to step back through your moments, newest first.
-                Button(action: stepBack) {
-                    Text(focusTime == nil ? "Now" : relative(current))
+                // Off now, the pill is the way back: it shows how far you are and a return arrow; tap to jump to
+                // Now. On Now, a tap steps back to your latest moment.
+                Button(action: { focusTime == nil ? stepBack() : go(to: nil) }) {
+                    HStack(spacing: 5) {
+                        if focusTime != nil, current > now { Image(systemName: "arrow.uturn.backward").font(.caption2.weight(.bold)) }
+                        Text(focusTime == nil ? "Now" : relative(current))
+                        if focusTime != nil, current < now { Image(systemName: "arrow.uturn.forward").font(.caption2.weight(.bold)) }
+                    }
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .tracking(0.2)
                         .foregroundStyle(scheme == .light ? Theme.linen : Color.black)
@@ -197,27 +203,9 @@ struct NowTimeline: View {
                 }
                 .buttonStyle(PressStyle())
                 .offset(y: axis - 17 - 30)
-                .accessibilityLabel("Previous moment")
+                .accessibilityLabel(focusTime == nil ? "Previous moment" : "Back to now")
             }
             .frame(maxWidth: .infinity)
-        }
-        // Off now: an icon that points back to now, on the side now is on (right while you're in the
-        // past, left while you're in the forecast).
-        .overlay(alignment: current < now ? .topTrailing : .topLeading) {
-            if focusTime != nil {
-                Button { go(to: nil) } label: {
-                    Image(systemName: current < now ? "chevron.right.2" : "chevron.left.2")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(ink.opacity(0.7))
-                        .frame(width: 34, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(PressStyle())
-                .padding(.horizontal, 12)
-                .offset(y: axis - 17 - 30)
-                .transition(.scale(scale: 0.8).combined(with: .opacity))
-                .accessibilityLabel("Jump to now")
-            }
         }
         .animation(Theme.snap, value: focusTime == nil)
         .padding(.top, 24)

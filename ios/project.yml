@@ -44,6 +44,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        # Recursive, the sentence's typeface (OFL). The file is in AsthmaLog/Theme/Fonts/.
+        UIAppFonts: [Recursive.ttf]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: Your location stamps each inhaler log with the outdoor air and weather where you were.

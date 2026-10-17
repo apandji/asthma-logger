@@ -36,6 +36,7 @@ struct NowHomeView: View {
     @State private var openDay: Date?
     @State private var toast: LogEvent?
     @State private var probing = false
+    @AppStorage(Prefs.didOnboard) private var didOnboard = false
     /// The timeline is moving: skies change without their ripple until it settles.
     @State private var scrubbing = false
     /// A sideways drag on the sky: where it started in time, and the finger.
@@ -95,7 +96,8 @@ struct NowHomeView: View {
                     .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) {
-                CaptureBar(showInsights: $showInsights, tip: tips.currentTip as? PullToLogTip, toast: $toast)
+                // No tips until onboarding is done: they'd pop over the first-run screens.
+                CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
             }
             .overlay(alignment: .bottomLeading) { rail }
             .overlay(alignment: .top) {
@@ -316,7 +318,7 @@ struct NowHomeView: View {
                 }
             case .moment(let m):
                 VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
-                              title: m.pastStatement, verdict: nil, tint: nil,
+                              title: standsOut(m) ?? m.pastStatement, verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
             case .hour(let h):
                 VerdictHeader(place: AnyView(placeField), title: h.statement,
@@ -490,6 +492,80 @@ struct NowHomeView: View {
 
     private var mapID: String { chosen.map { "place-\($0.lat)-\($0.lon)" } ?? "here" }
 
+    /// What stood out at a rescue moment, from the data model: the bins of its frame that are gated
+    /// patterns (more common on flare days than baseline), named in plain words. Never a cause, never a
+    /// percent: "Weed pollen was high and it was humid, as on most of your flare days." Nil when the moment
+    /// isn't rescue, the gate isn't met, or nothing in it is a pattern; the weather sentence then stands.
+    private func standsOut(_ m: LogEvent) -> String? {
+        guard m.moment == .rescue else { return nil }
+        let learned = forced == .learned || (model.progress?.isMet ?? false)
+        // What was in the air in the two days before (the look-back, docs/air-outlook.md): a flare often
+        // trails the air, so a high the day before is worth a clause even when the moment itself was clean.
+        let before = Self.before(m.conditions?.lookBack)
+        // On a flare, the weather sentence alone would judge the air ("the air was clear") and discount what
+        // happened. So: the facts, then what we saw, or didn't: outdoor air is the only thing felt air can see.
+        let weather = AirWords.weatherOnly(tense: .past, weave: m.weave, conditions: m.conditions)
+        let nothing = "Nothing outdoors stood out this time."
+        guard learned else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
+        if forced == .learned, !(model.progress?.isMet ?? false) {
+            // The demo person's story, for moments without a real pattern behind them.
+            return ["Weed pollen was high, as on most of your flare days.", before].compactMap { $0 }.joined(separator: " ")
+        }
+        guard let frame = m.frame(), let rows = model.report?.gatedRows, !rows.isEmpty else {
+            return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ")
+        }
+        let hits = Bins.all.compactMap { def -> (String, Double)? in
+            guard let level = def.levelOf(frame),
+                  let row = rows.first(where: { $0.bin == def.bin && $0.level == level && $0.lift > 1.25 }) else { return nil }
+            return (Self.phrase(def.bin, level), row.lift)
+        }
+        .sorted { $0.1 > $1.1 }
+        guard !hits.isEmpty else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
+        let named = hits.prefix(2).map(\.0)
+        let joined = named.count == 1 ? named[0] : "\(named[0]) and \(named[1])"
+        let now = joined.prefix(1).uppercased() + joined.dropFirst() + ", as on most of your flare days."
+        return [now, before].compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// "Fine particles were high in the two days before." Only signals whose two windows were read well
+    /// enough count; a window that wasn't read is missing, not clean. High *now* is already in the frame.
+    private static func before(_ lb: LookBack?) -> String? {
+        guard let lb else { return nil }
+        var names: [String] = []
+        if lb.pm25Level == .earlier { names.append("fine particles") }
+        if lb.ozoneLevel == .earlier { names.append("ozone") }
+        var parts: [String] = []
+        if !names.isEmpty {
+            let joined = names.count == 1 ? names[0] : "\(names[0]) and \(names[1])"
+            parts.append(joined.prefix(1).uppercased() + joined.dropFirst() + (names.count == 1 && names[0] == "ozone" ? " was" : " were") + " high the two days before.")
+        }
+        if lb.tempDropLevel == .earlier { parts.append("The temperature dropped fast the day before.") }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    /// A bin and level as a short past-tense clause.
+    private static func phrase(_ bin: String, _ level: String) -> String {
+        switch (bin, level) {
+        case ("pm25", "high"): "fine particles were high"
+        case ("pm25", "moderate"): "fine particles were up"
+        case ("ozone", "high"): "ozone was high"
+        case ("ozone", "moderate"): "ozone was up"
+        case ("pollen_weed", "high"): "weed pollen was high"
+        case ("pollen_weed", "moderate"): "weed pollen was up"
+        case ("temp", "hot"): "it was hot"
+        case ("temp", "cold"): "it was cold"
+        case ("humidity", "humid"): "it was humid"
+        case ("humidity", "dry"): "the air was dry"
+        case ("smoke_at_point", "yes"): "there was smoke"
+        case ("heat_alert", "yes"): "there was a heat alert"
+        case ("temp_drop", "yes"): "the temperature had dropped fast"
+        case ("hour", let part): "it was \(part)"
+        case ("indoor_outdoor", let io): "you were \(io == "indoor" ? "indoors" : "outdoors")"
+        case (let b, let l) where b.hasPrefix("tag_"): "\(Bins.label(b).lowercased()) was noted\(l == "yes" ? "" : "")"
+        case (let b, let l): "\(Bins.label(b).lowercased()) was \(l)"
+        }
+    }
+
     /// The live reading as an unsaved moment, so the details page can show it. Never inserted.
     private func liveSnapshot() -> LogEvent? {
         guard let here else { return nil }
@@ -564,6 +640,15 @@ struct NowReading {
 /// One voice across past, present and forecast: "It was… / It's… / It will be…".
 nonisolated enum AirWords {
     enum Tense { case past, present, future, carried }
+
+    /// "It was 58° and humid." The weather alone, no judgement of the air: for flare moments.
+    static func weatherOnly(tense: Tense, weave: WeaveSpec, conditions: Conditions?) -> String? {
+        let it = switch tense { case .past: "It was"; case .present: "It's"; case .future, .carried: "It will be" }
+        let temp = conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°" }
+        let feel = weave.words[.humidity].flatMap { ["humid", "dry", "very humid", "very dry"].contains($0) ? $0 : nil }
+        let weather = [temp, feel].compactMap { $0 }.joined(separator: " and ")
+        return weather.isEmpty ? nil : "\(it) \(weather)."
+    }
 
     /// "54°, humid, clear air": the conditions as one plain line under the verdict.
     static func short(_ weave: WeaveSpec, _ conditions: Conditions?) -> String {
@@ -695,6 +780,8 @@ struct NowSky: View {
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @AppStorage(Crit.SkyTexture.key) private var texture = Crit.SkyTexture.dots
     @State private var probe: SkyProbe?
+    /// The 48 hours before this sky's time, for the label's lines. Loaded once per sky.
+    @State private var history: HourlyHistory?
     /// The row of the scale being read: 0 weather, then the layers in reading order.
     @State private var row: Int?
     @State private var pulse: Task<Void, Never>?
@@ -806,6 +893,10 @@ struct NowSky: View {
         }
         .padding(.horizontal, 8)
         .onDisappear { stopPulse() }
+        .task(id: "\(mapID)-\(date.timeIntervalSinceReferenceDate)") {
+            guard let (lat, lon) = coordinate else { return }
+            history = await HourlyHistory.load(latitude: lat, longitude: lon, from: date.addingTimeInterval(-48 * 3600), to: date)
+        }
         .onAppear {
             guard !isPast, !sketch, !reduceMotionEnv else { return }
             withAnimation(.easeOut(duration: 2).repeatForever(autoreverses: false)) { pinPulse = true }
@@ -849,7 +940,20 @@ struct NowSky: View {
         let y = (bands[r].lowerBound + bands[r].upperBound) / 2
         let hit = SkyExplorer.strata(at: y, layers: layers, conditions: conditions, weave: weave, temperatureF: temperature, pollen: pollen)
         UISelectionFeedbackGenerator().selectionChanged()
-        withAnimation(.snappy(duration: 0.2)) { row = r; probe = hit?.probe }
+        var p = hit?.probe
+        if var probe = p, let h = history {
+            switch probe.name {
+            case "Weather":
+                probe.lines = [SparkSeries(name: "Temperature", unit: "°", points: h.temperature, ink: .white),
+                               SparkSeries(name: "Humidity", unit: "%", points: h.humidity, ink: Color(red: 0.55, green: 0.7, blue: 0.95))]
+                    .filter { $0.points.count > 1 }
+            case "PM2.5", "Air":
+                probe.lines = h.pm25.count > 1 ? [SparkSeries(name: "PM2.5", unit: "", points: h.pm25, ink: WeatherColor.pm25)] : []
+            default: break
+            }
+            p = probe
+        }
+        withAnimation(.snappy(duration: 0.2)) { row = r; probe = p }
     }
 
     private func startPulse() {
@@ -1070,9 +1174,10 @@ struct VerdictHeader: View {
             }
             .frame(minHeight: 30, alignment: .leading)
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
+            // Never cut: the sentence takes the lines it needs and the sky gives up the room.
             Text(title)
                 .font(Theme.serifTitle).kerning(Theme.serifKerning)
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(settled ? .easeInOut(duration: 0.22) : nil, value: title)
             let ink = tint ?? Theme.secondaryText

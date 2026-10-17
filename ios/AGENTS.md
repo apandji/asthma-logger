@@ -163,7 +163,7 @@ Record new crit feedback here, dated, and move items out when they're resolved (
 - **Demo pollen** (`Providers/DemoPollen.swift`) is display-only: realistic Midwest seasons, labelled "Demo" wherever shown, never in frames, Insights or patterns.
 - **Air and pollen read Good / OK / Not good** (`Tier`), each on its own scale (EPA for pollutants, Ambee for pollen). Bars show the amount: one bar a little, three a lot. Temperature and humidity get plain words (Mild, Humid), never a judgement. The AQI is an index, so it's a summary line, not a row. Raw values and units are shown, never compared.
 - Debug: Settings › Reset onboarding and button. `ios/scripts/fresh-install.sh` reinstalls on the phone so every permission sheet shows again (erases the Journal; adds the demo week back).
-- Apple-native, **light and dark** (follows the system): SF Symbols, system materials, Dynamic Type. Spec: [docs/design/visual-style.md](../docs/design/visual-style.md).
+- **The design system is [docs/design/design-system.md](../docs/design/design-system.md).** Tokens, type, the three springs, the sky, the header, the timeline, the controls, the words. Read it before building any screen; it supersedes visual-style.md where they differ.
 - **All styling goes through `Theme/`.** No hard-coded colors or fonts in views. Colors are `Color(light:dark:)` tokens; riso inks are for data marks only.
 - **Demo moments** (Settings → Demo moments) are marked by `LogEvent.isDemoMoment`, never by `note`. They show in the Journal but never feed Insights, I'm okay sampling, or a trend line next to real readings.
 - Copy follows the "Say / Do not say" table in [docs/predictive-engine.md §2](../docs/predictive-engine.md).

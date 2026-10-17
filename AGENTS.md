@@ -57,8 +57,8 @@ Each one comes from the docs. Follow the link before you change anything in that
 | Apple Watch | **Logging only**: a watchOS app with Rescue and Standard buttons. Each press goes to the iPhone over WatchConnectivity; the phone stamps the air and writes Health (when that setting is on) | No complications, no Health writes or air lookups on the watch |
 | Journaling | Voice note → on-device transcript → model extracts tags you confirm. Photos of the day, opt-in | Confirmed tags become bins |
 | Risk prediction | From *when* (hour, season), *where* (place, indoor/outdoor), and *conditions* (weather, AQ) on inhaler days vs usual days | |
-| Look | Apple-native, light and dark (follows system), New York for one headline per screen, riso inks only for data. Spec: [docs/design/visual-style.md](docs/design/visual-style.md) | Keep styling in one theme file so it can be swapped |
-| Insight voice | Clinical → plain → poetic slider lives in **Settings**, not on the Insights screen | Only changes the on-device model's wording; the template stays plain |
+| Look | Printed on weather-tinted paper: one Recursive sentence (variable, OFL, bundled), SF for the rest, riso particles for the air, colour only for the air. Spec: [docs/design/design-system.md](docs/design/design-system.md) | Tokens in `ios/AsthmaLog/Theme/` |
+| Insight voice | Clinical → plain → poetic slider lives in **Settings**, not on the Insights screen | Changes the on-device model's wording and the sentence's Recursive Casual axis (clinical linear → poetic casual); the template's wording stays plain |
 | Usual-day samples ("I'm okay" moments) | Automatic only, no button. Now: one on app open (none in 20 h, no inhaler use in 2 h). Next: a few a day in the background at home | Background sampling needs the Always location permission: ask the owner first |
 | Pollen until Ambee | None. The bin reads `unknown` and Insights says "Pollen not included yet" | |
 | Photos | Later, opt-in, on-device only. Not in the first build | |

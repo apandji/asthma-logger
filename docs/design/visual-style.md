@@ -2,7 +2,7 @@
 
 The app is called **felt air**.
 
-The design spec for the iOS app's look. Mockups: [`visual-style-mockups.html`](visual-style-mockups.html) (open in a browser; Journal and Recap in light and dark). This refines the [riso visual language](riso-visual-language.md): it keeps the riso inks and the overprint idea for data, and drops the paper texture, grain, misregistration and custom type.
+The design spec for the iOS app's look. Mockups: [`visual-style-mockups.html`](visual-style-mockups.html) (open in a browser; Journal and Recap in light and dark). This refines the [riso visual language](riso-visual-language.md): it keeps the riso inks and the overprint idea for data, and drops the paper texture, grain and misregistration. Its one custom typeface is Recursive, for the sentence.
 
 > **Possible direction:** [textile-direction.md](textile-direction.md) adds stitches and fabric for brand moments and data on top of this spec. Not decided.
 
@@ -10,7 +10,7 @@ The design spec for the iOS app's look. Mockups: [`visual-style-mockups.html`](v
 
 The app should feel like it shipped with the iPhone. Layout, type, controls and colours are stock iOS, following Apple Health most closely: the Journal borrows Cycle Tracking's week strip and tinted log, and the check-in borrows State of Mind. Two things are ours:
 
-1. **One New York sentence per screen.** The headline that says what matters is set in Apple's serif. Everything else is SF.
+1. **One Recursive sentence per screen.** The headline that says what matters is set in [Recursive](https://www.recursive.design), a variable typeface drawn from single-stroke sign painting. It looks more or less casual depending on the insight voice. Everything else is SF.
 2. **Ink for data.** Conditions print as soft, see-through discs in a few inks that overlap where conditions happened together. Ink is only for data, never for text or chrome (apart from the one primary button and the active tab).
 
 Light and dark both follow the system setting.
@@ -19,13 +19,14 @@ Light and dark both follow the system setting.
 
 | Role | Font | SwiftUI | Notes |
 |---|---|---|---|
-| Headline sentence (one per screen) | New York, medium | `.font(.system(.title, design: .serif, weight: .medium))` | Never bold. Condition words are tinted in their ink. |
+| Headline sentence (one per screen) | Recursive Sans, weight 400 | `.font(Theme.serifTitle)` (`Theme/Recursive.swift`) | Never bold. Condition words are tinted in their ink. The Casual axis follows Settings › Insight voice: clinical 0, plain 0.5, poetic 1 (with cursive letters). Slant −15 for a slanted sentence. |
 | Eyebrow | SF, 13 pt semibold, uppercase, secondary | `.font(.footnote.weight(.semibold)).textCase(.uppercase)` | Often the start of the headline: "Of the 10 times you used your inhaler" → "ozone was high 8 times". |
 | Card titles, row titles | SF semibold | `.headline` / `.subheadline.weight(.semibold)` | |
 | Body, detail | SF regular, secondary | `.subheadline`, `.footnote` | |
 | Numbers in comparisons | SF semibold | `.monospacedDigit()` | |
+| Figures that change in place | Recursive Mono, Casual 0 | `.font(Theme.figures)` | Always linear, whatever the voice, so numbers read exact. |
 
-All text uses Dynamic Type styles, no fixed sizes. Only system fonts; nothing to bundle.
+SF text uses Dynamic Type styles. One bundled font: `ios/AsthmaLog/Theme/Fonts/Recursive.ttf` (the variable file, SIL Open Font License, license beside it), listed under `UIAppFonts` in `project.yml`. If it fails to load, the sentence falls back to New York.
 
 ## Colour tokens
 

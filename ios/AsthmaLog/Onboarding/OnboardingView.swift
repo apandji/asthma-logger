@@ -1,385 +1,315 @@
 import AsthmaCore
 import CoreLocation
-import MapKit
 import SwiftData
 import SwiftUI
 
-/// First run: welcome → press your felt button to sync → your location and the air there, on a map
-/// (the location prompt appears right after the press, no extra screen) → motion and Apple Health →
-/// "It gets better with time". No account. Each permission is asked when it's about to be used.
-/// Photos come from the owner's Figma (local only; woven fallback without).
+/// First run, in the home's own language (docs/design/design-system.md). Four screens and one moment:
+/// welcome · where you are (the location prompt, then the sky draws for the first time) · your felt
+/// button (press it: the phone answers, and the scan draws your **first capture**) · two optional
+/// permissions · what happens next. Skippable at the button: a tap on the + does the first capture.
 struct OnboardingView: View {
     @Environment(LogService.self) private var services
     @Environment(ButtonLink.self) private var button
     @Environment(\.modelContext) private var context
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
     @AppStorage(Prefs.logMethod) private var logMethod = "app"
-    @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
+    @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
 
+    enum Step: Int, CaseIterable, Comparable {
+        case welcome, here, button, permissions, learn
+        static func < (a: Step, b: Step) -> Bool { a.rawValue < b.rawValue }
+    }
     @State private var step = Step.welcome
-    @State private var working = false
-    @State private var firstMoment: LogEvent?
-    @State private var fix: CLLocationCoordinate2D?
+    /// The air where you are, read on the "here" step; the first capture is stamped from it.
+    @State private var here: (lat: Double, lon: Double, place: String?, conditions: Conditions)?
     @State private var locating = false
-    @State private var camera: MapCameraPosition = .automatic
+    @State private var noLocation = false
+    @State private var first: LogEvent?
     @State private var askedMotion = false
     @State private var askedHealth = false
-
-    enum Step: Int, CaseIterable { case welcome, sync, here, health, learn }
+    @State private var probing = false
 
     var body: some View {
-        ZStack {
-            backdrop
-                .ignoresSafeArea()
-                .transition(.opacity)
-            VStack(alignment: .leading, spacing: 0) {
-                Spacer(minLength: 0)
-                content
-                    .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.ultraThinMaterial, in: .rect(cornerRadius: 32, style: .continuous))
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
-                    .environment(\.colorScheme, .dark)
-                pageDots.padding(.vertical, 12)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            sky
+                .frame(maxHeight: .infinity)
+                .padding(.top, 4)
+            card
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+            pageDots.padding(.bottom, 10)
         }
-        .animation(.easeInOut(duration: 0.35), value: step)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background {
+            ZStack {
+                LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), .black], startPoint: .top, endPoint: .bottom)
+                SkyGrain(responds: false).opacity(0.5)
+            }
+            .ignoresSafeArea()
+            .animation(.easeInOut(duration: 0.6), value: step)
+        }
+        .environment(\.colorScheme, .dark)
+        .animation(Theme.smooth, value: step)
         .onChange(of: button.syncPresses) { _, n in
-            guard n > 0, step == .sync else { return }
+            guard n > 0, step == .button, first == nil else { return }
             logMethod = "button"
-            // A beat to see "Synced", then straight on to location: the press is the go-ahead.
-            Task { try? await Task.sleep(for: .seconds(1.2)); goToHere() }
+            capture()
         }
+        #if DEBUG
+        // Recordings in the simulator: `-demoPress` presses the button for you a few seconds into that step.
+        .task(id: step) {
+            guard step == .button, ProcessInfo.processInfo.arguments.contains("-demoPress") else { return }
+            try? await Task.sleep(for: .seconds(3))
+            button.simulatePress(.rescue)
+        }
+        #endif
     }
 
-    @ViewBuilder private var backdrop: some View {
-        if step == .here, let fix {
-            Map(position: $camera, interactionModes: []) {
-                Marker("", systemImage: "wind", coordinate: fix).tint(Color.primary)
-            }
-            .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
-            .environment(\.colorScheme, .dark)
-            .overlay(LinearGradient(colors: [.clear, .black.opacity(0.5)], startPoint: .center, endPoint: .bottom))
-        } else {
-            OnboardingBackdrop(photo: photo, seed: step.rawValue).id(step)
-        }
-    }
+    // MARK: Header (the home's)
 
-    private var photo: String {
+    @ViewBuilder private var header: some View {
         switch step {
-        case .welcome: "onboardingTree"
-        case .sync: "onboardingHand"
-        case .here: "onboardingPark"
-        case .health: "onboardingGrass"
-        case .learn: "onboardingTree"
-        }
-    }
-
-    @ViewBuilder private var content: some View {
-        switch step {
-        case .welcome: welcome
-        case .sync: sync
-        case .here: here
-        case .health: health
-        case .learn: learn
-        }
-    }
-
-    // MARK: Steps
-
-    private var welcome: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("felt air").font(.system(size: 30, weight: .light)).tracking(1)
-            Text("Your inhaler, and the air around it.")
-                .font(.system(.title2, design: .serif, weight: .medium))
-            Text("Each time you use your inhaler, felt air saves the outdoor air and weather. After a few weeks you can see what your harder days share.")
-                .font(.subheadline).foregroundStyle(.secondary)
-            Text("Outdoor air only. Not medical advice.").font(.footnote).foregroundStyle(.secondary)
-            primary("Get started") {
-                step = .sync
-                button.beginSync()
-            }
-        }
-    }
-
-    private var sync: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 16) {
-                SyncPulse(synced: button.syncPresses > 0, cap: button.lastSyncCap)
-                    .frame(width: 64, height: 64)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(button.syncPresses > 0 ? "Synced" : "Press your felt button")
-                        .font(.system(.title2, design: .serif, weight: .medium))
-                        .contentTransition(.opacity)
-                    Text(syncStatus).font(.subheadline).foregroundStyle(.secondary)
-                }
-            }
-            Text("Orange is rescue. Teal is your daily inhaler. This press only pairs the button, it isn't logged.")
-                .font(.footnote).foregroundStyle(.secondary)
-            secondary("I don't have a button") {
-                button.endSync()
-                logMethod = "app"
-                goToHere()
-            }
-        }
-    }
-
-    private var syncStatus: String {
-        if button.syncPresses > 0 { return "Next, the air where you are." }
-        switch button.status {
-        case .notAllowed: return "Bluetooth is off for felt air. Turn it on in Settings › felt air."
-        case .bluetoothOff: return "Turn on Bluetooth to connect."
-        case .connected: return "Connected. Press either cap."
-        case .connecting: return "Connecting…"
-        default: return "Keep it close to your iPhone."
-        }
-    }
-
-    private var here: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if let m = firstMoment, !m.weave.isEmpty {
-                Text("The air where you are").font(.system(.title2, design: .serif, weight: .medium))
-                VStack(spacing: 0) {
-                    tierRow(m, .air, "Air quality", m.conditions?.best(.pm25).map { "PM2.5 \(Int($0.value.rounded()))" })
-                    tierRow(m, .temperature, "Temperature", m.conditions?.best(.temperature).map { "\(Int($0.value.rounded()))°F" })
-                    tierRow(m, .humidity, "Humidity", m.conditions?.best(.humidity).map { "\(Int($0.value.rounded()))%" })
-                }
-                Text("Outdoors · \(sources(m)). Saved as a calm moment, so later inhaler days have something to compare with.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                WeatherAttributionView()
-                primary("Continue") { step = .health }
-            } else if fix == nil && !locating {
-                Text("No location").font(.system(.title2, design: .serif, weight: .medium))
-                Text("You can still log. Turn on location in Settings to add the air.")
-                    .font(.subheadline).foregroundStyle(.secondary)
-                primary("Continue") { step = .health }
+        case .welcome:
+            VerdictHeader(place: AnyView(Label("felt air", systemImage: "sparkles").font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)),
+                          title: "Your inhaler, and the air around it.", verdict: nil, tint: nil)
+        case .here:
+            VerdictHeader(place: AnyView(placeLine), title: hereTitle, verdict: nil, tint: nil)
+        case .button:
+            if let f = first {
+                VerdictHeader(tag: nil, place: AnyView(HStack(spacing: 8) { MomentTag(moment: .okay, text: "First capture"); placeLine }),
+                              title: AirWords.sentence(tense: .present, weave: f.weave, conditions: f.conditions),
+                              verdict: nil, tint: nil)
             } else {
-                HStack(spacing: 12) {
-                    ProgressView()
-                    Text(fix == nil ? "Finding you…" : "Checking the air…")
-                        .font(.system(.title2, design: .serif, weight: .medium))
+                VerdictHeader(place: AnyView(placeLine), title: "Press your felt button.", verdict: nil, tint: nil)
+            }
+        case .permissions:
+            VerdictHeader(place: AnyView(placeLine), title: "Two optional permissions.", verdict: nil, tint: nil)
+        case .learn:
+            VerdictHeader(place: AnyView(placeLine), title: "It gets better with time.", verdict: nil, tint: nil,
+                          when: nil)
+        }
+    }
+
+    private var placeLine: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "location.fill").font(.caption)
+            Text(here?.place ?? (noLocation ? "No location" : "Finding you…")).lineLimit(1)
+        }
+        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+    }
+
+    private var hereTitle: String {
+        if let here { return AirWords.sentence(tense: .present, weave: WeaveSpec(here.conditions.input), conditions: here.conditions) }
+        return noLocation ? "You can still log without it." : (locating ? "Checking the air near you…" : "The air where you are.")
+    }
+
+    // MARK: Sky
+
+    @ViewBuilder private var sky: some View {
+        let listening = step == .button && first == nil
+        if let f = first, step >= .button {
+            // The first capture: the map alone, then the scan, then the air. Logged by the button or the +.
+            NowSky(conditions: f.conditions ?? here?.conditions, weave: f.weave.isEmpty ? (here.map { WeaveSpec($0.conditions.input) } ?? WeaveSpec()) : f.weave,
+                   date: f.loggedAt, pollen: DemoPollen.sample(at: f.loggedAt, season: pollenSeason), probing: $probing,
+                   mapID: f.id.uuidString, coordinate: f.latitude.flatMap { lat in f.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
+                   captureInk: logMethod == "button" ? Theme.rescueSoft : Theme.standardSoft)
+                .id(f.id)
+        } else if let here, step >= .here {
+            // Where you are: the map draws in with the air's ripple, then the particles.
+            NowSky(conditions: here.conditions, weave: WeaveSpec(here.conditions.input), date: .now,
+                   pollen: DemoPollen.sample(at: .now, season: pollenSeason), probing: $probing,
+                   mapID: "here", coordinate: (here.lat, here.lon))
+                .opacity(listening ? 0.45 : 1)
+                .overlay { if listening { Listening().transition(.opacity) } }
+        } else {
+            // Before there's a place: the grain alone, breathing.
+            ParticleField(particles: [], animated: !reduceMotion, inviting: false)
+                .padding(.horizontal, 8)
+                .mask(EllipticalGradient(colors: [.black, .clear], center: .center, startRadiusFraction: 0.2, endRadiusFraction: 0.7))
+                .overlay { if step == .welcome { Listening(quiet: true) } }
+        }
+    }
+
+    private var pageTop: Color {
+        let t = here?.conditions.best(.temperature)?.value ?? 62
+        return WeatherColor.light(WeatherColor.temperature(t), at: .now).mix(with: .black, by: 0.22)
+    }
+
+    // MARK: The card: one short paragraph and the actions
+
+    @ViewBuilder private var card: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            switch step {
+            case .welcome:
+                Text("Each time you use your inhaler, felt air saves the outdoor air and weather. After a few weeks you can see what your flare days have in common.")
+                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                Text("Outdoor air only. Not medical advice.").font(.footnote).foregroundStyle(Theme.secondaryText)
+                primary("Get started") { goHere() }
+            case .here:
+                if here != nil {
+                    Text("felt air reads the air near you each time you log. Your location stays on this iPhone.")
+                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    WeatherAttributionView()
+                    primary("Next") { step = .button; button.beginSync() }
+                } else if noLocation {
+                    Text("Turn on location in Settings to add the air to each moment.")
+                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    primary("Next") { step = .button; button.beginSync() }
+                } else {
+                    HStack(spacing: 10) { ProgressView(); Text("The location prompt appears now.").font(.subheadline).foregroundStyle(Theme.secondaryText) }
                 }
-                Text("felt air checks the air where you are when you log. Your location stays on this iPhone.")
-                    .font(.subheadline).foregroundStyle(.secondary)
+            case .button:
+                if first != nil {
+                    Text("That press is your first capture: the air, here, right now. From now on each press saves a moment like it.")
+                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    primary("Next") { step = .permissions }
+                } else {
+                    Text(buttonStatus).font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    Text("Orange cap is Rescue, teal is Standard. This first press pairs the button; it isn't counted as inhaler use.")
+                        .font(.footnote).foregroundStyle(Theme.secondaryText)
+                    HStack(spacing: 10) {
+                        secondary("I don't have a button") {
+                            button.endSync()
+                            logMethod = "app"
+                            capture()
+                        }
+                    }
+                }
+            case .permissions:
+                permission("figure.walk", "Motion & Fitness", "Walking, driving or still helps guess if you were indoors or out.", done: askedMotion) {
+                    Task { _ = await services.motion.recent(); askedMotion = true }
+                }
+                permission("heart.text.square", "Apple Health", "Saves each rescue puff as Inhaler Usage, next to the rest of your health.", done: askedHealth) {
+                    Task { await services.health.requestAccess(); askedHealth = true }
+                }
+                primary("Next") { step = .learn }
+            case .learn:
+                Text("Each press saves a moment. felt air adds baseline moments on its own. With enough of both, Insights shows what your flare days have in common.")
+                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                LearningRing(progress: GateProgress(nAttacks: events.filter { !$0.isDemo && $0.moment == .rescue }.count,
+                                                    nBaselines: events.filter { !$0.isDemo && $0.moment == .okay }.count, gate: .default), size: 96)
+                primary("Start") { button.endSync(); didOnboard = true }
             }
         }
+        .padding(20)
+        .glassEffect(.regular, in: .rect(cornerRadius: 28))
     }
 
-    private var health: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Two optional permissions").font(.system(.title2, design: .serif, weight: .medium))
-            permission("figure.walk", "Motion & Fitness",
-                       "Walking, driving or still helps guess if you were indoors or out.", done: askedMotion) {
-                Task { _ = await services.motion.recent(); askedMotion = true }
-            }
-            permission("heart.text.square", "Apple Health",
-                       "Saves each rescue puff as Inhaler Usage, next to the rest of your health.", done: askedHealth) {
-                Task { await services.health.requestAccess(); askedHealth = true }
-            }
-            primary("Continue") { step = .learn }
-        }
-    }
-
-    private var learn: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("It gets better with time").font(.system(.title2, design: .serif, weight: .medium))
-            Text("Each press saves the air at that moment. felt air also saves calm moments on its own. With enough of both, Insights shows which conditions come up more on your inhaler days, and flags days ahead that look similar.")
-                .font(.subheadline).foregroundStyle(.secondary)
-            learning
-            primary("Start") {
-                button.endSync()
-                didOnboard = true
-            }
-        }
-    }
-
-    /// Honest progress toward the first pattern (the default sample gate).
-    private var learning: some View {
-        let real = events.filter { !$0.isDemo }
-        let rescue = real.filter { $0.moment == .rescue }.count
-        let okay = real.filter { $0.moment == .okay }.count
-        let gate = LiftGate.default
-        return VStack(alignment: .leading, spacing: 8) {
-            progress("Inhaler uses", rescue, gate.minAttacks, Theme.rescue)
-            progress("Calm moments", okay, gate.minBaselines, .white)
+    private var buttonStatus: String {
+        switch button.status {
+        case .notAllowed: "Bluetooth is off for felt air. Turn it on in Settings › felt air."
+        case .bluetoothOff: "Turn on Bluetooth to connect."
+        case .connected: "Connected. Press either cap."
+        case .connecting: "Connecting…"
+        default: "Listening. Keep the button close to your iPhone."
         }
     }
 
     // MARK: Actions
 
-    private func goToHere() {
-        guard step != .here else { return }
+    private func goHere() {
         step = .here
         locating = true
         Task {
-            // The system prompt appears here, right after the press.
-            if let loc = try? await services.location.currentLocation(timeout: .seconds(10)) {
-                let c = loc.coordinate
-                camera = .camera(MapCamera(centerCoordinate: c, distance: 400_000, pitch: 0))
-                fix = c
-                try? await Task.sleep(for: .milliseconds(300))
-                withAnimation(.easeInOut(duration: 2.4)) {
-                    camera = .camera(MapCamera(centerCoordinate: c, distance: 1_600, heading: 20, pitch: 55))
-                }
-                let moment = LogEvent(moment: .okay)
-                context.insert(moment)
-                try? context.save()
-                firstMoment = moment
-                await services.enrich(moment)
-                try? context.save()
+            // The system prompt appears here.
+            if let fix = try? await services.location.currentLocation(timeout: .seconds(10)) {
+                let lat = fix.coordinate.latitude, lon = fix.coordinate.longitude
+                async let c = services.conditions.conditions(latitude: lat, longitude: lon)
+                async let marks = try? CLGeocoder().reverseGeocodeLocation(fix)
+                let place = await marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
+                here = (lat, lon, place, await c)
+            } else {
+                noLocation = true
             }
             locating = false
         }
     }
 
-    // MARK: Pieces
-
-    private func tierRow(_ m: LogEvent, _ f: WeaveSpec.Factor, _ name: String, _ value: String?) -> some View {
-        let level = m.weave.levels[f]
-        return HStack(spacing: 12) {
-            LevelIndicator(level: level, ink: WeaveSwatch.ink(f), style: style).frame(minWidth: 30)
-            Text(name)
-            Spacer()
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(Tier.label(f, m.weave) ?? "No reading")
-                if let value { Text(value).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
-            }
+    /// The first capture: a baseline moment stamped with the air here, drawn by the scan.
+    private func capture() {
+        guard first == nil else { return }
+        Task {
+            let e = await services.logFirstCapture(in: context)
+            if let here, e.placeName == nil { e.placeName = here.place }
+            withAnimation(Theme.smooth) { first = e }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
-        .font(.subheadline)
-        .padding(.vertical, 7)
     }
+
+    // MARK: Pieces
 
     private func permission(_ symbol: String, _ title: String, _ detail: String, done: Bool, action: @escaping () -> Void) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol).font(.title3).frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.headline)
-                Text(detail).font(.footnote).foregroundStyle(.secondary)
+                Text(detail).font(.footnote).foregroundStyle(Theme.secondaryText)
             }
             Spacer()
             Button(done ? "Done" : "Allow", action: action)
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .buttonStyle(PressStyle())
                 .disabled(done)
         }
-        .padding(12)
-        .background(.white.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
-    }
-
-    private func progress(_ label: String, _ n: Int, _ goal: Int, _ tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(label)
-                Spacer()
-                Text("\(min(n, goal)) of \(goal)").monospacedDigit().foregroundStyle(.secondary)
-            }
-            .font(.footnote)
-            ProgressView(value: Double(min(n, goal)), total: Double(goal)).tint(tint)
-        }
-    }
-
-    private func sources(_ m: LogEvent) -> String {
-        let names = Array(Set((m.conditions?.observations ?? []).map(\.source))).sorted()
-        return names.isEmpty ? "your air services" : names.joined(separator: ", ")
     }
 
     private func primary(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+            Text(title).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 14)
+                .foregroundStyle(.black)
+                .background(Capsule().fill(.white))
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.white)
-        .foregroundStyle(.black)
-        .buttonBorderShape(.capsule)
-        .disabled(working)
-        .padding(.top, 6)
+        .buttonStyle(PressStyle())
+        .padding(.top, 4)
     }
 
     private func secondary(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .font(.subheadline.weight(.semibold))
-            .frame(maxWidth: .infinity)
-            .foregroundStyle(.secondary)
+        Button(action: action) {
+            Text(title).font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 12)
+                .glassEffect(.regular.interactive(), in: .capsule)
+        }
+        .buttonStyle(PressStyle())
     }
 
     private var pageDots: some View {
         HStack(spacing: 7) {
             ForEach(Step.allCases, id: \.self) { s in
-                Circle().fill(.white.opacity(s == step ? 0.95 : 0.35)).frame(width: 7, height: 7)
+                Circle().fill(.white.opacity(s == step ? 0.95 : 0.3)).frame(width: 6, height: 6)
             }
         }
         .frame(maxWidth: .infinity)
     }
 }
 
-/// Waiting for the first press: soft rings pulse outward. On sync, a solid disc in the pressed cap's color.
-struct SyncPulse: View {
-    let synced: Bool
-    let cap: ButtonPacket.Cap?
+/// Waiting for the first press: the pin breathes out slow rings over the map, the way Now's pin does,
+/// but larger, so the phone visibly listens.
+struct Listening: View {
+    var quiet = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(paused: synced || reduceMotion)) { tl in
+        TimelineView(.animation(paused: reduceMotion)) { tl in
             Canvas { ctx, size in
                 let c = CGPoint(x: size.width / 2, y: size.height / 2)
-                let r = min(size.width, size.height) / 2
-                if synced {
-                    let color = cap == .standard ? Theme.standard : Theme.rescue
-                    ctx.fill(Path(ellipseIn: CGRect(x: c.x - r * 0.7, y: c.y - r * 0.7, width: r * 1.4, height: r * 1.4)), with: .color(color))
-                    var check = Path()
-                    check.move(to: CGPoint(x: c.x - r * 0.28, y: c.y))
-                    check.addLine(to: CGPoint(x: c.x - r * 0.06, y: c.y + r * 0.22))
-                    check.addLine(to: CGPoint(x: c.x + r * 0.32, y: c.y - r * 0.2))
-                    ctx.stroke(check, with: .color(.white), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                } else {
-                    let t = tl.date.timeIntervalSinceReferenceDate
-                    for k in 0..<3 {
-                        let phase = (t / 2.2 + Double(k) / 3).truncatingRemainder(dividingBy: 1)
-                        let rr = r * (0.35 + 0.65 * phase)
-                        ctx.stroke(Path(ellipseIn: CGRect(x: c.x - rr, y: c.y - rr, width: rr * 2, height: rr * 2)),
-                                   with: .color(.white.opacity(0.6 * (1 - phase))), lineWidth: 1.5)
-                    }
-                    ctx.fill(Path(ellipseIn: CGRect(x: c.x - r * 0.3, y: c.y - r * 0.3, width: r * 0.6, height: r * 0.6)),
-                             with: .color(.white.opacity(0.9)))
+                let t = tl.date.timeIntervalSinceReferenceDate
+                for k in 0..<3 {
+                    let phase = (t / 2.6 + Double(k) / 3).truncatingRemainder(dividingBy: 1)
+                    let rr = 14 + 150 * phase
+                    ctx.stroke(Path(ellipseIn: CGRect(x: c.x - rr, y: c.y - rr, width: rr * 2, height: rr * 2)),
+                               with: .color(.white.opacity((quiet ? 0.3 : 0.6) * (1 - phase))), lineWidth: 1.5)
+                }
+                if !quiet {
+                    ctx.fill(Path(ellipseIn: CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10)), with: .color(.white))
                 }
             }
         }
-        .animation(.spring(duration: 0.4), value: synced)
-        .accessibilityLabel(synced ? "Synced" : "Waiting for a press")
-    }
-}
-
-/// Full-bleed photo, darkened at the bottom for the text. Without the photo (fresh clone), a woven field.
-struct OnboardingBackdrop: View {
-    let photo: String
-    let seed: Int
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                if let image = UIImage(named: photo), image.size.height < 1000 {
-                    // Small photo (the hand): blurred to fill, sharp copy in the top half so the subject isn't under the card.
-                    Image(uiImage: image).resizable().scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height).clipped().blur(radius: 24)
-                    Image(uiImage: image).resizable().scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height * 0.55).clipped()
-                        .frame(maxHeight: .infinity, alignment: .top)
-                } else if let image = UIImage(named: photo) {
-                    Image(uiImage: image).resizable().scaledToFill()
-                        .frame(width: geo.size.width, height: geo.size.height).clipped()
-                } else {
-                    Color(white: 0.08)
-                    WeaveSwatch(weave: fallback, cornerRadius: 0).opacity(0.55)
-                }
-                LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .bottom)
-            }
-        }
-    }
-
-    private var fallback: WeaveSpec {
-        let levels: [WeaveSpec.Level] = [.low, .medium, .high]
-        return WeaveSpec(levels: [.air: levels[seed % 3], .humidity: levels[(seed + 1) % 3], .temperature: levels[(seed + 2) % 3]])
+        .allowsHitTesting(false)
+        .accessibilityLabel("Waiting for a press")
     }
 }

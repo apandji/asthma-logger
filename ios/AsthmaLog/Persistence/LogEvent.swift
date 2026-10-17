@@ -36,6 +36,8 @@ final class LogEvent {
     /// Made-up moment from Settings → Demo moments. Its own field, so a user note (voice notes) never
     /// turns a demo moment real or the other way round.
     var isDemoMoment: Bool = false
+    /// Onboarding's first press: saved as a baseline moment with its own label. Never counts as rescue.
+    var isFirstCapture: Bool = false
     /// File name of this moment's voice note in Documents/VoiceNotes (audio stays on the phone).
     var voiceNoteFile: String?
     /// "University City, MO", looked up once from the coordinates.

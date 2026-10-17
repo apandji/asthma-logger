@@ -25,6 +25,14 @@ struct SettingsView: View {
             Form {
                 #if DEBUG
                 Section {
+                    NavigationLink { DevicesView() } label: {
+                        Label { Text("Devices") } icon: { Image(systemName: "button.programmable") }
+                    }
+                } footer: {
+                    Text("Your felt buttons and Apple Watch.")
+                }
+
+                Section {
                     Toggle("Performance readout", isOn: $perfHUD)
                     Button("Replay tutorial") {
                         UserDefaults.standard.set(true, forKey: AppTips.resetKey)
@@ -61,10 +69,14 @@ struct SettingsView: View {
                         Text("Poetic").font(Theme.caption)
                     }
                     LabeledContent("Current", value: NarratorStyle(score: styleScore).label)
+                    // A sample in the sentence's type, which follows this slider: linear when clinical, casual when poetic.
+                    Text("Ozone was high on 8 of the 14 times you used your inhaler.")
+                        .font(Recursive.sentence(size: 22, voice: NarratorStyle(score: styleScore)))
+                        .kerning(Theme.serifKerning)
                 } header: {
                     Text("Insight voice")
                 } footer: {
-                    Text("How the on-device model words your pattern. The numbers never change. Without Apple Intelligence you get a plain template sentence.")
+                    Text("How the on-device model words your pattern, and how casual the headline type looks. The numbers never change. Without Apple Intelligence you get a plain template sentence.")
                 }
 
                 Section("On-device model") {
@@ -82,7 +94,6 @@ struct SettingsView: View {
                     Text("I'm okay moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
                 }
 
-                ButtonSection()
 
                 Section("Data sources") {
                     LabeledContent("Apple Weather", value: "On")

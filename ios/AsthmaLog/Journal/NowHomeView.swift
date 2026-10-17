@@ -37,6 +37,9 @@ struct NowHomeView: View {
     @State private var probing = false
     /// The timeline is moving: skies change without their ripple until it settles.
     @State private var scrubbing = false
+    /// A sideways drag on the sky: where it started in time, and the finger.
+    @State private var skyDrag: (start: Date, point: CGPoint)?
+    @State private var skyPress: CGFloat = 0
     /// The clock. Ticks so "now" creeps along the track while you watch.
     @State private var now = Date()
     @Namespace private var mapZoom
@@ -54,6 +57,10 @@ struct NowHomeView: View {
                 // One sky at a time; the next settles in with a breath, not a cut.
                 ZStack { sky.id(focusKey).transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.985))) }
                     .animation(Theme.smooth, value: focusKey)
+                    // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
+                    .distortionEffect(ShaderLibrary.dent(.float2(skyDrag?.point ?? .zero), .float(170), .float(skyPress)),
+                                      maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: skyDrag != nil && !reduceMotion)
+                    .gesture(skyScrub)
                     .frame(maxHeight: .infinity)
                     .padding(.top, 4)
                 NowTimeline(moments: moments, baselines: events.filter { $0.moment == .okay }.map(\.loggedAt),
@@ -61,8 +68,10 @@ struct NowHomeView: View {
                             forecastTints: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
                             hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
                     .frame(height: 104)
-                    // The + and Settings sit on the timeline's row, either side of it; the sky gets the height.
-                    .padding(.horizontal, 80)
+                    // Full width; the + and Settings float over its ends, which fade out beneath them.
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.2),
+                                                 .init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
+                                         startPoint: .leading, endPoint: .trailing))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
@@ -165,6 +174,31 @@ struct NowHomeView: View {
 
     /// Whether the playhead is ahead of now. Crossing it gives one firmer haptic.
     private var inFuture: Bool { if case .hour = focus { true } else { false } }
+
+    /// Drag the sky sideways to move through time: a screen-width is about a day, as on the timeline but
+    /// slower, and letting go lands on the nearest moment (or stays in the forecast). The dent gives it feel.
+    private var skyScrub: some Gesture {
+        DragGesture(minimumDistance: 14)
+            .onChanged { v in
+                guard abs(v.translation.width) > abs(v.translation.height) || skyDrag != nil else { return }
+                if skyDrag == nil {
+                    skyDrag = (focusTime ?? now, v.startLocation)
+                    scrubbing = true
+                    withAnimation(Theme.snap) { skyPress = 1 }
+                }
+                skyDrag?.point = v.location
+                let t = skyDrag!.start.addingTimeInterval(-Double(v.translation.width) * 86_400 / 360)
+                if abs(t.timeIntervalSince(now)) < 15 * 60 { focusTime = nil }
+                else if t < now {
+                    focusTime = moments.min { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }?.loggedAt ?? t
+                } else { focusTime = min(t, hours.last?.date ?? t) }
+            }
+            .onEnded { _ in
+                withAnimation(Theme.smooth) { skyPress = 0 }
+                skyDrag = nil
+                scrubbing = false
+            }
+    }
 
     /// What the sky is showing, as a key, so a change can animate as one move.
     private var focusKey: String {

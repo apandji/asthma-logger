@@ -118,20 +118,44 @@ final class QuickRecordCenter: NSObject, UNUserNotificationCenterDelegate {
 }
 
 /// On-device speech to text for a recorded note. Fails open: no permission or no recognizer → no transcript.
-enum NoteTranscriber {
+/// `nonisolated`: Speech calls back on its own queues, and a main-actor closure there traps (the stop crash).
+nonisolated enum NoteTranscriber {
+    /// Asks for speech recognition once (before recording, so the prompt doesn't land mid-transcript).
+    static func authorize() async -> Bool {
+        if SFSpeechRecognizer.authorizationStatus() != .notDetermined { return SFSpeechRecognizer.authorizationStatus() == .authorized }
+        let status = await withCheckedContinuation { (c: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+            SFSpeechRecognizer.requestAuthorization { @Sendable s in c.resume(returning: s) }
+        }
+        return status == .authorized
+    }
+
     static func transcribe(_ url: URL) async -> String? {
-        let status = await withCheckedContinuation { c in SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) } }
-        guard status == .authorized, let r = SFSpeechRecognizer(), r.isAvailable else { return nil }
+        guard await authorize(), let r = SFSpeechRecognizer(), r.isAvailable else { return nil }
         let request = SFSpeechURLRecognitionRequest(url: url)
         request.requiresOnDeviceRecognition = r.supportsOnDeviceRecognition
         request.shouldReportPartialResults = false
-        return await withCheckedContinuation { c in
-            var done = false
-            r.recognitionTask(with: request) { result, error in
-                guard !done else { return }
-                if let result, result.isFinal { done = true; c.resume(returning: result.bestTranscription.formattedString) }
-                else if error != nil { done = true; c.resume(returning: nil) }
+        return await withCheckedContinuation { (c: CheckedContinuation<String?, Never>) in
+            let once = Once()
+            r.recognitionTask(with: request) { @Sendable result, error in
+                if let result, result.isFinal {
+                    let text = result.bestTranscription.formattedString
+                    once.run { c.resume(returning: text) }
+                } else if error != nil {
+                    once.run { c.resume(returning: nil) }
+                }
             }
+        }
+    }
+
+    /// Resumes the continuation exactly once, whichever callback comes first.
+    private final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        func run(_ body: () -> Void) {
+            lock.lock(); defer { lock.unlock() }
+            guard !done else { return }
+            done = true
+            body()
         }
     }
 }
@@ -251,6 +275,7 @@ struct QuickRecordView: View {
             }
         } else {
             Task {
+                _ = await NoteTranscriber.authorize()
                 if await notes.startRecording(for: event) {
                     started = .now
                     phase = .recording

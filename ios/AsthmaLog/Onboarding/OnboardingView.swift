@@ -219,9 +219,8 @@ struct OnboardingView: View {
             if let fix = try? await services.location.currentLocation(timeout: .seconds(10)) {
                 let lat = fix.coordinate.latitude, lon = fix.coordinate.longitude
                 async let c = services.conditions.conditions(latitude: lat, longitude: lon)
-                async let marks = try? CLGeocoder().reverseGeocodeLocation(fix)
-                let place = await marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
-                here = (lat, lon, place, await c)
+                async let place = PlaceNames.label(latitude: lat, longitude: lon)
+                here = (lat, lon, await place, await c)
             } else {
                 noLocation = true
             }

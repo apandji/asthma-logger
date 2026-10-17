@@ -78,7 +78,8 @@ struct PlacePicker: View {
                     // What the forecast is for, right now.
                     HStack(spacing: 10) {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.tint)
-                        Text("Forecast for ").foregroundStyle(Theme.secondaryText) + Text(currentLabel).fontWeight(.semibold)
+                        Text("Forecast for \(Text(currentLabel).fontWeight(.semibold))")
+                            .foregroundStyle(Theme.secondaryText)
                     }
                     .font(.subheadline)
                     .listRowBackground(Color.clear)

@@ -22,6 +22,8 @@ struct SkyProbe: Equatable {
     let intensity: Double
     /// Overrides the layer's usual symbol (the Weather row after a sharp temperature drop).
     var symbol: String? = nil
+    /// The look-back: what this layer did before, as (window, value) rows. "Last 6 h", "6–48 h before".
+    var before: [LookBackRow] = []
 
     /// What the highlight is tinted with: the level, in the same three colors as the verdict line
     /// (good green, OK yellow, not good red). The layer's own ink stays in the sky; its name is in the label.
@@ -107,16 +109,42 @@ enum SkyExplorer {
         let bands = bands(count: stack.count, height: 1)
         let i = max(0, min(bands.count - 1, bands.firstIndex { $0.contains(y) } ?? (y < bands[0].lowerBound ? 0 : bands.count - 1)))
         if i == 0 {
-            guard let w = probe(at: CGPoint(x: 0.5, y: 0.1), layers: layers, conditions: conditions, weave: weave,
+            guard var w = probe(at: CGPoint(x: 0.5, y: 0.1), layers: layers, conditions: conditions, weave: weave,
                                 temperatureF: temperatureF, pollen: pollen) else { return nil }
+            w.before = lookBack("Weather", conditions)
             return (w, bands[0])
         }
         let layer = stack[i - 1]
         let (v, unit) = reading(layer.name, conditions, pollen)
         let position = (Double(layer.level.rawValue) + max(0, min(1, layer.fraction))) / 3
-        let p = SkyProbe(name: layer.name, kind: kind(layer.name, pollen), value: v, unit: unit,
+        var p = SkyProbe(name: layer.name, kind: kind(layer.name, pollen), value: v, unit: unit,
                          level: layer.level, note: note(layer.name), color: layer.color, intensity: position)
+        p.before = lookBack(layer.name, conditions)
         return (p, bands[i])
+    }
+
+    /// The look-back rows for a layer (weather, PM2.5, ozone), from the 48 hours stored with the reading.
+    /// A window shows only when at least half its hours were read; otherwise it's missing, not clean.
+    static func lookBack(_ name: String, _ c: Conditions?) -> [LookBackRow] {
+        guard let lb = c?.lookBack else { return [] }
+        func peak(_ w: WindowPeak, needed: Int, _ text: (Double) -> String) -> String? {
+            guard w.hours >= needed, let v = w.worst else { return nil }
+            return text(v)
+        }
+        let (a, b): (String?, String?) = switch name {
+        case "Weather":
+            (peak(lb.tempFallNow, needed: 3) { $0 < 1 ? "Steady" : "Fell \(Int($0.rounded()))°" },
+             peak(lb.tempFallEarlier, needed: 21) { $0 < 1 ? "Steady" : "Fell \(Int($0.rounded()))°" })
+        case "PM2.5", "Air":
+            (peak(lb.pm25Now, needed: 3) { "Up to \(Int($0.rounded())) µg/m³" },
+             peak(lb.pm25Earlier, needed: 21) { "Up to \(Int($0.rounded())) µg/m³" })
+        case "Ozone":
+            (peak(lb.ozoneNow, needed: 3) { "Up to \(Int($0.rounded())) ppb" },
+             peak(lb.ozoneEarlier, needed: 21) { "Up to \(Int($0.rounded())) ppb" })
+        default: (nil, nil)
+        }
+        return [a.map { LookBackRow(window: "Last 6 h", value: $0) }, b.map { LookBackRow(window: "6–48 h before", value: $0) }]
+            .compactMap { $0 }
     }
 
     /// The number and its unit, apart, so the number can be set large.
@@ -262,6 +290,22 @@ struct SkyProbeOverlay: View {
             if !probe.note.isEmpty {
                 Text(probe.note).font(.caption).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
             }
+            if !probe.before.isEmpty {
+                // The look-back: what came before this reading.
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Before this").font(.caption2.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+                    ForEach(probe.before, id: \.window) { row in
+                        HStack {
+                            Text(row.window).foregroundStyle(Theme.secondaryText)
+                            Spacer(minLength: 8)
+                            Text(row.value).monospacedDigit()
+                        }
+                        .font(.caption)
+                    }
+                }
+                .padding(.top, 4)
+                .overlay(alignment: .top) { Rectangle().fill(Theme.secondaryText.opacity(0.25)).frame(height: 0.5).offset(y: -2) }
+            }
         }
         .padding(12)
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
@@ -331,4 +375,10 @@ struct AmountDots: View {
         }
         .accessibilityLabel("\(level.rawValue + 1) of 3")
     }
+}
+
+/// One look-back row in the reading's label: the window and what happened in it.
+struct LookBackRow: Equatable {
+    let window: String
+    let value: String
 }

@@ -150,6 +150,7 @@ struct NowHomeView: View {
             // A new moment brings the playhead back to now.
             .environment(\.skySettled, !scrubbing)
             .sensoryFeedback(.impact(weight: .medium, intensity: 0.9), trigger: inFuture)
+            .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: inPast)
             .onChange(of: events.last?.id) { _, _ in
                 withAnimation(.smooth(duration: 0.6)) { focusTime = nil }
                 announce(events.last)
@@ -177,6 +178,9 @@ struct NowHomeView: View {
     // MARK: What the playhead is on
 
     private enum Focus { case now, moment(LogEvent), hour(NowHour) }
+
+    /// Whether the playhead is on a past moment. Crossing back from Now gives a softer tick.
+    private var inPast: Bool { if case .moment = focus { true } else { false } }
 
     /// Whether the playhead is ahead of now. Crossing it gives one firmer haptic.
     private var inFuture: Bool { if case .hour = focus { true } else { false } }
@@ -677,6 +681,11 @@ struct NowSky: View {
     /// smoke lays a warm veil over the map, a temperature drop cools the top of the sky.
     var event: AirEvent? = nil
     @State private var flash = 0.0
+    @State private var pinPulse = false
+    /// Past: a moment more than 20 minutes ago (not a forecast, not a fresh log).
+    private var isPast: Bool { !sketch && captureInk == nil && date < Date().addingTimeInterval(-20 * 60) }
+    /// 0 at now … 1 two days out.
+    private var farness: CGFloat { sketch ? CGFloat(min(1, max(0, date.timeIntervalSinceNow / (48 * 3600)))) : 0 }
     @Environment(\.colorScheme) private var scheme
     private var light: Bool { scheme == .light }
     /// False while the timeline is moving.
@@ -719,6 +728,13 @@ struct NowSky: View {
                         Circle().fill(Color.white.opacity(0.9)).frame(width: 7, height: 7)
                             .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.2).frame(width: 13, height: 13))
                             .shadow(color: .black.opacity(0.25), radius: 2)
+                            // Now is live: the pin breathes like a live location. The past's pin stays still.
+                            .background {
+                                if !isPast {
+                                    Circle().stroke(.white.opacity(pinPulse ? 0 : 0.6), lineWidth: 1.5)
+                                        .frame(width: pinPulse ? 34 : 13, height: pinPulse ? 34 : 13)
+                                }
+                            }
                     }
                 }
                 if event == .smoke {
@@ -737,9 +753,13 @@ struct NowSky: View {
                               selected: row.flatMap { $0 > 0 ? $0 - 1 : nil },
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
-                              rippleInk: rippleInk, scan: true, hollow: sketch)
+                              rippleInk: rippleInk, scan: true, hollow: sketch,
+                              breathes: !isPast, drift: sketch ? 1 + 2 * farness : 0)
             }
             .frame(width: size.width, height: size.height)
+            // The past is a print, a touch faded. The future softens the further out it is.
+            .saturation(isPast ? 0.82 : 1)
+            .blur(radius: sketch && !reduceMotionEnv ? 2.5 * farness : 0)
             .drawingGroup()
             // A sky ripples once you've landed on it, not while the timeline is moving past it.
             .onAppear { if settled { ripple() } }
@@ -785,6 +805,10 @@ struct NowSky: View {
         }
         .padding(.horizontal, 8)
         .onDisappear { stopPulse() }
+        .onAppear {
+            guard !isPast, !sketch, !reduceMotionEnv else { return }
+            withAnimation(.easeOut(duration: 2).repeatForever(autoreverses: false)) { pinPulse = true }
+        }
         // A storm: now and then, a soft flash of lightning across the whole field.
         .task(id: event) {
             guard event == .storm, !reduceMotionEnv else { return }
@@ -867,6 +891,10 @@ struct ParticleField: View {
     var scan = false
     /// A sketch: particles drawn as rings, not dots. The forecast's look.
     var hollow = false
+    /// Now breathes; the past is still.
+    var breathes = true
+    /// The future drifts, more the further out: 0 still … 3 restless.
+    var drift: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let spacing: CGFloat = 8
@@ -891,7 +919,8 @@ struct ParticleField: View {
         // "touch me" ripples run over a sky that's already there.
         let firstPass = rippleAt.map { time.timeIntervalSince($0) < seconds } ?? false
 
-        let breath = (animated && !reduceMotion) ? time.timeIntervalSinceReferenceDate : 0
+        let clock = (animated && !reduceMotion) ? time.timeIntervalSinceReferenceDate : 0
+        let breath = breathes ? clock : 0
         // Odds per layer: a floor so any present layer shows, rising with amount; capped so the map shows.
         var weights = particles.map { $0.1 > 0 ? 0.012 + 0.09 * $0.1 : 0 }
         let total = weights.reduce(0, +)
@@ -908,7 +937,12 @@ struct ParticleField: View {
                     var h = UInt32(truncatingIfNeeded: i &* 73856093 ^ j &* 19349663)
                     h = (h ^ (h >> 13)) &* 1274126177
                     let u = Double(h & 0xFFFF) / 65535, jx = Double((h >> 16) & 0xFF) / 255, jy = Double((h >> 24) & 0xFF) / 255
-                    let x = (CGFloat(i) + 0.2 + 0.6 * jx) * spacing, y = (CGFloat(j) + 0.2 + 0.6 * jy) * spacing
+                    var x = (CGFloat(i) + 0.2 + 0.6 * jx) * spacing, y = (CGFloat(j) + 0.2 + 0.6 * jy) * spacing
+                    if drift > 0, clock > 0 {
+                        // Not yet settled: each dot wanders on its own slow path.
+                        x += drift * 1.6 * CGFloat(sin(clock * 0.5 + jx * 6.3))
+                        y += drift * 1.6 * CGFloat(cos(clock * 0.43 + jy * 6.3))
+                    }
                     let k = cumulative.firstIndex { u < $0 }
                     let dist = hypot(x - centre.x, y - centre.y)
                     // The scan: nothing exists ahead of the ring yet.

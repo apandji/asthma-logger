@@ -253,7 +253,8 @@ struct NowHomeView: View {
     /// place name. "Here" gets the location arrow; other places get no icon.
     private func placeLabel(_ lat: Double?, _ lon: Double?, _ name: String?, current: Bool = false) -> some View {
         let known = Self.knownPlace(lat, lon)
-        let icon = known?.icon ?? (current ? "location.fill" : nil)
+        // Home and Work get their icons; every other place gets the location arrow (filled for where you are now).
+        let icon = known?.icon ?? (current ? "location.fill" : "location")
         let text = known?.name ?? name.map(Self.clean) ?? "Here"
         return HStack(spacing: 6) {
             if let icon { Image(systemName: icon).font(.caption) }
@@ -278,7 +279,7 @@ struct NowHomeView: View {
         case nil: ("location.fill", Self.knownPlace(here?.lat, here?.lon)?.name ?? here?.place.map(Self.clean) ?? "Here")
         case let p? where p == home: ("house.fill", "Home")
         case let p? where p == work: ("building.2.fill", "Work")
-        case let p?: ("magnifyingglass", Self.clean(p.name))
+        case let p?: ("location", Self.clean(p.name))
         }
         return HStack(spacing: 8) {
             // The label keeps its width; the field gives way and truncates.

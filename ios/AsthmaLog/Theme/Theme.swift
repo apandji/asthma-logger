@@ -124,9 +124,9 @@ enum Theme {
             case .recursive:
                 return Recursive.sentence(size: size, slanted: slanted, voice: voice)
             case .funnelSans:
-                // Nested helpers — a top-level `FunnelSans` type collided with case `funnelSans`
+                // Use Theme.Funnel — a top-level `FunnelSans` type collided with case `funnelSans`
                 // in name lookup ("Cannot find 'FunnelSans' in scope").
-                return Funnel.font(size: size)
+                return Theme.Funnel.font(size: size)
             }
         }
 
@@ -137,7 +137,7 @@ enum Theme {
             case .recursive:
                 return Recursive.figures(size: size)
             case .funnelSans:
-                return Funnel.font(size: size)
+                return Theme.Funnel.font(size: size)
             }
         }
     }

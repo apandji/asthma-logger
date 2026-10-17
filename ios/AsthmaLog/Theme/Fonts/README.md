@@ -8,6 +8,6 @@ Settings › Type picks the **big statement** face only. UI chrome stays SF.
 |-------|-----------------|
 | (system) | **System** — New York for the sentence |
 | `Recursive.ttf` + `Recursive-OFL.txt` | **Recursive** (default); Insight voice softens its axes |
-| `FunnelSans-*.ttf` + `FunnelSans-OFL.txt` | **Funnel Sans** |
+| `FunnelSans-*.ttf` + `FunnelSans-OFL.txt` | **Funnel Sans** (helpers in `Theme.Funnel`) |
 
 Funnel Sans source: [Dicotype/Funnel](https://github.com/Dicotype/Funnel) / [Google Fonts](https://fonts.google.com/specimen/Funnel+Sans). Weights shipped: Regular, Medium, SemiBold, Bold.

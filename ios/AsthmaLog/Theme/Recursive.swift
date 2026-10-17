@@ -61,12 +61,13 @@ extension NarratorStyle {
         return NarratorStyle(score: score)
     }
 
-    /// Clinical is linear; plain is halfway; poetic is fully casual with cursive letters.
+    /// Clinical is linear; plain and poetic only a little casual, with no cursive letters, so the sentence
+    /// keeps its warmth but still sits next to SF Pro. (Fully casual read as a different app.)
     var sentenceAxes: Recursive.Axes {
         switch self {
         case .clinical: Recursive.Axes(casual: 0, cursive: 0)
-        case .plain: Recursive.Axes(casual: 0.5, cursive: 0.5)
-        case .poetic: Recursive.Axes(casual: 1, cursive: 1)
+        case .plain: Recursive.Axes(casual: 0.25, cursive: 0)
+        case .poetic: Recursive.Axes(casual: 0.4, cursive: 0)
         }
     }
 }

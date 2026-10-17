@@ -298,7 +298,7 @@ struct SkyPanel: View {
             .overlay(alignment: .trailing) {
                 if reading == .strata {
                     StrataScale(layers: AirLayers(conditions: event.conditions, weave: event.weave, pollen: pollen, smooth: strengthStyle == .smooth),
-                                probe: probe, height: size.height)
+                                probe: probe, height: size.height, weatherSymbol: SkyExplorer.weatherIcon(event.conditions))
                         .padding(.trailing, 18)
                 }
             }

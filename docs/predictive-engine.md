@@ -63,6 +63,7 @@ A frame is one hour at one place:
 | `smoke_at_point` | Elevated PM2.5 with fire nearby | Forecast PM2.5 band, not fire-risk |
 | `hour_of_day`, `season` | Local time of the event | Local time of the forecast hour |
 | `lag_pm25_24h`, `lag_pollen_24h` | Prior stamps or 48h history | Observed recent hours, not the forecast of the past |
+| `temp_drop` (iOS, v4) | Fall of ≥ 10°F in the 3 h before, from Apple Weather's past hours | Same rule on the hourly forecast. See [air-outlook.md](air-outlook.md) |
 
 Bin edges live in code, not in a prompt. Numeric fields never go through a model to become a band. `pm25 >= 35` is a comparison.
 

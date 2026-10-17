@@ -113,6 +113,8 @@ public struct ConditionsInput: Sendable, Equatable {
     public var aqi: Int?
     public var isExtremeTemp: Bool
     public var alertNames: [String]
+    /// °F fallen in the 3 hours before (`TempDrop.degreesFallen`). Nil = no hourly history.
+    public var tempFallF: Double?
 
     public init(
         pm25: Double? = nil,
@@ -122,7 +124,8 @@ public struct ConditionsInput: Sendable, Equatable {
         pollenWeedRisk: String? = nil,
         aqi: Int? = nil,
         isExtremeTemp: Bool? = nil,
-        alertNames: [String] = []
+        alertNames: [String] = [],
+        tempFallF: Double? = nil
     ) {
         self.pm25 = pm25
         self.ozonePpb = ozonePpb
@@ -132,6 +135,7 @@ public struct ConditionsInput: Sendable, Equatable {
         self.aqi = aqi
         self.isExtremeTemp = isExtremeTemp ?? Banding.isExtremeTemp(temperatureF)
         self.alertNames = alertNames
+        self.tempFallF = tempFallF
     }
 
     /// The web prototype skips logs with no usable outdoor value.
@@ -165,6 +169,7 @@ public enum FrameBuilder {
             pollenWeed: Banding.pollen(risk: c.pollenWeedRisk),
             smokeAtPoint: Banding.smokeAtPoint(pm25: c.pm25, aqi: c.aqi),
             heatAlert: Banding.heatAlert(isExtremeTemp: c.isExtremeTemp, alertNames: c.alertNames),
+            tempDrop: TempDrop.band(c.tempFallF),
             place: place,
             indoorOutdoor: indoorOutdoor == .unknown ? nil : indoorOutdoor,
             tags: tags,
@@ -201,14 +206,17 @@ public struct ForecastConditions: Sendable, Equatable {
     public var pm25Category: Int?
     public var ozoneCategory: Int?
     public var alertNames: [String]
+    /// °F fallen in the 3 hours before this hour, from the hourly forecast (plus recent past hours).
+    public var tempFallF: Double?
 
     public init(temperatureF: Double? = nil, humidityPct: Double? = nil, pm25Category: Int? = nil,
-                ozoneCategory: Int? = nil, alertNames: [String] = []) {
+                ozoneCategory: Int? = nil, alertNames: [String] = [], tempFallF: Double? = nil) {
         self.temperatureF = temperatureF
         self.humidityPct = humidityPct
         self.pm25Category = pm25Category
         self.ozoneCategory = ozoneCategory
         self.alertNames = alertNames
+        self.tempFallF = tempFallF
     }
 
     /// AQ forecast missing → score with what we have and mark the window partial.
@@ -234,6 +242,7 @@ extension FrameBuilder {
             pollenWeed: .unknown,
             smokeAtPoint: worstCategory >= 2,
             heatAlert: Banding.heatAlert(isExtremeTemp: extreme, alertNames: c.alertNames),
+            tempDrop: TempDrop.band(c.tempFallF),
             place: place
         )
     }

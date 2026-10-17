@@ -688,6 +688,9 @@ struct ParticleField: View {
         // Every new sky is revealed by its first ripple: no particles until the ring has passed. Later
         // "touch me" ripples run over a sky that's already there.
         let firstPass = rippleAt.map { time.timeIntervalSince($0) < seconds } ?? false
+        // Then the particles emerge, growing in over 0.7 s once the ring has gone.
+        let sinceDone = rippleAt.map { time.timeIntervalSince($0) - seconds } ?? 1
+        let emerge = (reduceMotion || !scan) ? 1.0 : { let t = max(0, min(1, sinceDone / 0.7)); return 1 - pow(1 - t, 3) }()
         let breath = (animated && !reduceMotion) ? time.timeIntervalSinceReferenceDate : 0
         // Odds per layer: a floor so any present layer shows, rising with amount; capped so the map shows.
         var weights = particles.map { $0.1 > 0 ? 0.012 + 0.09 * $0.1 : 0 }
@@ -709,7 +712,8 @@ struct ParticleField: View {
                     let k = cumulative.firstIndex { u < $0 }
                     let dist = hypot(x - centre.x, y - centre.y)
                     // The scan: nothing exists ahead of the ring yet.
-                    if scan, firstPass, let radius, dist > radius + 8 { continue }
+                    // The ring runs over bare grain; the air isn't there yet.
+                    if scan, firstPass, k != nil { continue }
                     var r: CGFloat, color: Color
                     if let k {
                         let amount = CGFloat(particles[k].1)
@@ -717,6 +721,8 @@ struct ParticleField: View {
                         let dim = selected != nil && selected != k
                         color = particles[k].0.opacity(dim ? 0.15 : 0.9)
                         if selected == k { r *= 1.6 }
+                        r *= CGFloat(emerge)
+                        color = color.opacity(emerge)
                         if breath > 0, !dim { r += 0.3 * CGFloat(0.5 + 0.5 * sin(breath * 1.3 + Double(x + y) / 70)) }
                     } else {
                         r = 0.55

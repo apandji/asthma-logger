@@ -190,16 +190,16 @@ struct NowHomeView: View {
             switch focus {
             case .now:
                 if let j = justNow {
-                    VerdictHeader(tag: j.moment, place: AnyView(placeLabel("location.fill", j.placeName ?? here?.place)),
+                    VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place)),
                                   title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
                                   verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
                 } else {
-                    VerdictHeader(place: AnyView(placeLabel("location.fill", here?.place)),
+                    VerdictHeader(place: AnyView(placeLabel(here?.lat, here?.lon, here?.place, current: true)),
                                   title: here?.statement ?? "Checking the air near you…",
                                   verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
                 }
             case .moment(let m):
-                VerdictHeader(tag: m.moment, place: AnyView(placeLabel("mappin", m.placeName)),
+                VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
                               title: m.pastStatement, verdict: nil, tint: nil)
             case .hour(let h):
                 VerdictHeader(place: AnyView(placeField), title: h.statement,
@@ -210,34 +210,53 @@ struct NowHomeView: View {
         .animation(Theme.smooth, value: focusKey)
     }
 
-    private func placeLabel(_ icon: String, _ name: String?) -> some View {
-        Label(name.map(Self.clean) ?? "Here", systemImage: icon)
-            .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-            .lineLimit(1)
+    /// The place as words: Home or Work (with their icon) when it's within 150 m of the saved one, else the
+    /// place name. "Here" gets the location arrow; other places get no icon.
+    private func placeLabel(_ lat: Double?, _ lon: Double?, _ name: String?, current: Bool = false) -> some View {
+        let known = Self.knownPlace(lat, lon)
+        let icon = known?.icon ?? (current ? "location.fill" : nil)
+        let text = known?.name ?? name.map(Self.clean) ?? "Here"
+        return HStack(spacing: 6) {
+            if let icon { Image(systemName: icon).font(.caption) }
+            Text(text).lineLimit(1)
+        }
+        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+    }
+
+    static func knownPlace(_ lat: Double?, _ lon: Double?) -> (icon: String, name: String)? {
+        guard let lat, let lon else { return nil }
+        let here = CLLocation(latitude: lat, longitude: lon)
+        func near(_ p: SavedPlace?) -> Bool { p.map { here.distance(from: CLLocation(latitude: $0.lat, longitude: $0.lon)) < 150 } ?? false }
+        if near(SavedPlace.load(SavedPlace.homeKey)) { return ("house.fill", "Home") }
+        if near(SavedPlace.load(SavedPlace.workKey) ?? SavedPlace.washU) { return ("building.2.fill", "Work") }
+        return nil
     }
 
     /// The forecast's place, as a field you can change: Here, Home, Work or an address.
     private var placeField: some View {
         let home = SavedPlace.load(SavedPlace.homeKey), work = SavedPlace.load(SavedPlace.workKey) ?? SavedPlace.washU
         let (icon, name): (String, String) = switch chosen {
-        case nil: ("location.fill", here?.place.map(Self.clean) ?? "Here")
+        case nil: ("location.fill", Self.knownPlace(here?.lat, here?.lon)?.name ?? here?.place.map(Self.clean) ?? "Here")
         case let p? where p == home: ("house.fill", "Home")
         case let p? where p == work: ("building.2.fill", "Work")
-        case let p?: ("mappin", Self.clean(p.name))
+        case let p?: ("magnifyingglass", Self.clean(p.name))
         }
         return HStack(spacing: 8) {
             Text("Forecast for").foregroundStyle(Theme.secondaryText)
             Button { showPlaces = true } label: {
                 HStack(spacing: 6) {
                     Image(systemName: icon).font(.caption)
-                    Text(name).lineLimit(1)
+                    // The field takes the rest of the row: the place is never cut short.
+                    Text(name).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading)
+                    Spacer(minLength: 4)
                     Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Theme.secondaryText)
                 }
                 .foregroundStyle(.primary)
-                .padding(.horizontal, 11).padding(.vertical, 6)
+                .padding(.horizontal, 12).padding(.vertical, 7)
                 .background(Capsule().fill(Theme.secondaryText.opacity(0.14)))
             }
             .buttonStyle(PressStyle())
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel("Forecast for \(name). Change place")
         }
         .font(.subheadline.weight(.medium))
@@ -834,7 +853,7 @@ struct VerdictHeader: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 if let tag { MomentTag(moment: tag) }
                 place

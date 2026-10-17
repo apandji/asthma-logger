@@ -1,3 +1,4 @@
+import AsthmaCore
 import SwiftUI
 
 /// Every color, font and spacing token. Views never hard-code styling.
@@ -48,20 +49,19 @@ enum Theme {
     static let padding: CGFloat = 16
     static let spacing: CGFloat = 12
 
-    // MARK: Type. One Recursive voice for the sentence (Theme/Recursive.swift), SF for everything else.
+    // MARK: Type. SF for UI. The big statement follows Settings › Type (system / Recursive / Funnel Sans).
     // The "serif" names stayed when New York was swapped out; they mean "the sentence's voice".
     /// The small line above a title: type, time, place. Set as tracked small caps, like a dateline.
     static let kicker = Font.system(size: 12, weight: .semibold, design: .default)
     static let kickerTracking: CGFloat = 1.1
-    /// The sentence. Recursive, regular weight, a size up, tracked a touch tight. How casual it looks follows
-    /// Settings › Insight voice, so these are read fresh each time.
-    static var serifTitle: Font { Recursive.sentence(size: 26) }
-    static var serifTitleLarge: Font { Recursive.sentence(size: 30) }
+    /// The sentence. Typeface from Settings › Type. Recursive's casual look follows Insight voice.
+    static var serifTitle: Font { Typeface.sentence(size: 26) }
+    static var serifTitleLarge: Font { Typeface.sentence(size: 30) }
     static let serifKerning: CGFloat = -0.5
-    /// Numbers that change in place (counts, times): Recursive Mono, always linear.
-    static var figures: Font { Recursive.figures(size: 22) }
+    /// Numbers that change in place (counts, times).
+    static var figures: Font { Typeface.figures(size: 22) }
     /// A verdict byline under the sentence, in the same voice.
-    static var bylineSerif: Font { Recursive.sentence(size: 17) }
+    static var bylineSerif: Font { Typeface.sentence(size: 17) }
 
     // MARK: Motion. Three springs, used everywhere, so the whole app moves with one hand.
     /// Small things settling: pills, chips, dots. Quick, a hint of bounce.
@@ -71,13 +71,73 @@ enum Theme {
     /// Things arriving: toasts, tiles, sheets. A little lift.
     static let lift = Animation.spring(duration: 0.55, bounce: 0.22)
 
-    /// One family for everything but the sentence: SF, as on the home. (Rounded is retired.)
+    /// One family for everything but the sentence: SF.
     static let headline = Font.headline
-    /// The sentence on a detail page: Recursive, like the home's but a size down.
-    static var headlineSerif: Font { Recursive.sentence(size: 22) }
+    /// The sentence on a detail page, a size down from the home.
+    static var headlineSerif: Font { Typeface.sentence(size: 22) }
     static let body = Font.body
     static let caption = Font.caption
     static let number = Font.body.monospacedDigit()
+
+    /// Settings › Type: which face draws the big statement. UI chrome stays SF.
+    enum Typeface: String, CaseIterable, Identifiable {
+        case system
+        case recursive
+        case funnelSans
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .system: "System"
+            case .recursive: "Recursive"
+            case .funnelSans: "Funnel Sans"
+            }
+        }
+
+        var detail: String {
+            switch self {
+            case .system: "New York for the sentence, SF for the rest"
+            case .recursive: "Bundled Recursive for the sentence"
+            case .funnelSans: "Bundled Funnel Sans for the sentence"
+            }
+        }
+
+        /// Current choice. Default Recursive (today's look). Migrates legacy `useFunnelSans`.
+        static var current: Typeface {
+            if let raw = UserDefaults.standard.string(forKey: Prefs.statementTypeface),
+               let value = Typeface(rawValue: raw) {
+                return value
+            }
+            if UserDefaults.standard.bool(forKey: Prefs.useFunnelSans) {
+                return .funnelSans
+            }
+            return .recursive
+        }
+
+        static func sentence(size: CGFloat, slanted: Bool = false, voice: NarratorStyle = .current) -> Font {
+            switch current {
+            case .system:
+                let base = Font.system(size: size, weight: .regular, design: .serif)
+                return slanted ? base.italic() : base
+            case .recursive:
+                return Recursive.sentence(size: size, slanted: slanted, voice: voice)
+            case .funnelSans:
+                return FunnelSans.font(size: size, weight: .regular)
+            }
+        }
+
+        static func figures(size: CGFloat) -> Font {
+            switch current {
+            case .system:
+                return .system(size: size, weight: .regular, design: .serif).monospacedDigit()
+            case .recursive:
+                return Recursive.figures(size: size)
+            case .funnelSans:
+                return FunnelSans.font(size: size, weight: .regular)
+            }
+        }
+    }
 }
 
 /// Press feedback for anything tappable that isn't a system button: a small, quick scale and dim,

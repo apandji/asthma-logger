@@ -51,6 +51,7 @@ struct RootView: View {
     @Environment(LogService.self) private var services
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
+    @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
     @AppStorage(Crit.performanceHUD) private var perfHUD = false
 
     var body: some View {
@@ -71,6 +72,8 @@ struct RootView: View {
         .fullScreenCover(isPresented: Binding(get: { !didOnboard }, set: { _ in })) {
             OnboardingView()
         }
+        // Observe Settings › Type so the big statement refreshes without remounting (sheets stay open).
+        .animation(nil, value: statementTypeface)
         .onChange(of: scenePhase, initial: true) { _, phase in
             guard phase == .active, autoBaseline, didOnboard else { return }
             Task { await services.sampleUsualDayIfDue(in: context) }

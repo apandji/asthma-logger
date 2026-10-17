@@ -36,6 +36,7 @@ struct JournalView: View {
     @State private var showDays = ProcessInfo.processInfo.arguments.contains("-startDays")  // debug: open on Days
     @State private var zoomingIn = false
     @AppStorage(Crit.Gestures.key) private var gestures = Crit.Gestures.zoom
+    @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
     /// First-use tips, one at a time: pull to log, then moments.
     @State private var tips = TipGroup(.ordered) { PullToLogTip(); MomentsTip(); SkyTip() }
     @State private var probePoint: CGPoint?
@@ -106,6 +107,7 @@ struct JournalView: View {
                         .presentationBackground(.ultraThinMaterial)
                 }
                 .sheet(isPresented: $showSettings) { SettingsView() }
+                .animation(nil, value: statementTypeface)
                 .toolbar(.hidden, for: .navigationBar)
                 .environment(\.colorScheme, paper == .linen ? .light : .dark)
                 .navigationDestination(for: LogEvent.self) { EventDetailView(event: $0) }

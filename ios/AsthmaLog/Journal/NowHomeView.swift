@@ -12,6 +12,7 @@ struct NowHomeView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @AppStorage(Prefs.useDemoData) private var demo = false
+    @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
     @AppStorage(Crit.InsightsState.key) private var forced = Crit.InsightsState.auto
     /// Reading the air somewhere other than here (an address, Home, Work). Nil is the phone's location.
@@ -112,6 +113,8 @@ struct NowHomeView: View {
                 InsightsView().presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper)).presentationCornerRadius(32)
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            // Refresh the big statement when Settings › Type flips; do not remount (sheet would dismiss).
+            .animation(nil, value: statementTypeface)
             .sheet(isPresented: $showPlaces) { PlacePicker(chosen: $chosen).presentationDetents([.medium, .large]) }
             .onChange(of: chosen) { _, new in
                 away = new.map { NowReading(lat: $0.lat, lon: $0.lon, place: $0.name, conditions: Conditions()) }

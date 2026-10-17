@@ -23,7 +23,8 @@ enum Recursive {
         var cursive: CGFloat = 0.5
     }
 
-    /// The sentence, in the voice chosen in Settings.
+    /// The sentence in Recursive, with axes from Settings › Insight voice.
+    /// Prefer `Theme.Typeface.sentence` so Settings › Type (system / Recursive / Funnel Sans) applies.
     static func sentence(size: CGFloat, slanted: Bool = false, voice: NarratorStyle = .current) -> Font {
         var axes = voice.sentenceAxes
         if slanted { axes.slant = -15 }

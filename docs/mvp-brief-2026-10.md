@@ -10,11 +10,19 @@ Three things have to work on the phone, in this order of importance. Everything 
 |---|---|
 | Words for the two sides of the comparison | **Baseline** (ordinary days, no rescue use) and **flare days** (days with rescue use). Moments keep their inhaler names: **Rescue** and **Standard**. Never "attack". |
 | First capture in onboarding | Saved as a **baseline** moment with a `firstCapture` flag, labelled "Your first capture", neutral ring. It counts toward baseline. |
-| Double press on the felt button (within ~2 s) | **One moment, 2 puffs.** The moment carries a puff count; the header says "2 puffs". |
+| Double press / multi-puff merge | **Superseded 2026-10-17 — see Event Window below.** (Oct 16 had said ~2 s → one moment, 2 puffs.) |
 | Insights for the presentation | A **labelled demo state** (Design crit) with a closed ring and a profile, beside the owner's real, still-filling ring. Demo stays out of real patterns. |
-| Heavy reliever use | **Count + guideline line.** Show today's rescue count; above a cited guideline threshold, one plain line pointing to care and the person's action plan, source named. No notification in the MVP. |
+| Heavy reliever use | **Count + guideline line.** Show today's rescue count; above a cited guideline threshold, one plain line pointing to care and the person's action plan, source named. **No clinical / overuse alert notifications** in the MVP. |
 | Archetype research | A **short cited doc**: 3–5 archetypes, 2–3 real citations each, the Ambee signals behind each, about a page each. |
 | Presentation | **Live pairing on stage** from a fresh install (needs a reliable reset), a **recorded pairing** as backup, and the **doctor table**. |
+
+## Decisions (owner, Oct 17)
+
+| Question | Decision |
+|---|---|
+| **Event Window** | **2 minutes.** First press opens a moment window; further presses in that window update the **same** moment’s puff count (and the one Lock Screen “record a note” notification). Header shows e.g. "Rescue · 2 puffs". This replaces the Oct 16 ~2 s-only merge. Priming (rapid presses → confirm → exclude from flare counts) stays a follow-on edge case. |
+| **Notification to Record** | **Not clinical.** After a press, a Lock Screen notification lets the person add a **voice note to that moment without leaving the Lock Screen.** Use a **Notification Content Extension** with hold-to-talk-style UI (learn from push-to-talk / talk-to-agent patterns; do **not** use Apple’s PushToTalk framework — that is for server walkie-talkie channels). Later puffs in the Event Window update the same notification. Separate from heavy-reliever *alert* policy above. |
+| **Insights usefulness** | Keep the existing Insights destination. Make it useful with a **spider (radar) chart** of relative correlation across four families from the product board: **Biologics**, **Weather dynamics**, **Particulates & gases**, **Physical exertion**. Scores come from gated personal lift / rates and always expose raw counts — never a percent risk or “attack will happen.” |
 
 
 1. **Onboarding**: no data → pair the button → first capture.
@@ -69,20 +77,20 @@ Protocol note: `ButtonPacket` carries `cap`, `bootID`, `seq`, `force`, `ageMs`; 
 
 Pressing the button, physical or the +, always produces a moment and the person always sees it: the toast at the top ("Rescue logged · Undo"), the ripple from the + in the moment's colour, the dot landing on the track under the playhead, the header turning to "Just now". No press is ever silent, and no press is ever lost (presses queue on the button while the phone is away and arrive with `ageMs`).
 
-**Several moments on one timestamp.** Two puffs a minute apart, a rescue then a standard, a double press. Today they stack on the track as overlapping swatches and the header shows only one. We want:
+**Event Window (2 minutes).** First press creates a moment and starts a 2-minute window. Further presses in that window update the same moment’s `puffs` (and refresh the one Lock Screen note notification) instead of stacking silent duplicates. After the window closes, a new press starts a new moment.
 
-- On the track: a **cluster** swatch when moments are within ~10 minutes: one dot with a small count ("2"), ringed with both colours if the kinds differ, that fans open into its moments when it's under the playhead (or on tap).
-- In the header: "Rescue · 2 puffs · Today, 9:41" when the kinds match; "Rescue and Standard · Today, 9:41" when they don't.
-- In the details: all of them listed, each with its own undo/delete.
-- In the pattern engine: nothing changes; frames are per hour already (`predictive-engine.md §3`).
+- On the track: one swatch for the windowed moment with a small puff count ("2"); if Rescue and Standard both land in the same window, show both colours and list both in details (product rule TBD if mixed caps share one moment or two linked moments).
+- In the header: "Rescue · 2 puffs · Today, 9:41" when the kinds match.
+- In the pattern engine: frames stay per hour (`predictive-engine.md §3`); puff count does not multiply frames.
+- **Priming** (board): several presses in rapid succession may prompt “Were you priming?” — if yes, exclude from flare / symptom counts. Thresholds still open.
 
 ### What exists
 
-`LogService.log` (phone), `ButtonLink` (felt button, with dedupe by `bootID`+`seq`), the watch path. Toast and ripple on both homes. `NowTimeline` and `TimelineTrack` draw one swatch per moment.
+`LogService.log` (phone), `ButtonLink` (felt button, with dedupe by `bootID`+`seq`), the watch path. Toast and ripple on both homes. `NowTimeline` and `TimelineTrack` draw one swatch per moment. Event Window merge and `puffs` field are **not** shipped yet.
 
 ### Open
 
-- ~~Double press~~ Decided: one moment with `puffs: 2`. Needs a `puffs` field on `LogEvent` (default 1), merged by the phone when two presses of the same cap arrive within ~2 s (by `ageMs`), and written to Health as two puffs.
+- ~~Merge window length~~ Decided 2026-10-17: **2 minutes** (see Decisions). Needs `puffs` on `LogEvent` (default 1), merge by the phone while the window is open (by press time / `ageMs`), Health write updated to the puff count, and one updatable Lock Screen notification for the voice note.
 
 ---
 
@@ -96,7 +104,7 @@ An Insights page (the sheet exists; this is a redesign of what's in it) with thr
 
 **b. Patterns.** What we have today: the lift table narrated, raw counts always shown, "8 of 14 flare days vs 3 of 40 baseline days".
 
-**c. Your profile.** The new part. As the pattern table fills in, felt air says what kind of air you react to, in plain words: "Your rescue days line up with pollen more than anything else", "Cold, dry mornings show up on your rescue days", "Ozone afternoons". These are **archetypes**, and the orchestrator should do the literature work before we name them (see Research below). The profile is also what a person hands a provider, together with the table of moments that already exists (`Journal/DoctorSheet.swift`).
+**c. Your profile (spider).** The usefulness upgrade for Insights (2026-10-17): a **spider / radar chart** with four axes — **Biologics**, **Weather dynamics**, **Particulates & gases**, **Physical exertion** — each a relative correlation from gated lift on that family’s bins (raw counts on tap). Plain-words callouts can still name what lined up with flare days ("Ozone afternoons", "Cold, dry mornings"). Archetype research (below) still informs copy; the chart is the visual spine. Hand to a provider with `Journal/DoctorSheet.swift`. Never a percent risk. Biologics stay muted until pollen exists; exertion stays thin until tags/motion/Health reads are approved.
 
 **Language.** Decided: **baseline** and **flare days** on screen (see Decisions). Update `docs/design/felt-air-language.md` and every string that says "calm", "usual days", "okay days" or "I'm okay". The verdict line becomes e.g. "Looks like your baseline" / "A bit like your flare days" / "Matches your flare days". Keep testing it with users, per Kate's note that the rescue / maintenance words need testing too.
 
@@ -132,10 +140,11 @@ Rules for the research: real citations only (title, authors, year, link); mark a
 
 ## Suggested order of work
 
-1. Onboarding pairing moment with the first capture, and a **reliable reset** for a fresh install on stage (Settings › Design crit, and `ios/scripts/fresh-install.sh`).
-2. Devices page and multi-button routing.
-3. Cluster swatches and the "2 puffs" header.
-4. Insights progress ring with the real counters.
-5. Research doc on archetypes and thresholds.
-6. Profile copy and the demo person, only after 5.
+1. **Event Window (2 min)** + `puffs` field + header ("2 puffs"), then Lock Screen **Notification Content Extension** for voice note (not clinical alerts).
+2. Onboarding pairing moment with the first capture, and a **reliable reset** for a fresh install on stage (Settings › Design crit, and `ios/scripts/fresh-install.sh`).
+3. Devices page and multi-button routing.
+4. Insights progress ring with the real counters, then **spider chart** (four families) from gated lift — demo crit state for the presentation.
+5. Research doc on archetypes and thresholds (feeds spider callouts / profile copy).
+6. Physical exertion signal (tag/motion first) so the spider’s fourth axis isn’t empty; Health reads only after ask.
 7. Record the pairing moment as a backup video for the presentation (`docs/demo-runbook.md`).
+8. Widget / Action Button log triggers (after Event Window is solid).

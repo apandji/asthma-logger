@@ -2,8 +2,8 @@ import TipKit
 
 /// First-use hints in Apple's own tip style (TipKit). Each shows a couple of times, then stays away.
 struct PullToLogTip: Tip {
-    var title: Text { Text("Pull up to log") }
-    var message: Text? { Text("Pull a little for Rescue, all the way for Standard. Let go early to cancel.") }
+    var title: Text { Text("Log with the +") }
+    var message: Text? { Text("Press and slide to Rescue or Standard, then let go. Or tap, then choose.") }
     var image: Image? { Image(systemName: "hand.draw") }
     /// For anyone who'd rather tap: switches the + to two labelled buttons (also in Settings).
     var actions: [Action] { [Action(id: "buttons", title: "Use buttons instead")] }
@@ -11,7 +11,7 @@ struct PullToLogTip: Tip {
 
 struct MomentsTip: Tip {
     var title: Text { Text("Drag the timeline") }
-    var message: Text? { Text("Each dot is a moment. Tap the sky for details. Hold the dots on the right to zoom out.") }
+    var message: Text? { Text("Each mark is a moment. Drag here, or swipe the map, to move through time. Tap the map for details.") }
     var image: Image? { Image(systemName: "hand.draw") }
 }
 
@@ -29,7 +29,7 @@ enum AppTips {
 }
 
 struct SkyTip: Tip {
-    var title: Text { Text("Drag across the sky") }
-    var message: Text? { Text("Your finger reads each color as it passes.") }
+    var title: Text { Text("Read the air") }
+    var message: Text? { Text("Slide along the icons on the right to see each layer and how much is in the air.") }
     var image: Image? { Image(systemName: "hand.point.up.left") }
 }

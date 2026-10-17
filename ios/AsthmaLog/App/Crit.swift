@@ -60,6 +60,21 @@ enum Crit {
         static let key = "crit.fieldStyle"
     }
 
+    /// For the presentation: make Now show an air event the real data hasn't produced today.
+    enum DemoEvent: String, CaseIterable, Identifiable {
+        case none, storm, smoke, tempDrop
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .none: "Off (real data)"
+            case .storm: "Thunderstorm with high pollen"
+            case .smoke: "Wildfire smoke"
+            case .tempDrop: "Sharp temperature drop"
+            }
+        }
+        static let key = "crit.demoEvent"
+    }
+
     /// The page: black (ink on night) or linen, a warm off-white paper that suits the riso grain.
     enum Paper: String, CaseIterable, Identifiable {
         case black, linen

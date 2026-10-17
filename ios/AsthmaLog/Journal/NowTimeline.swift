@@ -6,11 +6,26 @@ import SwiftUI
 /// into this evening or tomorrow, and it snaps to a moment when one is close.
 struct NowTimeline: View {
     let moments: [LogEvent]
+    /// Baseline moments (felt air's own checks): small ticks, so the comparison is visible.
+    var baselines: [Date] = []
+    /// How the air was at each moment: green / yellow / red, so the rail answers "was that comfortable?"
+    /// at a glance. Nil when there was no reading.
+    /// 0 light … 1 heavy (nil when there was no reading). Drawn as one ink at three strengths.
+    var tint: (LogEvent) -> Double? = { _ in nil }
+    /// The forecast ahead of now, hour by hour, in the verdict's colours (nil while still learning).
+    var forecastTints: [(Date, Double?)] = []
     let hours: [NowHour]
     /// The clock, passed in so the track creeps forward while you watch.
     let now: Date
     /// Nil is now.
     @Binding var focusTime: Date?
+    /// True while the track is being dragged or is still gliding.
+    @Binding var scrubbing: Bool
+    /// Swiping on past the end of the forecast reveals Insights.
+    var onPastEnd: () -> Void = {}
+    @State private var pastEndArmed = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var settle = false
 
     @State private var position = ScrollPosition(edge: .trailing)
     @State private var centerX: CGFloat = 0
@@ -19,7 +34,8 @@ struct NowTimeline: View {
 
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     /// The track's ink: white on black paper, near-black on linen.
-    private var ink: Color { paper == .linen ? Color(red: 0.12, green: 0.1, blue: 0.09) : .white }
+    @Environment(\.colorScheme) private var scheme
+    private var ink: Color { scheme == .light ? Color(red: 0.12, green: 0.1, blue: 0.09) : .white }
 
     private let dayWidth: CGFloat = 64
     private let axis: CGFloat = 46
@@ -43,23 +59,55 @@ struct NowTimeline: View {
             HStack(spacing: 0) {
                 Color.clear.frame(width: viewport / 2)
                 ZStack(alignment: .topLeading) {
+                    // The forecast hasn't settled: its slots drift. The past is still.
+                    TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion || forecastTints.isEmpty)) { frame in
+                    let flux = reduceMotion ? 0 : frame.date.timeIntervalSinceReferenceDate
                     Canvas { ctx, size in
-                        // The forecast: a strip of sky color per hour, ahead of now.
-                        for h in hours {
-                            let t = h.conditions.best(.temperature)?.value
-                            var c = WeatherColor.light(WeatherColor.temperature(t ?? 65), at: h.date)
-                            if let rh = h.conditions.best(.humidity)?.value, rh > 70 { c = c.opacity(0.9) }
-                            let rect = CGRect(x: x(h.date), y: axis - 5, width: dayWidth / 24 + 0.5, height: 10)
-                            ctx.fill(Path(rect), with: .color(c.opacity(0.55)))
-                        }
-                        // Axis.
+                        // The axis: solid behind now, dotted ahead. The forecast's colours live in the sky
+                        // and the details, not down here.
                         var line = Path()
                         line.move(to: CGPoint(x: 0, y: axis)); line.addLine(to: CGPoint(x: x(now), y: axis))
-                        ctx.stroke(line, with: .color(ink.opacity(0.12)), lineWidth: 1)
+                        ctx.stroke(line, with: .color(ink.opacity(0.14)), lineWidth: 1)
+                        if let last = hours.last {
+                            var ahead = Path()
+                            ahead.move(to: CGPoint(x: x(now), y: axis)); ahead.addLine(to: CGPoint(x: x(last.date), y: axis))
+                            ctx.stroke(ahead, with: .color(ink.opacity(0.14)), style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                        }
+                        // The forecast: one slot per hour, the same ink at three strengths (light, a bit like,
+                        // matches your flare days). While still learning it's a faint band, so the day's shape shows.
+                        for (n, (date, v)) in forecastTints.enumerated() where date >= now {
+                            let w = dayWidth / 24 + 0.5
+                            // Each hour breathes on its own phase, more the further out it is: not yet known.
+                            let far = min(1, date.timeIntervalSince(now) / (48 * 3600))
+                            let wave = sin(flux * 1.6 + Double(n) * 0.55)
+                            let h = 8 + CGFloat((2 + 4 * far) * wave)
+                            let base = v.map { 0.18 + 0.62 * $0 } ?? 0.1
+                            let rect = CGRect(x: x(date), y: axis - h / 2, width: w, height: h)
+                            ctx.fill(Path(rect), with: .color(ink.opacity(base * (0.8 + 0.2 * (0.5 + 0.5 * wave)))))
+                        }
+                        // Moments: a tick per moment in the colour of the air that day. Rescue stands taller than
+                        // standard, so the kind reads in the shape and the comfort in the colour.
+                        for e in moments {
+                            let on = e.id == currentMoment?.id
+                            let tall: CGFloat = e.moment == .rescue ? 11 : 7
+                            let c = ink.opacity(tint(e).map { 0.3 + 0.7 * $0 } ?? 0.25)
+                            let rect = CGRect(x: x(e.loggedAt) - 1.5, y: axis - tall, width: 3, height: 2 * tall)
+                            ctx.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(on ? c : c.opacity(0.85)))
+                            if on {
+                                ctx.stroke(Path(ellipseIn: CGRect(x: x(e.loggedAt) - 9, y: axis - 9, width: 18, height: 18)),
+                                           with: .color(ink), lineWidth: 1.5)
+                            }
+                        }
                         // Now: a short bright tick.
                         var nowTick = Path()
                         nowTick.move(to: CGPoint(x: x(now), y: axis - 12)); nowTick.addLine(to: CGPoint(x: x(now), y: axis + 12))
                         ctx.stroke(nowTick, with: .color(ink.opacity(0.6)), lineWidth: 1.5)
+                        // Baseline checks: a short, faint tick just under the axis.
+                        for b in baselines {
+                            var p = Path()
+                            p.move(to: CGPoint(x: x(b), y: axis + 3)); p.addLine(to: CGPoint(x: x(b), y: axis + 9))
+                            ctx.stroke(p, with: .color(ink.opacity(0.35)), lineWidth: 1.5)
+                        }
                         // Ticks every 6 h, day names beneath.
                         var t = start
                         while t <= end {
@@ -71,35 +119,42 @@ struct NowTimeline: View {
                             if isDay {
                                 let label = cal.isDateInToday(t) ? "Today" : cal.isDateInTomorrow(t) ? "Tomorrow"
                                     : t.formatted(.dateTime.weekday(.abbreviated).day())
-                                ctx.draw(Text(label).font(.caption2).foregroundStyle(ink.opacity(t > now ? 0.3 : 0.45)),
+                                ctx.draw(Text(label).font(.caption2.weight(.medium)).tracking(0.3).foregroundStyle(ink.opacity(t > now ? 0.3 : 0.45)),
                                          at: CGPoint(x: x(t) + dayWidth / 2, y: axis + 26))
                             }
                             t = cal.date(byAdding: .hour, value: 6, to: t)!
                         }
                     }
                     .frame(width: contentWidth, height: height)
+                    }
 
+                    // Tap targets for the ticks (the marks themselves are drawn above).
                     ForEach(moments) { e in
-                        let on = e.id == currentMoment?.id
-                        MomentSwatch(event: e, size: on ? 16 : 11, ringWidth: on ? 2.5 : 1.8)
-                            .background {
-                                if on {
-                                    Circle().fill(ink).frame(width: 22, height: 22)
-                                        .shadow(color: (e.moment == .rescue ? Theme.rescue : Theme.standard).opacity(0.8), radius: 8)
-                                }
-                            }
+                        Color.clear.frame(width: 22, height: 36).contentShape(Rectangle())
                             .position(x: x(e.loggedAt), y: axis)
-                            .animation(.snappy(duration: 0.2), value: on)
                             .onTapGesture { go(to: e.loggedAt) }
                     }
                 }
                 .frame(width: contentWidth, height: height)
+                // After the forecast: a hint that there's more this way.
                 Color.clear.frame(width: viewport / 2)
+                    .overlay(alignment: .leading) {
+                        Image(systemName: "sparkles")
+                            .font(.caption)
+                            .foregroundStyle(ink.opacity(0.35))
+                            .padding(.leading, 22)
+                            .offset(y: axis - height / 2)
+                    }
             }
         }
         .scrollIndicators(.hidden)
         .scrollPosition($position)
         .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.width } action: { _, w in viewport = w }
+        // Pulled past the forecast's end (the bounce): open Insights, once per drag.
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x - ($0.contentSize.width - $0.containerSize.width) } action: { _, over in
+            if over > 56, dragging, pastEndArmed { pastEndArmed = false; UIImpactFeedbackGenerator(style: .medium).impactOccurred(); onPastEnd() }
+            if over < 8 { pastEndArmed = true }
+        }
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, cx in
             centerX = cx
             guard dragging else { return }
@@ -112,6 +167,7 @@ struct NowTimeline: View {
         }
         .onScrollPhaseChange { old, phase in
             dragging = phase == .interacting || phase == .decelerating
+            scrubbing = dragging
             // Settle on a moment if one is near the playhead, else exactly on now if near it.
             if phase == .idle, old == .interacting || old == .decelerating {
                 if let m = moments.min(by: { abs(x($0.loggedAt) - centerX) < abs(x($1.loggedAt) - centerX) }),
@@ -121,47 +177,44 @@ struct NowTimeline: View {
         }
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
-                Capsule().fill(ink).frame(width: 3, height: 34)
-                    .shadow(color: .black.opacity(0.5), radius: 2)
-                    .offset(y: axis - 17)
+                Capsule().fill(ink).frame(width: 2, height: 30)
+                    .offset(y: axis - 15)
                     .allowsHitTesting(false)
                 // The pill is a button: tap it to step back through your moments, newest first.
-                Button(action: stepBack) {
-                    Text(focusTime == nil ? "Now" : current.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+                // Off now, the pill is the way back: it shows how far you are and a return arrow; tap to jump to
+                // Now. On Now, a tap steps back to your latest moment.
+                Button(action: { focusTime == nil ? stepBack() : go(to: nil) }) {
+                    HStack(spacing: 5) {
+                        if focusTime != nil, current > now { Image(systemName: "arrow.uturn.backward").font(.caption2.weight(.bold)) }
+                        Text(focusTime == nil ? "Now" : relative(current))
+                        if focusTime != nil, current < now { Image(systemName: "arrow.uturn.forward").font(.caption2.weight(.bold)) }
+                    }
                         .font(.caption.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(Theme.paper(paper))
+                        .tracking(0.2)
+                        .foregroundStyle(scheme == .light ? Theme.linen : Color.black)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(ink, in: Capsule())
                         .contentTransition(.numericText())
-                        .animation(.snappy(duration: 0.2), value: focusTime == nil)
+                        .animation(Theme.snap, value: focusTime == nil)
                         .fixedSize()
+                        // A small settle each time the playhead lands on a moment.
+                        .scaleEffect(settle ? 1.07 : 1)
+                        .animation(Theme.snap, value: settle)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressStyle())
                 .offset(y: axis - 17 - 30)
-                .accessibilityLabel("Previous moment")
+                .accessibilityLabel(focusTime == nil ? "Previous moment" : "Back to now")
             }
             .frame(maxWidth: .infinity)
         }
-        // Off now: an icon that points back to now, on the side now is on (right while you're in the
-        // past, left while you're in the forecast).
-        .overlay(alignment: current < now ? .topTrailing : .topLeading) {
-            if focusTime != nil {
-                Button { go(to: nil) } label: {
-                    Image(systemName: current < now ? "chevron.right.2" : "chevron.left.2")
-                        .font(.caption.weight(.bold))
-                        .frame(width: 34, height: 28)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .offset(y: axis - 17 - 30)
-                .transition(.scale(scale: 0.8).combined(with: .opacity))
-                .accessibilityLabel("Jump to now")
-            }
-        }
-        .animation(.snappy(duration: 0.25), value: focusTime == nil)
+        .animation(Theme.snap, value: focusTime == nil)
         .padding(.top, 24)
         .sensoryFeedback(.selection, trigger: currentMoment?.id)
+        .onChange(of: currentMoment?.id) { _, id in
+            guard id != nil else { return }
+            settle = true
+            Task { try? await Task.sleep(for: .milliseconds(140)); settle = false }
+        }
         .onChange(of: focusTime) { _, t in
             if !dragging, abs(x(t ?? now) - centerX) > 1 { withAnimation(.smooth) { position.scrollTo(x: x(t ?? now)) } }
         }
@@ -182,6 +235,16 @@ struct NowTimeline: View {
         let past = moments.filter { $0.loggedAt < current - 60 }
         guard let target = past.last else { return }
         go(to: target.loggedAt)
+    }
+
+    /// "+4h", "−6h", "+40m"; past two days, the day: "Wed 14".
+    private func relative(_ t: Date) -> String {
+        let s = t.timeIntervalSince(now)
+        let sign = s >= 0 ? "+" : "−"
+        let a = abs(s)
+        if a < 3600 { return "\(sign)\(max(1, Int((a / 60).rounded())))m" }
+        if a < 48 * 3600 { return "\(sign)\(Int((a / 3600).rounded()))h" }
+        return t.formatted(.dateTime.weekday(.abbreviated).day())
     }
 
     private func go(to t: Date?) {

@@ -23,6 +23,8 @@ struct AmbientField: View {
     var conditions: Conditions? = nil
     /// Demo pollen, when switched on in Design crit (pollen isn't connected yet).
     var pollen: PollenSample? = nil
+    /// False: the field is weather only (the air is drawn as particles on top).
+    var tintsLayers = true
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var scheme
     @AppStorage(Crit.FieldStyle.key) private var style = Crit.FieldStyle.weather
@@ -46,13 +48,15 @@ struct AmbientField: View {
     private var weatherField: some View {
         // Linen: ink on paper. Light colors wash out on an off-white page, so the sky is laid down fuller
         // (near-opaque), a touch darker, more saturated, and the layers overprint harder, like riso inks.
-        let linen = paper == .linen
+        let linen = paper == .linen || scheme == .light
         let base = linen ? Theme.linen : Theme.stage
         let humidity = weave.words[.humidity]
         var sky = WeatherColor.light(WeatherColor.temperature(temperatureF ?? WeatherColor.fallbackTemp(weave)), at: date)
         if humidity == "humid" { sky = sky.mix(with: .white, by: linen ? 0.08 : 0.16) }
+        // Under the particles the weather is the paper, not a colour: a grey that leans warm or cool.
+        if !tintsLayers { sky = sky.mix(with: Color(white: 0.42), by: 0.15) }
         if linen { sky = sky.mix(with: Color(red: 0.16, green: 0.14, blue: 0.2), by: 0.14) }
-        let strength = linen ? 0.96 : (scheme == .dark ? 0.75 : 0.66)
+        let strength = linen ? 0.96 : (!tintsLayers ? 0.62 : (scheme == .dark ? 0.75 : 0.66))
         let overprint = linen ? 1.5 : 1.0
 
         let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
@@ -75,7 +79,8 @@ struct AmbientField: View {
         func haze(_ c: Color, _ weight: Double) -> Color {
             layers.all.reduce(c) { $0.mix(with: $1.color, by: min(0.85, $1.amount * 0.7 * weight * overprint)) }
         }
-        let middle: [Color] = spread == .spots
+        // Weather only (particles on top): the hue holds through the field so hot / cold, humid / dry read.
+        let middle: [Color] = !tintsLayers ? Array(repeating: sky.mix(with: base, by: 0.08), count: 4) + Array(repeating: sky.mix(with: base, by: 0.22), count: 4) : spread == .spots
             ? [tint(mid, layers.pm25), tint(mid, layers.no2), tint(mid, layers.ozone), tint(mid, layers.pm10),
                tint(low, layers.tree), tint(low, layers.weed), tint(low, layers.grass), tint(low, layers.pm25)]
             : [haze(mid, 1.0), haze(mid, 1.15), haze(mid, 0.9), haze(mid, 1.05),

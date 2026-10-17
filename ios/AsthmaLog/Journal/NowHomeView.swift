@@ -64,7 +64,10 @@ struct NowHomeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
                 // The grain is the paper's, not the map's: it runs under the whole page.
-                ZStack { Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
+                // The future is printed on a different paper: deep purple, crossfading as you cross now.
+                ZStack { inFuture ? Theme.forecastPaper : Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }
+                    .ignoresSafeArea()
+                    .animation(Theme.smooth, value: inFuture)
             }
             // Linen is a light page whatever the system says; black is a dark one.
             .environment(\.colorScheme, paper == .linen ? .light : .dark)
@@ -207,7 +210,7 @@ struct NowHomeView: View {
             case .hour(let h):
                 // The look-ahead: what the forecast says, then how it compares (or that we're still learning).
                 ScaleHeader(title: h.statement, reserveTwoLines: true,
-                            byline: outlook(at: h.date).text, bylineTint: outlook(at: h.date).tint, onByline: { showInsights = true }, compact: true, italic: true) {
+                            byline: outlook(at: h.date).text, bylineTint: outlook(at: h.date).tint, onByline: { showInsights = true }, compact: true) {
                     Image(systemName: "arrow.right").font(.caption2.weight(.bold))
                     Text("Forecast · \(h.date.formatted(.dateTime.weekday(.abbreviated).hour().minute())) ·")
                     placeChip
@@ -537,7 +540,7 @@ struct NowSky: View {
                         .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
                         .saturation(0)
                         .blendMode(paper == .linen ? .multiply : .screen)
-                        .opacity(sketch ? 0.4 : 0.75)
+                        .opacity(sketch ? 0.7 : 1)
                         .frame(width: size.width, height: size.height)
                         .clipped()
                         .allowsHitTesting(false)

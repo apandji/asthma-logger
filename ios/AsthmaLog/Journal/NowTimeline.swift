@@ -22,6 +22,7 @@ struct NowTimeline: View {
     /// Swiping on past the end of the forecast reveals Insights.
     var onPastEnd: () -> Void = {}
     @State private var pastEndArmed = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settle = false
 
     @State private var position = ScrollPosition(edge: .trailing)
@@ -55,6 +56,9 @@ struct NowTimeline: View {
             HStack(spacing: 0) {
                 Color.clear.frame(width: viewport / 2)
                 ZStack(alignment: .topLeading) {
+                    // The forecast hasn't settled: its slots drift. The past is still.
+                    TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion || forecastTints.isEmpty)) { frame in
+                    let flux = reduceMotion ? 0 : frame.date.timeIntervalSinceReferenceDate
                     Canvas { ctx, size in
                         // The axis: solid behind now, dotted ahead. The forecast's colours live in the sky
                         // and the details, not down here.
@@ -68,10 +72,15 @@ struct NowTimeline: View {
                         }
                         // The forecast: one slot per hour, the same ink at three strengths (light, a bit like,
                         // matches your flare days). While still learning it's a faint band, so the day's shape shows.
-                        for (date, v) in forecastTints where date >= now {
+                        for (n, (date, v)) in forecastTints.enumerated() where date >= now {
                             let w = dayWidth / 24 + 0.5
-                            let rect = CGRect(x: x(date), y: axis - 4, width: w, height: 8)
-                            ctx.fill(Path(rect), with: .color(ink.opacity(v.map { 0.18 + 0.62 * $0 } ?? 0.1)))
+                            // Each hour breathes on its own phase, more the further out it is: not yet known.
+                            let far = min(1, date.timeIntervalSince(now) / (48 * 3600))
+                            let wave = sin(flux * 1.6 + Double(n) * 0.55)
+                            let h = 8 + CGFloat((2 + 4 * far) * wave)
+                            let base = v.map { 0.18 + 0.62 * $0 } ?? 0.1
+                            let rect = CGRect(x: x(date), y: axis - h / 2, width: w, height: h)
+                            ctx.fill(Path(rect), with: .color(ink.opacity(base * (0.8 + 0.2 * (0.5 + 0.5 * wave)))))
                         }
                         // Moments: a tick per moment in the colour of the air that day. Rescue stands taller than
                         // standard, so the kind reads in the shape and the comfort in the colour.
@@ -114,6 +123,7 @@ struct NowTimeline: View {
                         }
                     }
                     .frame(width: contentWidth, height: height)
+                    }
 
                     // Tap targets for the ticks (the marks themselves are drawn above).
                     ForEach(moments) { e in

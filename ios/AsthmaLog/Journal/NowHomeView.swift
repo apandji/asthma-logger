@@ -318,7 +318,7 @@ struct NowHomeView: View {
                 }
             case .moment(let m):
                 VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
-                              title: m.pastStatement, verdict: nil, tint: nil,
+                              title: standsOut(m) ?? m.pastStatement, verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
             case .hour(let h):
                 VerdictHeader(place: AnyView(placeField), title: h.statement,
@@ -491,6 +491,78 @@ struct NowHomeView: View {
     }
 
     private var mapID: String { chosen.map { "place-\($0.lat)-\($0.lon)" } ?? "here" }
+
+    /// What stood out at a rescue moment, from the data model: the bins of its frame that are gated
+    /// patterns (more common on flare days than baseline), named in plain words. Never a cause, never a
+    /// percent: "Weed pollen was high and it was humid, as on most of your flare days." Nil when the moment
+    /// isn't rescue, the gate isn't met, or nothing in it is a pattern; the weather sentence then stands.
+    private func standsOut(_ m: LogEvent) -> String? {
+        guard m.moment == .rescue else { return nil }
+        let learned = forced == .learned || (model.progress?.isMet ?? false)
+        // What was in the air in the two days before (the look-back, docs/air-outlook.md): a flare often
+        // trails the air, so a high the day before is worth a clause even when the moment itself was clean.
+        let before = Self.before(m.conditions?.lookBack)
+        guard learned else {
+            guard let before else { return nil }
+            let temp = m.conditions?.best(.temperature).map { "It was \(Int($0.value.rounded()))°. " } ?? ""
+            return temp + before
+        }
+        if forced == .learned, !(model.progress?.isMet ?? false) {
+            // The demo person's story, for moments without a real pattern behind them.
+            return ["Weed pollen was high, as on most of your flare days.", before].compactMap { $0 }.joined(separator: " ")
+        }
+        guard let frame = m.frame(), let rows = model.report?.gatedRows, !rows.isEmpty else { return before }
+        let hits = Bins.all.compactMap { def -> (String, Double)? in
+            guard let level = def.levelOf(frame),
+                  let row = rows.first(where: { $0.bin == def.bin && $0.level == level && $0.lift > 1.25 }) else { return nil }
+            return (Self.phrase(def.bin, level), row.lift)
+        }
+        .sorted { $0.1 > $1.1 }
+        guard !hits.isEmpty else { return before }
+        let named = hits.prefix(2).map(\.0)
+        let joined = named.count == 1 ? named[0] : "\(named[0]) and \(named[1])"
+        let now = joined.prefix(1).uppercased() + joined.dropFirst() + ", as on most of your flare days."
+        return [now, before].compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// "Fine particles were high in the two days before." Only signals whose two windows were read well
+    /// enough count; a window that wasn't read is missing, not clean. High *now* is already in the frame.
+    private static func before(_ lb: LookBack?) -> String? {
+        guard let lb else { return nil }
+        var names: [String] = []
+        if lb.pm25Level == .earlier { names.append("fine particles") }
+        if lb.ozoneLevel == .earlier { names.append("ozone") }
+        var parts: [String] = []
+        if !names.isEmpty {
+            let joined = names.count == 1 ? names[0] : "\(names[0]) and \(names[1])"
+            parts.append(joined.prefix(1).uppercased() + joined.dropFirst() + (names.count == 1 && names[0] == "ozone" ? " was" : " were") + " high in the two days before.")
+        }
+        if lb.tempDropLevel == .earlier { parts.append("The temperature had dropped fast the day before.") }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    /// A bin and level as a short past-tense clause.
+    private static func phrase(_ bin: String, _ level: String) -> String {
+        switch (bin, level) {
+        case ("pm25", "high"): "fine particles were high"
+        case ("pm25", "moderate"): "fine particles were up"
+        case ("ozone", "high"): "ozone was high"
+        case ("ozone", "moderate"): "ozone was up"
+        case ("pollen_weed", "high"): "weed pollen was high"
+        case ("pollen_weed", "moderate"): "weed pollen was up"
+        case ("temp", "hot"): "it was hot"
+        case ("temp", "cold"): "it was cold"
+        case ("humidity", "humid"): "it was humid"
+        case ("humidity", "dry"): "the air was dry"
+        case ("smoke_at_point", "yes"): "there was smoke"
+        case ("heat_alert", "yes"): "there was a heat alert"
+        case ("temp_drop", "yes"): "the temperature had dropped fast"
+        case ("hour", let part): "it was \(part)"
+        case ("indoor_outdoor", let io): "you were \(io == "indoor" ? "indoors" : "outdoors")"
+        case (let b, let l) where b.hasPrefix("tag_"): "\(Bins.label(b).lowercased()) was noted\(l == "yes" ? "" : "")"
+        case (let b, let l): "\(Bins.label(b).lowercased()) was \(l)"
+        }
+    }
 
     /// The live reading as an unsaved moment, so the details page can show it. Never inserted.
     private func liveSnapshot() -> LogEvent? {

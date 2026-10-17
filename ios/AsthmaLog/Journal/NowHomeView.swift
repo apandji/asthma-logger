@@ -55,7 +55,7 @@ struct NowHomeView: View {
                     .opacity(probing ? 0.4 : 1)
                     .animation(Theme.smooth, value: probing)
                 // One sky at a time; the next settles in with a breath, not a cut.
-                ZStack { sky.id(focusKey).transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.985))) }
+                ZStack { sky.id(focusKey).transition(.opacity) }
                     .animation(Theme.smooth, value: focusKey)
                     // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
                     .distortionEffect(ShaderLibrary.dent(.float2(skyDrag?.point ?? .zero), .float(170), .float(skyPress)),
@@ -904,19 +904,19 @@ struct VerdictHeader: View {
                 place
             }
             .frame(minHeight: 30, alignment: .leading)
-            ZStack(alignment: .topLeading) {
-                Text(title)
-                    .font(Theme.serifTitle).kerning(Theme.serifKerning)
-                    .lineLimit(2)
-                    .id(title)
-                    .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
-            }
-            .animation(Theme.smooth, value: title)
+            // The Weather app's way: digits roll, words crossfade in place. No scale, no blur.
+            Text(title)
+                .font(Theme.serifTitle).kerning(Theme.serifKerning)
+                .lineLimit(2)
+                .contentTransition(reduceMotion ? .opacity : .numericText())
+                .animation(.snappy(duration: 0.3), value: title)
             let ink = tint ?? Theme.secondaryText
             Button { onVerdict?() } label: {
                 HStack(spacing: 7) {
                     Circle().fill(ink).frame(width: 7, height: 7)
                     Text(verdict ?? " ").lineLimit(1)
+                        .contentTransition(.interpolate)
+                        .animation(.snappy(duration: 0.3), value: verdict)
                     if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }
                 }
                 .font(.subheadline.weight(.semibold))

@@ -116,6 +116,7 @@ public enum GenericHazards {
         if f.pollenWeed == .high { out.append("high weed pollen") }
         if f.heatAlert { out.append("a heat alert") }
         if f.tempBand == .cold { out.append("freezing air") }
+        if f.tempDrop == .sharp { out.append("a sharp temperature drop") }
         if f.smokeAtPoint && f.pm25Band == .high { out.append("smoke-like air") }
         return out
     }

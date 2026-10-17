@@ -34,6 +34,28 @@ struct OpenAQProvider {
         }
     }
 
+    /// Hourly values from the nearest station measuring a pollutant, oldest first. Empty when there's none.
+    /// Pass `locations` from an earlier `search` to reuse it across pollutants.
+    func hours(_ lat: Double, _ lon: Double, from: Date, to: Date, measures: (OpenAQ.Sensor) -> Bool,
+               locations known: [OpenAQ.Location]? = nil) async throws -> (values: [HourValue], station: String?) {
+        var locations: [OpenAQ.Location]
+        if let known { locations = known } else { locations = try await search(lat, lon, monitor: true) }
+        if !locations.contains(where: { ($0.sensors ?? []).contains(where: measures) }) {
+            locations += try await search(lat, lon, monitor: false)
+        }
+        guard let loc = OpenAQ.nearest(locations, lat: lat, lon: lon, measures: measures),
+              let sensor = (loc.sensors ?? []).first(where: measures), let id = sensor.id else { return ([], nil) }
+        let iso = ISO8601DateFormatter()
+        var c = URLComponents(string: "\(OpenAQ.baseURL)/sensors/\(id)/hours")!
+        c.queryItems = [
+            URLQueryItem(name: "datetime_from", value: iso.string(from: from)),
+            URLQueryItem(name: "datetime_to", value: iso.string(from: to)),
+            URLQueryItem(name: "limit", value: "500"),
+        ]
+        let rows = try await HTTP.get(c.url!, headers: headers, as: OpenAQ.Results<OpenAQ.SensorHour>.self).results ?? []
+        return (OpenAQ.hourValues(rows, units: sensor.parameter?.units), loc.name)
+    }
+
     private var headers: [String: String] { ["X-API-Key": key, "Accept": "application/json"] }
 
     func search(_ lat: Double, _ lon: Double, monitor: Bool) async throws -> [OpenAQ.Location] {

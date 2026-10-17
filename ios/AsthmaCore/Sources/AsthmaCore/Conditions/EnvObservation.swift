@@ -92,6 +92,11 @@ public struct Conditions: Codable, Sendable, Equatable {
     public var fetchedAt: Date
     /// Apple Weather's description at the time ("Rain", "Mostly Cloudy"). Nil on older moments.
     public var weatherCondition: String?
+    /// °F the outdoor temperature fell in the 3 hours before (`TempDrop`), from Apple Weather's past
+    /// hours. Nil when those hours couldn't be read, and on older moments.
+    public var tempFallF: Double?
+    /// The 48 hours before the moment, in two windows (`LookBack`). Nil until fetched or backfilled.
+    public var lookBack: LookBack?
 
     public init(observations: [EnvObservation] = [], alerts: [ConditionAlert] = [], errors: [String] = [], fetchedAt: Date = Date()) {
         self.observations = observations
@@ -113,7 +118,8 @@ public struct Conditions: Codable, Sendable, Equatable {
             humidityPct: best(.humidity)?.value,
             pollenWeedRisk: best(.pollenWeed)?.category,
             aqi: best(.aqi).map { Int($0.value.rounded()) },
-            alertNames: alerts.map(\.name)
+            alertNames: alerts.map(\.name),
+            tempFallF: tempFallF
         )
     }
 }

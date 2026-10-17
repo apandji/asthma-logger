@@ -51,37 +51,11 @@ struct HourlyHistory: Sendable {
         } catch { return .failure(error) }
     }
 
-    nonisolated private struct SensorHour: Codable, Sendable {
-        struct Period: Codable, Sendable { var datetimeFrom: OpenAQ.DateTimePair? }
-        var value: Double?
-        var period: Period?
-    }
-
     private static func pm25Hours(_ lat: Double, _ lon: Double, _ from: Date, _ to: Date) async -> Result<(points: [HourPoint], station: String?), Error> {
         guard let key = Secrets.openAQ else { return .success(([], nil)) }
         do {
-            let provider = OpenAQProvider(key: key)
-            var locations = try await provider.search(lat, lon, monitor: true)
-            if !locations.contains(where: { ($0.sensors ?? []).contains(where: \.measuresPM25) }) {
-                locations += try await provider.search(lat, lon, monitor: false)
-            }
-            guard let loc = OpenAQ.nearest(locations, lat: lat, lon: lon, measures: { $0.measuresPM25 }),
-                  let sensor = (loc.sensors ?? []).first(where: \.measuresPM25)?.id else { return .success(([], nil)) }
-            let iso = ISO8601DateFormatter()
-            var c = URLComponents(string: "\(OpenAQ.baseURL)/sensors/\(sensor)/hours")!
-            c.queryItems = [
-                URLQueryItem(name: "datetime_from", value: iso.string(from: from)),
-                URLQueryItem(name: "datetime_to", value: iso.string(from: to)),
-                URLQueryItem(name: "limit", value: "500"),
-            ]
-            let rows = try await HTTP.get(c.url!, headers: ["X-API-Key": key, "Accept": "application/json"],
-                                          as: OpenAQ.Results<SensorHour>.self).results ?? []
-            let parse = ISO8601DateFormatter()
-            let points = rows.compactMap { r -> HourPoint? in
-                guard let v = r.value, v >= 0, let s = r.period?.datetimeFrom?.utc, let d = parse.date(from: s) else { return nil }
-                return HourPoint(date: d, value: v)
-            }.sorted { $0.date < $1.date }
-            return .success((points, loc.name))
+            let r = try await OpenAQProvider(key: key).hours(lat, lon, from: from, to: to, measures: { $0.measuresPM25 })
+            return .success((r.values.map { HourPoint(date: $0.date, value: $0.value) }, r.station))
         } catch { return .failure(error) }
     }
 }

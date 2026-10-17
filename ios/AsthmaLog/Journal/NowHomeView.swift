@@ -454,7 +454,10 @@ struct NowHour: Identifiable, Sendable {
     /// `now` is the current reading for the place: when AirNow has no forecast for it (many areas only
     /// publish in ozone season), today's PM2.5 and ozone are carried forward, marked low confidence.
     static func forecast(latitude: Double, longitude: Double, now: Conditions? = nil) async -> [NowHour] {
-        guard let hours = try? await WeatherProvider().hourly(latitude: latitude, longitude: longitude, hours: 48) else { return [] }
+        guard let all = try? await WeatherProvider().hourly(latitude: latitude, longitude: longitude, hours: 48,
+                                                            pastHours: Int(TempDrop.windowHours)) else { return [] }
+        let temps = all.map(\.tempPoint)
+        let hours = all.filter { $0.date > Date().addingTimeInterval(-3600) }
         var aq: [String: (pm25: Int?, ozone: Int?)] = [:]
         if let key = Secrets.airNow { aq = (try? await AirNowProvider(key: key).forecast(latitude: latitude, longitude: longitude)) ?? [:] }
         let carried = aq.isEmpty ? now : nil
@@ -479,7 +482,9 @@ struct NowHour: Identifiable, Sendable {
                     airCarried = true
                 }
             }
-            return NowHour(date: h.date, conditions: Conditions(observations: obs, fetchedAt: .now), airCarried: airCarried)
+            var conditions = Conditions(observations: obs, fetchedAt: .now)
+            conditions.tempFallF = TempDrop.degreesFallen(at: h.date, in: temps)
+            return NowHour(date: h.date, conditions: conditions, airCarried: airCarried)
         }
     }
 }
@@ -579,7 +584,7 @@ struct NowSky: View {
             }
             // The scale: the legend, and the only place you read the air. Slide up and down it.
             .overlay(alignment: .trailing) {
-                StrataScale(layers: layers, probe: probe, height: size.height)
+                StrataScale(layers: layers, probe: probe, height: size.height, weatherSymbol: SkyExplorer.weatherIcon(conditions))
                     .padding(.trailing, 18)
                     .frame(width: 64, height: size.height, alignment: .trailing)
                     .contentShape(Rectangle())

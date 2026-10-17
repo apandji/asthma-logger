@@ -20,6 +20,8 @@ struct SkyProbe: Equatable {
     let color: Color
     /// 0 (clean) … 1 (high and rising): drives the haptic pulse.
     let intensity: Double
+    /// Overrides the layer's usual symbol (the Weather row after a sharp temperature drop).
+    var symbol: String? = nil
 
     /// What the highlight is tinted with: the level, in the same three colors as the verdict line
     /// (good green, OK yellow, not good red). The layer's own ink stays in the sky; its name is in the label.
@@ -64,10 +66,13 @@ enum SkyExplorer {
         guard p.y <= 0.3 else { return nil }
         let humidity = conditions?.best(.humidity)?.value
         let detail = [humidity.map { "\(Int($0.rounded()))% humidity" }, weave.words[.humidity]].compactMap { $0 }.joined(separator: ", ")
+        // What came before (docs/air-outlook.md): one plain line when the weather just changed sharply.
+        let before = TempDrop.line(conditions?.tempFallF)
+        let note = [detail.isEmpty ? nil : detail + ".", before].compactMap { $0 }.joined(separator: " ")
         return SkyProbe(name: "Weather",
                         kind: conditions?.weatherCondition ?? weave.words[.temperature].map { $0.capitalized } ?? "",
                         value: temperatureF.map { "\(Int($0.rounded()))" } ?? "–", unit: "°F", level: nil,
-                        note: detail.isEmpty ? "" : detail + ".", color: .white, intensity: 0)
+                        note: note, color: .white, intensity: 0, symbol: weatherIcon(conditions))
     }
 
     /// Strata: the sky as a core sample. Weather on top, then each present layer as a horizontal band
@@ -134,6 +139,11 @@ enum SkyExplorer {
         case "Weed pollen": return (pollen.map { "\($0.weed.count)" } ?? "–", "grains/m³")
         default: return ("–", "")
         }
+    }
+
+    /// The Weather row's symbol: changes when the weather just did something worth reading.
+    static func weatherIcon(_ conditions: Conditions?) -> String {
+        TempDrop.band(conditions?.tempFallF) == .sharp ? "thermometer.low" : icon("Weather")
     }
 
     /// One symbol per layer, shared by the scale and the label so they read as the same thing.
@@ -232,7 +242,7 @@ struct SkyProbeOverlay: View {
                     Text(probe.name)
                 } icon: {
                     // The connection to the field: this is the ink of the particles you're reading.
-                    Image(systemName: SkyExplorer.icon(probe.name)).foregroundStyle(probe.level == nil ? .primary : probe.color)
+                    Image(systemName: probe.symbol ?? SkyExplorer.icon(probe.name)).foregroundStyle(probe.level == nil ? .primary : probe.color)
                 }
                 .font(.subheadline.weight(.semibold))
                 Text(probe.kind).font(.caption).foregroundStyle(Theme.secondaryText)
@@ -267,6 +277,8 @@ struct StrataScale: View {
     let layers: AirLayers
     let probe: SkyProbe?
     let height: CGFloat
+    /// `SkyExplorer.weatherIcon(conditions)`, so the top dot changes with the weather.
+    var weatherSymbol: String = SkyExplorer.icon("Weather")
 
     var body: some View {
         let stack = SkyExplorer.stack(layers)
@@ -291,7 +303,7 @@ struct StrataScale: View {
         // One ink for the whole scale (the weather's), so it sits quietly on the field. Size is the amount;
         // the layer's own colour appears in the label once you're reading it.
         let size = 11 + 11 * CGFloat(amount)
-        return Image(systemName: SkyExplorer.icon(name))
+        return Image(systemName: name == "Weather" ? weatherSymbol : SkyExplorer.icon(name))
             .font(.system(size: on ? size + 3 : size, weight: .semibold))
             .foregroundStyle(on ? Color.primary : Color.primary.opacity(0.55))
             .frame(width: 30, height: 30)

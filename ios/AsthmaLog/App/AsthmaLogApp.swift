@@ -37,6 +37,7 @@ struct AsthmaLogApp: App {
                         Task { await services.logFromButton(packet, receivedAt: received, in: context) }
                     }
                     await services.resumePending(in: context)
+                    await services.backfillLookBack(in: context)
                 }
         }
         .modelContainer(container)

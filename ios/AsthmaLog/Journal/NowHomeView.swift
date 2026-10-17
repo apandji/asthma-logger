@@ -65,13 +65,13 @@ struct NowHomeView: View {
             .background {
                 // The grain is the paper's, not the map's: it runs under the whole page.
                 // The future is printed on a different paper: deep purple, crossfading as you cross now.
-                ZStack { inFuture ? Theme.linen : Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }
+                ZStack { inFuture ? Theme.forecastPaper : Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }
                     .ignoresSafeArea()
-                    .animation(Theme.smooth, value: inFuture)
+                    .animation(.smooth(duration: 0.9), value: inFuture)
             }
             // Linen is a light page whatever the system says; black is a dark one.
             // Past and now are printed in ink on black; the future is a sketch on linen.
-            .environment(\.colorScheme, paper == .linen || inFuture ? .light : .dark)
+            .environment(\.colorScheme, paper == .linen ? .light : .dark)
             .sheet(item: $pinDetails) { e in
                 NavigationStack { MomentDetailsView(event: e) }
                     .presentationDragIndicator(.visible)
@@ -183,29 +183,26 @@ struct NowHomeView: View {
 
     // MARK: Header
 
-    /// The verdict leads; the conditions and the place sit under it in one plain line. The inhaler tag
-    /// appears only on moments. The time lives on the rail's pill.
+    /// The conditions lead (serif); the verdict sits under them as one tappable line with its dot; the place
+    /// under that. The inhaler tag appears only on moments. The time lives on the rail's pill.
     private var header: some View {
         Group {
             switch focus {
             case .now:
                 if let j = justNow {
-                    VerdictHeader(tag: j.moment, title: outlook(at: now).text, tint: outlook(at: now).tint,
-                                  detail: [AirWords.short(j.weave, j.conditions), j.placeName ?? here?.place].compactMap { $0 }.joined(separator: " · "),
-                                  onTitle: { showInsights = true })
+                    VerdictHeader(tag: j.moment, title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
+                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint,
+                                  detail: j.placeName ?? here?.place ?? "", onVerdict: { showInsights = true })
                 } else {
-                    VerdictHeader(title: outlook(at: now).text, tint: outlook(at: now).tint,
-                                  detail: here.map { [AirWords.short($0.weave, $0.conditions), $0.place].compactMap { $0 }.joined(separator: " · ") }
-                                      ?? "Checking the air near you…",
-                                  onTitle: { showInsights = true })
+                    VerdictHeader(title: here?.statement ?? "Checking the air near you…",
+                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint,
+                                  detail: here?.place ?? "", onVerdict: { showInsights = true })
                 }
             case .moment(let m):
-                VerdictHeader(tag: m.moment, title: m.pastStatement, tint: nil,
-                              detail: m.placeName ?? "", onTitle: { pinDetails = m })
+                VerdictHeader(tag: m.moment, title: m.pastStatement, verdict: nil, tint: nil, detail: m.placeName ?? "")
             case .hour(let h):
-                VerdictHeader(title: outlook(at: h.date).text, tint: outlook(at: h.date).tint,
-                              detail: AirWords.short(h.weave, h.conditions) + " ·", trailing: AnyView(placeChip),
-                              onTitle: { showInsights = true })
+                VerdictHeader(title: h.statement, verdict: outlook(at: h.date).text, tint: outlook(at: h.date).tint,
+                              detail: "", trailing: AnyView(placeChip), onVerdict: { showInsights = true })
             }
         }
         .padding(.top, 2)
@@ -799,15 +796,17 @@ struct MapZoomSource: ViewModifier {
     }
 }
 
-/// The home's header. The verdict is the headline (serif, with a small dot in its colour); one plain line of
-/// conditions and place under it. A tag line above is kept even when empty, so nothing jumps.
+/// The home's header: the conditions as the headline (serif), the verdict as one line under it with a
+/// dot in its colour (tap for Insights), then the place. The tag line and the verdict line keep their
+/// space even when empty, so nothing jumps while you scrub.
 struct VerdictHeader: View {
     var tag: MomentKind? = nil
     let title: String
+    let verdict: String?
     let tint: Color?
     let detail: String
     var trailing: AnyView? = nil
-    var onTitle: (() -> Void)? = nil
+    var onVerdict: (() -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -816,32 +815,32 @@ struct VerdictHeader: View {
                 MomentTag(moment: tag ?? .rescue).hidden()
                 if let tag { MomentTag(moment: tag).transition(.opacity) }
             }
-            Button { onTitle?() } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    if let tint {
-                        Circle().fill(tint).frame(width: 10, height: 10).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                    ZStack(alignment: .topLeading) {
-                        Text(title)
-                            .font(Theme.serifTitle).kerning(Theme.serifKerning)
-                            .lineLimit(2, reservesSpace: true)
-                            .multilineTextAlignment(.leading)
-                            .id(title)
-                            .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
-                    }
-                    .animation(Theme.smooth, value: title)
+            ZStack(alignment: .topLeading) {
+                Text(title)
+                    .font(Theme.serifTitle).kerning(Theme.serifKerning)
+                    .lineLimit(2, reservesSpace: true)
+                    .id(title)
+                    .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
+            }
+            .animation(Theme.smooth, value: title)
+            Button { onVerdict?() } label: {
+                HStack(spacing: 8) {
+                    Circle().fill(tint ?? Theme.secondaryText.opacity(0.5)).frame(width: 8, height: 8)
+                    Text(verdict ?? " ").lineLimit(1)
+                    if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(Theme.secondaryText) }
                 }
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(.primary)
             }
             .buttonStyle(PressStyle())
-            .disabled(onTitle == nil)
+            .disabled(onVerdict == nil)
+            .opacity(verdict == nil ? 0 : 1)
+            .contentTransition(.opacity)
             HStack(spacing: 4) {
                 Text(detail).lineLimit(1).truncationMode(.middle)
                 if let trailing { trailing }
             }
             .font(.subheadline).foregroundStyle(Theme.secondaryText)
-            .contentTransition(.opacity)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)

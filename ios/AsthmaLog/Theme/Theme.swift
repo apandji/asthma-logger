@@ -28,8 +28,9 @@ enum Theme {
     static let stage = Color(light: 0xF2F1EE, dark: 0x0B0B0D)
     /// Warm off-white paper for the linen look (Design crit › Paper).
     static let linen = Color(light: 0xF3EEE4, dark: 0xF3EEE4)
-    /// The forecast's paper: deep purple, so the future reads as a different place.
-    static let forecastPaper = Color(red: 0.11, green: 0.06, blue: 0.2)
+    /// The forecast's paper: a warm graphite, a quiet step off black, so crossing into the future is felt
+    /// without a flash.
+    static let forecastPaper = Color(red: 0.11, green: 0.1, blue: 0.09)
     /// The page color for the chosen paper.
     static func paper(_ p: Crit.Paper) -> Color { p == .linen ? linen : .black }
     static let card = Color(light: 0xFFFFFF, dark: 0x1C1C1F)

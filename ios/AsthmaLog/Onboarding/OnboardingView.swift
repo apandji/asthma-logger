@@ -187,8 +187,9 @@ struct OnboardingView: View {
                 }
                 primary("Next") { step = .learn }
             case .learn:
-                Text("Each press saves the air at that moment. felt air also saves baseline moments on its own. With enough of both, Insights shows what your flare days have in common, and flags days ahead that look like them.")
+                Text("Each press saves a moment. felt air adds baseline moments on its own. With enough of both, Insights shows what your flare days have in common.")
                     .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
                 LearningRing(progress: GateProgress(nAttacks: events.filter { !$0.isDemo && $0.moment == .rescue }.count,
                                                     nBaselines: events.filter { !$0.isDemo && $0.moment == .okay }.count, gate: .default), size: 96)
                 primary("Start") { button.endSync(); didOnboard = true }

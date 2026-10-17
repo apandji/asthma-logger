@@ -8,7 +8,7 @@ are where these ideas came from; where they disagree, this file wins.
 ## One idea
 
 The app is **printed on paper**. The page is black paper tinted by the weather; the air is riso ink
-particles on it; words are set in one serif sentence and SF for everything else. Colour has **one job**:
+particles on it; words are set in one Recursive sentence and SF for everything else. Colour has **one job**:
 it says *which* air. Everything else (which inhaler, how much, good or bad, past or future) is said by
 words, size, shape, motion or ink weight.
 
@@ -66,16 +66,16 @@ rose dawn and dusk. It is the **page**, not a data mark.
 
 | Role | Font | Where |
 |---|---|---|
-| The sentence | `Theme.serifTitle`: New York 28 pt regular, kerning −0.6 | One per screen: "It's 54° and humid, and the air is clear." |
+| The sentence | `Theme.serifTitle`: **Recursive** 28 pt, weight 400, kerning −0.4 (`Theme/Recursive.swift`, OFL, bundled) | One per screen: "It's 54° and humid, and the air is clear." Its Casual axis follows Settings › Insight voice: clinical linear → poetic casual. Falls back to New York if the font is missing. |
 | Larger sentence | `Theme.serifTitleLarge`: 32 pt | Only on pages with nothing else above the fold |
 | Place line | `.subheadline.weight(.medium)`, secondary | Above the sentence: icon + place |
 | Verdict pill | `.subheadline.weight(.semibold)` | The pill under the sentence |
-| Counts | `.title3.weight(.semibold).monospacedDigit()` | Insights ring |
+| Counts | `.title3.weight(.semibold).monospacedDigit()` (Insights ring); `Theme.figures` is Recursive Mono for numbers that change in place | |
 | Caption | `Theme.caption` (.caption), secondary | Notes, footers |
 | Kicker (retired) | | The tracked small-caps kicker is gone; place lines are sentence case. |
 
-One serif, one sans. The sentence is never bold, never italic, never scaled to fit (long lines wrap to
-two, then truncate).
+One voice for the sentence, SF for the rest. The sentence is never bold, never scaled to fit (long lines wrap to
+two, then truncate). Slant is Recursive's `slnt` axis, used only where a tense needs it.
 
 ## Motion (`Theme.snap / .smooth / .lift`)
 

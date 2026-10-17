@@ -122,6 +122,26 @@ final class LogService {
         try? context.save()
     }
 
+    /// Older moments saved before look-back existed: fetch their 48 hours once, a few per app open so it
+    /// never floods the air services. Same windows as a new moment, measured back from when it was logged.
+    func backfillLookBack(in context: ModelContext, limit: Int = 10) async {
+        let ready = EnvStatus.ready.rawValue, partial = EnvStatus.partial.rawValue
+        var d = FetchDescriptor<LogEvent>(predicate: #Predicate { $0.envStatusRaw == ready || $0.envStatusRaw == partial },
+                                          sortBy: [SortDescriptor(\.loggedAt, order: .reverse)])
+        d.fetchLimit = 500
+        let todo = ((try? context.fetch(d)) ?? []).filter {
+            !$0.isDemo && $0.latitude != nil && $0.longitude != nil && $0.conditions != nil && $0.conditions?.lookBack == nil
+        }
+        for e in todo.prefix(limit) {
+            guard let lat = e.latitude, let lon = e.longitude,
+                  let back = await LookBackService.load(latitude: lat, longitude: lon, at: e.loggedAt) else { continue }
+            var c = e.conditions
+            c?.lookBack = back
+            e.conditions = c
+        }
+        try? context.save()
+    }
+
     /// Usual-day sample (docs/predictive-engine.md §4): on app open, if there's been no usual-day
     /// sample in 20 h and no puff in the last 2 h. Only after the first log, so the first launch
     /// doesn't open with a location prompt.

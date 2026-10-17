@@ -45,9 +45,14 @@ struct WeatherProvider {
 
     /// Hourly from `pastHours` ago to `hours` ahead. Past hours feed the temperature-drop detector.
     func hourly(latitude: Double, longitude: Double, hours: Int, pastHours: Int = 0) async throws -> [Hour] {
+        try await self.hours(latitude: latitude, longitude: longitude,
+                             from: Date().addingTimeInterval(-Double(pastHours) * 3600),
+                             to: Date().addingTimeInterval(Double(hours) * 3600))
+    }
+
+    /// Hourly between two dates, past or future (Apple Weather keeps past hours).
+    func hours(latitude: Double, longitude: Double, from start: Date, to end: Date) async throws -> [Hour] {
         let location = CLLocation(latitude: latitude, longitude: longitude)
-        let start = Date().addingTimeInterval(-Double(pastHours) * 3600)
-        let end = Date().addingTimeInterval(Double(hours) * 3600)
         let forecast = try await WeatherService.shared.weather(for: location, including: .hourly(startDate: start, endDate: end))
         return forecast.map {
             Hour(date: $0.date, temperatureF: $0.temperature.converted(to: .fahrenheit).value, humidityPct: $0.humidity * 100)

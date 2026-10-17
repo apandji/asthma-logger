@@ -29,6 +29,40 @@ Each detector is one function from hourly values to an event, with tests. The sa
 
 Missing hours make an event **unknown**, not "no". A frame without hourly history adds nothing to the `temp_drop` row.
 
+## Looking back: 0 to 48 hours
+
+Breathing often trails the air by a day or two. So each moment also keeps the 48 hours before it, in two windows:
+
+```
+ −48 h ─────────────── earlier ─────────────── −6 h ── now ── moment
+```
+
+- **now**: the 6 hours up to the moment (this hour included)
+- **earlier**: 6 to 48 hours before
+
+For each signal the worst value in each window is stored (`LookBack` on `Conditions`), with how many hours were read. A future bin per signal will read one of three **exclusive** levels:
+
+| Level | Meaning |
+|---|---|
+| `now` | High in the last 6 hours |
+| `earlier` | High 6–48 hours before, but not now |
+| `neither` | Not high anywhere in the 48 hours |
+
+One bin per signal with exclusive levels, not three bins (`pm25_now`, `pm25_24h`, `pm25_48h`): yesterday's air is usually close to today's, and the score adds evidence across bins, so separate bins would count one smoky week two or three times. They would also triple the chances of a pattern by luck.
+
+A window counts only when at least half its hours have a reading; otherwise the level is missing, not `neither`. Baseline moments get the same look-back, so both sides of the comparison are measured the same way.
+
+| Signal | History from | Status |
+|---|---|---|
+| PM2.5 | OpenAQ hourly, nearest station | Stored |
+| Ozone | OpenAQ hourly, nearest station | Stored |
+| Temperature drop | Apple Weather past hours (largest 3-hour fall in each window) | Stored |
+| Pollen | Ambee 48 h history | With Ambee |
+
+Older moments are backfilled a few at a time on app open. **Not in frames or Insights yet**: the bins (`pm25_window`, `ozone_window`, later `smoke_recent` as the PM2.5 case) come in their own change.
+
+For the look-ahead, the `earlier` window of a forecast hour tomorrow is today, which is already measured.
+
 ## What the user sees
 
 - **Weather row** (top of the sky's strata scale): the icon changes when an event is active (`thermometer.low` for a temperature drop) and hold-to-read adds one line about what came before: "Dropped 12°F in the 3 hours before."

@@ -23,6 +23,9 @@ struct NowHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The full air details, opened from the pin.
     @State private var pinDetails: LogEvent?
+    /// Quick Record: the moment whose recorder is open (from a notification, or the toast's Note button).
+    @State private var recording: LogEvent?
+    @State private var quick = QuickRecordCenter.shared
 
     /// The air where the phone is. Now is always here.
     @State private var here: NowReading?
@@ -92,6 +95,25 @@ struct NowHomeView: View {
             // Linen is a light page whatever the system says; black is a dark one.
             // Black paper, or linen when chosen; the forecast shifts the paper to warm graphite (above).
             .environment(\.colorScheme, paper == .linen ? .light : .dark)
+            .fullScreenCover(item: $recording) { e in QuickRecordView(event: e) }
+            #if DEBUG
+            // Recordings: `-quickRecord` opens the recorder on the latest moment (unstructured, so the first
+            // layout pass can't cancel it).
+            .onAppear {
+                guard ProcessInfo.processInfo.arguments.contains("-quickRecord") else { return }
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    let all = (try? context.fetch(FetchDescriptor<LogEvent>(sortBy: [SortDescriptor(\.loggedAt)]))) ?? []
+                    quick.pending = (all.last { $0.moment != .okay } ?? all.last)?.id
+                }
+            }
+            #endif
+            .onChange(of: quick.pending) { _, id in
+                // Fetched by id from the store: a notification can arrive before this view's list has loaded.
+                guard let id, let e = try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.id == id })).first else { return }
+                quick.pending = nil
+                recording = e
+            }
             .sheet(item: $pinDetails) { e in
                 NavigationStack { MomentDetailsView(event: e) }
                     .presentationDragIndicator(.visible)
@@ -103,10 +125,13 @@ struct NowHomeView: View {
             .overlay(alignment: .bottomLeading) { rail }
             .overlay(alignment: .top) {
                 if let e = toast {
-                    LoggedToast(event: e) {
+                    LoggedToast(event: e, undo: {
                         withAnimation(.snappy) { toast = nil }
                         Task { await services.delete(e, in: context) }
-                    }
+                    }, note: {
+                        withAnimation(.snappy) { toast = nil }
+                        recording = e
+                    })
                 }
             }
             .sheet(isPresented: $showInsights) {

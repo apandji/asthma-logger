@@ -51,6 +51,8 @@ public enum Bins {
             guard let io = f.indoorOutdoor, io != .unknown else { return nil }
             return io.rawValue
         },
+        // v4
+        BinDef(bin: "temp_drop", isBoolean: true) { $0.tempDrop == .unknown ? nil : yesNo($0.tempDrop == .sharp) },
     ] + JournalTag.allCases.map { tag in
         // Only frames with a reviewed note: an unreviewed moment is missing, not "no".
         BinDef(bin: "tag_\(tag.rawValue)", isBoolean: true, sampled: { $0.tagsSampled }) { f in
@@ -70,6 +72,7 @@ public enum Bins {
         case "hour": return "Time of day"
         case "place": return "Place"
         case "indoor_outdoor": return "Indoors / outdoors"
+        case "temp_drop": return "Sharp temperature drop"
         default:
             if bin.hasPrefix("tag_"), let tag = JournalTag(rawValue: String(bin.dropFirst(4))) {
                 return tag.label

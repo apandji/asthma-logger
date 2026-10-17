@@ -1,10 +1,11 @@
 import Foundation
 
 /// Bin edges version. v1 = the web prototype's bins; v2 adds place, indoor/outdoor and journal tags;
-/// v3 reads journal tags as missing (not "no") on frames without a reviewed note.
+/// v3 reads journal tags as missing (not "no") on frames without a reviewed note;
+/// v4 adds `temp_drop` (a fall of 10°F or more in the 3 hours before, `TempDrop`).
 /// Bump when any edge changes and regenerate `fixtures/` (fixtures cover the v1 bins only).
 public enum BinSpec {
-    public static let version = 3
+    public static let version = 4
 }
 
 public enum FrameKind: String, Codable, Sendable, CaseIterable {
@@ -58,6 +59,9 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
     public var smokeAtPoint: Bool
     public var heatAlert: Bool
 
+    /// v4 (iOS only). Unknown when there were no hourly temperatures around the frame.
+    public var tempDrop: TempDropBand
+
     // v2 (iOS only). Absent → the bin contributes no rows.
     public var place: PlaceKind?
     public var indoorOutdoor: IndoorOutdoor?
@@ -82,6 +86,7 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         pollenWeed: PollenLevel = .unknown,
         smokeAtPoint: Bool = false,
         heatAlert: Bool = false,
+        tempDrop: TempDropBand = .unknown,
         place: PlaceKind? = nil,
         indoorOutdoor: IndoorOutdoor? = nil,
         tags: Set<JournalTag> = [],
@@ -98,6 +103,7 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         self.pollenWeed = pollenWeed
         self.smokeAtPoint = smokeAtPoint
         self.heatAlert = heatAlert
+        self.tempDrop = tempDrop
         self.place = place
         self.indoorOutdoor = indoorOutdoor
         self.tags = tags
@@ -106,7 +112,7 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, hourOfDay, season, tempBand, humidityBand, pm25Band, ozoneBand, pollenWeed
-        case smokeAtPoint, heatAlert, place, indoorOutdoor, tags, tagsReviewed
+        case smokeAtPoint, heatAlert, tempDrop, place, indoorOutdoor, tags, tagsReviewed
     }
 
     public init(from decoder: Decoder) throws {
@@ -122,6 +128,7 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         pollenWeed = try c.decode(PollenLevel.self, forKey: .pollenWeed)
         smokeAtPoint = try c.decode(Bool.self, forKey: .smokeAtPoint)
         heatAlert = try c.decode(Bool.self, forKey: .heatAlert)
+        tempDrop = try c.decodeIfPresent(TempDropBand.self, forKey: .tempDrop) ?? .unknown
         place = try c.decodeIfPresent(PlaceKind.self, forKey: .place)
         indoorOutdoor = try c.decodeIfPresent(IndoorOutdoor.self, forKey: .indoorOutdoor)
         tags = try c.decodeIfPresent(Set<JournalTag>.self, forKey: .tags) ?? []

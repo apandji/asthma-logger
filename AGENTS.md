@@ -67,7 +67,7 @@ Each one comes from the docs. Follow the link before you change anything in that
 
 These must mean the same thing in both apps. Change one → update `docs/`, `fixtures/`, and both implementations, or note why one app lags.
 
-- **Feature frame**: one hour at one place, binned. Shared v1 bins: `pm25`, `ozone`, `pollen_weed`, `temp`, `humidity`, `smoke_at_point`, `heat_alert`, `hour`, `season`. iOS adds `place`, `indoor_outdoor`, and journal tags as v2. Journal tags are **confirmed tags only**, and a frame without a reviewed note (`tagsReviewed`) is missing for the tag bins, not "no" (iOS `BinSpec.version` 3). Reference: `web/src/lib/insights/types.ts`, `lift.ts`.
+- **Feature frame**: one hour at one place, binned. Shared v1 bins: `pm25`, `ozone`, `pollen_weed`, `temp`, `humidity`, `smoke_at_point`, `heat_alert`, `hour`, `season`. iOS adds `place`, `indoor_outdoor`, and journal tags as v2, and `temp_drop` as v4 ([docs/air-outlook.md](docs/air-outlook.md); the web app lags). Journal tags are **confirmed tags only**, and a frame without a reviewed note (`tagsReviewed`) is missing for the tag bins, not "no" (iOS `BinSpec.version` 3; 4 adds `temp_drop`). Reference: `web/src/lib/insights/types.ts`, `lift.ts`.
 - **Lift row**: `attacksWith`, `baselinesWith`, `nAttacks`, `nBaselines`, rates, `lift`, `gated`. Raw counts are always shown to the user. `nAttacks` / `nBaselines` are the frames sampled for that bin: every frame for v1 bins, only moments with a reviewed note for journal tags. The gate checks those per-row totals.
 - **Gate**: default 8 inhaler logs, 20 baselines, 4 in the level, lift > 1.25.
 - **Scoring for risk days**: smoothed log likelihood ratio (add-k, k=2) per [docs/predictive-engine.md §5](docs/predictive-engine.md). Display lift stays raw.

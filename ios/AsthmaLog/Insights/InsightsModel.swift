@@ -50,13 +50,17 @@ final class InsightsModel {
         }
     }
 
-    /// Next ~3 days at `latitude/longitude`: WeatherKit hourly + AirNow daily AQ categories.
+    /// Next ~3 days at `latitude/longitude`: WeatherKit hourly + AirNow daily AQ categories. The last few
+    /// past hours come along so the first forecast hours can show a temperature drop.
     func loadForecast(latitude: Double, longitude: Double, placeLabel: String) async {
         guard let table, let bander else { return }
         isLoadingForecast = true
         defer { isLoadingForecast = false }
         do {
-            let hours = try await WeatherProvider().hourly(latitude: latitude, longitude: longitude, hours: 72)
+            let all = try await WeatherProvider().hourly(latitude: latitude, longitude: longitude, hours: 72,
+                                                         pastHours: Int(TempDrop.windowHours))
+            let temps = all.map(\.tempPoint)
+            let hours = all.filter { $0.date > Date().addingTimeInterval(-3600) }
             var aq: [String: (pm25: Int?, ozone: Int?)] = [:]
             var notes = ["Forecast for \(placeLabel)."]
             if let key = Secrets.airNow {
@@ -71,7 +75,8 @@ final class InsightsModel {
             let forecast = hours.map { h -> ForecastHour in
                 let day = aq[AirNowProvider.dayString(h.date)]
                 let conditions = ForecastConditions(temperatureF: h.temperatureF, humidityPct: h.humidityPct,
-                                                    pm25Category: day?.pm25, ozoneCategory: day?.ozone)
+                                                    pm25Category: day?.pm25, ozoneCategory: day?.ozone,
+                                                    tempFallF: TempDrop.degreesFallen(at: h.date, in: temps))
                 let parts = cal.dateComponents([.hour, .month], from: h.date)
                 let frame = FrameBuilder.forecastFrame(id: h.date.ISO8601Format(), hourOfDay: parts.hour ?? 0,
                                                        month: parts.month ?? 1, conditions)

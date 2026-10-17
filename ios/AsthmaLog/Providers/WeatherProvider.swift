@@ -5,6 +5,13 @@ import WeatherKit
 /// Apple Weather (WeatherKit). Modeled outdoor values for the pin — labeled as such.
 /// The Apple Weather attribution must be shown wherever these values appear (WeatherAttributionView).
 struct WeatherProvider {
+    /// How far the last few hours' temperature fell, for `Conditions.tempFallF`. Nil if the hours can't be read.
+    func tempFall(latitude: Double, longitude: Double, at date: Date = .now) async -> Double? {
+        guard let hours = try? await hourly(latitude: latitude, longitude: longitude, hours: 1,
+                                            pastHours: Int(TempDrop.windowHours) + 1) else { return nil }
+        return TempDrop.degreesFallen(at: date, in: hours.map(\.tempPoint))
+    }
+
     static let source = "Apple Weather"
 
     func current(latitude: Double, longitude: Double) async throws -> (observations: [EnvObservation], alerts: [ConditionAlert], condition: String) {
@@ -32,12 +39,15 @@ struct WeatherProvider {
         let date: Date
         let temperatureF: Double
         let humidityPct: Double
+
+        var tempPoint: TempPoint { TempPoint(date: date, temperatureF: temperatureF) }
     }
 
-    func hourly(latitude: Double, longitude: Double, hours: Int) async throws -> [Hour] {
+    /// Hourly from `pastHours` ago to `hours` ahead. Past hours feed the temperature-drop detector.
+    func hourly(latitude: Double, longitude: Double, hours: Int, pastHours: Int = 0) async throws -> [Hour] {
         let location = CLLocation(latitude: latitude, longitude: longitude)
-        let start = Date()
-        let end = start.addingTimeInterval(Double(hours) * 3600)
+        let start = Date().addingTimeInterval(-Double(pastHours) * 3600)
+        let end = Date().addingTimeInterval(Double(hours) * 3600)
         let forecast = try await WeatherService.shared.weather(for: location, including: .hourly(startDate: start, endDate: end))
         return forecast.map {
             Hour(date: $0.date, temperatureF: $0.temperature.converted(to: .fahrenheit).value, humidityPct: $0.humidity * 100)

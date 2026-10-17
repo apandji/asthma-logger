@@ -12,6 +12,7 @@ struct ConditionsService {
         let weather = weather
 
         async let w = Self.attempt { try await weather.current(latitude: latitude, longitude: longitude) }
+        async let fall = weather.tempFall(latitude: latitude, longitude: longitude)
         async let aq = Self.attempt { () -> [EnvObservation] in
             guard let openAQKey else { return [] }
             return try await OpenAQProvider(key: openAQKey).observations(latitude: latitude, longitude: longitude)
@@ -37,6 +38,7 @@ struct ConditionsService {
         case .success(let v): result.observations += v
         case .failure(let e): result.errors.append("AirNow: \(e.localizedDescription)")
         }
+        result.tempFallF = await fall
         if openAQKey == nil && airNowKey == nil {
             result.errors.append("Air quality isn't set up yet.")
         }

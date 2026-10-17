@@ -754,7 +754,8 @@ struct NowSky: View {
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
                               rippleInk: rippleInk, scan: true, hollow: sketch,
-                              breathes: !isPast, drift: sketch ? 1 + 2 * farness : 0)
+                              breathes: !isPast, drift: sketch ? 1 + 2 * farness : 0,
+                              reveal: sketch ? .soft : isPast ? .inward : .outward)
             }
             .frame(width: size.width, height: size.height)
             // The past is a print, a touch faded. The future softens the further out it is.
@@ -895,6 +896,10 @@ struct ParticleField: View {
     var breathes = true
     /// The future drifts, more the further out: 0 still … 3 restless.
     var drift: CGFloat = 0
+    /// How the reveal moves: the past closes in onto the pin (it happened, it settles), now rings out from
+    /// it, the future washes in wide and soft (not yet known).
+    enum Reveal { case inward, outward, soft }
+    var reveal: Reveal = .outward
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let spacing: CGFloat = 8
@@ -913,7 +918,7 @@ struct ParticleField: View {
         var age = rippleAt.map { time.timeIntervalSince($0) } ?? rippleSeconds
         if inviting, age >= rippleSeconds { age = age.truncatingRemainder(dividingBy: rippleEvery) }
         // A log's scan takes a little longer than an ordinary refresh.
-        let seconds = rippleInk == .white ? rippleSeconds : 2.2
+        let seconds = rippleInk != .white ? 2.2 : reveal == .soft ? 2.6 : reveal == .inward ? 1.4 : rippleSeconds
         let wave = (animated && !reduceMotion && age < seconds) ? age / seconds : nil
         // Every new sky is revealed by its first ripple: no particles until the ring has passed. Later
         // "touch me" ripples run over a sky that's already there.
@@ -929,7 +934,8 @@ struct ParticleField: View {
         return Canvas(rendersAsynchronously: true) { ctx, size in
             // Every ripple starts at the pin: the place, then the air around it.
             let centre = CGPoint(x: size.width / 2, y: size.height / 2)
-            let radius = wave.map { CGFloat($0) * hypot(size.width, size.height) * 0.6 }
+            let reach = hypot(size.width, size.height) * 0.6
+            let radius = wave.map { reveal == .inward ? reach * (1 - CGFloat($0)) : CGFloat($0) * reach }
             let fade = wave.map { scan && firstPass ? 1 : 1 - $0 } ?? 0
             let cols = Int(size.width / spacing) + 1, rows = Int(size.height / spacing) + 1
             for i in 0..<cols {
@@ -949,7 +955,8 @@ struct ParticleField: View {
                     // The ring runs ahead over bare grain; inside it, the air fills in, growing up just behind the front.
                     var emerge = 1.0
                     if scan, firstPass, k != nil, let radius {
-                        let behind = Double(radius - dist)
+                        // Behind the front: inside it when it rings out, outside it when it closes in.
+                        let behind = reveal == .inward ? Double(dist - radius) : Double(radius - dist) * (reveal == .soft ? 0.5 : 1)
                         if behind < 0 { continue }
                         let t = min(1, behind / 70)
                         emerge = 1 - pow(1 - t, 3)
@@ -970,9 +977,9 @@ struct ParticleField: View {
                     }
                     if let radius {
                         let d = abs(dist - radius)
-                        let width = scan ? 44.0 : 36.0
+                        let width = reveal == .soft ? 110.0 : scan ? 44.0 : 36.0
                         if d < width {
-                            let t = (1 - d / width) * fade
+                            let t = (1 - d / width) * fade * (reveal == .soft ? 0.45 : 1)
                             r += t * t * (scan ? 2.6 : 2.2)
                             // The front wears the ink; in a scan, even the particles take it as they're born.
                             if k == nil || scan { color = rippleInk.opacity(0.2 + 0.7 * Double(t)).mix(with: color, by: scan && k != nil ? 0.4 : 0) }

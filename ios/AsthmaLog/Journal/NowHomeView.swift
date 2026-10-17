@@ -497,7 +497,8 @@ struct NowHomeView: View {
 
     /// What stood out at a rescue moment, from the data model: the bins of its frame that are gated
     /// patterns (more common on flare days than baseline), named in plain words. Never a cause, never a
-    /// percent: "Weed pollen was high and it was humid, as on most of your flare days." Nil when the moment
+    /// percent, and the raw count: "Weed pollen was high and it was humid. High weed pollen came up at 9 of
+    /// your 14 rescue moments." Nil when the moment
     /// isn't rescue, the gate isn't met, or nothing in it is a pattern; the weather sentence then stands.
     private func standsOut(_ m: LogEvent) -> String? {
         guard m.moment == .rescue else { return nil }
@@ -512,21 +513,24 @@ struct NowHomeView: View {
         guard learned else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         if forced == .learned, !(model.progress?.isMet ?? false) {
             // The demo person's story, for moments without a real pattern behind them.
-            return ["Weed pollen was high, as on most of your flare days.", before].compactMap { $0 }.joined(separator: " ")
+            return ["Weed pollen was high. High weed pollen came up at 9 of your 14 rescue moments.", before].compactMap { $0 }.joined(separator: " ")
         }
         guard let frame = m.frame(), let rows = model.report?.gatedRows, !rows.isEmpty else {
             return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ")
         }
-        let hits = Bins.all.compactMap { def -> (String, Double)? in
+        let hits = Bins.all.compactMap { def -> (String, LiftRow)? in
             guard let level = def.levelOf(frame),
                   let row = rows.first(where: { $0.bin == def.bin && $0.level == level && $0.lift > 1.25 }) else { return nil }
-            return (Self.phrase(def.bin, level), row.lift)
+            return (Self.phrase(def.bin, level), row)
         }
-        .sorted { $0.1 > $1.1 }
+        .sorted { $0.1.lift > $1.1.lift }
         guard !hits.isEmpty else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         let named = hits.prefix(2).map(\.0)
         let joined = named.count == 1 ? named[0] : "\(named[0]) and \(named[1])"
-        let now = joined.prefix(1).uppercased() + joined.dropFirst() + ", as on most of your flare days."
+        // The raw count, not an adjective: "High ozone came up at 9 of your 14 rescue moments."
+        let top = hits[0].1
+        let count = "\(Self.noun(top.bin, top.level).prefix(1).uppercased() + Self.noun(top.bin, top.level).dropFirst()) came up at \(top.attacksWith) of your \(top.nAttacks) rescue moments."
+        let now = joined.prefix(1).uppercased() + joined.dropFirst() + ". " + count
         return [now, before].compactMap { $0 }.joined(separator: " ")
     }
 
@@ -544,6 +548,25 @@ struct NowHomeView: View {
         }
         if lb.tempDropLevel == .earlier { parts.append("The temperature dropped fast the day before.") }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
+    }
+
+    /// A bin and level as a noun phrase, for the count line: "high ozone", "humid air".
+    private static func noun(_ bin: String, _ level: String) -> String {
+        switch (bin, level) {
+        case ("pm25", _): "\(level == "high" ? "high" : "raised") fine particles"
+        case ("ozone", _): "\(level == "high" ? "high" : "raised") ozone"
+        case ("pollen_weed", _): "\(level == "high" ? "high" : "raised") weed pollen"
+        case ("temp", "hot"): "hot weather"
+        case ("temp", "cold"): "cold weather"
+        case ("humidity", "humid"): "humid air"
+        case ("humidity", "dry"): "dry air"
+        case ("smoke_at_point", _): "smoke"
+        case ("heat_alert", _): "a heat alert"
+        case ("temp_drop", _): "a fast temperature drop"
+        case ("hour", let part): "the \(part)"
+        case ("indoor_outdoor", let io): io == "indoor" ? "being indoors" : "being outdoors"
+        case (let b, _): Bins.label(b).lowercased()
+        }
     }
 
     /// A bin and level as a short past-tense clause.

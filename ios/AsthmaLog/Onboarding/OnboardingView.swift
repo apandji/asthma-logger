@@ -29,6 +29,7 @@ struct OnboardingView: View {
     @State private var first: LogEvent?
     @State private var askedMotion = false
     @State private var askedHealth = false
+    @State private var askedNotes = false
     @State private var probing = false
 
     var body: some View {
@@ -86,7 +87,7 @@ struct OnboardingView: View {
                 VerdictHeader(place: AnyView(placeLine), title: "Press your felt button.", verdict: nil, tint: nil)
             }
         case .permissions:
-            VerdictHeader(place: AnyView(placeLine), title: "Two optional permissions.", verdict: nil, tint: nil)
+            VerdictHeader(place: AnyView(placeLine), title: "A few optional permissions.", verdict: nil, tint: nil)
         case .learn:
             VerdictHeader(place: AnyView(placeLine), title: "It gets better with time.", verdict: nil, tint: nil,
                           when: nil)
@@ -181,6 +182,9 @@ struct OnboardingView: View {
             case .permissions:
                 permission("figure.walk", "Motion & Fitness", "Walking, driving or still helps guess if you were indoors or out.", done: askedMotion) {
                     Task { _ = await services.motion.recent(); askedMotion = true }
+                }
+                permission("bell.badge", "Notifications", "After a press, a nudge to add what was going on. One reminder at 6 pm if a moment has no note.", done: askedNotes) {
+                    Task { _ = await QuickRecordCenter.shared.requestPermission(); askedNotes = true }
                 }
                 permission("heart.text.square", "Apple Health", "Saves each rescue puff as Inhaler Usage, next to the rest of your health.", done: askedHealth) {
                     Task { await services.health.requestAccess(); askedHealth = true }

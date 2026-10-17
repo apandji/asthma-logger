@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.narratorStyle) private var styleScore = NarratorStyle.defaultScore
     @AppStorage(Prefs.useOnDeviceModel) private var useModel = true
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
+    @AppStorage(Prefs.quickRecord) private var quickRecord = true
     @AppStorage(Prefs.logButtons) private var useButtons = false
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.useDemoData) private var demo = false
@@ -103,6 +104,8 @@ struct SettingsView: View {
                 Section {
                     Toggle("Log with two buttons instead of the +", isOn: $useButtons)
                     Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
+                    Toggle("After a press, ask what was going on", isOn: $quickRecord)
+                        .onChange(of: quickRecord) { _, on in if on { Task { _ = await QuickRecordCenter.shared.requestPermission() } } }
                     Toggle("Add baseline moments automatically", isOn: $autoBaseline)
                 } header: {
                     Text("Logging")

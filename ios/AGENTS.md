@@ -77,14 +77,15 @@ Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web pr
 
 | Built | Not yet |
 |-------|---------|
-| Log a puff / usual moment, offline-first | Voice notes (Speech + tag suggestions UI). Core logic is in `AsthmaCore/Journal/VoiceNoteTags.swift`; the app still needs a `TagProposer` on Foundation Models, the chips, and `tagsReviewed` on `LogEvent` |
+| Log a puff / usual moment, offline-first | |
 | Precise fix, motion, indoor/outdoor guess + correction | Place learning (visits → home/work) — `Places.cluster` is ready in core |
 | WeatherKit, OpenAQ, AirNow, fail-open with provenance | Pollen (Ambee) |
 | HealthKit inhaler usage write + delete | Photos |
 | Insights: lift, template + Foundation Models narration with output checks | Full visual style pass ([docs/design/visual-style.md](../docs/design/visual-style.md)) |
-| Look-ahead: 72 h WeatherKit + AirNow categories, personal windows or cold-start hazards | Notifications |
+| Look-ahead: 72 h WeatherKit + AirNow categories, personal windows or cold-start hazards | Air-event warnings as notifications |
 | Settings: voice slider, model toggle, Health, auto baseline moments, demo data | |
 | Apple Watch logging (Rescue / Standard → phone) | Watch complications |
+| Quick Record: after a moment, the Lock Screen asks what was going on (Live Activity in `AsthmaLogWidgets/`, buttons are App Intents in `QuickRecordActivity/` that run in the app, `Voice/QuickRecordLive.swift`); falls back to a notification when iOS won't start it from the background. Lock Screen / Control Center control "Voice note" | Live Activity started by a felt button press while the app is in the background (iOS refuses; the notification and the control cover it) |
 | First-run onboarding; Journal week strip with woven tiles and ambient field | |
 
 **On device** (iPhone 15 Pro, iOS 27, Xcode 27.0, 2026-10-01): builds clean with no warnings; logging a puff works and writes Inhaler Usage to Apple Health; Insights renders the template narration and the look-ahead (demo data); precise location (±13 m) stamps the log; WeatherKit, OpenAQ and AirNow all return outdoor conditions, with the Apple Weather attribution shown. Compile fix needed: `Observation` → `EnvObservation` (see "Project file" above). AirNow moved to its 2026 services (`observation/current/ziplatLong`, `forecast/current`) after the old `latLong` ones were retired. **Not yet confirmed:** Foundation Models narration (Apple Intelligence was not on), and Insights from real logs rather than demo data.

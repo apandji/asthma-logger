@@ -56,6 +56,8 @@ extension CaptureBar {
         Task {
             let e: LogEvent = await services.log(moment, in: context, writeToHealth: writeToHealth)
             withAnimation(.snappy) { toast = e }
+            // So the question is waiting on the Lock Screen when the phone goes back in the pocket.
+            if e.moment != .okay, QuickRecordCenter.shared.enabled { QuickRecordLive.shared.begin(for: e) }
             try? await Task.sleep(for: .seconds(4))
             if toast?.id == e.id { withAnimation(.snappy) { toast = nil } }
         }

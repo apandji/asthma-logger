@@ -13,6 +13,9 @@ struct AsthmaLogApp: App {
         AppTips.configure()
         do { container = try ModelContainer(for: LogEvent.self) }
         catch { fatalError("Couldn't open the journal store: \(error)") }
+        // Here, not in .task: a Lock Screen button can wake the app in the background with no scene.
+        QuickRecordCenter.shared.container = container
+        QuickRecordLive.shared.install(container: container)
     }
 
     var body: some Scene {

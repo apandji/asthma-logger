@@ -46,9 +46,11 @@ final class QuickRecordCenter: NSObject, UNUserNotificationCenterDelegate {
 
     var enabled: Bool { UserDefaults.standard.object(forKey: Prefs.quickRecord) as? Bool ?? true }
 
-    /// After a press from the button or the watch: "Rescue logged · Add what was going on, while it's fresh."
+    /// After a press from the button or the watch: the Lock Screen recorder (Live Activity) when iOS allows it,
+    /// otherwise a notification: "Rescue logged · Add what was going on, while it's fresh."
     func notify(for event: LogEvent) {
         guard enabled, event.moment != .okay else { return }
+        if QuickRecordLive.shared.begin(for: event) { scheduleEvening(); return }
         let c = UNMutableNotificationContent()
         c.title = "\(event.moment == .rescue ? "Rescue" : "Standard") logged"
         c.subtitle = event.placeName ?? ""
@@ -334,6 +336,7 @@ struct QuickRecordView: View {
         event.voiceTranscript = words.isEmpty ? nil : words
         try? context.save()
         QuickRecordCenter.shared.scheduleEvening()
+        QuickRecordLive.shared.finished(momentID: event.id)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
     }

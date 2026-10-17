@@ -930,9 +930,11 @@ struct VerdictHeader: View {
             .contentTransition(.opacity)
             .overlay(alignment: .leading) {
                 if verdict == nil, let when {
+                    // Sized to its own text, not the hidden pill's (which is one space wide).
                     Label(when, systemImage: "clock")
                         .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
                         .lineLimit(1)
+                        .fixedSize()
                         .transition(.opacity)
                 }
             }

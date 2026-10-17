@@ -70,8 +70,9 @@ export type NarratorOutput = {
 };
 
 export const NARRATOR_RULES = [
-  "Do not claim causation or predict an attack.",
+  "Do not claim causation or predict a flare.",
   "Always mention the counts for the top driver when gated rows exist.",
-  "If no gated rows, say we need more usual days or more attacks.",
+  "If no gated rows, say we need more baseline days or more inhaler logs.",
   "Outdoor air only — not indoor, not a diagnosis.",
+  "Never use the word attack. Say baseline days (or baseline moments), not usual days or I'm okay.",
 ] as const;

@@ -103,11 +103,11 @@ struct SettingsView: View {
                 Section {
                     Toggle("Log with two buttons instead of the +", isOn: $useButtons)
                     Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
-                    Toggle("Add I'm okay moments automatically", isOn: $autoBaseline)
+                    Toggle("Add baseline moments automatically", isOn: $autoBaseline)
                 } header: {
                     Text("Logging")
                 } footer: {
-                    Text("I'm okay moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
+                    Text("Baseline moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
                 }
 
 
@@ -176,7 +176,7 @@ struct SettingsView: View {
                 #endif
 
                 Section {
-                    Text("felt air is a diary, not a medical device. It compares outdoor conditions when you used your inhaler with your I'm okay moments. It can't see indoor air and doesn't diagnose or predict attacks.")
+                    Text("felt air is a diary, not a medical device. It compares outdoor conditions when you used your inhaler with your baseline moments. It can't see indoor air, doesn't diagnose, and never says a flare will happen.")
                         .font(Theme.caption)
                         .foregroundStyle(Theme.secondaryText)
                 }

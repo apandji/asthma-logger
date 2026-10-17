@@ -33,7 +33,7 @@ export function toNarratorInput(report: LiftReport, styleScore: StyleScore = 35)
 }
 
 const CAVEAT =
-  "Outdoor air only — not a medical diagnosis. Comparison to your usual logged days, not a prediction.";
+  "Outdoor air only — not a medical diagnosis. Comparison to your baseline days, not a prediction.";
 
 /**
  * Fixed factual narrator — always available on device.
@@ -46,8 +46,8 @@ export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
   if (gated.length === 0) {
     const headline =
       input.nBaselines < 12
-        ? `You've used your inhaler ${input.nAttacks} times and logged ${input.nBaselines} usual moments. Keep logging usual days so there's something to compare.`
-        : `Nothing stands out yet (${input.nAttacks} inhaler uses, ${input.nBaselines} usual days). Patterns need more repeats.`;
+        ? `You've used your inhaler ${input.nAttacks} times and logged ${input.nBaselines} baseline moments. Keep logging baseline days so there's something to compare.`
+        : `Nothing stands out yet (${input.nAttacks} inhaler uses, ${input.nBaselines} baseline days). Patterns need more repeats.`;
     return {
       headline,
       caveat: CAVEAT,
@@ -62,8 +62,8 @@ export function summarizeWithTemplate(input: NarratorInput): NarratorOutput {
   let headline = `${top.attacksWith} of the ${input.nAttacks} times you used your inhaler, ${conditionClause(top.bin, top.level)}.`;
   headline +=
     top.baselinesWith === 0
-      ? ` On usual days, that never happened (0 of ${input.nBaselines}).`
-      : ` On usual days, that only happened ${top.baselinesWith} of ${input.nBaselines} times.`;
+      ? ` On baseline days, that never happened (0 of ${input.nBaselines}).`
+      : ` On baseline days, that only happened ${top.baselinesWith} of ${input.nBaselines} times.`;
   if (second) {
     headline += ` Also common: ${conditionClause(second.bin, second.level)}.`;
   }

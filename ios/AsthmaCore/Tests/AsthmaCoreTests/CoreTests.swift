@@ -86,7 +86,7 @@ import Testing
         i.nAttacks = 10
         i.nBaselines = 24
         #expect(Narrator.template(i).headline ==
-            "8 of the 10 times you used your inhaler, it was humid. On usual days, that only happened 6 of 24 times.")
+            "8 of the 10 times you used your inhaler, it was humid. On baseline days, that only happened 6 of 24 times.")
         #expect(Narrator.clause("hour", "evening") == "it was evening")
         #expect(Narrator.clause("indoor_outdoor", "outdoor") == "you were likely outdoors")
         #expect(Narrator.clause("tag_coldAir", "yes") == "you noted cold air")
@@ -108,7 +108,7 @@ import Testing
 
     @Test func guardAcceptsHonestSentence() {
         let out = NarrationGuard.accept(
-            headline: "Here's what stands out: ozone was high on 8 of the 10 times you used your inhaler, and on 0 of 24 usual days.",
+            headline: "Here's what stands out: ozone was high on 8 of the 10 times you used your inhaler, and on 0 of 24 baseline days.",
             caveat: "Outdoor air only.", drivers: ["ozone:high", "made:up"], input: input)
         #expect(out.source == .onDevice)
         #expect(out.drivers == ["ozone:high"])
@@ -261,8 +261,8 @@ import Testing
         #expect(OutlookCopy.headline(w, timeRange: "8 PM–10 PM") ==
             "8 PM–10 PM looks more like the times you used your inhaler: evening and high ozone.")
         #expect(OutlookCopy.evidence(w) == [
-            "Evening: 4 of your 10 inhaler times, 0 of 24 usual days.",
-            "High ozone: 8 of your 10 inhaler times, 2 of 24 usual days.",
+            "Evening: 4 of your 10 inhaler times, 0 of 24 baseline days.",
+            "High ozone: 8 of your 10 inhaler times, 2 of 24 baseline days.",
             "No air-quality forecast for these hours, so this is weather only.",
         ])
     }

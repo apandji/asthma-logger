@@ -1,14 +1,15 @@
 import Foundation
 
-/// What a journal moment is. Stored raw values for rescue and I'm okay match `FrameKind`, so logs
-/// saved before maintenance existed read back unchanged.
+/// What a journal moment is. Stored raw values for rescue and baseline match `FrameKind`, so logs
+/// saved before maintenance existed read back unchanged. On-screen titles follow
+/// `docs/design/felt-air-language.md` (Rescue / Standard / Baseline — never "I'm okay" or "attack").
 public enum MomentKind: String, Codable, Sendable, CaseIterable {
     /// Used the rescue inhaler. The only kind that counts as an inhaler use in patterns.
     case rescue = "attack"
     /// Took the standard (maintenance / controller) inhaler. Recorded, but never part of the lift table:
     /// it's routine, not a sign of a hard breathing moment.
     case maintenance
-    /// A usual-moment sample ("I'm okay"), captured automatically.
+    /// A baseline sample (ordinary moment, no inhaler), captured automatically or as first capture.
     case okay = "baseline"
 
     public init(_ kind: FrameKind) {
@@ -26,9 +27,9 @@ public enum MomentKind: String, Codable, Sendable, CaseIterable {
 
     public var title: String {
         switch self {
-        case .rescue: "Rescue inhaler"
-        case .maintenance: "Standard inhaler"
-        case .okay: "I'm okay"
+        case .rescue: "Rescue"
+        case .maintenance: "Standard"
+        case .okay: "Baseline"
         }
     }
 }

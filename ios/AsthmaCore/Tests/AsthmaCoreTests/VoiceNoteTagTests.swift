@@ -254,7 +254,7 @@ actor CallLog {
 }
 
 @Suite struct JournalTagBinTests {
-    /// 10 inhaler uses (8 with a reviewed note, 4 of those with smoke) and 30 usual moments
+    /// 10 inhaler uses (8 with a reviewed note, 4 of those with smoke) and 30 baseline moments
     /// (20 with a reviewed note, 2 with smoke). Outdoor values unknown so only hour and tags make rows.
     static func frames(reviewedBaselines: Int = 20) -> [FeatureFrame] {
         var out: [FeatureFrame] = []
@@ -345,8 +345,8 @@ actor CallLog {
         #expect(row.nAttacks == 8 && row.nBaselines == 20 && row.isSubset)
         #expect(input.rules.contains(Narrator.subsetRule))
         #expect(Narrator.template(input).headline ==
-            "4 of the 8 times you used your inhaler and added a note, you noted smoke. On usual days with a note, that only happened 2 of 20 times. Most of these logs are from summer.")
-        #expect(NarrationGuard.problems(headline: "You noted smoke 4 of 8 times; on usual days 2 of 20.", input: input).isEmpty)
+            "4 of the 8 times you used your inhaler and added a note, you noted smoke. On baseline days with a note, that only happened 2 of 20 times. Most of these logs are from summer.")
+        #expect(NarrationGuard.problems(headline: "You noted smoke 4 of 8 times; on baseline days 2 of 20.", input: input).isEmpty)
     }
 
     @Test func v1RowsKeepTheTableTotals() {

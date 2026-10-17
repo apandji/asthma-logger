@@ -4,7 +4,7 @@ import SwiftData
 import SwiftUI
 
 /// How one outdoor factor changed over the days around a moment, from every captured moment
-/// (rescue, standard and I'm okay). Only captured readings are plotted; the line joins them and
+/// (rescue, standard and baseline). Only captured readings are plotted; the line joins them and
 /// isn't continuous measurement. The selected moment is marked.
 struct MomentTrendChart: View {
     let event: LogEvent
@@ -48,7 +48,7 @@ struct MomentTrendChart: View {
                 legend(Theme.standard, "Standard")
                 HStack(spacing: 4) {
                     Circle().strokeBorder(Theme.secondaryText, lineWidth: 1.5).frame(width: 8, height: 8)
-                    Text("I'm okay")
+                    Text("Baseline")
                 }
             }
             .font(.caption).foregroundStyle(Theme.secondaryText)

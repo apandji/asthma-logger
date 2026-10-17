@@ -160,7 +160,7 @@ final class LogService {
         defer { isSampling = false }
         var recent = FetchDescriptor<LogEvent>(sortBy: [SortDescriptor(\.loggedAt, order: .reverse)])
         recent.fetchLimit = 200
-        // Demo moments don't count: a demo week must neither hold back nor start real I'm okay samples.
+        // Demo moments don't count: a demo week must neither hold back nor start real baseline samples.
         guard let events = try? context.fetch(recent).filter({ !$0.isDemo }), !events.isEmpty else { return }
         let now = Date()
         let lastBaseline = events.first { $0.moment == .okay }?.loggedAt

@@ -10,11 +10,11 @@ public enum OutlookCopy {
         return "\(timeRange) looks more like the times you used your inhaler: \(phrases.joined(separator: " and "))."
     }
 
-    /// One line per driver: "Evening: 4 of your 10 inhaler times, 0 of 24 usual days."
+    /// One line per driver: "Evening: 4 of your 10 inhaler times, 0 of 24 baseline days."
     /// Plus a note when the air-quality forecast was missing for these hours.
     public static func evidence(_ w: RiskWindow) -> [String] {
         var lines = w.drivers.map {
-            "\(capitalized(phrase($0.bin, $0.level))): \($0.attacksWith) of your \(w.nAttacks) inhaler times, \($0.baselinesWith) of \(w.nBaselines) usual days."
+            "\(capitalized(phrase($0.bin, $0.level))): \($0.attacksWith) of your \(w.nAttacks) inhaler times, \($0.baselinesWith) of \(w.nBaselines) baseline days."
         }
         if w.isPartial { lines.append("No air-quality forecast for these hours, so this is weather only.") }
         return lines

@@ -80,7 +80,7 @@ struct NowHomeView: View {
                 // the hour (rose dawn, blue day, amber dusk, indigo night), deepening to black at the bottom.
                 // The forecast is the same, quieter. The grain runs over all of it.
                 ZStack {
-                    LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), .black],
+                    LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), pageBottom],
                                    startPoint: .top, endPoint: .bottom)
                     SkyGrain(responds: false).opacity(0.5)
                 }
@@ -241,8 +241,26 @@ struct NowHomeView: View {
         return (c, c.map { WeaveSpec($0.input) } ?? here?.weave ?? WeaveSpec(), pollen)
     }
 
-    /// The top of the page's colour for what the playhead is on.
+    /// A day that matches your flare days warms the bottom of the page, faintly.
+    private var pageBottom: Color {
+        let t: Date = switch focus {
+        case .now: now
+        case .moment(let m): m.loggedAt
+        case .hour(let h): h.date
+        }
+        return outlook(at: t).tint == Self.red ? Self.red.mix(with: .black, by: 0.72) : .black
+    }
+
+    /// The top of the page's colour for what the playhead is on. An air event takes the page over:
+    /// slate for a storm, ochre for smoke, ice for a temperature drop.
     private var pageTop: Color {
+        if case .now = focus, let e = liveEvent {
+            switch e {
+            case .storm: return Color(red: 0.2, green: 0.25, blue: 0.33)
+            case .smoke: return Color(red: 0.55, green: 0.37, blue: 0.18)
+            case .tempDrop: return Color(red: 0.42, green: 0.6, blue: 0.85)
+            }
+        }
         let (t, d): (Double?, Date) = switch focus {
         case .now: (liveAir.conditions?.best(.temperature)?.value, now)
         case .moment(let m): (m.conditions?.best(.temperature)?.value, m.loggedAt)

@@ -75,7 +75,36 @@ struct InsightsView: View {
     }
 
     private var paperBackground: some View {
-        ZStack { Theme.paper(paper); SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
+        ZStack {
+            Theme.paper(paper)
+            FactorBloom(colors: factorColors).opacity(0.85)
+            // A dark wash keeps the text readable over the colour.
+            LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.55), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
+            SkyGrain(responds: false).opacity(0.5)
+        }
+        .ignoresSafeArea()
+    }
+
+    /// The inks of what shows up most on your flare days, strongest first: the page is drawn from you.
+    /// Before felt air has learned, a quiet blend of the weather's blues.
+    private var factorColors: [Color] {
+        if demoLearned { return [WeatherColor.pollen[2], WeatherColor.pollen[1], WeatherColor.ozone] }
+        let rows = (model.report?.gatedRows ?? []).sorted { $0.lift > $1.lift }
+        let inks = rows.compactMap { r -> Color? in
+            switch r.bin {
+            case "pm25": WeatherColor.pm25
+            case "ozone": WeatherColor.ozone
+            case "pollen_weed": WeatherColor.pollen[2]
+            case "temp": WeatherColor.temperature(r.level == "hot" ? 88 : r.level == "cold" ? 30 : 62)
+            case "humidity": Color(red: 0.45, green: 0.6, blue: 0.95)
+            case "smoke_at_point": Color(red: 0.6, green: 0.42, blue: 0.25)
+            default: nil
+            }
+        }
+        var unique: [Color] = []
+        for c in inks where !unique.contains(c) { unique.append(c) }
+        return unique.isEmpty ? [Color(red: 0.25, green: 0.35, blue: 0.6), Color(red: 0.2, green: 0.45, blue: 0.55), Color(red: 0.35, green: 0.3, blue: 0.55)]
+                              : Array(unique.prefix(3))
     }
 
     // MARK: Hero
@@ -406,5 +435,31 @@ struct LearningRing: View {
             }
             .font(Theme.caption).foregroundStyle(Theme.secondaryText)
         }
+    }
+}
+
+/// Soft blobs of colour that drift slowly, like Apple Card's: a 3×3 mesh whose inner points wander. The
+/// first colour gets the most room.
+struct FactorBloom: View {
+    let colors: [Color]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { frame in
+            let t = reduceMotion ? 0 : frame.date.timeIntervalSinceReferenceDate
+            let a = colors.first ?? .blue, b = colors.count > 1 ? colors[1] : a, c = colors.count > 2 ? colors[2] : b
+            let w = { (p: Double, s: Double) in Float(0.5 + 0.18 * sin(t * s + p)) }
+            MeshGradient(width: 3, height: 3, points: [
+                [0, 0], [0.5, 0], [1, 0],
+                [0, w(0, 0.21)], [w(1, 0.17), w(2, 0.13)], [1, w(3, 0.19)],
+                [0, 1], [0.5, 1], [1, 1],
+            ], colors: [
+                a, a, b,
+                b, a, c,
+                c, b, a,
+            ])
+            .blur(radius: 30)
+        }
+        .accessibilityHidden(true)
     }
 }

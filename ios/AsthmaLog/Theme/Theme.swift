@@ -48,16 +48,20 @@ enum Theme {
     static let padding: CGFloat = 16
     static let spacing: CGFloat = 12
 
-    // MARK: Type. One serif voice (New York) for the sentence, SF for everything else.
+    // MARK: Type. One Recursive voice for the sentence (Theme/Recursive.swift), SF for everything else.
+    // The "serif" names stayed when New York was swapped out; they mean "the sentence's voice".
     /// The small line above a title: type, time, place. Set as tracked small caps, like a dateline.
     static let kicker = Font.system(size: 12, weight: .semibold, design: .default)
     static let kickerTracking: CGFloat = 1.1
-    /// The sentence. New York, regular weight (medium reads machine-set), a size up, tracked tight.
-    static let serifTitle = Font.system(size: 28, weight: .regular, design: .serif)
-    static let serifTitleLarge = Font.system(size: 32, weight: .regular, design: .serif)
-    static let serifKerning: CGFloat = -0.6
-    /// Numbers that change in place (counts, times).
-    static let figures = Font.system(size: 22, weight: .regular, design: .serif)
+    /// The sentence. Recursive, regular weight, a size up, tracked a touch tight. How casual it looks follows
+    /// Settings › Insight voice, so these are read fresh each time.
+    static var serifTitle: Font { Recursive.sentence(size: 28) }
+    static var serifTitleLarge: Font { Recursive.sentence(size: 32) }
+    static let serifKerning: CGFloat = -0.4
+    /// Numbers that change in place (counts, times): Recursive Mono, always linear.
+    static var figures: Font { Recursive.figures(size: 22) }
+    /// A verdict byline under the sentence, in the same voice.
+    static var bylineSerif: Font { Recursive.sentence(size: 17) }
 
     // MARK: Motion. Three springs, used everywhere, so the whole app moves with one hand.
     /// Small things settling: pills, chips, dots. Quick, a hint of bounce.
@@ -69,8 +73,8 @@ enum Theme {
 
     /// One family for everything but the sentence: SF, as on the home. (Rounded is retired.)
     static let headline = Font.headline
-    /// The sentence on a detail page: New York, regular, like the home's but a size down.
-    static let headlineSerif = Font.system(size: 22, weight: .regular, design: .serif)
+    /// The sentence on a detail page: Recursive, like the home's but a size down.
+    static var headlineSerif: Font { Recursive.sentence(size: 22) }
     static let body = Font.body
     static let caption = Font.caption
     static let number = Font.body.monospacedDigit()

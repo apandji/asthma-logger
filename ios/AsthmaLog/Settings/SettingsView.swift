@@ -61,10 +61,14 @@ struct SettingsView: View {
                         Text("Poetic").font(Theme.caption)
                     }
                     LabeledContent("Current", value: NarratorStyle(score: styleScore).label)
+                    // A sample in the sentence's type, which follows this slider: linear when clinical, casual when poetic.
+                    Text("Ozone was high on 8 of the 14 times you used your inhaler.")
+                        .font(Recursive.sentence(size: 22, voice: NarratorStyle(score: styleScore)))
+                        .kerning(Theme.serifKerning)
                 } header: {
                     Text("Insight voice")
                 } footer: {
-                    Text("How the on-device model words your pattern. The numbers never change. Without Apple Intelligence you get a plain template sentence.")
+                    Text("How the on-device model words your pattern, and how casual the headline type looks. The numbers never change. Without Apple Intelligence you get a plain template sentence.")
                 }
 
                 Section("On-device model") {

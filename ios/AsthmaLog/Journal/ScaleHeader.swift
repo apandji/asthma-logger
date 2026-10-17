@@ -16,10 +16,12 @@ struct ScaleHeader<Kicker: View>: View {
     var onByline: (() -> Void)? = nil
     /// A step smaller, for two-sentence titles that have to fit two lines.
     var compact = false
-    /// Not yet: the forecast's sentence is set in italic.
+    /// Not yet: the forecast's sentence is set slanted (Recursive's slant axis).
     var italic = false
     @ViewBuilder let kicker: Kicker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Read so the sentence redraws when the voice (and so the type) changes in Settings.
+    @AppStorage(Prefs.narratorStyle) private var styleScore = NarratorStyle.defaultScore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -29,11 +31,10 @@ struct ScaleHeader<Kicker: View>: View {
                 .lineLimit(1).truncationMode(.middle)  // fixed size: a long place name clips, the type never shrinks
                 .contentTransition(.opacity)
             let hasByline = byline != nil || reserveByline
-            // The sentence: New York, a touch tight, and it blurs between readings instead of cutting.
+            // The sentence: Recursive in the chosen voice, a touch tight, and it blurs between readings instead of cutting.
             ZStack(alignment: .topLeading) {
                 Text(title)
-                    .font(compact ? Theme.serifTitle : Theme.serifTitleLarge)
-                    .italic(italic)
+                    .font(Recursive.sentence(size: compact ? 28 : 32, slanted: italic, voice: NarratorStyle(score: styleScore)))
                     .kerning(Theme.serifKerning)
                     // Two lines, always: the byline sits in the same place whatever the title says.
                     .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)
@@ -52,7 +53,7 @@ struct ScaleHeader<Kicker: View>: View {
                         Text(byline ?? " ").lineLimit(2).multilineTextAlignment(.leading)
                         if onByline != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.7) }
                     }
-                    .font(bylineTint == nil ? .subheadline : .system(size: 17, design: .serif))
+                    .font(bylineTint == nil ? .subheadline : Theme.bylineSerif)
                     .foregroundStyle(tint)
                     .padding(.horizontal, onByline == nil ? 0 : 13).padding(.vertical, onByline == nil ? 0 : 8)
                     .background { if onByline != nil { Capsule().fill(tint.opacity(bylineTint == nil ? 0.1 : 0.16)) } }

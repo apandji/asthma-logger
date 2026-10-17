@@ -246,7 +246,8 @@ struct NowHomeView: View {
         case let p?: ("magnifyingglass", Self.clean(p.name))
         }
         return HStack(spacing: 8) {
-            Text("Forecast for").foregroundStyle(Theme.secondaryText)
+            // The label keeps its width; the field gives way and truncates.
+            Text("Forecast for").foregroundStyle(Theme.secondaryText).lineLimit(1).fixedSize()
             Button { showPlaces = true } label: {
                 HStack(spacing: 6) {
                     Image(systemName: icon).font(.caption)
@@ -259,7 +260,6 @@ struct NowHomeView: View {
                 .background(Capsule().fill(Theme.secondaryText.opacity(0.14)))
             }
             .buttonStyle(PressStyle())
-            .layoutPriority(1)
             .accessibilityLabel("Forecast for \(name). Change place")
         }
         .font(.subheadline.weight(.medium))

@@ -1,5 +1,6 @@
 import AsthmaCore
 import SwiftUI
+import UIKit
 
 /// Every color, font and spacing token. Views never hard-code styling.
 /// Spec: docs/design/visual-style.md (Apple-native, light and dark, ink only for data).
@@ -123,7 +124,9 @@ enum Theme {
             case .recursive:
                 return Recursive.sentence(size: size, slanted: slanted, voice: voice)
             case .funnelSans:
-                return FunnelSans.font(size: size, weight: .regular)
+                // Nested helpers — a top-level `FunnelSans` type collided with case `funnelSans`
+                // in name lookup ("Cannot find 'FunnelSans' in scope").
+                return Funnel.font(size: size)
             }
         }
 
@@ -134,8 +137,26 @@ enum Theme {
             case .recursive:
                 return Recursive.figures(size: size)
             case .funnelSans:
-                return FunnelSans.font(size: size, weight: .regular)
+                return Funnel.font(size: size)
             }
+        }
+    }
+
+    /// Bundled Funnel Sans (OFL; files in Theme/Fonts/). Statement face only — not UI chrome.
+    /// Nested under Theme so it does not clash with `Typeface.funnelSans`.
+    enum Funnel {
+        static func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+            let name: String
+            switch weight {
+            case .medium: name = "FunnelSans-Medium"
+            case .semibold: name = "FunnelSans-SemiBold"
+            case .bold, .heavy, .black: name = "FunnelSans-Bold"
+            default: name = "FunnelSans-Regular"
+            }
+            if UIFont(name: name, size: size) != nil {
+                return .custom(name, size: size)
+            }
+            return .system(size: size, weight: weight, design: .default)
         }
     }
 }

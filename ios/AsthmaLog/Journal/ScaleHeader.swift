@@ -32,11 +32,12 @@ struct ScaleHeader<Kicker: View>: View {
                 .lineLimit(1).truncationMode(.middle)  // fixed size: a long place name clips, the type never shrinks
                 .contentTransition(.opacity)
             let hasByline = byline != nil || reserveByline
-            // The sentence: Recursive in the chosen voice, a touch tight, and it blurs between readings instead of cutting.
+            // The sentence: Settings › Type face, a touch tight; blurs between readings instead of cutting.
             ZStack(alignment: .topLeading) {
                 Text(title)
                     .font(Theme.Typeface.sentence(size: compact ? 26 : 30, slanted: italic, voice: NarratorStyle(score: styleScore)))
                     .kerning(Theme.serifKerning)
+                    .animation(nil, value: statementTypeface)
                     // Two lines, always: the byline sits in the same place whatever the title says.
                     .lineLimit(reserveTwoLines ? 2 : 1, reservesSpace: reserveTwoLines)
                     .lineSpacing(-1)

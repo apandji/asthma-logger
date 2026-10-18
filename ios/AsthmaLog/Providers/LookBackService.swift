@@ -19,9 +19,10 @@ enum LookBackService {
                                 pm25Station: a.pm25.station, ozoneStation: a.ozone.station)
     }
 
-    private typealias Series = (values: [HourValue], station: String?)
+    typealias Series = (values: [HourValue], station: String?)
 
-    private static func airHours(_ lat: Double, _ lon: Double, _ from: Date, _ to: Date) async -> (pm25: Series, ozone: Series) {
+    /// The nearest stations' hourly PM2.5 and ozone between two dates (also used by the baseline backfill).
+    static func airHours(_ lat: Double, _ lon: Double, _ from: Date, _ to: Date) async -> (pm25: Series, ozone: Series) {
         guard let key = Secrets.openAQ else { return (([], nil), ([], nil)) }
         let provider = OpenAQProvider(key: key)
         guard let near = try? await provider.search(lat, lon, monitor: true) else { return (([], nil), ([], nil)) }

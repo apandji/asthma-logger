@@ -54,6 +54,7 @@ enum DataSets {
         var tagsReviewed: Bool
         var voiceNoteFile: String?
         var placeName: String?
+        var isBackfilled: Bool?
 
         init(_ e: LogEvent) {
             id = e.id; kindRaw = e.kindRaw; loggedAt = e.loggedAt; latitude = e.latitude; longitude = e.longitude
@@ -61,6 +62,7 @@ enum DataSets {
             conditionsData = e.conditionsData; indoorGuessRaw = e.indoorGuessRaw; indoorConfirmedRaw = e.indoorConfirmedRaw
             tagsRaw = e.tagsRaw; note = e.note; isDemoMoment = e.isDemoMoment; isFirstCapture = e.isFirstCapture
             voiceTranscript = e.voiceTranscript; tagsReviewed = e.tagsReviewed; voiceNoteFile = e.voiceNoteFile; placeName = e.placeName
+            isBackfilled = e.isBackfilled
         }
 
         var event: LogEvent {
@@ -70,6 +72,7 @@ enum DataSets {
             e.indoorGuessRaw = indoorGuessRaw; e.indoorConfirmedRaw = indoorConfirmedRaw; e.tagsRaw = tagsRaw
             e.note = note; e.isDemoMoment = isDemoMoment; e.isFirstCapture = isFirstCapture
             e.voiceTranscript = voiceTranscript; e.tagsReviewed = tagsReviewed; e.voiceNoteFile = voiceNoteFile; e.placeName = placeName
+            e.isBackfilled = isBackfilled ?? false
             return e
         }
     }
@@ -110,6 +113,7 @@ enum DataSets {
         try? context.save()
         UserDefaults.standard.set(set.profileHistory, forKey: "profileHistory")
         active = set.name == ownData ? nil : set.name
+        BaselineFiller.reset()
     }
 
     static func load(_ preset: DataSetPreset, context: ModelContext) {

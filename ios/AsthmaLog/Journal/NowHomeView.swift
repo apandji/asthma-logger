@@ -31,7 +31,10 @@ struct NowHomeView: View {
     @State private var here: NowReading?
     /// The forecast's place when you've picked one (Home, Work, an address); nil means here.
     @State private var away: NowReading?
-    @State private var hours: [NowHour] = []
+    @State private var hours: [NowHour] = [] {
+        // Only for where you are, not a forecast place you picked.
+        didSet { if !hours.isEmpty, chosen == nil { scheduleMorningBrief() } }
+    }
     @State private var model = InsightsModel()
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
@@ -614,15 +617,32 @@ struct NowHomeView: View {
         return Self.isMold(h.conditions) ? .mold : nil
     }
 
-    private func aheadRead(_ h: NowHour) -> String {
+    /// `label` names the time ("Thursday afternoon"); the morning brief says "This afternoon" instead.
+    private func aheadRead(_ h: NowHour, label: String? = nil) -> String {
         let tint = outlook(at: h.date).tint
-        return TheRead.sentence(time: .ahead(Self.when(h.date)), learned: isLearned, event: aheadEvent(h)?.advice,
+        return TheRead.sentence(time: .ahead(label ?? Self.when(h.date)), learned: isLearned, event: aheadEvent(h)?.advice,
                                 fallF: h.conditions.tempFallF, shared: shared(h.conditions, at: h.date),
                                 notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true).map(\.clause),
                                 looksLikeFlare: tint == Self.red || tint == Self.yellow)
     }
 
     private var atHome: Bool { Self.knownPlace(here?.lat, here?.lon)?.name == "Home" }
+
+    /// Tomorrow's look-ahead for the 8 am notification: the waking hour that looks most like your flare days,
+    /// worded for that morning ("This afternoon…").
+    private func scheduleMorningBrief() {
+        let cal = Calendar.current
+        let tomorrow = hours.filter { cal.isDateInTomorrow($0.date) && (7...22).contains(cal.component(.hour, from: $0.date)) }
+        guard let pick = tomorrow.max(by: { (verdictStrength(outlook(at: $0.date).tint) ?? 0) < (verdictStrength(outlook(at: $1.date).tint) ?? 0) }) else {
+            MorningBrief.schedule(title: nil, body: nil)
+            return
+        }
+        let h = cal.component(.hour, from: pick.date)
+        let part = h < 12 ? "This morning" : h < 17 ? "This afternoon" : "This evening"
+        let verdict = outlook(at: pick.date).text
+        let title = isLearned ? "Today: \(verdict.prefix(1).lowercased() + verdict.dropFirst())" : "Today's air"
+        MorningBrief.schedule(title: title, body: aheadRead(pick, label: part))
+    }
 
     /// Ahead, the advice follows the forecast's place, not where you are.
     private var forecastAtHome: Bool {

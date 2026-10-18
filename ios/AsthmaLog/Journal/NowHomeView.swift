@@ -48,6 +48,8 @@ struct NowHomeView: View {
     @State private var skyPress: CGFloat = 0
     /// The clock. Ticks so "now" creeps along the track while you watch.
     @State private var now = Date()
+    /// Active wildfires near here, while smoke is the event (Ambee, demo until the key arrives).
+    @State private var fires: WildfiresNearby?
     @Namespace private var mapZoom
     @State private var tips = TipGroup(.ordered) { PullToLogTip() }
 
@@ -176,6 +178,11 @@ struct NowHomeView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .task { await load() }
+            // Re-runs when the location arrives, not only when the event changes.
+            .task(id: "\(liveEvent == .smoke)-\(here?.lat ?? 0)") {
+                guard liveEvent == .smoke, let p = here else { fires = nil; return }
+                fires = await AmbeeClient.wildfires(latitude: p.lat, longitude: p.lon)
+            }
             // Every moment's map, newest first, drawn ahead of time: scrubbing never finds a blank.
             .task(id: moments.count) {
                 for m in moments.reversed() {
@@ -365,10 +372,7 @@ struct NowHomeView: View {
                     VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place)),
                                   title: TheRead.justLogged(j.moment.title), verdict: nil, tint: nil)
                 } else {
-                    VerdictHeader(place: AnyView(HStack(spacing: 8) {
-                                      placeLabel(here?.lat, here?.lon, here?.place, current: true)
-                                      if let e = liveEvent { EventChip(event: e) }
-                                  }),
+                    VerdictHeader(place: AnyView(placeLabel(here?.lat, here?.lon, here?.place, current: true)),
                                   title: here == nil ? "Checking the air near you…" : nowRead,
                                   verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
                 }
@@ -418,8 +422,7 @@ struct NowHomeView: View {
         case let p?: ("location", Self.clean(p.name))
         }
         return HStack(spacing: 8) {
-            // The label keeps its width; the field gives way and truncates.
-            Text("Forecast for").foregroundStyle(Theme.secondaryText).lineLimit(1).fixedSize()
+            // No "Forecast for": the read names the time, and the verdict sits beside this on the context line.
             Button { showPlaces = true } label: {
                 HStack(spacing: 6) {
                     Image(systemName: icon).font(.caption)
@@ -601,7 +604,7 @@ struct NowHomeView: View {
     private var nowRead: String {
         let air = liveAir
         return TheRead.sentence(time: .now, learned: isLearned, event: liveEvent?.advice, fallF: air.conditions?.tempFallF,
-                                shared: shared(air.conditions, at: now),
+                                fires: fires, shared: shared(air.conditions, at: now),
                                 notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false).map(\.clause))
     }
 
@@ -1345,9 +1348,11 @@ struct VerdictHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // The context line: tag, place, and the verdict (the place gives way first).
             HStack(spacing: 8) {
                 if let tag { MomentTag(moment: tag) }
-                place
+                place.layoutPriority(0)
+                if verdict != nil { verdictPill.layoutPriority(1) }
             }
             .frame(minHeight: 30, alignment: .leading)
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
@@ -1357,39 +1362,38 @@ struct VerdictHeader: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(settled ? .easeInOut(duration: 0.22) : nil, value: title)
-            let ink = tint ?? Theme.secondaryText
-            Button { onVerdict?() } label: {
-                HStack(spacing: 7) {
-                    Circle().fill(ink).frame(width: 7, height: 7)
-                    Text(verdict ?? " ").lineLimit(1)
-                        .contentTransition(.opacity)
-                        .animation(settled ? .easeInOut(duration: 0.22) : nil, value: verdict)
-                    if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .background(Capsule().fill(ink.opacity(0.16)))
-            }
-            .buttonStyle(PressStyle())
-            .disabled(onVerdict == nil)
-            .opacity(verdict == nil ? 0 : 1)
-            .contentTransition(.opacity)
-            .overlay(alignment: .leading) {
-                if verdict == nil, let when {
-                    // Sized to its own text, not the hidden pill's (which is one space wide).
-                    Label(when, systemImage: "clock")
-                        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .transition(.opacity)
-                }
+            if let when {
+                Label(when, systemImage: "clock")
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.top, 6)
         .animation(settled ? .easeInOut(duration: 0.22) : nil, value: tint)
+    }
+}
+
+extension VerdictHeader {
+    /// How this time compares with your days, as a pill; tap for Insights.
+    var verdictPill: some View {
+        let ink = tint ?? Theme.secondaryText
+        return Button { onVerdict?() } label: {
+            HStack(spacing: 6) {
+                Circle().fill(ink).frame(width: 7, height: 7)
+                Text(verdict ?? " ").lineLimit(1).fixedSize()
+                    .contentTransition(.opacity)
+                    .animation(settled ? .easeInOut(duration: 0.22) : nil, value: verdict)
+                if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Capsule().fill(ink.opacity(0.16)))
+        }
+        .buttonStyle(PressStyle())
+        .disabled(onVerdict == nil)
     }
 }
 

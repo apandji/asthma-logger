@@ -11,10 +11,14 @@ public enum TheRead {
         case back
     }
 
-    /// Gated rows whose level this frame has, biggest flare-vs-baseline gap first.
+    /// About you, not the air: when and where you used your inhaler. These belong in Insights ("You used your
+    /// inhaler most in the evening"), never in the read on Now or Ahead.
+    public static let personalBins: Set<String> = ["hour", "season", "place", "indoor_outdoor"]
+
+    /// Gated rows about the air whose level this frame has, biggest flare-vs-baseline gap first.
     public static func shared(_ frame: FeatureFrame, rows: [LiftRow]) -> [LiftRow] {
         Bins.all.compactMap { def -> LiftRow? in
-            guard let level = def.levelOf(frame) else { return nil }
+            guard !personalBins.contains(def.bin), let level = def.levelOf(frame) else { return nil }
             return rows.first { $0.bin == def.bin && $0.level == level && $0.gated && $0.attackRate > $0.baselineRate }
         }
         .sorted { ($0.attackRate - $0.baselineRate) > ($1.attackRate - $1.baselineRate) }
@@ -44,19 +48,30 @@ public enum TheRead {
         }
     }
 
-    /// "High weed pollen came up at 9 of your 14 rescue moments."
+    /// "High weed pollen came up at 9 of your 14 rescue moments." When and where read as moments:
+    /// "4 of your 10 rescue moments were in the evening."
     public static func counted(_ r: LiftRow) -> String {
-        "\(noun(r.bin, r.level)) came up at \(r.attacksWith) of your \(r.nAttacks) rescue moments."
+        let n = "\(r.attacksWith) of your \(r.nAttacks) rescue moments"
+        switch r.bin {
+        case "hour": return "\(n) were in the \(r.level)."
+        case "season": return "\(n) were in \(r.level)."
+        case "indoor_outdoor": return "\(n) were \(r.level == "indoor" ? "indoors" : "outdoors")."
+        case "place": return "\(n) were at \(r.level)."
+        default: return "\(noun(r.bin, r.level)) came up at \(n)."
+        }
     }
 
     /// The event as a fact, in the time's tense, without the temperature lead.
-    public static func eventFact(_ e: AirAdvice.Event, time: Time, fallF: Double?) -> String {
+    /// `fires`: active wildfires nearby (Ambee), for the smoke line from the board: "There are two active
+    /// wildfires 50 miles north. Heavy smoke is drifting into your area."
+    public static func eventFact(_ e: AirAdvice.Event, time: Time, fallF: Double?, fires: WildfiresNearby? = nil) -> String {
         let drop = fallF.map { "\(Int($0.rounded()))°" }
         switch (e, time) {
         case (.tempDrop, .ahead(let when)): return "\(when): a sharp temperature drop on the way."
         case (.tempDrop, _): return drop.map { "A sharp cold drop: \($0) in three hours." } ?? "A sharp cold drop."
         case (.smoke, .ahead(let when)): return "\(when): wildfire smoke in the forecast."
-        case (.smoke, _): return "Wildfire smoke is in the air."
+        case (.smoke, .back): return "Wildfire smoke was in the air."
+        case (.smoke, _): return [fires?.sentence, "Heavy smoke is drifting into your area."].compactMap { $0 }.joined(separator: " ")
         case (.stormPollen, .ahead(let when)): return "\(when): a thunderstorm while pollen is high."
         case (.stormPollen, _): return "A thunderstorm while pollen is high."
         case (.mold, .ahead(let when)): return "\(when): rainy, humid and warm."
@@ -68,10 +83,10 @@ public enum TheRead {
     /// - `shared`: from `shared(_:rows:)` (empty before felt air has learned).
     /// - `notable`: what's at a high level, as present-tense clauses ("weed pollen is high"), for before it has learned.
     /// - `verdict`: Ahead only, the look-ahead's call (looks like flare days, or not).
-    public static func sentence(time: Time, learned: Bool, event: AirAdvice.Event?, fallF: Double?,
+    public static func sentence(time: Time, learned: Bool, event: AirAdvice.Event?, fallF: Double?, fires: WildfiresNearby? = nil,
                                 shared: [LiftRow], notable: [String], looksLikeFlare: Bool = false) -> String {
         var parts: [String] = []
-        if let event { parts.append(eventFact(event, time: time, fallF: fallF)) }
+        if let event { parts.append(eventFact(event, time: time, fallF: fallF, fires: fires)) }
         switch time {
         case .back:
             break
@@ -96,6 +111,22 @@ public enum TheRead {
             }
         }
         return parts.joined(separator: " ")
+    }
+
+    /// For Insights: "You used your inhaler most in the evening: 4 of your 10 rescue moments." Gated rows only.
+    public static func personal(_ rows: [LiftRow]) -> [String] {
+        rows.filter { $0.gated && personalBins.contains($0.bin) && $0.attackRate > $0.baselineRate }
+            .sorted { ($0.attackRate - $0.baselineRate) > ($1.attackRate - $1.baselineRate) }
+            .map { r in
+                let n = "\(r.attacksWith) of your \(r.nAttacks) rescue moments"
+                let when: String = switch r.bin {
+                case "hour": "in the \(r.level)"
+                case "season": "in \(r.level)"
+                case "indoor_outdoor": r.level == "indoor" ? "indoors" : "outdoors"
+                default: "at \(r.level)"
+                }
+                return "You used your inhaler most \(when): \(n)."
+            }
     }
 
     /// A Standard moment: it's routine, and it isn't part of the comparison.

@@ -42,3 +42,33 @@ import Testing
         #expect(lines.allSatisfy { !$0.contains("%") && !$0.contains(";") })
     }
 }
+
+@Suite struct WildfireTests {
+    @Test func demoFiresReadLikeTheBoard() throws {
+        let lat = 38.6, lon = -90.25
+        let w = try #require(WildfiresNearby(fires: DemoAmbee().fires(latitude: lat, longitude: lon), latitude: lat, longitude: lon))
+        #expect(w.count == 2)
+        #expect(w.direction == "north")
+        #expect(w.sentence == "There are two active wildfires 50 miles north.")
+        #expect(TheRead.eventFact(.smoke, time: .now, fallF: nil, fires: w)
+                == "There are two active wildfires 50 miles north. Heavy smoke is drifting into your area.")
+    }
+
+    @Test func farFiresDontCount() {
+        let far = [Ambee.FireResponse.Fire(lat: 45, lng: -100)]
+        #expect(WildfiresNearby(fires: far, latitude: 38.6, longitude: -90.25) == nil)
+    }
+
+    @Test func timeOfDayReadsAsMoments() {
+        let r = LiftRow(bin: "hour", level: "evening", attacksWith: 4, baselinesWith: 2, nAttacks: 10, nBaselines: 30,
+                        attackRate: 0.4, baselineRate: 0.07, lift: 6, gated: true)
+        #expect(TheRead.personal([r]) == ["You used your inhaler most in the evening: 4 of your 10 rescue moments."])
+    }
+
+    @Test func theReadLeavesWhenAndWhereToInsights() {
+        let r = LiftRow(bin: "hour", level: "evening", attacksWith: 4, baselinesWith: 2, nAttacks: 10, nBaselines: 30,
+                        attackRate: 0.4, baselineRate: 0.07, lift: 6, gated: true)
+        let frame = FrameBuilder.frame(id: "x", kind: .baseline, hourOfDay: 20, month: 10, conditions: ConditionsInput())
+        #expect(TheRead.shared(frame, rows: [r]).isEmpty)
+    }
+}

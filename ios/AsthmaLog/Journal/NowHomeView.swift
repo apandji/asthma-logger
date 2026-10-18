@@ -1219,6 +1219,8 @@ struct NowSky: View {
     @State private var pulse: Task<Void, Never>?
     /// The thumb's height on the rail while it's held: the stop under it grows, its neighbours ease away.
     @State private var railFinger: CGFloat?
+    /// Holding on Voice: the short wait before recording starts (cancelled by sliding off).
+    @State private var holdToRecord: Task<Void, Never>?
     /// When the rail opens, everything would slide to make room. This keeps the stop you pressed where it
     /// was (the rail grows around your thumb), clamped so the rail stays on the sky.
     @State private var railShift: CGFloat = 0
@@ -1446,20 +1448,7 @@ struct NowSky: View {
                     withAnimation(.smooth(duration: 0.3)) { expanded = true }
                 }
                 railFinger = drag.location.y
-                // How far the thumb has slid off the rail toward the sky (the rail column is 64 pt wide).
-                let inward = railLeft ? drag.location.x - 32 : 32 - drag.location.x
-                // On Voice, slide sideways into its panel to record; slide back out to cancel.
-                if row == .voice || voice.phase == .recording {
-                    if voice.phase == .idle && inward > 72 {
-                        stopPulse()
-                        Task { await voice.start() }
-                        return
-                    }
-                    if voice.phase == .recording {
-                        if inward < 28 { voice.cancel(); UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-                        return   // recording: the rail holds still on Voice
-                    }
-                }
+                if voice.phase == .recording { return }   // recording: the rail holds still on Voice
                 let rows = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
                 let mids = RailRow.ys(rows, in: size.height).map { $0 + railShift }
                 // Slid off the bottom (past Body): nothing is read, and letting go puts the rail back as it was.
@@ -1473,10 +1462,23 @@ struct NowSky: View {
                 if let cur = row.flatMap({ rows.firstIndex(of: $0) }), cur != nearest,
                    abs(mids[nearest] - drag.location.y) > abs(mids[cur] - drag.location.y) - 10 { return }
                 if rows[nearest] != row { select(rows[nearest]) }
+                // Voice: keep holding on it and it records (the panel beside the thumb becomes the recording
+                // surface); slide away before it starts and nothing happens. Recording, the rail holds still:
+                // lift to stop and review.
+                if row == .voice, voice.phase == .idle, holdToRecord == nil {
+                    holdToRecord = Task {
+                        try? await Task.sleep(for: .milliseconds(450))
+                        guard !Task.isCancelled, row == .voice, probing else { return }
+                        stopPulse()
+                        await voice.start()
+                    }
+                }
+                if row != .voice { holdToRecord?.cancel(); holdToRecord = nil }
             }
             .onEnded { _ in
                 stopPulse()
                 railFinger = nil
+                holdToRecord?.cancel(); holdToRecord = nil
                 // Lift while recording: stop, write it down, review.
                 if voice.phase == .recording { Task { await voice.finish() } }
                 // Voice and Body stay open where you let go, the rail with them; the air's close.

@@ -49,3 +49,10 @@ Things noticed while building, not yet decided. Add as you go; move an item out 
   screen that aren't readings. They're list lengths, not stats, but worth a decision: keep, or "Your moments ›"
   alone. (Oct 18)
 - **"Not tracked yet" rows** could say *when*: "Pressure swings · later", "Tree pollen · with Ambee". (Oct 18)
+- **Symptom tags** (Oct 18): a second tag set (tight chest, wheeze, cough, short of breath, woke at night,
+  needed a second puff, felt better after), auto-selected from the live words, in their own colour. The lit
+  words in the transcript are where these would show first. Needs a `BinSpec` bump.
+- **The recorder per surface** (Oct 18): one session state machine (idle → listening → writing → review →
+  saved) rendered differently per surface: the rail panel (beside the thumb, prompts, lit words), the Lock
+  Screen card (one line + mic, chips after), a notification (tap to open the panel), Control Center / Action
+  button (starts listening, the Dynamic Island shows the words). To map out together.

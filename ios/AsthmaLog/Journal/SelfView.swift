@@ -9,6 +9,8 @@ import SwiftUI
 private struct RailPanel<Content: View>: View {
     let title: String
     let icon: String
+    /// Recording: the glass takes the inhaler's ink, so the panel reads as live, not a card.
+    var tint: Color? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -18,7 +20,13 @@ private struct RailPanel<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+        .glassEffect(tint.map { .regular.tint($0.opacity(0.22)) } ?? .regular, in: .rect(cornerRadius: 16))
+        .overlay {
+            if let tint {
+                RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(tint.opacity(0.7), lineWidth: 1.5)
+            }
+        }
+        .animation(Theme.smooth, value: tint != nil)
     }
 }
 
@@ -44,7 +52,9 @@ struct VoicePanel: View {
     let save: () -> Void
 
     var body: some View {
-        RailPanel(title: "Your voice", icon: Icons.voice) {
+        let ink = event?.moment == .rescue || event == nil ? Theme.rescueSoft : Theme.standardSoft
+        RailPanel(title: session.phase == .recording ? "Recording" : "Your voice", icon: Icons.voice,
+                  tint: session.phase == .recording ? ink : nil) {
             switch session.phase {
             case .idle: idle
             case .recording: recording
@@ -73,7 +83,7 @@ struct VoicePanel: View {
             }
             .buttonStyle(PressStyle())
         } else {
-            Label("Slide in to record", systemImage: "mic").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+            Label("Keep holding to record", systemImage: "mic").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.secondaryText)
         }
         if event == nil && !interactive {
             Text("Saved as a note, with the air right now.").font(.caption).foregroundStyle(Theme.secondaryText)
@@ -81,13 +91,22 @@ struct VoicePanel: View {
     }
 
     @ViewBuilder private var recording: some View {
-        VoiceGrain(level: Double(VoiceNotes.shared.level), listening: true,
-                   ink: event?.moment == .rescue || event == nil ? Theme.rescueSoft : Theme.standardSoft)
-            .frame(height: 96)
-        // Your words as you say them; the newest arrive at the end, older lines scroll off the top.
-        LiveWords(text: VoiceNotes.shared.liveWords)
+        let ink = event?.moment == .rescue || event == nil ? Theme.rescueSoft : Theme.standardSoft
+        VoiceGrain(level: Double(VoiceNotes.shared.level), listening: true, ink: ink)
+            .frame(height: 72)
+        // Your words as you say them, and the ones felt air is picking up lit in the inhaler's ink: this is
+        // data capture, not a voice memo. Older lines scroll off the top.
+        LiveWords(text: VoiceNotes.shared.liveWords, ink: ink)
+        // A past-tense prompt, rotating, so there's always something to answer; "keep going" once you've begun.
+        Text(VoiceNotes.shared.liveWords.isEmpty ? VoicePrompts.first(for: event) : VoicePrompts.next(after: VoiceNotes.shared.liveWords))
+            .font(.subheadline).foregroundStyle(Theme.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            .contentTransition(.opacity)
+            .animation(Theme.smooth, value: VoiceNotes.shared.liveWords.isEmpty)
         HStack {
-            Text(VoiceNotes.shared.liveWords.isEmpty ? "Listening…" : "Still listening").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+            Label(VoiceNotes.shared.liveWords.isEmpty ? "Listening" : "Still listening", systemImage: "waveform")
+                .font(.caption.weight(.semibold)).foregroundStyle(ink)
+                .symbolEffect(.variableColor.iterative, options: .repeating)
             Spacer()
             if let start = session.startedAt {
                 TimelineView(.periodic(from: .now, by: 1)) { tl in
@@ -104,7 +123,7 @@ struct VoicePanel: View {
             }
             .buttonStyle(PressStyle())
         } else {
-            Text("Lift to stop. Slide back out to cancel.").font(.caption).foregroundStyle(Theme.secondaryText)
+            Text("Lift to stop.").font(.caption).foregroundStyle(Theme.secondaryText)
         }
     }
 
@@ -148,6 +167,7 @@ struct VoicePanel: View {
 /// keeps its tail (head truncation) so you always see what you just said.
 struct LiveWords: View {
     let text: String
+    var ink: Color = Theme.rescueSoft
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -156,10 +176,17 @@ struct LiveWords: View {
             if words.isEmpty {
                 Text(" ").font(.subheadline)
             } else {
-                // One Text so it wraps as a paragraph; the last word is brighter.
-                let head = words.dropLast().joined(separator: " ")
-                (Text(head.isEmpty ? "" : head + " ").foregroundStyle(.primary.opacity(0.75))
-                 + Text(words.last ?? "").foregroundStyle(.primary))
+                // One Text so it wraps as a paragraph. Words that match a tag rule light up in the ink
+                // (not negated ones: "no smoke" stays plain); the newest word is brightest.
+                let lit = Self.litWords(in: text)
+                words.enumerated().reduce(Text(verbatim: "")) { acc, pair in
+                    let (i, w) = pair
+                    let clean = w.lowercased().trimmingCharacters(in: .punctuationCharacters)
+                    let piece: Text = lit.contains(clean)
+                        ? Text(w).foregroundStyle(ink).fontWeight(.semibold)
+                        : Text(w).foregroundStyle(.primary.opacity(i == words.count - 1 ? 1 : 0.75))
+                    return acc + piece + Text(i == words.count - 1 ? "" : " ")
+                }
                     .font(.subheadline)
                     .lineLimit(3)
                     .truncationMode(.head)
@@ -169,6 +196,39 @@ struct LiveWords: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
+    }
+
+    /// The words of every positive tag mention in the text (the keyword rules' phrases, split into words).
+    static func litWords(in text: String) -> Set<String> {
+        let scan = KeywordTagger.scan(text)
+        var out = Set<String>()
+        for m in scan.mentions where !m.negated {
+            for w in m.phrase.lowercased().split(separator: " ") { out.insert(String(w)) }
+        }
+        return out
+    }
+}
+
+/// What to answer, in the past tense (a note often comes hours after the moment). The first prompt rotates
+/// per note; after the first words, the one you haven't answered yet, then "keep going".
+enum VoicePrompts {
+    static let opening = ["What were you doing?", "Where were you?", "How did you feel?", "What was in the air?"]
+
+    static func first(for event: LogEvent?) -> String {
+        // Rotates with the moment, so the same person sees a different first question each time.
+        let i = Int((event?.loggedAt ?? .now).timeIntervalSince1970 / 60) % opening.count
+        return opening[i]
+    }
+
+    static func next(after words: String) -> String {
+        let w = words.lowercased()
+        let doing = ["was ", "were ", "went", "walk", "run", "ran", "clean", "cook", "sleep", "work", "play", "exercis", "gym", "stairs"].contains { w.contains($0) }
+        let feeling = ["felt", "feel", "tight", "wheez", "cough", "breath", "chest", "bad", "fine", "worse", "better", "panick"].contains { w.contains($0) }
+        let place = ["at ", "in ", "outside", "inside", "indoors", "outdoors", "home", "park", "car", "office", "school", "kitchen", "bed"].contains { w.contains($0) }
+        if !feeling { return "How did you feel?" }
+        if !doing { return "What were you doing?" }
+        if !place { return "Where were you?" }
+        return "Keep going…"
     }
 }
 

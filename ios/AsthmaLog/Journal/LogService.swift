@@ -74,7 +74,8 @@ final class LogService {
         if let count = try? context.fetchCount(existing), count > 0 { return }
         let moment: MomentKind = log.kind == .rescue ? .rescue : .maintenance
         let writeToHealth = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
-        await self.log(moment, at: log.at, id: log.id, in: context, writeToHealth: writeToHealth)
+        let e = await self.log(moment, at: log.at, id: log.id, in: context, writeToHealth: writeToHealth)
+        QuickRecordCenter.shared.notify(for: e)
     }
 
     /// A press on the felt button. `ButtonLink` has already dropped resends; the press time comes
@@ -82,9 +83,10 @@ final class LogService {
     func logFromButton(_ packet: ButtonPacket, receivedAt: Date, in context: ModelContext) async {
         let moment: MomentKind = packet.cap == .rescue ? .rescue : .maintenance
         let writeToHealth = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
-        await log(moment, at: packet.pressedAt(receivedAt: receivedAt),
-                  lateNote: "Pressed on your felt button while your iPhone was away, so there's no air reading.",
-                  in: context, writeToHealth: writeToHealth)
+        let e = await log(moment, at: packet.pressedAt(receivedAt: receivedAt),
+                          lateNote: "Pressed on your felt button while your iPhone was away, so there's no air reading.",
+                          in: context, writeToHealth: writeToHealth)
+        QuickRecordCenter.shared.notify(for: e)
     }
 
     /// Onboarding's first press (or tap): a baseline moment with its own label, air and place stamped.

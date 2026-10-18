@@ -38,6 +38,11 @@ final class LogEvent {
     var isDemoMoment: Bool = false
     /// Onboarding's first press: saved as a baseline moment with its own label. Never counts as rescue.
     var isFirstCapture: Bool = false
+    /// The voice note's words, transcribed on the phone. Editable; the audio is `voiceNoteFile`.
+    var voiceTranscript: String?
+    /// The person looked at this moment's tags (confirmed some, or confirmed none). Until then the tag bins
+    /// treat the moment as missing, not as "no" (docs/on-device-insights.md).
+    var tagsReviewed: Bool = false
     /// File name of this moment's voice note in Documents/VoiceNotes (audio stays on the phone).
     var voiceNoteFile: String?
     /// "University City, MO", looked up once from the coordinates.
@@ -99,7 +104,7 @@ final class LogEvent {
         guard !isDemo, moment.frameKind != nil, let c = conditions, c.input.hasAnyValue else { return nil }
         return FrameBuilder.frame(
             id: id.uuidString, kind: kind, date: loggedAt, calendar: calendar, conditions: c.input,
-            place: nil, indoorOutdoor: indoorOutdoor, tags: tags
+            place: nil, indoorOutdoor: indoorOutdoor, tags: tags, tagsReviewed: tagsReviewed
         )
     }
 }

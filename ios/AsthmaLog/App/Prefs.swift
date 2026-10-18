@@ -12,6 +12,8 @@ enum Prefs {
     static let logMethod = "logMethod"
     /// Two labelled Rescue / Standard buttons instead of the pull-up +.
     static let logButtons = "logButtons"
+    /// After a felt-button or watch press, a notification to add a note (Quick Record). On by default.
+    static let quickRecord = "quickRecord"
     /// Big-statement typeface: `system` (New York), `recursive` (default), or `funnelSans`.
     /// UI chrome stays SF. Legacy bool `useFunnelSans` is still read once for migration.
     static let statementTypeface = "statementTypeface"

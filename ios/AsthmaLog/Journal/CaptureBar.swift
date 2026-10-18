@@ -284,13 +284,18 @@ struct InsightsRingButton: View {
 struct LoggedToast: View {
     let event: LogEvent
     let undo: () -> Void
+    /// Quick Record from inside the app: add a voice note or tags to this moment.
+    var note: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
             MomentDot(moment: event.moment, size: 9)
             Text("\(event.moment == .rescue ? "Rescue" : "Standard") logged").font(.subheadline.weight(.semibold))
             Spacer()
-            Button("Undo", action: undo).font(.subheadline.weight(.semibold))
+            if let note {
+                Button(action: note) { Label("Note", systemImage: "mic.fill") }.font(.subheadline.weight(.semibold))
+            }
+            Button("Undo", action: undo).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.secondaryText)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
         .glassEffect(.regular, in: .capsule)

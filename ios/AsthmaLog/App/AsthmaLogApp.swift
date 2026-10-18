@@ -30,6 +30,7 @@ struct AsthmaLogApp: App {
                     if args.contains("-skipOnboarding") { UserDefaults.standard.set(true, forKey: Prefs.didOnboard) }
                     if args.contains("-showOnboarding") { UserDefaults.standard.set(false, forKey: Prefs.didOnboard) }
                     #endif
+                    QuickRecordCenter.shared.start(container: container)
                     watch.start { log in
                         Task { await services.logFromWatch(log, in: context) }
                     }

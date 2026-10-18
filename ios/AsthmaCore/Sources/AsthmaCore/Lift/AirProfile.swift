@@ -15,7 +15,7 @@ public struct AirProfile: Sendable, Equatable {
             switch self {
             case .weather: "Weather dynamics"
             case .biologics: "Biologics"
-            case .particulates: "Particles & gases"
+            case .particulates: "Pollutants"
             // Effort, stress and the like: about you, not the air (owner, Oct 17). Never on the map.
             case .exertion: "Self"
             }

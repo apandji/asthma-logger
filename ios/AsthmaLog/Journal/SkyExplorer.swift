@@ -337,7 +337,7 @@ struct SkyProbeOverlay: View {
     }
 }
 
-/// The rail's groups, in the language of Personal Insights: Weather, Particles & gases, Biologics, then Self
+/// The rail's groups, in the language of Personal Insights: Weather, Pollutants, Biologics, then Self
 /// (set apart: it isn't in the sky, and choosing it slides the map away to your words and activity).
 enum RailGroup: String, CaseIterable {
     case weather, particles, biologics
@@ -345,7 +345,7 @@ enum RailGroup: String, CaseIterable {
     var title: String {
         switch self {
         case .weather: "Weather"
-        case .particles: "Particles & gases"
+        case .particles: "Pollutants"
         case .biologics: "Biologics"
         }
     }
@@ -426,7 +426,7 @@ enum RailRow: Hashable {
     /// Whether this row has a reading to show (group headers only name themselves).
     var reads: Bool {
         switch self {
-        case .header(let g): g.items.isEmpty   // Weather reads; Particles & gases and Biologics just name.
+        case .header(let g): g.items.isEmpty   // Weather reads; Pollutants and Biologics just name.
         case .item, .voice, .body: true
         }
     }
@@ -548,7 +548,7 @@ struct StrataScale: View {
     }
 }
 
-/// A group on the rail (Particles & gases, Biologics): everything it tracks, each with its amount and level,
+/// A group on the rail (Pollutants, Biologics): everything it tracks, each with its amount and level,
 /// so the header gives the overview and the items below give the detail.
 struct GroupSummary: View {
     let group: RailGroup

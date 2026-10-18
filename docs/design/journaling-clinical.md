@@ -3,7 +3,25 @@
 Oct 19, 2026. What the voice note should capture so a provider can use it, and what it must not pretend to
 be. Grounded in two sources Pandji pulled: the LUMA/AstraZeneca *BREATHE* daily asthma journal (the fields a
 paper diary asks for) and NICE guideline NG245, evidence review L, "Symptom diary for monitoring asthma"
-(Nov 2024: what the evidence says diaries are and aren't good for). For the doctor critique on Friday.
+(Nov 2024: what the evidence says diaries are and aren't good for). **Wording follows the US references** a
+US provider works from: NHLBI's NAEPP guidelines (EPR-3 and the 2020 update) and GINA, which the BREATHE
+journal itself cites. For the doctor critique on Friday.
+
+## The US frame: the four control domains
+
+Both NAEPP and GINA assess control over the past 2–4 weeks on the same four things, and these are the words
+a US provider uses:
+
+| Domain (NAEPP / GINA) | Asked as | In felt air |
+|---|---|---|
+| **Symptoms** (daytime) | wheezing, coughing, chest tightness, shortness of breath | symptom tags (new) |
+| **Nighttime awakenings** | "woke up at night because of asthma" | `wokeAtNight` (new) |
+| **Interference with normal activity** | "kept you from doing something" | `activityLimited` (new) |
+| **Quick-relief inhaler use** (SABA, for symptoms) | puffs, how often | automatic from the press |
+
+NAEPP's fifth and sixth are lung function (peak flow / FEV1) and validated questionnaires (ACT, ACQ, ATAQ),
+both out of scope for a voice note. "Quick-relief" is NAEPP's term for what we call Rescue; both are fine on
+screen, and providers hear "rescue inhaler" every day.
 
 ## What the evidence says, in one paragraph
 
@@ -46,12 +64,14 @@ reliever use > 2×/week, refills > 2×/year, oral steroids > 2×/year).
 Add a second closed list, **symptoms**, next to the trigger tags. Same pipeline (keyword rules + model
 suggests, you confirm, only confirmed tags become bins), their own colour so they never read as triggers:
 
-`wheeze` · `cough` · `shortOfBreath` · `tightChest` · `wokeAtNight` · `couldntDoActivity` ·
-`secondPuffNeeded` · `betterAfter` · `unplannedVisit` · `oralSteroids`
+`wheezing` · `coughing` · `chestTightness` · `shortnessOfBreath` · `wokeAtNight` · `activityLimited` ·
+`secondPuffNeeded` · `betterAfter` · `urgentVisit` · `oralSteroids`
 
-The first four are the journal's hallmark symptoms, worded the way people say them. The next four are the
-outcomes that change a provider's decision. `secondPuffNeeded` and `betterAfter` come free from the puff
-count and a follow-up note. Each needs a `BinSpec` bump and a sentence in `TheRead.noun`.
+On screen: "Wheezing", "Coughing", "Chest tightness", "Shortness of breath" (NHLBI's four symptom words),
+"Woke at night", "Kept me from doing something", "Needed a second puff", "Felt better after",
+"Urgent care or ER visit", "Oral steroids". The first six are NAEPP's control domains as a patient says them;
+the last four are the outcomes that change a provider's decision. `secondPuffNeeded` and `betterAfter` come
+free from the puff count and a follow-up note. Each needs a `BinSpec` bump and a sentence in `TheRead.noun`.
 
 ### 2. Prompts that are the focused questions, in the past tense
 The NICE finding is the reason the prompts exist: focused beats "what's going on?". Rotating opener, then the
@@ -59,9 +79,10 @@ one not yet answered (built: `VoicePrompts`). Tune the set to the journal's fiel
 
 - "What were you doing?" (activity, exertion)
 - "Where were you?" (place, indoors or out)
-- "How did it feel?" (symptoms: wheeze, cough, tight, breathless)
+- "How did your breathing feel?" (symptoms: wheezing, coughing, chest tightness, shortness of breath)
 - "What was in the air?" (triggers the APIs can't see)
-- "Did it wake you?" only when the moment is between midnight and 6 am
+- "Did it wake you up?" only when the moment is between midnight and 6 am (nighttime awakenings)
+- "Did it keep you from doing something?" (interference with normal activity)
 - "Did you need a second puff?" only when puffs = 1 and the note is within 30 min
 
 Never "How have you been?" and never a question that asks for a count.
@@ -77,7 +98,7 @@ weeks of recall). Instead, **"For your next visit"**: a one-screen summary a pro
 in words, with the export behind it:
 - the rescue moments since the last visit, each with its symptoms, triggers and air, newest first
 - what shows up on flare days (the Insights categories, in the same words)
-- the outcomes that happened (night waking, missed work, unplanned visit, oral steroids), as a list
+- the outcomes that happened (nighttime awakenings, activity limited, urgent visits, oral steroids), as a list
 - a line: "felt air records; it doesn't score control. Your action plan is the plan."
 Shareable as a PDF or text from the moments export. This is where the pharmacist-in-the-loop finding points:
 the value is in a human reading it.
@@ -88,13 +109,13 @@ Nothing is parsed; it's just there, because NICE's committee says that's the rig
 
 ## Questions for the doctor
 
-1. Are wheeze / cough / short of breath / tight chest the right four symptom words for patients to say?
-   Anything missing that changes your decision (sputum, chest pain, blue lips)?
-2. Night waking and a second puff: are these the two outcomes you'd most want flagged from a diary?
+1. NHLBI's four: wheezing, coughing, chest tightness, shortness of breath. Are those the words your
+   patients say? Anything missing that changes your decision (mucus, chest pain, blue lips)?
+2. Nighttime awakenings and a second puff: are these the two things you'd most want flagged from a diary?
+   Do you work from NAEPP (EPR-3 / 2020 update), GINA, or something else?
 3. Would you read a one-page "since your last visit" summary? What's the first line you'd want on it?
 4. Is it right that we never show the Rules of 2 or an ACT-like score in the app, only in the export?
-5. "How did it feel?" versus "How did you feel?": does the symptom question need to be about the airways
-   specifically to be useful?
+5. "How did your breathing feel?": is naming the breathing the right nudge, or does it lead the answer?
 6. Should a rescue moment with no note ever be allowed to count toward patterns, or should symptoms be
    required for it to be a "flare"?
 7. Anything in the advice cards you'd strike ("Bring your inhaler" was the one we flagged)?

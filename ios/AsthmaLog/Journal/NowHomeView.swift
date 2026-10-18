@@ -609,9 +609,10 @@ struct NowHomeView: View {
     private static func when(_ d: Date) -> String {
         let cal = Calendar.current
         let day = cal.isDateInToday(d) ? "This" : cal.isDateInTomorrow(d) ? "Tomorrow" : d.formatted(.dateTime.weekday(.wide))
-        let h = cal.component(.hour, from: d)
-        let part = h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"
-        return cal.isDateInToday(d) ? "This \(part)" : "\(day) \(part)"
+        // The same parts of the day as the hour bin, so midnight isn't "morning".
+        let part = Bins.hourPart(cal.component(.hour, from: d))
+        if cal.isDateInToday(d) { return part == "night" ? "Tonight" : "This \(part)" }
+        return "\(day) \(part)"
     }
 
     // MARK: Sky

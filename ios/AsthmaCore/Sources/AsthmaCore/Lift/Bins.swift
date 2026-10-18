@@ -26,7 +26,8 @@ public struct BinDef: Sendable {
 }
 
 public enum Bins {
-    static func hourPart(_ h: Int) -> String {
+    /// The same four parts of the day the app names in its sentences.
+    public static func hourPart(_ h: Int) -> String {
         if h >= 5 && h < 12 { return "morning" }
         if h >= 12 && h < 17 { return "afternoon" }
         if h >= 17 && h < 22 { return "evening" }

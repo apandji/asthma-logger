@@ -27,9 +27,6 @@ struct OnboardingView: View {
     @State private var locating = false
     @State private var noLocation = false
     @State private var first: LogEvent?
-    @State private var askedMotion = false
-    @State private var askedHealth = false
-    @State private var askedNotes = false
     @State private var probing = false
     /// The inhalers' names (renamed later in Settings › Devices).
     @State private var rescueName = ""
@@ -92,7 +89,7 @@ struct OnboardingView: View {
         case .inhalers:
             VerdictHeader(place: AnyView(placeLine), title: "Name your inhalers.", verdict: nil, tint: nil)
         case .permissions:
-            VerdictHeader(place: AnyView(placeLine), title: "A few optional permissions.", verdict: nil, tint: nil)
+            VerdictHeader(place: AnyView(placeLine), title: "What felt air uses, and where it goes.", verdict: nil, tint: nil)
         case .learn:
             VerdictHeader(place: AnyView(placeLine), title: "It gets better with time.", verdict: nil, tint: nil,
                           when: nil)
@@ -156,7 +153,7 @@ struct OnboardingView: View {
                 primary("Get started") { goHere() }
             case .here:
                 if here != nil {
-                    Text("felt air reads the air near you each time you log. Your location stays on this iPhone.")
+                    Text("felt air reads the air near you each time you log. The weather and air services get your area, never who you are. Your exact location stays on this iPhone.")
                         .font(.subheadline).foregroundStyle(Theme.secondaryText)
                     WeatherAttributionView()
                     primary("Next") { step = .button; button.beginSync() }
@@ -195,15 +192,8 @@ struct OnboardingView: View {
                 inhalerField("Daily · teal cap", placeholder: "e.g. Flovent", text: $dailyName)
                 primary("Next") { saveInhalers(); step = .permissions }
             case .permissions:
-                permission("figure.walk", "Motion & Fitness", "Walking, driving or still helps guess if you were indoors or out.", done: askedMotion) {
-                    Task { _ = await services.motion.recent(); askedMotion = true }
-                }
-                permission("bell.badge", "Notifications", "After a press, a nudge to add what was going on. One reminder at 6 pm if a moment has no note.", done: askedNotes) {
-                    Task { _ = await QuickRecordCenter.shared.requestPermission(); askedNotes = true }
-                }
-                permission("heart.text.square", "Apple Health", "Saves each rescue puff as Inhaler Usage, next to the rest of your health.", done: askedHealth) {
-                    Task { await services.health.requestAccess(); askedHealth = true }
-                }
+                // One card per source: what it uses, what it's for, and where it goes.
+                DataCards()
                 primary("Next") { step = .learn }
             case .learn:
                 Text("Each press saves a moment. felt air adds baseline moments on its own. With enough of both, Insights shows what your flare days have in common.")
@@ -279,24 +269,6 @@ struct OnboardingView: View {
             if !name.isEmpty { list[i].name = name }
         }
         Inhaler.save(list)
-    }
-
-    private func permission(_ symbol: String, _ title: String, _ detail: String, done: Bool, action: @escaping () -> Void) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbol).font(.title3).frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline)
-                Text(detail).font(.footnote).foregroundStyle(Theme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)   // all its lines: the sky gives up the room
-            }
-            Spacer()
-            Button(done ? "Done" : "Allow", action: action)
-                .font(.subheadline.weight(.semibold))
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .glassEffect(.regular.interactive(), in: .capsule)
-                .buttonStyle(PressStyle())
-                .disabled(done)
-        }
     }
 
     private func primary(_ title: String, action: @escaping () -> Void) -> some View {

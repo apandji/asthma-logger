@@ -58,7 +58,7 @@ nonisolated struct AmbeeClient: AmbeeSource {
 
     private func get<T: Decodable & Sendable>(_ path: String, _ lat: Double, _ lng: Double, _ extra: [String: String] = [:]) async throws -> T {
         var c = URLComponents(string: base + path)!
-        c.queryItems = [URLQueryItem(name: "lat", value: String(lat)), URLQueryItem(name: "lng", value: String(lng))]
+        c.queryItems = [URLQueryItem(name: "lat", value: Coarse.string(lat)), URLQueryItem(name: "lng", value: Coarse.string(lng))]
             + extra.map { URLQueryItem(name: $0.key, value: $0.value) }
         return try await HTTP.get(c.url!, headers: ["x-api-key": key, "Content-type": "application/json"])
     }

@@ -252,6 +252,8 @@ struct BodyPanel: View {
                 if let v = h.sleep { BodyLine(name: "Sleep", text: v) }
                 if let v = h.heart { BodyLine(name: "Heart", text: v) }
                 if let v = h.breathing { BodyLine(name: "Breathing", text: v) }
+                if let v = h.workout { BodyLine(name: "Workout", text: v) }
+                if let v = h.mind { BodyLine(name: "Mind", text: v) }
                 // Asked, and nothing came back (not shared, or no data for the hours): say so rather than
                 // dropping the row.
                 if h.isEmpty { BodyLine(name: "Health", text: "Nothing to read yet.") }
@@ -265,7 +267,7 @@ struct BodyPanel: View {
                 .buttonStyle(PressStyle())
                 .disabled(!interactive)
                 .opacity(interactive ? 1 : 0.5)
-                Text("Adds sleep, heart and breathing, in words.").font(.caption).foregroundStyle(Theme.secondaryText)
+                Text("Adds sleep, heart and breathing, workouts and State of Mind, in words. Stays on this iPhone.").font(.caption).foregroundStyle(Theme.secondaryText)
             }
         }
         .task(id: date) { await load() }

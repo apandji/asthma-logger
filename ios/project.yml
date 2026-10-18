@@ -60,7 +60,8 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: Notes the places you spend time, on this iPhone, so felt air can compare your inhaler moments with ordinary hours where you actually were.
         NSMotionUsageDescription: Movement (walking, driving, still) helps guess whether you were indoors or outdoors.
         NSHealthUpdateUsageDescription: Saves each time you use your inhaler to Apple Health as Inhaler Usage.
-        NSHealthShareUsageDescription: Reads your sleep, heart rate and breathing rate to describe how you were around each moment, in words. Stays on this iPhone.
+        NSHealthShareUsageDescription: Reads your sleep, heart and breathing rate, steps, workouts and State of Mind to describe how you were around each moment, in words. Stays on this iPhone.
+        NSCalendarsFullAccessUsageDescription: Shows what was on your calendar around each moment, and where you're going to be for the look-ahead. Event titles stay on this iPhone.
         NSMicrophoneUsageDescription: Record a short voice note about how you're feeling.
         NSSpeechRecognitionUsageDescription: Turns your voice note into text on this iPhone.
         NSBluetoothAlwaysUsageDescription: Connects to your felt button so a press logs a moment, even when the app is closed.

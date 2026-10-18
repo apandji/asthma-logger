@@ -61,7 +61,7 @@ struct OpenAQProvider {
     func search(_ lat: Double, _ lon: Double, monitor: Bool) async throws -> [OpenAQ.Location] {
         var c = URLComponents(string: "\(OpenAQ.baseURL)/locations")!
         c.queryItems = [
-            URLQueryItem(name: "coordinates", value: String(format: "%.4f,%.4f", lat, lon)),
+            URLQueryItem(name: "coordinates", value: "\(Coarse.string(lat)),\(Coarse.string(lon))"),
             URLQueryItem(name: "radius", value: String(OpenAQ.radiusMeters)),
             URLQueryItem(name: "limit", value: "100"),
             URLQueryItem(name: "mobile", value: "false"),
@@ -98,8 +98,8 @@ struct AirNowProvider {
         var c = URLComponents(string: "https://www.airnowapi.org/aq/\(path)")!
         c.queryItems = [
             URLQueryItem(name: "format", value: "application/json"),
-            URLQueryItem(name: "latitude", value: String(lat)),
-            URLQueryItem(name: "longitude", value: String(lon)),
+            URLQueryItem(name: "latitude", value: Coarse.string(lat)),
+            URLQueryItem(name: "longitude", value: Coarse.string(lon)),
             URLQueryItem(name: "API_KEY", value: key),
         ]
         return c.url!

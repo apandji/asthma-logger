@@ -81,7 +81,7 @@ Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web pr
 | Precise fix, motion, indoor/outdoor guess + correction | Place learning (visits → home/work) — `Places.cluster` is ready in core |
 | WeatherKit, OpenAQ, AirNow, fail-open with provenance | Pollen (Ambee) |
 | HealthKit inhaler usage write + delete | Photos |
-| Insights: lift, template + Foundation Models narration with output checks | Full visual style pass ([docs/design/visual-style.md](../docs/design/visual-style.md)) |
+| Insights: lift, template + Foundation Models narration with output checks; the radar (`AsthmaCore/Lift/AirProfile.swift` folds the lift table into weather / biologics / particulates & gases / exertion, `Insights/AirRadar.swift` draws it in riso dots) | Full visual style pass ([docs/design/visual-style.md](../docs/design/visual-style.md)) |
 | Look-ahead: 72 h WeatherKit + AirNow categories, personal windows or cold-start hazards | Air-event warnings as notifications |
 | Settings: voice slider, model toggle, Health, auto baseline moments, demo data | |
 | Apple Watch logging (Rescue / Standard → phone) | Watch complications |

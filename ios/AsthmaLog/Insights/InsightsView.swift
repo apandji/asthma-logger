@@ -16,6 +16,7 @@ struct InsightsView: View {
     @State private var showDoctor = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @State private var path: [Page] = []
+    @State private var picked: AirProfile.Category?
 
     /// The pages behind the tiles.
     enum Page: Hashable { case pattern, profile, moments }
@@ -109,10 +110,37 @@ struct InsightsView: View {
 
     // MARK: Hero
 
-    /// The ring and its two counts; the sentence lives in the header now.
-    private var hero: some View {
-        LearningRing(progress: model.progress, forcedLearned: forced == .learned, size: 184)
-            .frame(maxWidth: .infinity)
+    /// Learning: the ring and its two counts. Learned: your shape on the radar, and the families under it.
+    @ViewBuilder private var hero: some View {
+        if learned, let p = profile {
+            radar(p)
+        } else {
+            LearningRing(progress: model.progress, forcedLearned: forced == .learned, size: 184)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// The four families from the lift table (or the demo person's).
+    private var profile: AirProfile? {
+        demoLearned ? .demoPerson : model.report.map(AirProfile.init(report:))
+    }
+
+    /// The radar and its rows: patterns first, strongest first; the families with nothing to show last.
+    private func radar(_ p: AirProfile) -> some View {
+        let rank: [AirProfile.Status: Int] = [.pattern: 0, .early: 1, .nothing: 2, .notTracked: 3]
+        let rows = p.axes.sorted { (rank[$0.status]!, -$0.strength) < (rank[$1.status]!, -$1.strength) }
+        return VStack(spacing: 10) {
+            AirRadar(profile: p, selected: $picked, size: 216)
+                .frame(maxWidth: .infinity)
+            ForEach(rows) { a in
+                ProfileRow(axis: a, selected: picked == a.category) {
+                    withAnimation(Theme.snap) { picked = picked == a.category ? nil : a.category }
+                }
+            }
+            Text("How much more often each family shows up on your flare moments than on baseline ones. The counts are the evidence.")
+                .font(.caption).foregroundStyle(Theme.secondaryText)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)
+        }
     }
 
     /// "Needs 1 more rescue and 14 more baseline moments."
@@ -132,7 +160,7 @@ struct InsightsView: View {
     private var tiles: some View {
         VStack(spacing: 10) {
             NavigationLink(value: Page.profile) {
-                row("person.crop.circle", "Your profile", demoLearned ? "Pollen-led" : learned ? "Ready" : "Soon")
+                row("person.crop.circle", "Your profile", demoLearned ? "Pollen-led" : learned ? "Ready" : "Taking shape")
             }
             NavigationLink(value: Page.moments) {
                 row("calendar", "Your moments", "\(monthCount) this month")
@@ -244,6 +272,8 @@ struct InsightsView: View {
             } else if let p = model.progress, !p.isMet {
                 Text("Once felt air has learned, this shows what your flare days have in common: pollen, particles, ozone, or cold or humid days.")
                     .font(Theme.caption).foregroundStyle(Theme.secondaryText)
+                // Taking shape: leanings show as hollow corners until there are enough moments to call them.
+                if let prof = profile { radar(prof) }
             } else if let n = model.narration {
                 Text(n.headline).font(Theme.headline)
                 Text("Named profiles come next, from the research.").font(Theme.caption).foregroundStyle(Theme.secondaryText)

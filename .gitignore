@@ -29,3 +29,6 @@ docs/gallery/private/
 
 # Owner photos for onboarding (local only; the app falls back to a woven background without them)
 ios/PrivateMedia/
+
+# xcodebuild output from agent sessions (ios/scripts use build/dd and build/dev)
+ios/build/

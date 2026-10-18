@@ -130,12 +130,18 @@ struct ProfileHistoryView: View {
     }()
 
     var body: some View {
-        let past = (demo ? Self.demoHistory : history).reversed()
+        let all = Array((demo ? Self.demoHistory : history).reversed())   // newest first
+        // The newest snapshots of the same kind as now are this profile, not a past one: one entry, with
+        // when it began.
+        let same = current.map { c in all.prefix { $0.kind == c.kind } } ?? []
+        let past = all.dropFirst(same.count)
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Your profile can shift with the seasons. felt air keeps a snapshot each time it changes, and once a month.")
                     .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                if let current { entry(current, label: "Now") }
+                if let current {
+                    entry(current, label: same.last.map { "Now, since \($0.date.formatted(.dateTime.month(.abbreviated).day().year()))" } ?? "Now")
+                }
                 ForEach(Array(past)) { s in
                     entry(s, label: "Since \(s.date.formatted(.dateTime.month(.abbreviated).day().year()))")
                 }

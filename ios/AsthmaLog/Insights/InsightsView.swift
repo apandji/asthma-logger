@@ -7,8 +7,6 @@ import SwiftUI
 /// (AsthmaCore: AirProfile, Archetype, Rhythm); this only lays them out.
 struct InsightsView: View {
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
-    @AppStorage(Prefs.narratorStyle) private var styleScore = NarratorStyle.defaultScore
-    @AppStorage(Prefs.useOnDeviceModel) private var useModel = true
     @AppStorage(Prefs.useDemoData) private var demo = false
     @State private var model = InsightsModel()
     @AppStorage(Crit.InsightsState.key) private var forced = Crit.InsightsState.auto
@@ -63,7 +61,6 @@ struct InsightsView: View {
             .environment(\.colorScheme, paper == .linen ? .light : .dark)
             .task(id: dataKey) {
                 model.rebuild(events: events, demo: demo)
-                await model.narrate(styleScore: styleScore, useModel: useModel)
                 recordSnapshot()
             }
             .onAppear { withAnimation(.easeOut(duration: 0.3)) { shown = true } }
@@ -251,7 +248,7 @@ struct InsightsView: View {
 
     private var dataKey: String {
         let ready = events.filter { $0.conditionsData != nil }.count
-        return "\(events.count)-\(ready)-\(demo)-\(styleScore)-\(useModel)-\(forced.rawValue)"
+        return "\(events.count)-\(ready)-\(demo)-\(forced.rawValue)"
     }
 }
 

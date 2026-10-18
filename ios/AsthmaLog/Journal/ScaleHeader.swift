@@ -21,7 +21,6 @@ struct ScaleHeader<Kicker: View>: View {
     @ViewBuilder let kicker: Kicker
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Read so the sentence redraws when voice or Settings › Type changes.
-    @AppStorage(Prefs.narratorStyle) private var styleScore = NarratorStyle.defaultScore
     @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
 
     var body: some View {
@@ -35,7 +34,7 @@ struct ScaleHeader<Kicker: View>: View {
             // The sentence: Settings › Type face, a touch tight; blurs between readings instead of cutting.
             ZStack(alignment: .topLeading) {
                 Text(title)
-                    .font(Theme.Typeface.sentence(size: compact ? 26 : 30, slanted: italic, voice: NarratorStyle(score: styleScore)))
+                    .font(Theme.Typeface.sentence(size: compact ? 26 : 30, slanted: italic, voice: .current))
                     .kerning(Theme.serifKerning)
                     .animation(nil, value: statementTypeface)
                     // Two lines, always: the byline sits in the same place whatever the title says.

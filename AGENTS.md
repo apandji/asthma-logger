@@ -46,7 +46,7 @@ Each one comes from the docs. Follow the link before you change anything in that
 | Topic | Decision | Notes |
 |-------|----------|-------|
 | Platform | iOS 27+, iPhone 15 Pro is the test device | Needed for Apple Foundation Models |
-| On-device AI | Apple **Foundation Models** for language; Vision / Speech for photos and voice | Template narrator stays the fallback |
+| On-device AI | Speech for voice notes; Apple **Foundation Models** only to suggest tags from a note (silently, when Apple Intelligence is on). The Insights sentence is the template narrator, not the model (owner, Oct 17) | Siri / Apple Intelligence ideas for later: [docs/apple-intelligence-later.md](docs/apple-intelligence-later.md) |
 | Audience | TestFlight group | Proof of concept first; privacy matters but isn't the gate |
 | Storage | **Local-first** (SwiftData). No server for iOS | CloudKit or sync later, if ever |
 | Weather | **WeatherKit** | Ambee contract is being renegotiated |
@@ -59,7 +59,7 @@ Each one comes from the docs. Follow the link before you change anything in that
 | Risk prediction | From *when* (hour, season), *where* (place, indoor/outdoor), and *conditions* (weather, AQ) on inhaler days vs usual days | |
 | Look | Printed on weather-tinted paper: one Recursive sentence (variable, OFL, bundled), SF for the rest, riso particles for the air, colour only for the air. Spec: [docs/design/design-system.md](docs/design/design-system.md) | Tokens in `ios/AsthmaLog/Theme/` |
 | Morning look-ahead | 8 am notification with the day's look-ahead (on by default, Settings › Logging). Opening it renews the Lock Screen card and fills in baselines | Scheduled each time the app is open: tomorrow specific, six more plain |
-| Insight voice | Clinical → plain → poetic slider lives in **Settings**, not on the Insights screen | Changes the on-device model's wording and the sentence's Recursive Casual axis (clinical linear → poetic casual); the template's wording stays plain |
+| Insight voice | **Dropped** (owner, Oct 17): one plain voice. No slider, no model toggle | The sentence keeps the plain Recursive axes |
 | Baseline samples (ordinary moments, no inhaler) | Automatic only, no button. **Filled in afterwards** (Oct 17): a day later, ~3 hours per day (morning, afternoon, evening), clear of inhaler use, placed where you were (visits, with Always location asked in Settings) or at home, with that hour's air from history (`BaselineBackfill`, `BaselineFiller`). Back to the first moment, 60 days at most. The app-open sample is retired. On screen: **Baseline**, never "I'm okay" | Visits stay on the phone |
 | Pollen until Ambee | None. The bin reads `unknown` and Insights says "Pollen not included yet" | |
 | Photos | Later, opt-in, on-device only. Not in the first build | |
@@ -106,6 +106,7 @@ Rule of thumb: logic and tests in the cloud; anything that has to compile the ap
 
 ## Open questions
 
+- Siri, Shortcuts and Apple Intelligence: what's worth it after the MVP? See [docs/apple-intelligence-later.md](docs/apple-intelligence-later.md).
 - Ambee contract: which datasets, and does a key ever ship in the app or only behind a proxy?
 - Photos: which signals are worth the permission (scene type, outdoor/indoor, smoke/pets/gym)?
 

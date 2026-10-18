@@ -116,7 +116,7 @@ struct InsightPeek: View {
             try? await Task.sleep(for: .seconds(1.2))
             guard !Task.isCancelled else { return }
             model.rebuild(events: events, demo: demo)
-            await model.narrate(styleScore: 50, useModel: false)
+            model.narrate()
         }
     }
 
@@ -249,7 +249,7 @@ struct InsightsRingButton: View {
             try? await Task.sleep(for: .seconds(1.2))
             guard !Task.isCancelled else { return }
             model.rebuild(events: events, demo: demo)
-            await model.narrate(styleScore: 50, useModel: false)
+            model.narrate()
         }
     }
 

@@ -38,11 +38,11 @@ ios/
     ├── Onboarding/      first-run screens (photos from gitignored ios/PrivateMedia/, woven fallback)
     ├── Journal/         JournalView (week strip, ambient field), EventDetailView, MomentTrendChart, LogService (log → locate → stamp)
     ├── Insights/        InsightsView, InsightsModel
-    ├── Settings/        SettingsView (insight voice slider lives here), settings toolbar
+    ├── Settings/        SettingsView (the real app on top; demo, data sets, design crit and prototypes under “Demo and development”)
     ├── Providers/       WeatherKit, OpenAQ, AirNow, ConditionsService (parallel, fail-open), attribution
     ├── Location/        CoreLocation (async liveUpdates, no delegate), CoreMotion
     ├── Health/          HealthKit writes
-    ├── Intelligence/    Foundation Models: narration + tag suggestions
+    ├── Intelligence/    Foundation Models: tag suggestions only
     ├── Persistence/     SwiftData LogEvent
     └── Theme/           every color, font and spacing token; Card, Chip
 ```
@@ -81,9 +81,9 @@ Golden tests: `AsthmaCore` loads `fixtures/*.json` and must reproduce the web pr
 | Precise fix, motion, indoor/outdoor guess + correction | Place learning (visits → home/work) — `Places.cluster` is ready in core |
 | WeatherKit, OpenAQ, AirNow, fail-open with provenance | Pollen (Ambee) |
 | HealthKit inhaler usage write + delete | Photos |
-| Insights: lift, template + Foundation Models narration with output checks; the radar (`AsthmaCore/Lift/AirProfile.swift` folds the lift table into weather / biologics / particulates & gases / exertion, `Insights/AirRadar.swift` draws it in riso dots) | Full visual style pass ([docs/design/visual-style.md](../docs/design/visual-style.md)) |
+| Insights: lift, template narration (the model no longer narrates, Oct 17); the radar (`AsthmaCore/Lift/AirProfile.swift` folds the lift table into weather / biologics / particulates & gases / exertion, `Insights/AirRadar.swift` draws it in riso dots) | Full visual style pass ([docs/design/visual-style.md](../docs/design/visual-style.md)) |
 | Look-ahead: 72 h WeatherKit + AirNow categories, personal windows or cold-start hazards | Air-event warnings as notifications |
-| Settings: voice slider, model toggle, Health, auto baseline moments, demo data | |
+| Settings: Health, Lock Screen prompt, morning look-ahead, devices, baseline moments, rail side, data sources; Demo and development page at the bottom | |
 | Apple Watch logging (Rescue / Standard → phone) | Watch complications |
 | Quick Record: after a moment, the Lock Screen asks what was going on (Live Activity in `AsthmaLogWidgets/`, buttons are App Intents in `QuickRecordActivity/` that run in the app, `Voice/QuickRecordLive.swift`); a standby card waits on the Lock Screen (started whenever the app is open, since iOS only *starts* Live Activities from the foreground) and a background press *updates* it with an alert; its mic logs a rescue and listens. Notification fallback when there's no card. Lock Screen / Control Center / Action button control "Rescue voice note" | Covering the gap when the card has lapsed (8-hour Live Activity limit, app not opened since): push-to-start needs a server |
 | First-run onboarding; Journal week strip with woven tiles and ambient field | |
@@ -125,7 +125,7 @@ No iOS API says "indoors", so this is a guess with a confidence level: `likelyIn
 
 ### Foundation Models (on-device language)
 - Always check `SystemLanguageModel.default.availability` first. Not available → template narrator, silently.
-- Two jobs only: **narrate** the gated lift table (port `web/src/lib/insights/summarize.ts` + `style.ts`), and **extract tags** from journal text. It never computes stats.
+- One job: **extract tags** from journal text (the Insights sentence is the template narrator, owner Oct 17). It never computes stats.
 - Use guided generation for structured output, not JSON-in-text parsing.
 - Validate output in `AsthmaCore`: every number in the headline must appear in the input table, and banned phrases ("will have an attack", percentages, causal claims, the word "attack", ratios like "3×") are rejected → template fallback.
 - Keep prompts small: the gated rows and rules, not the diary.

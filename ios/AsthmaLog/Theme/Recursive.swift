@@ -58,8 +58,8 @@ enum Recursive {
 extension NarratorStyle {
     /// The voice saved in Settings (same key and default as the slider).
     static var current: NarratorStyle {
-        let score = UserDefaults.standard.object(forKey: Prefs.narratorStyle) as? Int ?? defaultScore
-        return NarratorStyle(score: score)
+        // The clinical → poetic slider is gone (owner, Oct 17): the sentence keeps the plain voice.
+        NarratorStyle(score: defaultScore)
     }
 
     /// Clinical is linear; plain and poetic only a little casual, with no cursive letters, so the sentence

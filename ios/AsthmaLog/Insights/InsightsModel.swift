@@ -41,13 +41,10 @@ final class InsightsModel {
         bander = RiskBander(table: table, baselineFrames: frames)
     }
 
-    func narrate(styleScore: Int, useModel: Bool) async {
+    /// The template sentence for the gated table. The on-device model no longer writes it (owner, Oct 17).
+    func narrate() {
         guard let report else { return }
-        let input = NarratorInput(report: report, styleScore: styleScore)
-        narration = Narrator.template(input)
-        if useModel && !report.gatedRows.isEmpty {
-            narration = await OnDeviceModel.narrate(input)
-        }
+        narration = Narrator.template(NarratorInput(report: report, styleScore: NarratorStyle.defaultScore))
     }
 
     /// Next ~3 days at `latitude/longitude`: WeatherKit hourly + AirNow daily AQ categories. The last few

@@ -57,13 +57,13 @@ struct MomentPager: View {
             .modifier(SpotIf(id: "sky", spot: spot))
             .animation(.easeInOut(duration: 0.35), value: current?.id)
             .modifier(AnchorReport(key: "moment", store: anchorStore, hidden: anchorHidden))
-            .popoverTip(skyTip, arrowEdge: .bottom)
+            .popoverTip(skyTip, arrowEdge: .bottom).tint(.primary)
             .task(id: current?.id) { await prefetchNeighbours() }
 
             TimelineTrack(events: events, selectedID: $selectedID)
                 .frame(height: 104)
                 .modifier(SpotIf(id: "track", spot: spot))
-                .popoverTip(momentsTip, arrowEdge: .bottom)
+                .popoverTip(momentsTip, arrowEdge: .bottom).tint(.primary)
         }
     }
 }

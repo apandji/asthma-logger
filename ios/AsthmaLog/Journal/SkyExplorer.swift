@@ -235,6 +235,7 @@ struct SkyProbeOverlay: View {
     /// The label in one fixed place, the sky's top left (the rail: the reading stays put, the name follows).
     var topLeading = false
     @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -267,8 +268,8 @@ struct SkyProbeOverlay: View {
             }
         }
         .allowsHitTesting(false)
-        .animation(.interactiveSpring(duration: 0.2), value: point)
-        .animation(.snappy(duration: 0.25), value: band)
+        .animation(reduceMotion ? nil : .interactiveSpring(duration: 0.2), value: point)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: band)
     }
 
     private var label: some View {

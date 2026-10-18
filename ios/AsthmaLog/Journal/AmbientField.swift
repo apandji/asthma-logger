@@ -36,10 +36,16 @@ struct AmbientField: View {
         if reduceTransparency {
             Theme.stage
         } else {
-            switch style {
-            case .weather: weatherField
-            case .inks: inkField(t: 0)
+            Group {
+                switch style {
+                case .weather: weatherField
+                case .inks: inkField(t: 0)
+                }
             }
+            // The mesh eases between readings (MeshGradient colours animate), so a sky that stays on screen
+            // while its inputs change flows rather than cuts.
+            .animation(.smooth(duration: 0.35), value: weave)
+            .animation(.smooth(duration: 0.35), value: temperatureF)
         }
     }
 

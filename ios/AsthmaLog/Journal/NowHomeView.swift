@@ -43,6 +43,8 @@ struct NowHomeView: View {
     /// top, the rail's icons, the + at the bottom, all on the same line.
     static let column: CGFloat = 36
     private let sparkleTip = SparkleTip()
+    /// Counts up each time a sentence with a sparkle lands: the sparkle button nods in sympathy.
+    @State private var noticed = 0
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var showSettings = false
     @State private var openDay: Date?
@@ -73,6 +75,7 @@ struct NowHomeView: View {
                 // Once, the first time a sentence carries the sparkle: what it means.
                 if didOnboard, hasMark {
                     TipView(sparkleTip)
+                    .tint(.primary)
                     .padding(.horizontal, 16).padding(.top, 10)
                 }
                 // The cards: what to do or see at this time. Several can be true at once, so they stack and you
@@ -86,7 +89,7 @@ struct NowHomeView: View {
                         .transition(.opacity)
                 }
                 // One sky at a time; the next settles in with a breath, not a cut. Self slides the map away.
-                ZStack { sky.id(focusKey).transition(.opacity) }
+                ZStack { sky.id(scrubbing ? "scrub" : focusKey).transition(.opacity) }
                     .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
                     // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
                     // The dent is drawn by the sky itself (NowSky), so what sits on top (Self's glass cards) isn't
@@ -176,6 +179,8 @@ struct NowHomeView: View {
                 InsightsView().presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper)).presentationCornerRadius(32)
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .onChange(of: focusKey) { _, _ in if !scrubbing, hasMark { noticed += 1 } }
+            .onChange(of: scrubbing) { _, s in if !s, hasMark { noticed += 1 } }
             // Refresh the big statement when Settings › Type flips; do not remount (sheet would dismiss).
             .animation(nil, value: statementTypeface)
             .sheet(isPresented: $showPlaces) { PlacePicker(chosen: $chosen).presentationDetents([.medium, .large]) }
@@ -391,7 +396,7 @@ struct NowHomeView: View {
     private var learningButton: some View {
         VStack(spacing: 2) {
             // No bubble: it would cover the sky. Learning breathes; learned bounces once.
-            InsightsRingButton(open: { showInsights = true }, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false, glass: false)
+            InsightsRingButton(open: { showInsights = true }, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false, glass: false, nod: noticed)
             settingsButton
         }
         .padding(4)
@@ -550,40 +555,80 @@ struct NowHomeView: View {
 
     // MARK: Sky
 
-    @ViewBuilder private var sky: some View {
+    /// One NowSky for every time, built from the playhead's focus, so its identity holds while you scrub and
+    /// the colour flows from moment to moment instead of cutting (docs/design/polish-pass.md §2). Landed, it
+    /// takes the moment's id again, so arriving somewhere new still crossfades.
+    private var sky: some View {
+        let s = skyInputs
+        return NowSky(conditions: s.conditions, weave: s.weave, date: s.date, pollen: s.pollen, probing: $probing,
+                      mapID: s.mapID, coordinate: s.coordinate, mapNamespace: s.mapNamespace, captureInk: s.captureInk,
+                      onPin: s.onPin, sketch: s.sketch, event: s.event, showsSelf: s.showsSelf, selfEvent: s.selfEvent,
+                      onRecord: { recording = $0 }, makeNote: s.makeNote,
+                      scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil)
+            .onTapGesture { s.onTap() }
+    }
+
+    private struct SkyInputs {
+        var conditions: Conditions?
+        var weave: WeaveSpec
+        var date: Date
+        var pollen: PollenSample?
+        var mapID: String
+        var coordinate: (Double, Double)?
+        var mapNamespace: Namespace.ID? = nil
+        var captureInk: Color? = nil
+        var onPin: (() -> Void)? = nil
+        var sketch = false
+        var event: AirEvent? = nil
+        var showsSelf = false
+        var selfEvent: LogEvent? = nil
+        var makeNote: (() async -> LogEvent?)? = nil
+        var onTap: () -> Void = {}
+    }
+
+    private var skyInputs: SkyInputs {
         switch focus {
         case .now:
             if let j = justNow {
                 // Just logged: the map alone first, then a scan from the pin in the inhaler's ink, and the
                 // particles appear where it has passed.
-                NowSky(conditions: j.conditions ?? here?.conditions, weave: j.weave.isEmpty ? (here?.weave ?? WeaveSpec()) : j.weave, date: j.loggedAt,
-                       pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
-                       mapID: j.latitude == nil ? "here" : j.id.uuidString,
-                       coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
-                       captureInk: j.moment == .rescue ? Theme.rescueSoft : Theme.standardSoft, onPin: { pinDetails = j },
-                       showsSelf: true, selfEvent: j, onRecord: { recording = $0 })
-                    .id(j.id)
-                    .onTapGesture { pinDetails = j }
-            } else {
-                let air = liveAir
-                NowSky(conditions: air.conditions, weave: air.weave, date: now,
-                       pollen: air.pollen, probing: $probing,
-                       mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() },
-                       event: liveEvent, showsSelf: true, selfEvent: recentInhalerMoment, onRecord: { recording = $0 },
-                       makeNote: { await services.log(.note, in: context, writeToHealth: false) })
-                    .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
+                return SkyInputs(conditions: j.conditions ?? here?.conditions, weave: j.weave.isEmpty ? (here?.weave ?? WeaveSpec()) : j.weave, date: j.loggedAt,
+                                 pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason),
+                                 mapID: j.latitude == nil ? "here" : j.id.uuidString,
+                                 coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
+                                 captureInk: j.moment == .rescue ? Theme.rescueSoft : Theme.standardSoft, onPin: { pinDetails = j },
+                                 showsSelf: true, selfEvent: j, onTap: { pinDetails = j })
             }
+            let air = liveAir
+            return SkyInputs(conditions: air.conditions, weave: air.weave, date: now, pollen: air.pollen,
+                             mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() },
+                             event: liveEvent, showsSelf: true, selfEvent: recentInhalerMoment,
+                             makeNote: { await services.log(.note, in: context, writeToHealth: false) },
+                             onTap: { openDay = Calendar.current.startOfDay(for: now) })
         case .moment(let m):
-            NowSky(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
-                   pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason), probing: $probing,
-                   mapID: m.id.uuidString, coordinate: m.latitude.flatMap { lat in m.longitude.map { (lat, $0) } },
-                   mapNamespace: mapZoom, onPin: { pinDetails = m }, showsSelf: true, selfEvent: m, onRecord: { recording = $0 })
-                .onTapGesture { pinDetails = m }
+            return SkyInputs(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
+                             pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason),
+                             mapID: m.id.uuidString, coordinate: m.latitude.flatMap { lat in m.longitude.map { (lat, $0) } },
+                             mapNamespace: mapZoom, onPin: { pinDetails = m }, showsSelf: true, selfEvent: m, onTap: { pinDetails = m })
         case .hour(let h):
-            NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
-                   pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
-                   mapID: mapID, coordinate: forecastCoordinate, sketch: true)
+            return SkyInputs(conditions: h.conditions, weave: h.weave, date: h.date,
+                             pollen: DemoPollen.sample(at: h.date, season: pollenSeason),
+                             mapID: mapID, coordinate: forecastCoordinate, sketch: true)
         }
+    }
+
+    /// The temperature at any time on the track, between the readings either side of it (moments, now, the
+    /// forecast), so the sky's hue flows under the playhead instead of stepping.
+    private func temperature(at t: Date) -> Double? {
+        var pts: [(Date, Double)] = moments.compactMap { m in m.conditions?.best(.temperature).map { (m.loggedAt, $0.value) } }
+        if let v = here?.conditions.best(.temperature)?.value { pts.append((now, v)) }
+        pts += hours.compactMap { h in h.conditions.best(.temperature).map { (h.date, $0.value) } }
+        pts.sort { $0.0 < $1.0 }
+        guard let after = pts.first(where: { $0.0 >= t }) else { return pts.last?.1 }
+        guard let before = pts.last(where: { $0.0 <= t }) else { return after.1 }
+        let span = after.0.timeIntervalSince(before.0)
+        guard span > 0 else { return before.1 }
+        return before.1 + (after.1 - before.1) * t.timeIntervalSince(before.0) / span
     }
 
     /// On Now, Voice and Body are about a rescue or Standard logged in the last 30 minutes, if there is one: a
@@ -606,10 +651,22 @@ struct NowHomeView: View {
         guard let c = m.conditions, let e = Self.event(in: c) else { return line }
         // A drop now and the day before are one story: said once, as a change.
         let dayBefore = e == .tempDrop && c.lookBack?.tempDropLevel == .earlier
-        let fact = AirAdvice.afterFlare(e.advice, fallF: c.tempFallF, dayBefore: dayBefore)
-        return [fact, line.replacingOccurrences(of: "Nothing outdoors stood out this time.", with: "")
-                          .replacingOccurrences(of: dayBefore ? Self.dayBeforeDrop : "\u{0}", with: "")]
-            .joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        var fact = AirAdvice.afterFlare(e.advice, fallF: c.tempFallF, dayBefore: dayBefore)
+        var rest = line.replacingOccurrences(of: "Nothing outdoors stood out this time.", with: "")
+            .replacingOccurrences(of: dayBefore ? Self.dayBeforeDrop : "\u{0}", with: "")
+        // The event already says the drop: when the pattern is the drop too, its sparkle joins the fact
+        // instead of saying it again ("…fallen 19° in three hours. ✦").
+        let dropPattern = TheRead.noun("temp_drop", "yes") + " was there."
+        if e == .tempDrop, let r = rest.range(of: dropPattern) {
+            let after = rest[r.upperBound...]
+            if let mark = after.first(where: { TheRead.Mark(rawValue: String($0)) != nil }) {
+                fact += "\u{00A0}" + String(mark)
+                rest = String(after.drop { $0 == "\u{00A0}" || $0 == " " }.dropFirst())
+            } else {
+                rest = String(after)
+            }
+        }
+        return [fact, rest].joined(separator: " ").trimmingCharacters(in: .whitespaces)
     }
 
     /// An event the moment's own readings show (no demo data: these lines are facts about a real moment).
@@ -1021,6 +1078,8 @@ struct NowSky: View {
     var onRecord: ((LogEvent) -> Void)? = nil
     /// Saving a voice note on Now with nothing logged makes a Note moment (never in patterns).
     var makeNote: (() async -> LogEvent?)? = nil
+    /// While scrubbing: the temperature between readings, for a hue that flows with the playhead.
+    var scrubTemperature: Double? = nil
     @State private var voice = VoiceSession()
     @Environment(\.modelContext) private var modelContext
     /// Let go on a Self row and its panel stays, the rail open beside it.
@@ -1053,7 +1112,7 @@ struct NowSky: View {
     @State private var rippleInk: Color = .white
     @AppStorage("sky.touched") private var touched = false
 
-    private var temperature: Double? { conditions?.best(.temperature)?.value }
+    private var temperature: Double? { scrubTemperature ?? conditions?.best(.temperature)?.value }
     private var layers: AirLayers { AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: true) }
 
     var body: some View {
@@ -1540,6 +1599,7 @@ struct VerdictHeader: View {
     @Environment(\.cornerInset) private var corner
     /// Tapping a sentence with a sparkle opens the key (the one-time tip, again on demand).
     @State private var showKey = false
+    @State private var breath = false
     private var hasMark: Bool { TheRead.Mark.allCases.contains { title.contains($0.rawValue) } }
 
     var body: some View {
@@ -1554,23 +1614,27 @@ struct VerdictHeader: View {
             .padding(Edge.Set(corner.0), max(0, corner.1 - 20))
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
             // Never cut: the sentence takes the lines it needs and the sky gives up the room.
-            Self.marked(title)
-                .font(Theme.serifTitle).kerning(Theme.serifKerning)
-                .fixedSize(horizontal: false, vertical: true)
+            // Blurs between readings instead of cutting (the same as ScaleHeader), once the playhead has landed.
+            ZStack(alignment: .topLeading) {
+                Self.marked(title)
+                    .font(Theme.serifTitle).kerning(Theme.serifKerning)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .id(title)
+                    .transition(reduceMotion || !settled ? AnyTransition.opacity : AnyTransition(.blurReplace))
+            }
                 .accessibilityLabel(TheRead.spoken(title))
                 .contentShape(Rectangle())
                 .onTapGesture { if hasMark { SparkleTip().invalidate(reason: .actionPerformed); showKey = true } }
                 .popover(isPresented: $showKey, arrowEdge: .top) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("Shows up on your flare days", systemImage: "sparkles").font(.headline)
+                        Label("Shows up on your flare days", systemImage: "sparkles").font(Theme.Typeface.sentence(size: 17))
                         SparkleTip.key.font(.subheadline).foregroundStyle(.secondary)
                     }
                     .padding(16)
                     .frame(width: 300, alignment: .leading)
                     .presentationCompactAdaptation(.popover)
                 }
-                .contentTransition(.opacity)
-                .animation(settled ? .easeInOut(duration: 0.22) : nil, value: title)
+                .animation(settled ? .easeInOut(duration: 0.26) : nil, value: title)
             if let when {
                 Label(when, systemImage: "clock")
                     .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
@@ -1607,7 +1671,12 @@ extension VerdictHeader {
         let ink = tint ?? Theme.secondaryText
         return Button { onVerdict?() } label: {
             HStack(spacing: 6) {
+                // The one state that asks for attention gets the only motion on the line: a slow breath.
+                let matches = tint == Verdict.red
                 Circle().fill(ink).frame(width: 7, height: 7)
+                    .scaleEffect(matches && breath ? 1.35 : 1)
+                    .animation(matches && !reduceMotion ? .easeInOut(duration: 1.6).repeatForever(autoreverses: true) : .default, value: breath)
+                    .onChange(of: matches, initial: true) { _, m in breath = m && !reduceMotion }
                 Text(verdict ?? " ").lineLimit(1).fixedSize()
                     .contentTransition(.opacity)
                     .animation(settled ? .easeInOut(duration: 0.22) : nil, value: verdict)

@@ -54,6 +54,7 @@ struct CaptureBar: View {
                 .popoverTip(tip, arrowEdge: .bottom) { action in
                     if action.id == "buttons" { useButtons = true; tip?.invalidate(reason: .actionPerformed) }
                 }
+                .tint(.primary)   // the tip's button in the app's ink, not system blue
             }
     }
 }
@@ -212,6 +213,8 @@ struct InsightsRingButton: View {
     var showsBubble = true
     /// Its own glass circle; off when it sits in a group that has the glass (Now's top controls).
     var glass = true
+    /// Bumps when a sentence with a sparkle lands on the home: the button nods once.
+    var nod = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -232,6 +235,7 @@ struct InsightsRingButton: View {
                     .contentTransition(.symbolEffect(.replace.magic(fallback: .downUp)))
                     .symbolEffect(.breathe.pulse.byLayer, options: .repeat(.continuous), isActive: !learned && !reduceMotion)
                     .symbolEffect(.bounce, value: learned)
+                    .symbolEffect(.bounce.down, value: nod)
             }
             .onAppear { shown = true }
             .padding(size < 50 ? 4 : 5)

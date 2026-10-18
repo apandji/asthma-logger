@@ -208,6 +208,7 @@ struct NowTimeline: View {
                         .contentTransition(.numericText())
                         .animation(Theme.snap, value: focusTime == nil)
                         .fixedSize()
+                        .frame(minWidth: 40)   // "Now" and "+4h" share a width, so the pill doesn't jump
                         // A small settle each time the playhead lands on a moment.
                         .scaleEffect(settle ? 1.07 : 1)
                         .animation(Theme.snap, value: settle)

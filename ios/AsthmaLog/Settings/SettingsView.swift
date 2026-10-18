@@ -87,7 +87,7 @@ struct SettingsView: View {
                     Text("Data sets, demo moments, design switches and prototypes. Not part of felt air.")
                 }
             }
-            .tint(.green) // switches keep the system green; the app's neutral tint would make them white-on-white
+            .tint(Theme.standard) // switches in the app's own blue (the neutral tint would be white-on-white)
             .navigationTitle("Settings")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -224,7 +224,7 @@ struct DeveloperSettings: View {
             }
             #endif
         }
-        .tint(.green)
+        .tint(Theme.standard)
         .navigationTitle("Demo and development")
         .navigationBarTitleDisplayMode(.inline)
     }

@@ -92,6 +92,24 @@ public enum KeywordTagger {
         .stress: ["stress", "stressed", "stressful", "anxious", "anxiety", "panic", "panicked", "upset",
                   "argument", "worried", "nervous", "overwhelmed"],
         .laughingOrCrying: ["laughing", "laughed", "laugh", "crying", "cried", "cry", "sobbing"],
+        // Symptoms: how people say NAEPP's four, plus night waking and activity limitation.
+        .wheezing: ["wheeze", "wheezing", "wheezy", "wheezed", "whistling"],
+        .coughing: ["cough", "coughing", "coughed", "coughs", "coughing fit", "hacking"],
+        .chestTightness: ["tight chest", "chest tight", "chest was tight", "chest felt tight", "chest tightness",
+                          "tightness", "chest pressure", "heavy chest", "chest felt heavy"],
+        .shortOfBreath: ["short of breath", "shortness of breath", "out of breath", "breathless", "winded",
+                         "couldn't breathe", "couldnt breathe", "can't breathe", "cant breathe", "hard to breathe",
+                         "struggling to breathe", "catch my breath", "couldn't catch my breath"],
+        .wokeAtNight: ["woke me", "woke me up", "wake me up", "woken up", "middle of the night", "in the night",
+                       "during the night", "couldn't sleep", "couldnt sleep", "up all night"],
+        .activityLimited: ["had to stop", "had to sit", "had to sit down", "had to leave", "couldn't finish",
+                           "couldnt finish", "couldn't keep up", "couldnt keep up", "kept me from", "stopped me",
+                           "gave up"],
+        // Outcomes
+        .secondPuff: ["second puff", "another puff", "two puffs", "more puffs", "puffed twice"],
+        .betterAfter: ["felt better", "feel better", "feeling better", "better after", "it eased", "eased up"],
+        .urgentVisit: ["urgent care", "emergency room", "the er", "hospital", "ambulance", "911"],
+        .oralSteroids: ["prednisone", "prednisolone", "dexamethasone", "steroids", "steroid pills", "oral steroids"],
     ]
 
     /// A negator turns off the next matches within this many words.
@@ -120,12 +138,15 @@ public enum KeywordTagger {
             var budget = 0  // words left in which a negator still applies
             while i < clause.count {
                 let word = clause[i]
-                if negators.contains(word) {
+                // A phrase that starts with a negator ("couldn't breathe", "can't keep up") is a mention,
+                // so rules are tried first.
+                let rule = match(clause, at: i)
+                if rule == nil, negators.contains(word) {
                     budget = negationWindow
                     i += 1
                     continue
                 }
-                if let rule = match(clause, at: i) {
+                if let rule {
                     let end = i + rule.words.count
                     let postfixFree = end < clause.count && clause[end] == "free"  // "smoke free", "pet-free"
                     let negated = budget > 0 || postfixFree

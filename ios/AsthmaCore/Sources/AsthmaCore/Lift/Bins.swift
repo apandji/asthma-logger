@@ -54,8 +54,9 @@ public enum Bins {
         },
         // v4
         BinDef(bin: "temp_drop", isBoolean: true) { $0.tempDrop == .unknown ? nil : yesNo($0.tempDrop == .sharp) },
-    ] + JournalTag.allCases.map { tag in
-        // Only frames with a reviewed note: an unreviewed moment is missing, not "no".
+    ] + JournalTag.triggers.map { tag in
+        // Triggers only (symptoms and outcomes are recorded, never bins). Only frames with a reviewed note:
+        // an unreviewed moment is missing, not "no".
         BinDef(bin: "tag_\(tag.rawValue)", isBoolean: true, sampled: { $0.tagsSampled }) { f in
             f.tagsSampled ? yesNo(f.tags.contains(tag)) : nil
         }

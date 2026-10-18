@@ -14,6 +14,8 @@ enum Prefs {
     static let logButtons = "logButtons"
     /// After a felt-button or watch press, a notification to add a note (Quick Record). On by default.
     static let quickRecord = "quickRecord"
+    /// A felt air card waits on the Lock Screen: a press lights it up, its mic logs a rescue and listens.
+    static let lockScreenReady = "lockScreenReady"
     /// Big-statement typeface: `system` (New York), `recursive` (default), or `funnelSans`.
     /// UI chrome stays SF. Legacy bool `useFunnelSans` is still read once for migration.
     static let statementTypeface = "statementTypeface"

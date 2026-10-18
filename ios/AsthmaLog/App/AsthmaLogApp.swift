@@ -4,7 +4,7 @@ import SwiftUI
 
 @main
 struct AsthmaLogApp: App {
-    @State private var services = LogService()
+    @State private var services: LogService
     private let container: ModelContainer
     private let watch = WatchBridge()
     @State private var button = ButtonLink()
@@ -13,9 +13,15 @@ struct AsthmaLogApp: App {
         AppTips.configure()
         do { container = try ModelContainer(for: LogEvent.self) }
         catch { fatalError("Couldn't open the journal store: \(error)") }
+        let services = LogService()
+        _services = State(initialValue: services)
         // Here, not in .task: a Lock Screen button can wake the app in the background with no scene.
+        let container = container
         QuickRecordCenter.shared.container = container
-        QuickRecordLive.shared.install(container: container)
+        QuickRecordLive.shared.install(container: container) { id in
+            let health = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
+            Task { _ = await services.log(.rescue, id: id, in: container.mainContext, writeToHealth: health) }
+        }
     }
 
     var body: some Scene {
@@ -79,6 +85,8 @@ struct RootView: View {
         // Observe Settings › Type so the big statement refreshes without remounting (sheets stay open).
         .animation(nil, value: statementTypeface)
         .onChange(of: scenePhase, initial: true) { _, phase in
+            // The only time iOS lets felt air start its Lock Screen card.
+            if phase == .active, didOnboard { QuickRecordLive.shared.standby() }
             guard phase == .active, autoBaseline, didOnboard else { return }
             Task { await services.sampleUsualDayIfDue(in: context) }
         }

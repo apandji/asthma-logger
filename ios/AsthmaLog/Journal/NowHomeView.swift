@@ -101,9 +101,13 @@ struct NowHomeView: View {
             // layout pass can't cancel it).
             .onAppear {
                 if ProcessInfo.processInfo.arguments.contains("-liveRecord") {
-                    // The Lock Screen recorder on the latest moment (lock the device to see it).
-                    let all = (try? context.fetch(FetchDescriptor<LogEvent>(sortBy: [SortDescriptor(\.loggedAt)]))) ?? []
-                    if let e = all.last(where: { $0.moment != .okay }) { QuickRecordLive.shared.begin(for: e) }
+                    // The Lock Screen card turns to the latest moment after 8 s, as a background press would
+                    // (go Home or lock the device first to see it update there).
+                    Task {
+                        try? await Task.sleep(for: .seconds(8))
+                        let all = (try? context.fetch(FetchDescriptor<LogEvent>(sortBy: [SortDescriptor(\.loggedAt)]))) ?? []
+                        if let e = all.last(where: { $0.moment != .okay }) { QuickRecordLive.shared.begin(for: e) }
+                    }
                 }
                 guard ProcessInfo.processInfo.arguments.contains("-quickRecord") else { return }
                 Task {

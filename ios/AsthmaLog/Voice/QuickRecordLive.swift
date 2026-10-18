@@ -4,59 +4,91 @@ import Foundation
 import OSLog
 import SwiftData
 
-/// The app side of the Lock Screen recorder: starts the Live Activity after a moment, and carries out its
-/// buttons (record, stop, tags, save). Same recorder, transcriber and tagger as the in-app Quick Record.
-/// Nothing leaves the phone.
+/// The app side of the Lock Screen recorder. One card lives on the Lock Screen while felt air is ready:
+/// - **Standby**, started whenever the app is open (iOS only allows *starting* a Live Activity from the
+///   foreground). Its mic logs a rescue and listens, so a note during an attack is one tap, phone locked.
+/// - A press on the felt button or the watch arrives in the background, where iOS still allows *updating* the
+///   card: it turns into "Rescue logged · What's going on?" and lights the screen with a sound.
+/// - Its buttons (record, stop, tags, save) are App Intents that run here. After Save it goes back to standby.
+/// Live Activities last up to 8 hours, so standby is refreshed each time the app comes forward.
+/// Same recorder, transcriber and tagger as the in-app Quick Record. Nothing leaves the phone.
 @MainActor
 final class QuickRecordLive {
     static let shared = QuickRecordLive()
 
-    private var container: ModelContainer?
-    private var autoStop: Task<Void, Never>?
-    private var autoEnd: Task<Void, Never>?
-
     typealias Live = Activity<QuickRecordAttributes>
+    typealias State = QuickRecordAttributes.ContentState
 
-    /// Called from the app's init, so the intents work even when the Lock Screen wakes the app in the background.
-    func install(container: ModelContainer) {
+    private var container: ModelContainer?
+    /// Starts logging a rescue with this id (LogService: stamps the air, writes Health per Settings).
+    private var logRescue: ((UUID) -> Void)?
+    private var autoStop: Task<Void, Never>?
+    private var idle: Task<Void, Never>?
+    private let log = Logger(subsystem: "felt-air", category: "QuickRecordLive")
+
+    /// Called from the app's init, so the intents work when the Lock Screen wakes the app in the background.
+    func install(container: ModelContainer, logRescue: @escaping (UUID) -> Void) {
         self.container = container
+        self.logRescue = logRescue
         QuickRecordBridge.handle = { [weak self] command in await self?.handle(command) }
-        // A note left waiting from an earlier run: after an hour it's no longer "while it's fresh".
-        for a in Live.activities where a.content.state.phase != .recording {
-            if let e = event(a.attributes.momentID), Date().timeIntervalSince(e.loggedAt) > 3600 {
-                let id = a.id; Task { await Self.end(id, nil, .immediate) }
-            }
-        }
+    }
+
+    /// Settings › "Keep felt air on the Lock Screen".
+    var standbyOn: Bool {
+        QuickRecordCenter.shared.enabled && (UserDefaults.standard.object(forKey: Prefs.lockScreenReady) as? Bool ?? true)
     }
 
     private var current: Live? {
         Live.activities.first { $0.activityState == .active || $0.activityState == .stale }
     }
 
-    /// After a rescue or standard moment. Returns false when the Live Activity can't start (Live Activities
-    /// off, or the app is in the background, where iOS doesn't allow it); the caller sends the notification.
+    // MARK: Standby
+
+    /// The app is in the foreground: make sure a fresh card is waiting (or none, if that's switched off).
+    func standby() {
+        guard standbyOn, ActivityAuthorizationInfo().areActivitiesEnabled else {
+            if !standbyOn, current?.content.state.phase == .standby { endAll() }
+            return
+        }
+        if let c = current {
+            let s = c.content.state
+            let busy = [.recording, .writing].contains(s.phase)
+            // A note waiting on an old moment: after an hour it's no longer "while it's fresh".
+            if !busy, s.phase != .standby, let e = event(s.momentID), Date().timeIntervalSince(e.loggedAt) > 3600 {
+                let id = c.id, standby = content(State(phase: .standby))
+                Task { await Self.update(id, standby, alert: nil) }
+            }
+            // Keep a card younger than 4 hours; restart an older one so the 8-hour limit stays far away.
+            let age = Date().timeIntervalSince(UserDefaults.standard.object(forKey: Self.startedKey) as? Date ?? .distantPast)
+            if busy || age < 4 * 3600 { return }
+        }
+        endAll()
+        _ = request(State(phase: .standby))
+    }
+
+    /// After a rescue or standard moment. True when the card now shows it; false when there's no card and iOS
+    /// won't start one (background), so the caller sends the notification.
     @discardableResult
     func begin(for e: LogEvent) -> Bool {
-        guard QuickRecordCenter.shared.enabled, e.moment != .okay,
-              ActivityAuthorizationInfo().areActivitiesEnabled else { return false }
-        endAll(except: nil)
-        do {
-            _ = try Live.request(attributes: attributes(e),
-                                 content: content(.init(phase: .ready, selected: e.tags.map(\.rawValue))),
-                                 pushType: nil)
-            scheduleEnd(after: 30 * 60)
+        guard QuickRecordCenter.shared.enabled, e.moment != .okay else { return false }
+        let state = momentState(e, phase: .ready)
+        if let c = current {
+            if [.recording, .writing].contains(c.content.state.phase) { return true }
+            let alert = AlertConfiguration(title: "\(e.moment.title) logged", body: "What's going on? Tap the mic to say.", sound: .default)
+            let id = c.id, next = content(state)
+            Task { await Self.update(id, next, alert: alert) }
+            returnToStandby(after: 30 * 60)
             return true
-        } catch {
-            return false
         }
+        guard ActivityAuthorizationInfo().areActivitiesEnabled, request(state) else { return false }
+        returnToStandby(after: 30 * 60)
+        return true
     }
 
     // MARK: Buttons
 
-    private let log = Logger(subsystem: "felt-air", category: "QuickRecordLive")
-
     func handle(_ command: QuickRecordCommand) async {
-        log.info("handle \(String(describing: command), privacy: .public); activities \(Live.activities.count)")
+        log.info("handle \(String(describing: command), privacy: .public)")
         switch command {
         case .start(let id): await start(id)
         case .stop: await stop()
@@ -65,31 +97,25 @@ final class QuickRecordLive {
         case .dismiss:
             if VoiceNotes.shared.recordingID != nil { VoiceNotes.shared.stopRecording() }
             autoStop?.cancel()
-            endAll(except: nil)
+            // The ✕ on standby hides the card until the app is next opened; on a note it goes back to standby.
+            if current?.content.state.phase == .standby || !standbyOn { endAll() } else { await backToStandby() }
         }
     }
 
     private func start(_ id: String?) async {
-        guard let e = event(id ?? current?.attributes.momentID) ?? latestMoment() else { log.error("start: no moment"); return }
-        // The Lock Screen control can start a note for a moment with no Live Activity yet.
-        var live = current
-        if live?.attributes.momentID != e.id.uuidString {
-            endAll(except: nil)
-            live = try? Live.request(attributes: attributes(e), content: content(.init(phase: .ready)), pushType: nil)
-        }
-        guard let live else { log.error("start: no activity"); return }
-        autoEnd?.cancel()
-        var state = live.content.state
+        guard let e = await moment(for: id ?? current?.content.state.momentID) else { log.error("start: no moment"); return }
+        idle?.cancel()
+        var state = momentState(e, phase: .ready, keeping: current?.content.state)
         guard await VoiceNotes.shared.startRecording(for: e) else {
             log.error("start: recorder refused")
             state.phase = .needsMic
-            await Self.update(live.id, content(state))
+            await show(state)
             return
         }
         try? container?.mainContext.save()
         state.phase = .recording
         state.startedAt = .now
-        await Self.update(live.id, content(state))
+        await show(state)
         autoStop?.cancel()
         autoStop = Task { [weak self] in
             try? await Task.sleep(for: .seconds(QuickRecordAttributes.maxSeconds))
@@ -104,10 +130,10 @@ final class QuickRecordLive {
         VoiceNotes.shared.stopRecording()
         var state = live.content.state
         state.phase = .writing
-        await Self.update(live.id, content(state))
+        await Self.update(live.id, content(state), alert: nil)
 
-        let e = event(live.attributes.momentID)
-        if let e, let file = e.voiceNoteFile, let text = await NoteTranscriber.transcribe(VoiceNotes.shared.url(file)) {
+        if let e = event(state.momentID), let file = e.voiceNoteFile,
+           let text = await NoteTranscriber.transcribe(VoiceNotes.shared.url(file)) {
             // The words are the person's own, so they're kept now; tags only count once they press Save.
             e.voiceTranscript = text
             try? container?.mainContext.save()
@@ -117,8 +143,8 @@ final class QuickRecordLive {
             state.selected = Array(Set(state.selected).union(state.suggested))
         }
         state.phase = .review
-        await Self.update(live.id, content(state))
-        scheduleEnd(after: 30 * 60)
+        await Self.update(live.id, content(state), alert: nil)
+        returnToStandby(after: 30 * 60)
     }
 
     private func toggle(_ tag: String) async {
@@ -127,65 +153,116 @@ final class QuickRecordLive {
         if let i = state.selected.firstIndex(of: tag) { state.selected.remove(at: i) } else { state.selected.append(tag) }
         // A tag from the first screen counts as an answer: show Save.
         if state.phase == .ready || state.phase == .needsMic { state.phase = .review }
-        await Self.update(live.id, content(state))
+        await Self.update(live.id, content(state), alert: nil)
     }
 
     private func save() async {
         guard let live = current else { return }
         var state = live.content.state
-        if let e = event(live.attributes.momentID) {
+        if let e = event(state.momentID) {
             e.tags = Set(state.selected.compactMap(JournalTag.init(rawValue:)))
             e.tagsReviewed = true
             try? container?.mainContext.save()
             QuickRecordCenter.shared.scheduleEvening()
         }
         state.phase = .saved
-        await Self.end(live.id, content(state), .after(.now.addingTimeInterval(4)))
+        await Self.update(live.id, content(state), alert: nil)
+        try? await Task.sleep(for: .seconds(2.5))
+        await backToStandby()
     }
 
-    /// When the in-app recorder saves a note, the Lock Screen one for that moment goes away.
+    /// When the in-app recorder saves a note, the Lock Screen card for that moment goes back to standby.
     func finished(momentID: UUID) {
-        for a in Live.activities where a.attributes.momentID == momentID.uuidString {
-            let id = a.id; Task { await Self.end(id, nil, .immediate) }
-        }
+        guard current?.content.state.momentID == momentID.uuidString else { return }
+        Task { await backToStandby() }
     }
 
     // MARK: Helpers
 
-    private func endAll(except id: String?) {
-        for a in Live.activities where a.attributes.momentID != id {
-            let id = a.id; Task { await Self.end(id, nil, .immediate) }
+    /// The moment a note is for: the one given, else one logged in the last 10 minutes (a felt button press
+    /// just before), else a new rescue. Logging starts in the background so recording isn't kept waiting.
+    private func moment(for id: String?) async -> LogEvent? {
+        if let e = event(id) { return e }
+        if let e = latestMoment(within: 10 * 60) { return e }
+        guard let logRescue else { return nil }
+        let newID = UUID()
+        logRescue(newID)
+        for _ in 0..<40 {
+            if let e = event(newID.uuidString) { return e }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        return nil
+    }
+
+    private func backToStandby() async {
+        idle?.cancel()
+        guard let live = current else { return }
+        if standbyOn {
+            await Self.update(live.id, content(State(phase: .standby)), alert: nil)
+        } else {
+            await Self.end(live.id, nil, .immediate)
         }
     }
 
-    /// Ends a note that's still waiting; only runs while the app is awake, the stale date covers the rest.
-    private func scheduleEnd(after seconds: TimeInterval) {
-        autoEnd?.cancel()
-        autoEnd = Task { [weak self] in
+    /// A note nobody answered goes back to standby. Only runs while the app is awake; `standby()` catches the rest.
+    private func returnToStandby(after seconds: TimeInterval) {
+        idle?.cancel()
+        idle = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
-            guard !Task.isCancelled, let self, let live = self.current, live.content.state.phase != .recording else { return }
-            await Self.end(live.id, nil, .immediate)
+            guard !Task.isCancelled, let self, let live = self.current,
+                  ![.recording, .writing, .standby].contains(live.content.state.phase) else { return }
+            await self.backToStandby()
+        }
+    }
+
+    /// Updates the card, or starts one (allowed in the foreground and from the card's own intents).
+    private func show(_ state: State) async {
+        if let live = current { await Self.update(live.id, content(state), alert: nil) } else { _ = request(state) }
+    }
+
+    private static let startedKey = "quickRecordCardStarted"
+
+    private func request(_ state: State) -> Bool {
+        do {
+            _ = try Live.request(attributes: QuickRecordAttributes(), content: content(state), pushType: nil)
+            UserDefaults.standard.set(Date.now, forKey: Self.startedKey)
+            return true
+        } catch {
+            log.info("request refused: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    private func endAll() {
+        for a in Live.activities {
+            let id = a.id
+            Task { await Self.end(id, nil, .immediate) }
         }
     }
 
     // ActivityKit's update and end are nonisolated; each looks the activity up by id so nothing non-Sendable
     // crosses from the main actor.
-    private nonisolated static func update(_ id: String, _ c: ActivityContent<QuickRecordAttributes.ContentState>) async {
-        await Live.activities.first { $0.id == id }?.update(c)
+    private nonisolated static func update(_ id: String, _ c: ActivityContent<State>, alert: AlertConfiguration?) async {
+        await Live.activities.first { $0.id == id }?.update(c, alertConfiguration: alert)
     }
 
-    private nonisolated static func end(_ id: String, _ c: ActivityContent<QuickRecordAttributes.ContentState>?,
-                                        _ policy: ActivityUIDismissalPolicy) async {
+    private nonisolated static func end(_ id: String, _ c: ActivityContent<State>?, _ policy: ActivityUIDismissalPolicy) async {
         await Live.activities.first { $0.id == id }?.end(c, dismissalPolicy: policy)
     }
 
-    private func content(_ state: QuickRecordAttributes.ContentState) -> ActivityContent<QuickRecordAttributes.ContentState> {
-        ActivityContent(state: state, staleDate: .now.addingTimeInterval(30 * 60))
+    private func content(_ state: State) -> ActivityContent<State> {
+        // Standby never goes stale; a note does after 30 minutes. Standby sits low among Live Activities.
+        ActivityContent(state: state, staleDate: state.phase == .standby ? nil : .now.addingTimeInterval(30 * 60),
+                        relevanceScore: state.phase == .standby ? 0 : 50)
     }
 
-    private func attributes(_ e: LogEvent) -> QuickRecordAttributes {
-        QuickRecordAttributes(momentID: e.id.uuidString, kind: e.moment.title, isRescue: e.moment == .rescue,
-                              whenAndWhere: e.whenAndWhere)
+    private func momentState(_ e: LogEvent, phase: QuickRecordAttributes.Phase, keeping old: State? = nil) -> State {
+        var s = State(phase: phase, momentID: e.id.uuidString, kind: e.moment.title, isRescue: e.moment == .rescue,
+                      whenAndWhere: e.whenAndWhere)
+        let same = old?.momentID == e.id.uuidString
+        s.selected = same ? old?.selected ?? [] : e.tags.map(\.rawValue)
+        s.suggested = same ? old?.suggested ?? [] : []
+        return s
     }
 
     private func event(_ id: String?) -> LogEvent? {
@@ -193,10 +270,9 @@ final class QuickRecordLive {
         return try? ctx.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.id == uuid })).first
     }
 
-    /// The Lock Screen control's moment: the latest rescue or standard moment in the last 6 hours.
-    private func latestMoment() -> LogEvent? {
+    private func latestMoment(within seconds: TimeInterval) -> LogEvent? {
         guard let ctx = container?.mainContext else { return nil }
-        let since = Date().addingTimeInterval(-6 * 3600)
+        let since = Date().addingTimeInterval(-seconds)
         let baseline = MomentKind.okay.rawValue
         var d = FetchDescriptor<LogEvent>(predicate: #Predicate { $0.loggedAt >= since && $0.kindRaw != baseline },
                                           sortBy: [SortDescriptor(\.loggedAt, order: .reverse)])

@@ -18,46 +18,49 @@ struct AsthmaLogWidgets: WidgetBundle {
 struct QuickRecordLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: QuickRecordAttributes.self) { context in
-            QuickRecordLockView(attributes: context.attributes, state: context.state, isStale: context.isStale)
+            QuickRecordLockView(state: context.state, isStale: context.isStale)
                 .activityBackgroundTint(.black)
                 .activitySystemActionForegroundColor(.white)
-                .widgetURL(URL(string: "feltair://record/\(context.attributes.momentID)"))
+                .widgetURL(Copy.url(context.state))
         } dynamicIsland: { context in
-            let a = context.attributes, s = context.state
+            let s = context.state
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    KindTag(attributes: a).padding(.leading, 4)
+                    KindTag(state: s).padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    MainButton(attributes: a, state: s, size: 44)
+                    MainButton(state: s, size: 44)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(Copy.title(s.phase)).font(Ink.sentence(20)).foregroundStyle(.white)
-                        Copy.detail(a, s).font(.caption).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                        Copy.detail(s).font(.caption).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } compactLeading: {
-                Image(systemName: s.phase == .recording ? "waveform" : "mic.fill").foregroundStyle(Ink.pastel(a))
+                // On standby the island stays quiet: a small grey mic.
+                Image(systemName: s.phase == .recording ? "waveform" : "mic.fill")
+                    .foregroundStyle(s.phase == .standby ? Color.white.opacity(0.4) : Ink.pastel(s))
             } compactTrailing: {
-                if s.phase == .recording, let start = s.startedAt {
+                if s.phase == .standby {
+                    EmptyView()
+                } else if s.phase == .recording, let start = s.startedAt {
                     Text(timerInterval: start...start.addingTimeInterval(QuickRecordAttributes.maxSeconds), countsDown: false)
-                        .monospacedDigit().frame(width: 40).foregroundStyle(Ink.pastel(a))
+                        .monospacedDigit().frame(width: 40).foregroundStyle(Ink.pastel(s))
                 } else {
-                    Text(a.kind).foregroundStyle(Ink.pastel(a))
+                    Text(s.kind ?? "").foregroundStyle(Ink.pastel(s))
                 }
             } minimal: {
-                Image(systemName: "mic.fill").foregroundStyle(Ink.pastel(a))
+                Image(systemName: "mic.fill").foregroundStyle(s.phase == .standby ? Color.white.opacity(0.4) : Ink.pastel(s))
             }
-            .widgetURL(URL(string: "feltair://record/\(a.momentID)"))
-            .keylineTint(Ink.pastel(a))
+            .widgetURL(Copy.url(s))
+            .keylineTint(Ink.pastel(s))
         }
     }
 }
 
 struct QuickRecordLockView: View {
-    let attributes: QuickRecordAttributes
     let state: QuickRecordAttributes.ContentState
     let isStale: Bool
 
@@ -65,8 +68,12 @@ struct QuickRecordLockView: View {
         // A Lock Screen Live Activity is at most 160 pt tall: everything is sized to fit that.
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                KindTag(attributes: attributes)
-                Text(attributes.whenAndWhere).font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                if state.phase == .standby {
+                    Text("felt air").font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.6))
+                } else {
+                    KindTag(state: state)
+                }
+                Text(state.whenAndWhere ?? "").font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
                 Spacer(minLength: 0)
                 if state.phase != .saved {
                     Button(intent: QuickRecordDismissIntent()) {
@@ -81,13 +88,13 @@ struct QuickRecordLockView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(isStale && state.phase == .ready ? "Still want to add a note?" : Copy.title(state.phase))
                         .font(Ink.sentence(22)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.75)
-                    Copy.detail(attributes, state).font(.footnote).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                    Copy.detail(state).font(.footnote).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 ZStack {
-                    DotRing(ink: Ink.pastel(attributes), strength: state.phase == .recording ? 1 : state.phase == .writing ? 0.6 : 0.35)
+                    DotRing(ink: Ink.pastel(state), strength: state.phase == .recording ? 1 : state.phase == .writing ? 0.6 : state.phase == .standby ? 0.2 : 0.35)
                         .frame(width: 68, height: 68)
-                    MainButton(attributes: attributes, state: state, size: 46)
+                    MainButton(state: state, size: 46)
                 }
             }
             if state.phase == .ready || state.phase == .review || state.phase == .needsMic {
@@ -100,14 +107,17 @@ struct QuickRecordLockView: View {
 
 /// Record / stop / save: the one big control. White when it's the next step.
 private struct MainButton: View {
-    let attributes: QuickRecordAttributes
     let state: QuickRecordAttributes.ContentState
     let size: CGFloat
 
     var body: some View {
         switch state.phase {
+        case .standby:
+            // Logs a rescue (or uses one from the last 10 minutes) and listens.
+            Button(intent: QuickRecordStartIntent(momentID: nil)) { circle("mic.fill", filled: false) }
+                .buttonStyle(.plain).accessibilityLabel("Log a rescue and record a voice note")
         case .ready, .needsMic:
-            Button(intent: QuickRecordStartIntent(momentID: attributes.momentID)) {
+            Button(intent: QuickRecordStartIntent(momentID: state.momentID)) {
                 circle("mic.fill", filled: false)
             }
             .buttonStyle(.plain).accessibilityLabel("Record a voice note")
@@ -124,7 +134,7 @@ private struct MainButton: View {
             .buttonStyle(.plain)
         case .saved:
             Image(systemName: "checkmark").font(.title3.weight(.semibold)).foregroundStyle(.black)
-                .frame(width: size, height: size).background(Circle().fill(Ink.pastel(attributes)))
+                .frame(width: size, height: size).background(Circle().fill(Ink.pastel(state)))
         }
     }
 
@@ -170,9 +180,9 @@ private struct Chips: View {
 }
 
 private struct KindTag: View {
-    let attributes: QuickRecordAttributes
+    let state: QuickRecordAttributes.ContentState
     var body: some View {
-        Text(attributes.kind).font(.caption.weight(.semibold)).foregroundStyle(.white)
+        Text(state.kind ?? "").font(.caption.weight(.semibold)).foregroundStyle(.white)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.14)))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.2), lineWidth: 1))
@@ -211,6 +221,7 @@ private struct DotRing: View {
 private enum Copy {
     static func title(_ p: QuickRecordAttributes.Phase) -> String {
         switch p {
+        case .standby: "Need your inhaler?"
         case .ready: "What's going on?"
         case .recording: "Listening…"
         case .writing: "Writing it down…"
@@ -220,8 +231,14 @@ private enum Copy {
         }
     }
 
-    @ViewBuilder static func detail(_ a: QuickRecordAttributes, _ s: QuickRecordAttributes.ContentState) -> some View {
+    /// Tapping the card opens the in-app recorder for its moment (or just the app, on standby).
+    static func url(_ s: QuickRecordAttributes.ContentState) -> URL? {
+        URL(string: "feltair://record/\(s.momentID ?? "")")
+    }
+
+    @ViewBuilder static func detail(_ s: QuickRecordAttributes.ContentState) -> some View {
         switch s.phase {
+        case .standby: Text("Tap the mic to log it and talk.")
         case .ready: Text("Where you were, what you were doing.")
         case .recording:
             if let start = s.startedAt {
@@ -240,8 +257,8 @@ private enum Copy {
 /// Widget-side copies of the few tokens the Lock Screen needs (the extension can't see the app's Theme).
 enum Ink {
     /// Theme.rescueSoft / Theme.standardSoft, dark values.
-    static func pastel(_ a: QuickRecordAttributes) -> Color {
-        a.isRescue ? Color(red: 1, green: 0xC9 / 255, blue: 0xA3 / 255) : Color(red: 0xB4 / 255, green: 0xDC / 255, blue: 0xF7 / 255)
+    static func pastel(_ s: QuickRecordAttributes.ContentState) -> Color {
+        s.isRescue ? Color(red: 1, green: 0xC9 / 255, blue: 0xA3 / 255) : Color(red: 0xB4 / 255, green: 0xDC / 255, blue: 0xF7 / 255)
     }
 
     /// Recursive at the "plain" voice (a little casual, no cursive), as the app's sentence. Falls back to New York.

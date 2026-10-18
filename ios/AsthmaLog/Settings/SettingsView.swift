@@ -8,6 +8,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.useOnDeviceModel) private var useModel = true
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
     @AppStorage(Prefs.quickRecord) private var quickRecord = true
+    @AppStorage(Prefs.lockScreenReady) private var lockScreenReady = true
     @AppStorage(Prefs.logButtons) private var useButtons = false
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.useDemoData) private var demo = false
@@ -105,12 +106,19 @@ struct SettingsView: View {
                     Toggle("Log with two buttons instead of the +", isOn: $useButtons)
                     Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
                     Toggle("After a press, ask what was going on", isOn: $quickRecord)
-                        .onChange(of: quickRecord) { _, on in if on { Task { _ = await QuickRecordCenter.shared.requestPermission() } } }
+                        .onChange(of: quickRecord) { _, on in
+                            if on { Task { _ = await QuickRecordCenter.shared.requestPermission() } }
+                            QuickRecordLive.shared.standby()
+                        }
+                    if quickRecord {
+                        Toggle("Keep felt air on the Lock Screen", isOn: $lockScreenReady)
+                            .onChange(of: lockScreenReady) { _, _ in QuickRecordLive.shared.standby() }
+                    }
                     Toggle("Add baseline moments automatically", isOn: $autoBaseline)
                 } header: {
                     Text("Logging")
                 } footer: {
-                    Text("Baseline moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
+                    Text("On the Lock Screen, a press on your felt button lights up felt air so you can say what's going on, and its mic logs a rescue and listens, all without unlocking. Baseline moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
                 }
 
 

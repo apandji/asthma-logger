@@ -2,20 +2,24 @@ import ActivityKit
 import AppIntents
 import Foundation
 
-/// Quick Record on the Lock Screen: after a rescue or standard moment, a Live Activity asks what was going on.
-/// Record, stop, tag and save all happen from the Lock Screen without unlocking. Compiled into the app and the
-/// widget extension; the intents always run in the app's process (where the microphone and the journal are).
+/// Quick Record on the Lock Screen. While felt air is ready, a small card waits on the Lock Screen (iOS only lets
+/// an app *start* a Live Activity from the foreground, but it can *update* one from the background, which is
+/// where a felt button press arrives). A press turns the card into "Rescue logged · What's going on?"; its mic
+/// on standby logs a rescue and listens. Record, stop, tag and save all happen without unlocking.
+/// Compiled into the app and the widget extension; the intents always run in the app's process.
 nonisolated struct QuickRecordAttributes: ActivityAttributes {
-    /// The moment this note is for.
-    var momentID: String
-    /// "Rescue" or "Standard".
-    var kind: String
-    var isRescue: Bool
-    /// "Today, 6:12 PM · Tower Grove South".
-    var whenAndWhere: String
+    /// Fixed for the card's life; the moment it's about changes, so it lives in the state.
+    var app = "felt air"
 
     struct ContentState: Codable, Hashable {
         var phase: Phase
+        /// The moment this note is for (nil on standby).
+        var momentID: String?
+        /// "Rescue" or "Standard".
+        var kind: String?
+        var isRescue = true
+        /// "Today, 6:12 PM · Tower Grove South".
+        var whenAndWhere: String?
         var startedAt: Date?
         /// The first words of the transcript (the full text is on the moment).
         var words: String?
@@ -25,6 +29,8 @@ nonisolated struct QuickRecordAttributes: ActivityAttributes {
     }
 
     enum Phase: String, Codable, Hashable {
+        /// Waiting for a moment: the mic logs a rescue and listens.
+        case standby
         case ready, recording, writing, review, saved
         /// The microphone isn't allowed yet; that can only be asked in the app.
         case needsMic
@@ -48,11 +54,11 @@ nonisolated enum QuickRecordCommand: Sendable {
     static var handle: ((QuickRecordCommand) async -> Void)?
 }
 
-/// Starts a voice note for the moment on the Lock Screen (or, from the Lock Screen control, the latest
-/// rescue or standard moment in the last few hours).
+/// Starts a voice note for the moment on the card. With no moment (standby card, Lock Screen control, Action
+/// button): attaches to a moment logged in the last 10 minutes, otherwise logs a rescue first.
 struct QuickRecordStartIntent: AudioRecordingIntent, LiveActivityIntent {
-    static let title: LocalizedStringResource = "Record a voice note"
-    static let description = IntentDescription("Say what was going on at your latest felt air moment.")
+    static let title: LocalizedStringResource = "Rescue voice note"
+    static let description = IntentDescription("Logs a rescue (unless you just logged one) and records what's going on.")
     static let openAppWhenRun = false
 
     @Parameter(title: "Moment") var momentID: String?

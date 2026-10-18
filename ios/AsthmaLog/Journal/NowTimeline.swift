@@ -41,6 +41,7 @@ struct NowTimeline: View {
 
     private let dayWidth: CGFloat = 64
     private let axis: CGFloat = 46
+    private let hourTick = UISelectionFeedbackGenerator()
     private let height: CGFloat = 86
     private let cal = Calendar.current
 
@@ -108,8 +109,14 @@ struct NowTimeline: View {
         .animation(Theme.snap, value: focusTime == nil)
         .padding(.top, 24)
         .sensoryFeedback(.selection, trigger: currentMoment?.id)
-        // Ahead, a tick per hour: the forecast's grain under the thumb.
-        .sensoryFeedback(.selection, trigger: current > now ? Self.hour(current) : nil)
+        // Ahead, a tick per hour: the forecast's grain under the thumb. A generator kept warm for the whole
+        // drag, and fired directly: `.sensoryFeedback` drops ticks that come fast, and the thumb crosses hours fast.
+        .onChange(of: current > now ? Self.hour(current) : nil) { was, next in
+            guard dragging, next != nil, was != nil else { return }
+            hourTick.selectionChanged()
+            hourTick.prepare()
+        }
+        .onChange(of: dragging) { _, d in if d { hourTick.prepare() } }
         .onChange(of: currentMoment?.id) { _, id in
             guard id != nil else { return }
             settle = true

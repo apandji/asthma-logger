@@ -158,10 +158,10 @@ struct MomentDetailsView: View {
                 }
             }
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
-                tile("humidity", "Humidity", c.best(.humidity).map { "\(Int($0.value.rounded()))%" })
-                tile("drop", "Dew point", c.best(.dewpoint).map { "\(Int($0.value.rounded()))°F" })
-                tile("wind", "Wind", c.best(.windSpeed).map { "\(Int($0.value.rounded())) mph" })
-                tile("sun.max", "UV index", c.best(.uvIndex).map { "\(Int($0.value.rounded()))" })
+                tile(Icons.humidity, "Humidity", c.best(.humidity).map { "\(Int($0.value.rounded()))%" })
+                tile(Icons.dewPoint, "Dew point", c.best(.dewpoint).map { "\(Int($0.value.rounded()))°F" })
+                tile(Icons.wind, "Wind", c.best(.windSpeed).map { "\(Int($0.value.rounded())) mph" })
+                tile(Icons.uv, "UV index", c.best(.uvIndex).map { "\(Int($0.value.rounded()))" })
             }
             if !c.alerts.isEmpty {
                 ForEach(c.alerts, id: \.name) { a in

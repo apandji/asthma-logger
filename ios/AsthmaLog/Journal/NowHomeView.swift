@@ -51,6 +51,8 @@ struct NowHomeView: View {
     @State private var skyPress: CGFloat = 0
     /// The clock. Ticks so "now" creeps along the track while you watch.
     @State private var now = Date()
+    /// Self, from the rail: the map slides away for your words and activity.
+    @State private var selfOpen = false
     /// Active wildfires near here, while smoke is the event (Ambee, demo until the key arrives).
     @State private var fires: WildfiresNearby?
     @Namespace private var mapZoom
@@ -75,14 +77,26 @@ struct NowHomeView: View {
                         .opacity(probing ? 0.4 : 1)
                         .transition(.opacity)
                 }
-                // One sky at a time; the next settles in with a breath, not a cut.
-                ZStack { sky.id(focusKey).transition(.opacity) }
+                // One sky at a time; the next settles in with a breath, not a cut. Self slides the map away.
+                ZStack {
+                    if !selfOpen {
+                        sky.id(focusKey).transition(.asymmetric(insertion: .opacity, removal: .move(edge: .top).combined(with: .opacity)))
+                    }
+                }
                     .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
                     // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
                     .distortionEffect(ShaderLibrary.dent(.float2(skyDrag?.point ?? .zero), .float(170), .float(skyPress)),
                                       maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: skyDrag != nil && !reduceMotion)
                     .gesture(skyScrub)
-                    .frame(maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Outside the sky's shader layer: a scroll view and glass can't be drawn inside one.
+                    .overlay {
+                        if selfOpen {
+                            SelfView(event: selfEvent, date: selfDate, close: { withAnimation(Theme.smooth) { selfOpen = false } },
+                                     record: { recording = $0 })
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
                     .padding(.top, 4)
                 NowTimeline(moments: moments, baselines: events.filter { $0.moment == .okay }.map(\.loggedAt),
                             tint: { airTint($0.weave) },
@@ -213,6 +227,7 @@ struct NowHomeView: View {
             .environment(\.skySettled, !scrubbing)
             .sensoryFeedback(.impact(weight: .medium, intensity: 0.9), trigger: inFuture)
             .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: inPast)
+            .onChange(of: focusKey) { _, _ in if selfOpen { withAnimation(Theme.smooth) { selfOpen = false } } }
             .onChange(of: events.last?.id) { _, _ in
                 withAnimation(.smooth(duration: 0.6)) { focusTime = nil }
                 announce(events.last)
@@ -517,7 +532,8 @@ struct NowHomeView: View {
                        pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason), probing: $probing,
                        mapID: j.latitude == nil ? "here" : j.id.uuidString,
                        coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
-                       captureInk: j.moment == .rescue ? Theme.rescueSoft : Theme.standardSoft, onPin: { pinDetails = j })
+                       captureInk: j.moment == .rescue ? Theme.rescueSoft : Theme.standardSoft, onPin: { pinDetails = j },
+                       onSelf: openSelf)
                     .id(j.id)
                     .onTapGesture { pinDetails = j }
             } else {
@@ -525,14 +541,14 @@ struct NowHomeView: View {
                 NowSky(conditions: air.conditions, weave: air.weave, date: now,
                        pollen: air.pollen, probing: $probing,
                        mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() },
-                       event: liveEvent)
+                       event: liveEvent, onSelf: openSelf)
                     .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
             }
         case .moment(let m):
             NowSky(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
                    pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason), probing: $probing,
                    mapID: m.id.uuidString, coordinate: m.latitude.flatMap { lat in m.longitude.map { (lat, $0) } },
-                   mapNamespace: mapZoom, onPin: { pinDetails = m })
+                   mapNamespace: mapZoom, onPin: { pinDetails = m }, onSelf: openSelf)
                 .onTapGesture { pinDetails = m }
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
@@ -542,6 +558,19 @@ struct NowHomeView: View {
     }
 
     private var mapID: String { chosen.map { "place-\($0.lat)-\($0.lon)" } ?? "here" }
+
+    private func openSelf() { withAnimation(Theme.smooth) { selfOpen = true } }
+
+    /// The moment Self is about: the one on the playhead, the one just logged, or none (Now).
+    private var selfEvent: LogEvent? {
+        switch focus {
+        case .moment(let m): m
+        case .now: justNow
+        case .hour: nil
+        }
+    }
+
+    private var selfDate: Date { selfEvent?.loggedAt ?? now }
 
     /// What stood out at a rescue moment, from the data model: the bins of its frame that are gated
     /// patterns (more common on flare days than baseline), named in plain words. Never a cause, never a
@@ -672,7 +701,7 @@ struct NowHomeView: View {
         if let event { deck.append(.advice(AirAdvice.warning(event.advice, fallF: fallF), icon: event.icon, title: event.label, home: home, ahead: ahead)) }
         for n in notable.prefix(3) {
             let w = AirAdvice.warning(n.factor)
-            deck.append(.advice(w, icon: n.factor.rawValue.hasSuffix("Pollen") ? "leaf.fill" : "aqi.medium",
+            deck.append(.advice(w, icon: Icons.factor(n.factor),
                                 title: w.headline.replacingOccurrences(of: " today.", with: "").replacingOccurrences(of: ".", with: ""),
                                 home: home, ahead: ahead))
         }
@@ -958,6 +987,8 @@ struct NowSky: View {
     /// An air event changes the whole field, never a spot: a storm darkens it and breaks the pollen apart,
     /// smoke lays a warm veil over the map, a temperature drop cools the top of the sky.
     var event: AirEvent? = nil
+    /// Self on the rail: your words and activity (not part of the sky). Nil where there's no "you" (forecast).
+    var onSelf: (() -> Void)? = nil
     @State private var flash = 0.0
     @State private var pinPulse = false
     /// Past: a moment more than 20 minutes ago (not a forecast, not a fresh log).
@@ -975,8 +1006,9 @@ struct NowSky: View {
     @State private var probe: SkyProbe?
     /// The 48 hours before this sky's time, for the label's lines. Loaded once per sky.
     @State private var history: HourlyHistory?
-    /// The row of the scale being read: 0 weather, then the layers in reading order.
-    @State private var row: Int?
+    /// The rail row being read, and whether the rail is held open (groups with their items).
+    @State private var row: RailRow?
+    @State private var expanded = false
     @State private var pulse: Task<Void, Never>?
     @State private var rippleAt: Date?
     @State private var rippleInk: Color = .white
@@ -989,7 +1021,8 @@ struct NowSky: View {
         GeometryReader { geo in
             let size = geo.size
             let stack = SkyExplorer.stack(layers)
-            let mids = SkyExplorer.bands(count: stack.count, height: 1).map { CGFloat($0.lowerBound + $0.upperBound) / 2 * size.height }
+            let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: onSelf != nil)
+            let mids = RailRow.mids(rows).map { CGFloat($0) * size.height }
             ZStack {
                 AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
                 if let (lat, lon) = coordinate {
@@ -1030,7 +1063,7 @@ struct NowSky: View {
                 }
                 ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
                               fragments: stack.map { event == .storm && $0.name.hasSuffix("pollen") },
-                              selected: row.flatMap { $0 > 0 ? $0 - 1 : nil },
+                              selected: selectedLayer(stack),
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
                               rippleInk: rippleInk, scan: true, hollow: sketch,
@@ -1055,8 +1088,8 @@ struct NowSky: View {
             }
             // The label sits beside the icon being read, never at a spot on the map.
             .overlay {
-                if let probe, let row, row < mids.count {
-                    SkyProbeOverlay(point: CGPoint(x: size.width - 64 - 118, y: mids[row]), probe: probe, width: size.width,
+                if let probe, let row, let i = rows.firstIndex(of: row) {
+                    SkyProbeOverlay(point: CGPoint(x: size.width - 64 - 118, y: mids[i]), probe: probe, width: size.width,
                                     showsGlow: false, beside: true)
                         .transition(.opacity)
                 }
@@ -1071,16 +1104,17 @@ struct NowSky: View {
             }
             // The scale: the legend, and the only place you read the air. Slide up and down it.
             .overlay(alignment: .trailing) {
-                StrataScale(layers: layers, probe: probe, height: size.height, weatherSymbol: SkyExplorer.weatherIcon(conditions))
+                GroupRail(layers: layers, rows: rows, mids: mids, selected: row, weatherSymbol: SkyExplorer.weatherIcon(conditions))
                     .padding(.trailing, 18)
                     .frame(width: 64, height: size.height, alignment: .trailing)
                     .contentShape(Rectangle())
-                    .gesture(scrub(size, mids: mids, stack: stack))
+                    .gesture(scrub(size))
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Air layers")
+                    .accessibilityLabel("Weather, particles and gases, biologics" + (onSelf == nil ? "" : ", and self"))
                     .accessibilityAdjustableAction { dir in
-                        let n = stack.count + 1
-                        select(dir == .increment ? min(n - 1, (row ?? -1) + 1) : max(0, (row ?? 1) - 1), size: size)
+                        let all = RailRow.rows(expanded: true, layers: layers, includesSelf: onSelf != nil)
+                        let i = row.flatMap { all.firstIndex(of: $0) } ?? -1
+                        select(all[dir == .increment ? min(all.count - 1, i + 1) : max(0, i - 1)])
                     }
             }
         }
@@ -1091,6 +1125,13 @@ struct NowSky: View {
             history = await HourlyHistory.load(latitude: lat, longitude: lon, from: date.addingTimeInterval(-48 * 3600), to: date)
         }
         .onAppear {
+            #if DEBUG
+            // `-railOpen`: the rail held open on Ozone, for screenshots.
+            if ProcessInfo.processInfo.arguments.contains("-railOpen"), !sketch {
+                expanded = true
+                Task { try? await Task.sleep(for: .seconds(1.5)); select(.item("Ozone")) }
+            }
+            #endif
             guard !isPast, !sketch, !reduceMotionEnv else { return }
             withAnimation(.easeOut(duration: 2).repeatForever(autoreverses: false)) { pinPulse = true }
         }
@@ -1113,27 +1154,63 @@ struct NowSky: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotionEnv
 
-    private func scrub(_ size: CGSize, mids: [CGFloat], stack: [AirLayers.Layer]) -> some Gesture {
+    /// Hold the rail: it opens (every group with its items' dots) and stays put while you slide; let go and it
+    /// folds. Letting go on Self opens your words and activity.
+    private func scrub(_ size: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { drag in
-                if !probing { probing = true; touched = true; startPulse() }
+                if !probing {
+                    probing = true; touched = true; startPulse()
+                    withAnimation(.snappy(duration: 0.25)) { expanded = true }
+                }
+                let rows = RailRow.rows(expanded: true, layers: layers, includesSelf: onSelf != nil)
+                let mids = RailRow.mids(rows).map { CGFloat($0) * size.height }
                 let nearest = mids.enumerated().min { abs($0.element - drag.location.y) < abs($1.element - drag.location.y) }?.offset ?? 0
-                if nearest != row { select(nearest, size: size) }
+                if rows[nearest] != row { select(rows[nearest]) }
             }
             .onEnded { _ in
                 stopPulse()
-                withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil }
+                let landedOnSelf = row == .me
+                withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil; expanded = false }
                 probing = false
+                if landedOnSelf { onSelf?() }
             }
     }
 
-    private func select(_ r: Int, size: CGSize) {
-        let bands = SkyExplorer.bands(count: SkyExplorer.stack(layers).count, height: 1)
-        guard r < bands.count else { return }
-        let y = (bands[r].lowerBound + bands[r].upperBound) / 2
-        let hit = SkyExplorer.strata(at: y, layers: layers, conditions: conditions, weave: weave, temperatureF: temperature, pollen: pollen)
+    /// The layer the particle field lights: the item read, or a group's strongest item.
+    private func selectedLayer(_ stack: [AirLayers.Layer]) -> Int? {
+        let name: String? = switch row {
+        case .item(let n)?: n
+        case .header(let g)?: worstItem(g)
+        default: nil
+        }
+        return name.flatMap { n in stack.firstIndex { ($0.name == "Air" ? "PM2.5" : $0.name) == n } }
+    }
+
+    private func worstItem(_ g: RailGroup) -> String? {
+        let present = layers.readable.filter { g.items.contains($0.name == "Air" ? "PM2.5" : $0.name) && !$0.empty }
+        return present.max { (Double($0.level.rawValue) + $0.fraction) < (Double($1.level.rawValue) + $1.fraction) }
+            .map { $0.name == "Air" ? "PM2.5" : $0.name }
+    }
+
+    private func select(_ r: RailRow) {
         UISelectionFeedbackGenerator().selectionChanged()
-        var p = hit?.probe
+        var p: SkyProbe?
+        switch r {
+        case .header(.weather):
+            p = SkyExplorer.strata(at: 0, layers: layers, conditions: conditions, weave: weave, temperatureF: temperature, pollen: pollen)?.probe
+        case .header(let g):
+            // A group reads as its strongest item, named as the group.
+            if let n = worstItem(g) ?? g.items.first, var q = SkyExplorer.layerProbe(n, layers: layers, conditions: conditions, pollen: pollen) {
+                q.kind = "\(g.title) · most now: \(n)"
+                p = q
+            }
+        case .item(let n):
+            p = SkyExplorer.layerProbe(n, layers: layers, conditions: conditions, pollen: pollen)
+        case .me:
+            p = SkyProbe(name: "Self", kind: "Your words and activity", value: "", unit: "", level: nil,
+                         note: "Let go to open.", color: .white, intensity: 0, symbol: Icons.me)
+        }
         if var probe = p, let h = history {
             switch probe.name {
             case "Weather":
@@ -1435,10 +1512,10 @@ enum AirEvent: Equatable {
 
     var icon: String {
         switch self {
-        case .storm: "cloud.bolt.rain.fill"
-        case .smoke: "smoke.fill"
-        case .tempDrop: "thermometer.low"
-        case .mold: "humidity.fill"
+        case .storm: Icons.storm
+        case .smoke: Icons.smoke
+        case .tempDrop: Icons.tempDrop
+        case .mold: Icons.mold
         }
     }
 

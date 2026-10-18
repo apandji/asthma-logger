@@ -3,7 +3,7 @@ import Testing
 
 @Suite struct AirProfileTests {
     @Test func everyBinHasAFamilyOrIsKnowinglyLeftOut() {
-        let outside: Set<String> = ["hour", "season", "place", "indoor_outdoor", "tag_stress"]
+        let outside: Set<String> = ["hour", "season", "place", "indoor_outdoor"]
         for def in Bins.all where !outside.contains(def.bin) {
             #expect(AirProfile.Category.of(bin: def.bin) != nil, "\(def.bin) has no family")
         }

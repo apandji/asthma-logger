@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.lockScreenReady) private var lockScreenReady = true
     @AppStorage(Prefs.logButtons) private var useButtons = false
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
+    @AppStorage(Prefs.morningBrief) private var morningBrief = true
     @AppStorage(Prefs.useDemoData) private var demo = false
     @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
     @Environment(\.modelContext) private var context
@@ -118,11 +119,21 @@ struct SettingsView: View {
                         Toggle("Keep felt air on the Lock Screen", isOn: $lockScreenReady)
                             .onChange(of: lockScreenReady) { _, _ in QuickRecordLive.shared.standby() }
                     }
-                    Toggle("Add baseline moments automatically", isOn: $autoBaseline)
+                    Toggle("Morning look-ahead", isOn: $morningBrief)
+                        .onChange(of: morningBrief) { _, on in if !on { MorningBrief.cancel() } }
+                    Toggle("Fill in baseline moments", isOn: $autoBaseline)
+                    if autoBaseline {
+                        Button {
+                            VisitLog.shared.requestAlways()
+                        } label: {
+                            LabeledContent("Use where you've been", value: VisitLog.shared.isAlways ? "On" : "Allow…")
+                        }
+                        .disabled(VisitLog.shared.isAlways)
+                    }
                 } header: {
                     Text("Logging")
                 } footer: {
-                    Text("On the Lock Screen, a press on your felt button lights up felt air so you can say what's going on, and its mic logs a rescue and listens, all without unlocking. Baseline moments are what the times you used your inhaler are compared against. For now felt air adds one when you open the app, if there's been none in 20 hours and no inhaler use in the last 2.")
+                    Text("On the Lock Screen, a press on your felt button lights up felt air so you can say what's going on, and its mic logs a rescue and listens, all without unlocking. The morning look-ahead is a notification at 8 with the day's air; opening it also keeps the Lock Screen card ready. Baseline moments are what your inhaler moments are compared against: felt air fills them in a day later, a few hours across each day, with that hour's air from history. With “Use where you've been” (Always location) they're placed where you actually were; otherwise at home. Places stay on this iPhone.")
                 }
 
 

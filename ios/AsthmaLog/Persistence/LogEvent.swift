@@ -47,6 +47,9 @@ final class LogEvent {
     var voiceNoteFile: String?
     /// "University City, MO", looked up once from the coordinates.
     var placeName: String?
+    /// A baseline moment filled in later from where you were and that hour's air (`BaselineFiller`), not
+    /// taken live. Counts like any baseline.
+    var isBackfilled: Bool = false
 
     init(moment: MomentKind, loggedAt: Date = .now, id: UUID = UUID()) {
         self.id = id

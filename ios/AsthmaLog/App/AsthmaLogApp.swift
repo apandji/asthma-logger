@@ -18,6 +18,8 @@ struct AsthmaLogApp: App {
         // Here, not in .task: a Lock Screen button can wake the app in the background with no scene.
         let container = container
         QuickRecordCenter.shared.container = container
+        // iOS relaunches the app in the background to deliver a visit: the log has to be listening from launch.
+        VisitLog.shared.start()
         QuickRecordLive.shared.install(container: container) { id in
             let health = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
             Task { _ = await services.log(.rescue, id: id, in: container.mainContext, writeToHealth: health) }
@@ -39,9 +41,14 @@ struct AsthmaLogApp: App {
                     if args.contains("-skipOnboarding") { UserDefaults.standard.set(true, forKey: Prefs.didOnboard) }
                     if args.contains("-showOnboarding") { UserDefaults.standard.set(false, forKey: Prefs.didOnboard) }
                     // `-dataSet hotHazy` (any DataSetPreset) loads a made-up person; `-freshStart` erases everything.
-                    if let i = args.firstIndex(of: "-dataSet"), i + 1 < args.count, let p = DataSetPreset(rawValue: args[i + 1]) {
-                        DataSets.load(p, context: context)
+                    if let i = args.firstIndex(of: "-dataSet"), i + 1 < args.count {
+                        if let p = DataSetPreset(rawValue: args[i + 1]) { DataSets.load(p, context: context) }
+                        // `-dataSet mine`: your own data back ("My data").
+                        else if args[i + 1] == "mine", let mine = DataSets.saved().first(where: { $0.name == DataSets.ownData }) {
+                            DataSets.load(mine, context: context)
+                        }
                     }
+                    if args.contains("-backfillNow") { await BaselineFiller.shared.runIfDue(in: context, force: true) }
                     if args.contains("-freshStart") { DataSets.freshStart(context: context, button: button) }
                     #endif
                     QuickRecordCenter.shared.start(container: container)
@@ -93,7 +100,9 @@ struct RootView: View {
             // The only time iOS lets felt air start its Lock Screen card.
             if phase == .active, didOnboard { QuickRecordLive.shared.standby() }
             guard phase == .active, autoBaseline, didOnboard else { return }
-            Task { await services.sampleUsualDayIfDue(in: context) }
+            // Baseline moments are filled in across past days (not sampled at app open, which leaned toward
+            // home and toward when the phone was in hand).
+            Task { await BaselineFiller.shared.runIfDue(in: context) }
         }
     }
 }

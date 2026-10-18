@@ -49,6 +49,17 @@ struct AsthmaLogApp: App {
                         }
                     }
                     if args.contains("-backfillNow") { await BaselineFiller.shared.runIfDue(in: context, force: true) }
+                    if args.contains("-exportNow") {
+                        // Copies both export files to Documents/Exports, to read off the simulator.
+                        let events = (try? context.fetch(FetchDescriptor<LogEvent>())) ?? []
+                        let dir = URL.documentsDirectory.appending(path: "Exports", directoryHint: .isDirectory)
+                        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                        for f in EngineExport.files(events: events) {
+                            let to = dir.appending(path: f.lastPathComponent)
+                            try? FileManager.default.removeItem(at: to)
+                            try? FileManager.default.copyItem(at: f, to: to)
+                        }
+                    }
                     if args.contains("-freshStart") { DataSets.freshStart(context: context, button: button) }
                     #endif
                     QuickRecordCenter.shared.start(container: container)

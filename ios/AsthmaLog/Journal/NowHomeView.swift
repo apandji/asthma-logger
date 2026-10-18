@@ -1072,10 +1072,23 @@ struct NowSky: View {
             }
             // The label sits beside the icon being read, never at a spot on the map.
             .overlay {
-                if let probe, let row, let i = rows.firstIndex(of: row) {
-                    SkyProbeOverlay(point: CGPoint(x: size.width - 64 - 118, y: mids[i]), probe: probe, width: size.width,
-                                    showsGlow: false, beside: true)
+                // The reading stays in one place (top left), whatever row the thumb is on.
+                if let probe, row?.reads ?? false {
+                    SkyProbeOverlay(point: .zero, probe: probe, width: size.width, showsGlow: false, topLeading: true)
                         .transition(.opacity)
+                }
+            }
+            // The name follows the thumb, just to its left, so the thumb never covers it.
+            .overlay {
+                if let row, let i = rows.firstIndex(of: row) {
+                    Text(row.name)
+                        .font(.subheadline.weight(.semibold)).lineLimit(1)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .glassEffect(.regular, in: .capsule)
+                        .frame(width: size.width - 64, alignment: .trailing)
+                        .position(x: (size.width - 64) / 2, y: mids[i])
+                        .allowsHitTesting(false)
+                        .animation(.snappy(duration: 0.18), value: row)
                 }
             }
             // The pin wants a tap: the full details for here and now.
@@ -1124,10 +1137,10 @@ struct NowSky: View {
         }
         .onAppear {
             #if DEBUG
-            // `-railOpen`: the rail held open on Ozone, for screenshots.
+            // `-railOpen`: the rail held open on weed pollen, for screenshots.
             if ProcessInfo.processInfo.arguments.contains("-railOpen"), !sketch {
                 expanded = true
-                Task { try? await Task.sleep(for: .seconds(1.5)); select(.item("Ozone")) }
+                Task { try? await Task.sleep(for: .seconds(1.5)); select(.item("Weed pollen")) }
             }
             #endif
             guard !isPast, !sketch, !reduceMotionEnv else { return }

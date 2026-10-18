@@ -232,6 +232,8 @@ struct SkyProbeOverlay: View {
     var band: ClosedRange<CGFloat>? = nil
     /// The label sits level with `point` (beside a scale icon) instead of above or below a finger.
     var beside = false
+    /// The label in one fixed place, the sky's top left (the rail: the reading stays put, the name follows).
+    var topLeading = false
     @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
 
     var body: some View {
@@ -252,7 +254,11 @@ struct SkyProbeOverlay: View {
                 .blur(radius: 6)
                 .position(point)
             }
-            if showsLabel {
+            if showsLabel && topLeading {
+                label.frame(width: 224, alignment: .leading)
+                    .padding(.leading, 12).padding(.top, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else if showsLabel {
                 // Above the finger, or below it when there's no room above.
                 label
                     .frame(width: 224, alignment: .leading)
@@ -379,16 +385,28 @@ enum RailRow: Hashable {
         return out
     }
 
-    /// Row centres (unit y). Self sits a little apart from the air.
+    /// Row centres (unit y), evenly spaced. Self is a stop like the others.
     static func mids(_ rows: [RailRow]) -> [Double] {
-        let gap = rows.contains(.me) ? 0.6 : 0
-        let units = Double(rows.count - 1) + gap
+        let units = Double(max(1, rows.count - 1))
         let span = min(0.72, 0.075 * units)
         let start = 0.5 - span / 2
-        var y = start
-        return rows.enumerated().map { i, r in
-            if i > 0 { y += span / max(1, units) * (r == .me ? 1 + gap : 1) }
-            return y
+        return rows.indices.map { start + span * Double($0) / units }
+    }
+
+    /// The name tag beside the thumb.
+    var name: String {
+        switch self {
+        case .header(let g): g.title
+        case .item(let n): n
+        case .me: "Self"
+        }
+    }
+
+    /// Whether this row has a reading to show (group headers only name themselves).
+    var reads: Bool {
+        switch self {
+        case .header(let g): g.items.isEmpty   // Weather reads; Particles & gases and Biologics just name.
+        case .item, .me: true
         }
     }
 }
@@ -438,11 +456,12 @@ struct GroupRail: View {
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.2).frame(width: 20, height: 20) } }
                 .accessibilityLabel(name)
         case .me:
+            // A stop like the others.
             Image(systemName: Icons.me)
-                .font(.system(size: on ? 17 : 14, weight: .semibold))
+                .font(.system(size: on ? 18 : 15, weight: .semibold))
                 .foregroundStyle(on ? Color.primary : Color.primary.opacity(0.6))
                 .frame(width: 30, height: 30)
-                .background { Circle().strokeBorder(Color.primary.opacity(on ? 0.8 : 0.3), style: StrokeStyle(lineWidth: 1.2, dash: on ? [] : [2, 3])) }
+                .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.5) } }
                 .accessibilityLabel("Self")
         }
     }

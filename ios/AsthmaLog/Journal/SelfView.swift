@@ -53,26 +53,34 @@ struct SelfPanel: View {
     }
 
     @ViewBuilder private var bodyLines: some View {
-        line("Activity", activity ?? "…")
-        if let h = health {
-            if let v = h.sleep { line("Sleep", v) }
-            if let v = h.heart { line("Heart", v) }
-            if let v = h.breathing { line("Breathing", v) }
+        VStack(alignment: .leading, spacing: 6) {
+            line("Activity", activity ?? "…")
+            if let h = health {
+                if let v = h.sleep { line("Sleep", v) }
+                if let v = h.heart { line("Heart", v) }
+                if let v = h.breathing { line("Breathing", v) }
+            }
         }
         if askHealth {
+            // A real button: sleep, heart and breathing come from Apple Health.
             Button { Task { await HealthReader.shared.ask(); await load() } } label: {
-                Label("Connect Apple Health for sleep, heart and breathing", systemImage: "heart.fill")
-                    .font(.subheadline.weight(.semibold)).multilineTextAlignment(.leading)
+                Label("Connect Apple Health", systemImage: "heart.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .glassEffect(.regular.interactive(), in: .capsule)
             }
             .buttonStyle(PressStyle())
             .disabled(!interactive)
+            .padding(.top, 4)
+            Text("Adds sleep, heart and breathing, in words.").font(.caption).foregroundStyle(Theme.secondaryText)
         }
     }
 
+    /// A small grey label and its value on one line, one size throughout.
     private func line(_ name: String, _ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(name).foregroundStyle(Theme.secondaryText).frame(width: 84, alignment: .leading)
-            Text(text)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(name).font(.caption.weight(.medium)).foregroundStyle(Theme.secondaryText).frame(width: 64, alignment: .leading)
+            Text(text).font(.subheadline)
         }
     }
 

@@ -169,12 +169,15 @@ struct OnboardingView: View {
                 }
             case .button:
                 if first != nil {
-                    Text("That press is your first capture: the air, here, right now. From now on each press saves a moment like it.")
+                    // Without a button there was no press: the + will be the way to log.
+                    Text(logMethod == "app"
+                         ? "This is your first capture: the air, here, right now. From now on each press of the + saves a moment like it."
+                         : "That press is your first capture: the air, here, right now. From now on each press saves a moment like it.")
                         .font(.subheadline).foregroundStyle(Theme.secondaryText)
                     primary("Next") { step = .inhalers }
                 } else {
                     Text(buttonStatus).font(.subheadline).foregroundStyle(Theme.secondaryText)
-                    Text("Orange cap is Rescue, teal is Standard. This first press pairs the button; it isn't counted as inhaler use.")
+                    Text("Orange cap is Rescue, teal is Standard. This first press pairs the button, it isn't counted as inhaler use.")
                         .font(.footnote).foregroundStyle(Theme.secondaryText)
                     HStack(spacing: 10) {
                         secondary("I don't have a button") {
@@ -187,6 +190,7 @@ struct OnboardingView: View {
             case .inhalers:
                 Text("So each moment says which one you used. You can rename them in Settings › Devices.")
                     .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)   // the keyboard squeezes the sky, not the words
                 inhalerField("Rescue · orange cap", placeholder: "e.g. Ventolin", text: $rescueName)
                 inhalerField("Daily · teal cap", placeholder: "e.g. Flovent", text: $dailyName)
                 primary("Next") { saveInhalers(); step = .permissions }
@@ -283,6 +287,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.headline)
                 Text(detail).font(.footnote).foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)   // all its lines: the sky gives up the room
             }
             Spacer()
             Button(done ? "Done" : "Allow", action: action)

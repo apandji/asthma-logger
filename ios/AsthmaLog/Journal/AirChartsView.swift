@@ -55,7 +55,7 @@ struct AirChartsView: View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(rangeTitle).font(Theme.headlineSerif)
-                Text("Swipe sideways to go back in time. Lines show the air outside, hour by hour; marks are when you used an inhaler.")
+                Text("Swipe sideways to go back in time. Lines show the air outside, hour by hour. Marks are when you used an inhaler.")
                     .font(.subheadline).foregroundStyle(Theme.secondaryText)
             }
             .padding(.horizontal, 4)

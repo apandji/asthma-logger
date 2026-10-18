@@ -94,16 +94,29 @@ Rules:
 - **Reduce Motion** turns off breathing, drift, ripples, lightning and press scaling; the design must
   still read from colour, shape and words.
 
-## The sky (`NowSky`, `ParticleField`, `StrataScale`)
+## The sky (`NowSky`, `ParticleField`, `GroupRail`)
 
 The main picture. Weather-only colour field, the **map pinned** on top (never moves with a finger), a
 **pin** at the centre, and the air as **particles**: each layer is its own ink, sprinkled evenly over the
 whole place. Count and size say how much; nothing says *where*.
 
-Reading it: slide along the **icon scale** at the right edge (one ink, icons sized by amount). The chosen
-layer's dots light up everywhere; the label appears beside the icon with the layer's ink on its icon, the
-reading set large, three growing **amount dots**, the level word, one plain line, and (when there's a
-look-back) the 48 hours before as sparklines and two rows.
+Reading it: **the rail** on the right edge (left in Settings › Rail for left hands). Folded, five stops in the
+language of Personal Insights: **Weather · Particles & gases · Biologics · Voice · Body** (`Icons` is the one source
+for every symbol). Hold it and it opens once for the whole hold, each group with its items as dots underneath (PM2.5,
+PM10, ozone, NO₂; tree, grass, weed pollen), so nothing shifts under the thumb. Slide to read; every panel sits beside
+the thumb at its row and names itself:
+
+- **An item or Weather:** the full reading (the layer's ink on its icon, the value large, three **amount dots**, the
+  level word, one plain line, the 48 h look-back as sparklines). Its dots light up across the sky.
+- **A group header:** the list of everything it tracks, each with amount dots and level, or "No reading".
+- **Voice:** your words and tags. Keep the thumb down and **slide into the panel to record** (a firm haptic, the dot
+  ring); lift to stop; slide back out to cancel. Then a light review: the words (editable), suggested tags, **Save** or
+  Redo. On Now with nothing logged, Save makes a **Note**.
+- **Body:** activity (motion sensor) and Apple Health (sleep, heart, breathing) in words, with **Connect Apple Health**.
+
+Let go on Voice or Body and the panel stays (rail open, row lit); tap the sky to close. Let go anywhere else and it folds.
+Voice wears a small dot when the moment is a rescue with nothing said. The finger **dent** shader bends only the sky
+drawing, never what sits on top.
 
 Three tenses:
 
@@ -117,25 +130,22 @@ A **fresh log** is a scan: the map alone, then a ring from the pin in the inhale
 particles fill in just behind it.
 
 **Air events** take the page over: slate for a storm (lightning, pollen fragments), ochre for smoke (a warm
-veil, dense PM2.5), ice for a temperature drop (cool band at the top). An `EventChip` sits on the place
-line; the sentence states the fact, never a cause.
+veil, dense PM2.5), ice for a temperature drop (cool band at the top). The read states the fact, never a
+cause; the event's advice comes as a card (docs/design/header-ia.md).
 
 ## Header (`VerdictHeader`)
 
-Three rows, in this order, each keeping its height so nothing jumps while scrubbing:
-
-1. **Where**: place line with an icon (location arrow for here, house for Home, building for Work; no
-   icon for other places). A moment adds its `MomentTag` first. The forecast shows a **Forecast for**
-   field that hugs its text and truncates at the edge.
-2. **What**: the serif sentence. Past "It was…", now "It's…", future "It will be…".
-3. **How it compares**: the verdict pill (dot + words + chevron), or on a moment its date and time.
+See docs/design/header-ia.md. The **context line** (moment tag, place, and the verdict pill beside them), **the
+read** (one sentence about the air and your days, never a weather readout, no numbers), then on a moment its date
+and time; under the header, the **cards** (advice, the capture card) stacked and swipeable.
 
 ## Timeline (`NowTimeline`)
 
 A full-width track under the sky, fading out under the glass controls at each end. One ink at three
 strengths: past moments are ticks (rescue taller than standard) in the strength of that day's air;
 baseline checks are short faint ticks; the forecast is a strip of slots that waver, in the verdict's
-strength or faint while learning. The playhead's pill reads **Now**, **+4h**, **−6h** or the day; off
+strength or faint while learning. A **Note** is a short, quiet tick. A rescue with nothing said wears a small
+hollow ring above its tick until it's noted. The playhead's pill reads **Now**, **+4h**, **−6h** or the day; off
 now it carries a return arrow and tapping it jumps back.
 
 ## Controls
@@ -152,8 +162,10 @@ All glass is `.glassEffect(.regular.interactive())`. Touch targets are never und
 
 ## Insights
 
-The home's header (place line "✦ Insights", the sentence, a pill), the **learning ring** of 72 riso dots
-with two sans counts, three glass rows (Profile, Moments, For your doctor), one caption. The page's
+**Personal Insights** (docs/design/personal-insights.md): the title in SF, the archetype as the page's one Recursive
+line, "Learned · may shift with the seasons", the radar, the category cards, When | Where, then Your profile history
+and Your moments (with Export). Before it has learned: the **learning ring** of riso dots and "Still learning…". No
+numbers anywhere. The page's
 background is the **bloom**: slow Apple-Card blobs in the inks of what shows up most on your flare days,
 under a dark wash and the grain.
 

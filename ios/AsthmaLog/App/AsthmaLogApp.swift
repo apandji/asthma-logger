@@ -20,6 +20,7 @@ struct AsthmaLogApp: App {
         let container = container
         // Moments gain inhaler uses and voice notes (docs/data-model.md): a one-time, additive upgrade.
         ModelUpgrade.run(container.mainContext)
+        AmbeeSampleFill.run(container.mainContext)
         QuickRecordCenter.shared.container = container
         // iOS relaunches the app in the background to deliver a visit: the log has to be listening from launch.
         VisitLog.shared.start()

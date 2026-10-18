@@ -491,6 +491,9 @@ struct NowHomeView: View {
                     // Just logged: Now is taken over by the capture. No verdict while it's happening.
                     VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place)),
                                   title: TheRead.justLogged(j.moment.title), verdict: nil, tint: nil)
+                    // The air arriving for this moment: shimmering while it's fetched, then each reading lands.
+                    AirReadings(conditions: j.conditions, weave: j.weave, pollen: nil, pending: j.envStatus == .pending)
+                        .padding(.top, 6)
                 } else {
                     VerdictHeader(place: AnyView(placeLabel(here?.lat, here?.lon, here?.place, current: true)),
                                   title: here == nil ? "Checking the air near you…" : nowRead,

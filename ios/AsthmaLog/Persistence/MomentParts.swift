@@ -1,3 +1,4 @@
+import AsthmaCore
 import Foundation
 import SwiftData
 
@@ -136,5 +137,26 @@ enum ModelUpgrade {
         }
         try? context.save()
         UserDefaults.standard.set(true, forKey: key)
+    }
+}
+
+/// Until the Ambee key arrives, moments logged before the sample was wired in get Ambee's sample for their
+/// hour (pollen and air, labelled "Ambee (demo)", never in patterns), so every moment shows what Ambee will
+/// give. Additive and idempotent: a moment that already has an Ambee reading is left alone. Stops once
+/// there's a key (real Ambee readings arrive with new moments; old ones keep their sample label).
+enum AmbeeSampleFill {
+    static func run(_ context: ModelContext) {
+        guard Secrets.ambee == nil else { return }
+        let all = (try? context.fetch(FetchDescriptor<LogEvent>())) ?? []
+        var changed = false
+        for e in all {
+            guard let lat = e.latitude, let lon = e.longitude, var c = e.conditions,
+                  !c.observations.contains(where: { $0.source == Ambee.demoSource || $0.source.hasPrefix("Ambee") }) else { continue }
+            let hour = DemoAmbee().hour(lat, lon, e.loggedAt, forecast: false)
+            c.observations += hour.observations(source: Ambee.demoSource)
+            e.conditions = c
+            changed = true
+        }
+        if changed { try? context.save() }
     }
 }

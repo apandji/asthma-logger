@@ -22,6 +22,13 @@ struct ConditionsService {
             guard let airNowKey else { return [] }
             return try await AirNowProvider(key: airNowKey).current(latitude: latitude, longitude: longitude)
         }
+        // Ambee: pollen and air in Ambee's own shapes, from the live API once there's a key and from the sample
+        // (DemoAmbee, labelled "Ambee (demo)", never in patterns) until then.
+        let ambee = await AmbeeClient.current
+        async let am = Self.attempt { () -> [EnvObservation] in
+            let hour = try await ambee.latest(latitude: latitude, longitude: longitude, at: .now)
+            return hour.observations(source: ambee.sourceName)
+        }
 
         var result = Conditions(fetchedAt: .now)
         switch await w {
@@ -39,11 +46,13 @@ struct ConditionsService {
         case .success(let v): result.observations += v
         case .failure(let e): result.errors.append("AirNow: \(e.localizedDescription)")
         }
+        switch await am {
+        case .success(let v): result.observations += v
+        case .failure(let e): result.errors.append("Ambee: \(e.localizedDescription)")
+        }
         result.tempFallF = await fall
         result.lookBack = await back
-        if openAQKey == nil && airNowKey == nil {
-            result.errors.append("Air quality isn't set up yet.")
-        }
+
         return result
     }
 

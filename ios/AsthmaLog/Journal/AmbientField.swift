@@ -199,7 +199,9 @@ struct AirLayers {
         if pm25 == nil && pm10 == nil && no2 == nil && ozone == nil, let air = weave.levels[.air] {
             pm25 = Layer(name: "Air", color: WeatherColor.pm25, level: air, smooth: smooth)
         }
-        if let p = pollen {
+        // The moment's own pollen (Ambee, or its sample) first; the Design-crit demo season only stands in
+        // when a moment has none.
+        if let p = DemoPollen.from(c) ?? pollen {
             let kinds = p.kinds
             func pollenLayer(_ i: Int, _ name: String) -> Layer {
                 var l = layer(name, WeatherColor.pollen[i], kinds[i].level, Double(kinds[i].count))

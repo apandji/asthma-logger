@@ -110,14 +110,20 @@ public struct Conditions: Codable, Sendable, Equatable {
         observations.first { $0.signal == signal }
     }
 
+    /// The best reading from a real source: Ambee's sample (until the contract) is shown, never binned.
+    public func bestReal(_ signal: Signal) -> EnvObservation? {
+        observations.first { $0.signal == signal && $0.source != Ambee.demoSource }
+    }
+
+    /// What the patterns see: real sources only (docs/ambee: the sample stands in on screen until the key).
     public var input: ConditionsInput {
         ConditionsInput(
-            pm25: best(.pm25)?.value,
-            ozonePpb: best(.ozone)?.value,
-            temperatureF: best(.temperature)?.value,
-            humidityPct: best(.humidity)?.value,
-            pollenWeedRisk: best(.pollenWeed)?.category,
-            aqi: best(.aqi).map { Int($0.value.rounded()) },
+            pm25: bestReal(.pm25)?.value,
+            ozonePpb: bestReal(.ozone)?.value,
+            temperatureF: bestReal(.temperature)?.value,
+            humidityPct: bestReal(.humidity)?.value,
+            pollenWeedRisk: bestReal(.pollenWeed)?.category,
+            aqi: bestReal(.aqi).map { Int($0.value.rounded()) },
             alertNames: alerts.map(\.name),
             tempFallF: tempFallF
         )

@@ -85,6 +85,8 @@ struct OnboardingView: View {
             if let here {
                 AirReadings(conditions: here.conditions, weave: WeaveSpec(here.conditions.input),
                             pollen: DemoPollen.sample(at: .now, season: pollenSeason))
+            } else if locating {
+                AirReadings(conditions: nil, weave: WeaveSpec(), pollen: nil, pending: true)
             }
         } else {
             VerdictHeader(place: AnyView(Label("felt air", systemImage: "sparkles").font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)),

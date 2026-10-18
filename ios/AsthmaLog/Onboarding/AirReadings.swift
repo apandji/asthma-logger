@@ -8,17 +8,39 @@ struct AirReadings: View {
     let conditions: Conditions?
     let weave: WeaveSpec
     let pollen: PollenSample?
+    /// Still being fetched: three shimmering placeholders, then the readings arrive one by one.
+    var pending = false
+    @State private var shown = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen)
         HStack(spacing: 8) {
-            weather
-            judged("Air", worst([layers.pm25, layers.pm10, layers.no2, layers.ozone]))
-            judged("Pollen", worst([layers.tree, layers.grass, layers.weed]))
+            if pending {
+                ForEach(["Weather", "Air", "Pollen"], id: \.self) { name in
+                    chip { Text(name).foregroundStyle(Theme.secondaryText) }.shimmer(true)
+                }
+            } else {
+                // The magic moment: each reading lands in turn, with a tick, as if just fetched.
+                if shown > 0 { weather.transition(.scale(scale: 0.8).combined(with: .opacity)) }
+                if shown > 1 { judged("Air", worst([layers.pm25, layers.pm10, layers.no2, layers.ozone])).transition(.scale(scale: 0.8).combined(with: .opacity)) }
+                if shown > 2 { judged("Pollen", worst([layers.tree, layers.grass, layers.weed])).transition(.scale(scale: 0.8).combined(with: .opacity)) }
+            }
         }
         .font(.subheadline.weight(.medium))
+        .frame(minHeight: 32, alignment: .leading)
         .padding(.horizontal, 20)
         .accessibilityElement(children: .combine)
+        .task(id: pending) {
+            guard !pending else { shown = 0; return }
+            if reduceMotion { shown = 3; return }
+            let tick = UISelectionFeedbackGenerator()
+            for i in 1...3 {
+                try? await Task.sleep(for: .milliseconds(i == 1 ? 150 : 320))
+                withAnimation(Theme.lift) { shown = i }
+                tick.selectionChanged()
+            }
+        }
     }
 
     private var weather: some View {

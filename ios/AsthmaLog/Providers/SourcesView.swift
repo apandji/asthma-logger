@@ -25,7 +25,7 @@ struct SourcesView: View {
                 Source(name: "Apple Weather", gives: "Temperature, humidity, wind, rain and storms, now, in the past hours and 10 days ahead.",
                        status: "On", link: attribution?.legalPageURL),
                 Source(name: "Ambee", gives: "Pollen (tree, grass, weed), and active wildfires nearby when the air looks smoky.",
-                       status: Secrets.ambee == nil ? "Not yet" : "On", link: URL(string: "https://www.getambee.com")),
+                       status: Secrets.ambee == nil ? "Sample" : "On", link: URL(string: "https://www.getambee.com")),
             ]),
             ("Regional monitors", "Government monitors, read for the area around you. Reliable, but often miles away.", [
                 Source(name: "AirNow (US EPA)", gives: "The air quality index and its forecast.",

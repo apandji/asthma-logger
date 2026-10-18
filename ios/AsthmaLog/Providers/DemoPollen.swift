@@ -79,6 +79,16 @@ nonisolated enum DemoPollen {
         )
     }
 
+    /// Pollen from a moment's own readings (Ambee, or its sample until the key), in the same bands as above.
+    static func from(_ c: Conditions?) -> PollenSample? {
+        guard let c, let t = c.best(.pollenTree)?.value, let g = c.best(.pollenGrass)?.value, let w = c.best(.pollenWeed)?.value else { return nil }
+        return PollenSample(
+            tree: kind("Tree", "Tree", t, moderate: 100, high: 213),
+            grass: kind("Grass", "Grass", g, moderate: 30, high: 61),
+            weed: kind("Weed", "Weed", w, moderate: 44, high: 80)
+        )
+    }
+
     private static func kind(_ name: String, _ species: String, _ count: Double, moderate: Double, high: Double) -> PollenSample.Kind {
         let c = max(0, Int(count.rounded()))
         let level: WeaveSpec.Level = Double(c) >= high ? .high : Double(c) >= moderate ? .medium : .low

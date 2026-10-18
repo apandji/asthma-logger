@@ -1,21 +1,21 @@
 import AsthmaCore
 import SwiftUI
 
-/// The +, pulled. Press, and the glass circle grows up into a well with two zones (Rescue nearest the
-/// finger, Standard above); a glass lens follows the thumb; lift in a zone to log, lift low to cancel. A tap
-/// opens the well and keeps it open for a second tap. It's the same Liquid Glass morph iOS uses for its own
-/// menus (`GlassEffectContainer` + `glassEffectID`), so it moves like part of the system, not a widget on top.
+/// The +, pulled. Press, and the button's glass stretches up into a well the same width as the +, with two
+/// stops in it: Rescue nearest the thumb, Standard above (small dots in the inhaler inks). The + itself rides
+/// up with your finger as a lens; when it reaches a stop, the stop's name appears beside it, the way a
+/// reading appears beside the rail. Lift on a stop to log, lift low to cancel. A tap opens the well and keeps
+/// it open for a second tap. Nothing changes x: the well grows straight up from the button.
 /// Haptics: a soft tick entering Rescue, a rigid one entering Standard, success on the log.
 /// VoiceOver gets the plain menu (`CaptureMenu`): no gesture to learn.
 struct PullToLog: View {
     let onLog: (MomentKind) -> Void
     @AppStorage(Crit.CaptureOrder.key) private var order = Crit.CaptureOrder.rescueFirst
-    /// The well grows inward from the +'s outer edge, so it never runs off the screen.
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var glass
     @State private var open = false
-    /// Opened by a tap: stays open until a zone is tapped or the finger lands outside.
+    /// Opened by a tap: stays open until a stop is tapped, a touch lands outside, or a few seconds pass.
     @State private var latched = false
     /// Finger height above the +, in points (positive = up).
     @State private var pull: CGFloat = 0
@@ -24,30 +24,46 @@ struct PullToLog: View {
     @State private var pressedAt: Date?
 
     private let button: CGFloat = 56
-    private let zoneHeight: CGFloat = 60
-    /// The well: the + plus two zones.
-    private var wellHeight: CGFloat { button + 2 * zoneHeight }
+    private let step: CGFloat = 62
+    private var wellHeight: CGFloat { button + 2 * step }
     private var first: MomentKind { order == .rescueFirst ? .rescue : .maintenance }
     private var second: MomentKind { order == .rescueFirst ? .maintenance : .rescue }
 
     var body: some View {
         GlassEffectContainer(spacing: 12) {
-            ZStack(alignment: railLeft ? .bottomLeading : .bottomTrailing) {
+            ZStack(alignment: .bottom) {
                 if open {
                     well
+                        // The same kind of glass as the button, or the morph between them draws nothing.
                         .glassEffect(.regular.interactive(), in: .capsule)
                         .glassEffectID("log", in: glass)
                         .transition(.identity)
                 } else {
-                    plus
+                    Color.clear.frame(width: button, height: button)
                         .glassEffect(.regular.interactive(), in: .circle)
                         .glassEffectID("log", in: glass)
                         .transition(.identity)
                 }
+                // The + is the lens: it rides up the well with the finger and takes the stop's ink.
+                lens.offset(y: -lensRise)
+                    .animation(reduceMotion ? nil : .interactiveSpring(response: 0.2, dampingFraction: 0.85), value: lensRise)
             }
-            .frame(width: 88, height: wellHeight, alignment: railLeft ? .bottomLeading : .bottomTrailing)
+            .frame(width: button, height: wellHeight, alignment: .bottom)
         }
-        .frame(width: button, height: button, alignment: railLeft ? .bottomLeading : .bottomTrailing)   // lays out as the + only; the well overflows upward
+        .frame(width: button, height: button, alignment: .bottom)   // lays out as the + only; the well overflows upward
+        // The stop's name, beside the lens, on the sky's side.
+        .overlay(alignment: railLeft ? .bottomLeading : .bottomTrailing) {
+            if let zone, open {
+                Text(zone == .rescue ? "Rescue" : "Standard")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .glassEffect(.regular, in: .capsule)
+                    .fixedSize()
+                    .offset(x: railLeft ? button + 10 : -(button + 10), y: -lensRise)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .allowsHitTesting(false)
+            }
+        }
         .contentShape(Rectangle())
         .gesture(drag)
         // Opened by a tap: a touch anywhere else closes it (the catcher is oversized on purpose; SwiftUI
@@ -68,44 +84,39 @@ struct PullToLog: View {
         .accessibilityHint("Press and pull up to Rescue or Standard")
     }
 
-    private var plus: some View {
+    /// The + as a disc: plain glass at rest, the stop's ink when it's on one.
+    private var lens: some View {
         Image(systemName: "plus")
             .font(.title2.weight(.semibold))
-            .foregroundStyle(.primary)
-            .frame(width: button, height: button)
-    }
-
-    /// Two zones over the +'s spot, and a lens where the thumb is.
-    private var well: some View {
-        ZStack(alignment: .bottom) {
-            VStack(spacing: 0) {
-                zoneLabel(second)
-                zoneLabel(first)
-                Color.clear.frame(height: button)
+            .foregroundStyle(zone == nil ? Color.primary : Color.black)
+            .frame(width: 48, height: 48)
+            .background {
+                Circle().fill(zoneInk.opacity(zone == nil ? 0 : 0.95))
+                    .animation(reduceMotion ? nil : Theme.snap, value: zone)
             }
-            // The lens: a glass disc that rides with the finger and takes the zone's ink.
-            Circle()
-                .fill(zoneInk.opacity(zone == nil ? 0.08 : 0.28))
-                .padding(.horizontal, 4)
-                .overlay(Circle().strokeBorder(zoneInk.opacity(zone == nil ? 0.2 : 0.55), lineWidth: 1))
-                .frame(width: 48, height: 48)
-                .offset(y: -lensRise)
-                .animation(reduceMotion ? nil : .interactiveSpring(response: 0.18, dampingFraction: 0.86), value: lensRise)
-                .allowsHitTesting(false)
-        }
-        .frame(width: 88, height: wellHeight)
+            .frame(width: button, height: button)
+            .allowsHitTesting(false)
     }
 
-    private func zoneLabel(_ kind: MomentKind) -> some View {
+    /// Two stops in the inhaler inks, over the +'s spot.
+    private var well: some View {
+        VStack(spacing: 0) {
+            stop(second)
+            stop(first)
+            Color.clear.frame(height: button)
+        }
+        .frame(width: button, height: wellHeight)
+    }
+
+    private func stop(_ kind: MomentKind) -> some View {
+        let ink = kind == .rescue ? Theme.rescue : Theme.standard
         let on = zone == kind
-        return Text(kind == .rescue ? "Rescue" : "Standard")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(on ? Color.primary : Theme.secondaryText)
-            .scaleEffect(on ? 1.06 : 1)
-            .frame(maxWidth: .infinity)
-            .frame(height: zoneHeight)
+        return Circle().fill(ink.opacity(on ? 0.2 : 0.9))
+            .frame(width: on ? 14 : 9, height: on ? 14 : 9)
+            .frame(width: button, height: step)
             .contentShape(Rectangle())
             .onTapGesture { if latched { commit(kind) } }
+            .accessibilityLabel(kind == .rescue ? "Rescue" : "Standard")
     }
 
     private var zoneInk: Color {
@@ -116,11 +127,11 @@ struct PullToLog: View {
         }
     }
 
-    /// How far the lens sits above the +'s centre: clamped to the well.
+    /// How far the lens sits above the +'s spot: on a stop when latched, else with the finger, clamped to the well.
     private var lensRise: CGFloat {
         guard open else { return 0 }
-        if latched, let zone { return zone == first ? zoneHeight : 2 * zoneHeight }
-        return min(max(0, pull), 2 * zoneHeight) + 4
+        if latched { return zone == second ? 2 * step : zone == first ? step : 0 }
+        return min(max(0, pull), 2 * step)
     }
 
     private var drag: some Gesture {
@@ -130,8 +141,8 @@ struct PullToLog: View {
                 if !open { open = true }
                 if latched { return }
                 pull = -v.translation.height
-                // Zones by height above the +: below the first line is nothing (lift to cancel).
-                let next: MomentKind? = pull < 28 ? nil : pull < zoneHeight + 28 ? first : second
+                // Stops by height above the +: below the first is nothing (lift to cancel).
+                let next: MomentKind? = pull < step * 0.5 ? nil : pull < step * 1.5 ? first : second
                 if next != zone { zone = next }
             }
             .onEnded { v in
@@ -140,7 +151,7 @@ struct PullToLog: View {
                 let quick = pressedAt.map { Date().timeIntervalSince($0) < 0.3 } ?? false
                 let still = abs(v.translation.height) < 8 && abs(v.translation.width) < 8
                 if quick && still {
-                    // A tap: keep the well open and point the lens at the first zone.
+                    // A tap: keep the well open with the lens on the first stop.
                     latched = true
                     zone = first
                     return

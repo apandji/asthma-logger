@@ -48,6 +48,7 @@ struct NowHomeView: View {
     @Namespace private var hero
     /// The rail is open (held or pinned): the pill above it steps aside.
     @State private var railOpen = false
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var showSettings = false
     @State private var openDay: Date?
@@ -204,6 +205,8 @@ struct NowHomeView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .task { await load() }
+            // Back in the foreground with no place yet (the first fix timed out): try again.
+            .onChange(of: scenePhase) { _, p in if p == .active, here == nil { Task { await load() } } }
             // Re-runs when the location arrives, not only when the event changes.
             .task(id: "\(liveEvent == .smoke)-\(here?.lat ?? 0)") {
                 guard liveEvent == .smoke, let p = here else { fires = nil; return }
@@ -923,7 +926,12 @@ struct NowHomeView: View {
     // MARK: Data
 
     private func load() async {
-        guard let fix = try? await services.location.currentLocation(timeout: .seconds(6)) else { return }
+        // A fix can take a while indoors: three tries, so Now isn't stuck on "Checking the air near you…".
+        var fix: CLLocation?
+        for _ in 0..<3 where fix == nil {
+            fix = try? await services.location.currentLocation(timeout: .seconds(6))
+        }
+        guard let fix else { return }
         let lat = fix.coordinate.latitude, lon = fix.coordinate.longitude
         // The map first: it's the slowest part and the first thing you see.
         Task { _ = await MapSnapshots.image(id: "here", latitude: lat, longitude: lon, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale) }
@@ -1372,6 +1380,11 @@ struct NowSky: View {
                 }
                 let rows = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
                 let mids = RailRow.mids(rows).map { CGFloat($0) * size.height + railShift }
+                // Slid off the bottom (past Body): nothing is read, and letting go puts the rail back as it was.
+                if let last = mids.last, drag.location.y > last + 40 {
+                    if row != nil { row = nil; probe = nil; UISelectionFeedbackGenerator().selectionChanged() }
+                    return
+                }
                 let nearest = mids.enumerated().min { abs($0.element - drag.location.y) < abs($1.element - drag.location.y) }?.offset ?? 0
                 if rows[nearest] != row { select(rows[nearest]) }
             }
@@ -1847,39 +1860,68 @@ enum HeaderCard: Identifiable {
 }
 
 /// Several cards true at once: a row you swipe through, the next one peeking in, with page dots.
+/// The cards as a stack, like the Watch's: the one that matters most in front, the next peeking out above
+/// it, all the same height (the stack is as tall as its tallest card). Swipe up to bring the next one forward,
+/// down to go back, or tap the peek. One card: just the card.
 struct CardStack<Content: View>: View {
     let cards: [HeaderCard]
     @ViewBuilder let content: (HeaderCard) -> Content
-    @State private var page: String?
+    @State private var front = 0
+    @State private var drag: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let n = cards.count
         VStack(spacing: 8) {
-            ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 10) {
-                    ForEach(cards) { c in
-                        content(c)
-                            // Full width when alone; with more, narrower so the next one shows at the edge.
-                            .containerRelativeFrame(.horizontal) { w, _ in w - (cards.count > 1 ? 28 : 0) }
-                            .id(c.id)
-                    }
+            ZStack(alignment: .top) {
+                ForEach(Array(cards.enumerated()), id: \.element.id) { i, c in
+                    // 0 = in front, 1 = next, 2 = the one behind that.
+                    let k = (i - front + n) % n
+                    let depth = min(k, 2)
+                    content(c)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .scaleEffect(1 - 0.05 * CGFloat(depth), anchor: .top)
+                        .offset(y: -10 * CGFloat(depth) + (k == 0 ? drag * 0.3 : 0))
+                        .opacity(depth == 0 ? 1 : depth == 1 ? 0.55 : 0.3)
+                        .zIndex(Double(n - k))
+                        .allowsHitTesting(k == 0)
+                        .accessibilityHidden(k != 0)
                 }
-                .scrollTargetLayout()
             }
-            .contentMargins(.horizontal, 20, for: .scrollContent)
-            .scrollTargetBehavior(.viewAligned)
-            .scrollIndicators(.hidden)
-            .scrollPosition(id: $page)
-            .sensoryFeedback(.selection, trigger: page)
-            if cards.count > 1 {
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, n > 1 ? 18 : 0)   // room for the peeks
+            .padding(.horizontal, 20)
+            .contentShape(Rectangle())
+            .gesture(n > 1 ? swipe : nil)
+            .animation(reduceMotion ? nil : Theme.lift, value: front)
+            .animation(reduceMotion ? nil : Theme.snap, value: drag)
+            .sensoryFeedback(.selection, trigger: front)
+            if n > 1 {
                 HStack(spacing: 6) {
-                    ForEach(cards) { c in
-                        Circle().fill(Color.primary.opacity((page ?? cards.first?.id) == c.id ? 0.9 : 0.25)).frame(width: 6, height: 6)
+                    ForEach(0..<n, id: \.self) { i in
+                        Circle().fill(Color.primary.opacity(i == front ? 0.9 : 0.25)).frame(width: 6, height: 6)
                     }
                 }
                 .accessibilityElement()
-                .accessibilityLabel("\(cards.count) cards")
+                .accessibilityLabel("\(n) cards, \(front + 1) in front")
+                .accessibilityAdjustableAction { dir in step(dir == .increment ? 1 : -1) }
             }
         }
+    }
+
+    private var swipe: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { drag = $0.translation.height }
+            .onEnded { v in
+                drag = 0
+                if v.translation.height < -30 || v.predictedEndTranslation.height < -80 { step(1) }
+                else if v.translation.height > 30 || v.predictedEndTranslation.height > 80 { step(-1) }
+            }
+    }
+
+    private func step(_ by: Int) {
+        let n = cards.count
+        front = ((front + by) % n + n) % n
     }
 }
 
@@ -1927,6 +1969,8 @@ struct AdviceCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Fills the height it's given, so cards in a stack are all one height.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
@@ -1977,6 +2021,8 @@ struct CaptureCard: View {
             .accessibilityLabel("Record a voice note")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Fills the height it's given, so cards in a stack are all one height.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }

@@ -75,17 +75,19 @@ struct NowTimeline: View {
                             ahead.move(to: CGPoint(x: x(now), y: axis)); ahead.addLine(to: CGPoint(x: x(last.date), y: axis))
                             ctx.stroke(ahead, with: .color(ink.opacity(0.14)), style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
                         }
-                        // The forecast: one slot per hour, the same ink at three strengths (light, a bit like,
-                        // matches your flare days). While still learning it's a faint band, so the day's shape shows.
+                        // The forecast: one slot per hour in the verdict's colour (green baseline, yellow a bit like,
+                        // red matches your flare days), so the track reads like the pill. While still learning it's a
+                        // faint band in the ink, so the day's shape shows.
                         for (n, (date, v)) in forecastTints.enumerated() where date >= now {
                             let w = dayWidth / 24 + 0.5
                             // Each hour breathes on its own phase, more the further out it is: not yet known.
                             let far = min(1, date.timeIntervalSince(now) / (48 * 3600))
                             let wave = sin(flux * 1.6 + Double(n) * 0.55)
                             let h = 8 + CGFloat((2 + 4 * far) * wave)
-                            let base = v.map { 0.18 + 0.62 * $0 } ?? 0.1
+                            let tint: Color = v.map { $0 >= 1 ? Verdict.red : $0 >= 0.5 ? Verdict.yellow : Verdict.green } ?? ink
+                            let base = v == nil ? 0.1 : 0.7
                             let rect = CGRect(x: x(date), y: axis - h / 2, width: w, height: h)
-                            ctx.fill(Path(rect), with: .color(ink.opacity(base * (0.8 + 0.2 * (0.5 + 0.5 * wave)))))
+                            ctx.fill(Path(rect), with: .color(tint.opacity(base * (0.8 + 0.2 * (0.5 + 0.5 * wave)))))
                         }
                         // Moments: a tick per moment in the colour of the air that day. Rescue stands taller than
                         // standard, so the kind reads in the shape and the comfort in the colour.
@@ -174,7 +176,10 @@ struct NowTimeline: View {
             else if t < now {
                 // Behind now there's nothing between moments, so the playhead reads the nearest one.
                 focusTime = moments.min { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }?.loggedAt
-            } else { focusTime = t }
+            } else {
+                // Ahead, the forecast is hourly: the playhead reads whole hours.
+                focusTime = t > now ? Self.hour(t) : t
+            }
         }
         .onScrollPhaseChange { old, phase in
             dragging = phase == .interacting || phase == .decelerating
@@ -249,9 +254,21 @@ struct NowTimeline: View {
         go(to: target.loggedAt)
     }
 
-    /// "+4h", "−6h", "+40m"; past two days, the day: "Wed 14".
+    /// Nearest whole hour.
+    static func hour(_ t: Date) -> Date {
+        let cal = Calendar.current
+        let floor = cal.dateInterval(of: .hour, for: t)?.start ?? t
+        return t.timeIntervalSince(floor) >= 1800 ? floor.addingTimeInterval(3600) : floor
+    }
+
+    /// Ahead: the hour ("3 PM", "Tomorrow 3 PM", "Mon 3 PM"). Behind: "−6h", "−40m"; past two days, the day.
     private func relative(_ t: Date) -> String {
         let s = t.timeIntervalSince(now)
+        if s > 0 {
+            let cal = Calendar.current
+            let h = t.formatted(.dateTime.hour())
+            return cal.isDateInToday(t) ? h : cal.isDateInTomorrow(t) ? "Tomorrow \(h)" : "\(t.formatted(.dateTime.weekday(.abbreviated))) \(h)"
+        }
         let sign = s >= 0 ? "+" : "−"
         let a = abs(s)
         if a < 3600 { return "\(sign)\(max(1, Int((a / 60).rounded())))m" }

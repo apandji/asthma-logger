@@ -14,7 +14,7 @@ public enum ButtonProtocol {
 /// One press. All fields little-endian:
 /// `[0] version · [1] cap · [2–3] bootID · [4–5] seq · [6–7] force · [8–11] ageMs`.
 public struct ButtonPacket: Sendable, Equatable, Hashable {
-    public enum Cap: UInt8, Sendable {
+    public enum Cap: UInt8, Sendable, Codable {
         /// Orange cap.
         case rescue = 1
         /// Teal cap: the standard (maintenance) inhaler.

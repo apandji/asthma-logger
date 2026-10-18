@@ -40,7 +40,7 @@ struct SettingsView: View {
                 Section {
                     NavigationLink("Devices") { DevicesView() }
                 } footer: {
-                    Text("Your inhalers, felt buttons and Apple Watch.")
+                    Text("Your inhalers, the felt button on each cap, and Apple Watch.")
                 }
 
                 Section {

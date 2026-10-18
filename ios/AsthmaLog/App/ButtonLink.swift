@@ -156,9 +156,10 @@ final class ButtonLink: NSObject {
         name = p.name
     }
 
-    private func touch(_ id: UUID) {
+    private func touch(_ id: UUID, cap: ButtonPacket.Cap? = nil) {
         guard let i = buttons.firstIndex(where: { $0.id == id }) else { return }
         buttons[i].lastSeen = .now
+        if let cap { buttons[i].cap = cap }
         PairedButton.save(buttons)
     }
 
@@ -176,7 +177,7 @@ final class ButtonLink: NSObject {
     private func receive(_ data: Data, from p: CBPeripheral) {
         guard let packet = ButtonPacket(bytes: [UInt8](data)) else { return }
         let received = Date()
-        touch(p.identifier)
+        touch(p.identifier, cap: packet.cap)
         if !alreadyHandled(packet.key) {
             markHandled(packet.key)
             if isSyncing {
@@ -279,6 +280,9 @@ nonisolated struct PairedButton: Codable, Identifiable, Equatable, Sendable {
     var name: String
     var addedAt: Date
     var lastSeen: Date?
+    /// Which inhaler cap this button sits on, learned from its first press (the cap is in every packet). A
+    /// felt button lives on the inhaler's cap, so on screen it's part of that inhaler (Settings › Devices).
+    var cap: ButtonPacket.Cap?
 
     static let key = "feltButtons"
     static let legacyKey = "feltButtonID"

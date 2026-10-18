@@ -79,8 +79,9 @@ struct NowHomeView: View {
                 ZStack { sky.id(focusKey).transition(.opacity) }
                     .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
                     // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
-                    .distortionEffect(ShaderLibrary.dent(.float2(skyDrag?.point ?? .zero), .float(170), .float(skyPress)),
-                                      maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: skyDrag != nil && !reduceMotion)
+                    // The dent is drawn by the sky itself (NowSky), so what sits on top (Self's glass cards) isn't
+                    // flattened into the shader.
+                    .environment(\.skyDent, skyDrag != nil && !reduceMotion ? SkyDent(point: skyDrag!.point, press: skyPress) : nil)
                     .gesture(skyScrub)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.top, 4)
@@ -968,6 +969,7 @@ struct NowSky: View {
     var onRecord: ((LogEvent) -> Void)? = nil
     /// Let go on Self and it stays, the rail still beside it.
     @State private var selfPinned = false
+    @Environment(\.skyDent) private var dent
     @State private var flash = 0.0
     @State private var pinPulse = false
     /// Past: a moment more than 20 minutes ago (not a forecast, not a fresh log).
@@ -1054,6 +1056,9 @@ struct NowSky: View {
             .saturation(isPast ? 0.82 : 1)
             .blur(radius: sketch && !reduceMotionEnv ? 2.5 * farness : 0)
             .drawingGroup()
+            // Swiping the sky sideways dents the surface under the finger (set by NowHomeView).
+            .distortionEffect(ShaderLibrary.dent(.float2(dent?.point ?? .zero), .float(170), .float(dent?.press ?? 0)),
+                              maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: dent != nil)
             // A sky ripples once you've landed on it, not while the timeline is moving past it.
             .onAppear { if settled { ripple() } }
             .onChange(of: date) { _, _ in if settled { ripple() } }
@@ -1086,10 +1091,8 @@ struct NowSky: View {
             .overlay {
                 if showsSelf && (row == .me || (selfPinned && row == nil)) {
                     ZStack {
-                        // Soft-edged, like the sky itself: no hard box.
-                        Color.black.opacity(0.62)
-                            .mask(RadialGradient(colors: [.black, .black, .clear], center: .center, startRadius: 0,
-                                                 endRadius: max(size.width, size.height) * 0.75))
+                        // No dim: tapping the open sky around the cards goes back to the air.
+                        Color.clear.contentShape(Rectangle())
                             .onTapGesture { withAnimation(Theme.smooth) { selfPinned = false } }
                         SelfPanel(event: selfEvent, date: selfEvent?.loggedAt ?? date, interactive: !probing,
                                   record: { onRecord?($0) })
@@ -1480,8 +1483,16 @@ extension VerdictHeader {
     }
 }
 
+/// Where the finger dents the sky while you swipe it.
+struct SkyDent: Equatable { var point: CGPoint; var press: CGFloat }
+private struct SkyDentKey: EnvironmentKey { static let defaultValue: SkyDent? = nil }
 private struct SkySettledKey: EnvironmentKey { static let defaultValue = true }
 extension EnvironmentValues {
+    var skyDent: SkyDent? {
+        get { self[SkyDentKey.self] }
+        set { self[SkyDentKey.self] = newValue }
+    }
+
     /// Whether the timeline has come to rest (skies ripple only then).
     var skySettled: Bool {
         get { self[SkySettledKey.self] }

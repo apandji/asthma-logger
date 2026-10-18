@@ -91,6 +91,11 @@ public struct LiftReport: Codable, Sendable, Equatable {
     public var rows: [LiftRow]
     /// Rows that pass the gate — the only ones the UI may call a pattern.
     public var gatedRows: [LiftRow]
+
+    public init(nAttacks: Int, nBaselines: Int, seasonHint: String?, rows: [LiftRow], gatedRows: [LiftRow]) {
+        self.nAttacks = nAttacks; self.nBaselines = nBaselines; self.seasonHint = seasonHint
+        self.rows = rows; self.gatedRows = gatedRows
+    }
 }
 
 public enum Lift {

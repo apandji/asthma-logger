@@ -63,6 +63,10 @@ public struct AirProfile: Sendable, Equatable {
         /// The row behind the strength (gated first), for the counts.
         public let lead: LiftRow?
         public var id: Category { category }
+
+        public init(category: Category, strength: Double, status: Status, lead: LiftRow?) {
+            self.category = category; self.strength = strength; self.status = status; self.lead = lead
+        }
     }
 
     public let axes: [Axis]

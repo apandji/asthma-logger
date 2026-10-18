@@ -67,7 +67,8 @@ extension CaptureBar {
             withAnimation(.snappy) { toast = e }
             // So the question is waiting on the Lock Screen when the phone goes back in the pocket.
             if e.moment != .okay, QuickRecordCenter.shared.enabled { QuickRecordLive.shared.begin(for: e) }
-            try? await Task.sleep(for: .seconds(4))
+            // Undo stays on the capture card for a while, then goes quietly.
+            try? await Task.sleep(for: .seconds(10))
             if toast?.id == e.id { withAnimation(.snappy) { toast = nil } }
         }
     }
@@ -135,31 +136,15 @@ struct InsightPeek: View {
     }
 }
 
-/// The + button. Press and drag up: past the first line is Rescue (orange, quick), keep going to the
-/// top for Standard (blue). Let go in a zone to log it; let go below the first line to cancel.
+/// The +: the glass well (`PullToLog`) by default, the system menu as the crit fallback. VoiceOver always
+/// gets the menu.
 struct CaptureControl: View {
     let onLog: (MomentKind) -> Void
-    @State private var logged = 0
+    @AppStorage(Crit.LogStyle.key) private var style = Crit.LogStyle.pull
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
-    /// The + is a system menu: press, slide onto Rescue or Standard, lift to log (or tap, then tap a choice).
-    /// That's Apple's own press-and-slide, so it needs no custom track and works with VoiceOver as is.
-    /// Rescue sits nearest the finger.
     var body: some View {
-        Menu {
-            Button { logged += 1; onLog(.rescue) } label: { Label("Rescue", systemImage: "lungs.fill") }
-            Button { logged += 1; onLog(.maintenance) } label: { Label("Standard", systemImage: "lungs") }
-        } label: {
-            Image(systemName: "plus")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 56, height: 56)
-                .glassEffect(.regular.interactive(), in: .circle)
-        }
-        .menuOrder(.priority)
-        .buttonStyle(.plain)
-        .sensoryFeedback(.success, trigger: logged)
-        .accessibilityLabel("Log a moment")
-        .accessibilityHint("Choose Rescue or Standard")
+        if style == .pull && !voiceOver { PullToLog(onLog: onLog) } else { CaptureMenu(onLog: onLog) }
     }
 }
 

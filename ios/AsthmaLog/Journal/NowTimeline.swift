@@ -60,7 +60,9 @@ struct NowTimeline: View {
                 Color.clear.frame(width: viewport / 2)
                 ZStack(alignment: .topLeading) {
                     // The forecast hasn't settled: its slots drift. The past is still.
-                    TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion || forecastTints.isEmpty)) { frame in
+                    // Runs while the forecast drifts, and for a moment after a log so the new tick can drop in.
+                    let justLogged = moments.last.map { Date().timeIntervalSince($0.loggedAt) < 1.2 } ?? false
+                    TimelineView(.animation(minimumInterval: 1 / 24, paused: reduceMotion || (forecastTints.isEmpty && !justLogged))) { frame in
                     let flux = reduceMotion ? 0 : frame.date.timeIntervalSinceReferenceDate
                     Canvas { ctx, size in
                         // The axis: solid behind now, dotted ahead. The forecast's colours live in the sky
@@ -90,7 +92,10 @@ struct NowTimeline: View {
                         for e in moments {
                             let on = e.id == currentMoment?.id
                             // Notes (no inhaler) are short and quiet.
-                            let tall: CGFloat = e.moment == .rescue ? 11 : e.moment == .note ? 4 : 7
+                            var tall: CGFloat = e.moment == .rescue ? 11 : e.moment == .note ? 4 : 7
+                            // Just logged: the tick lands, tall then settling, over half a second.
+                            let age = frame.date.timeIntervalSince(e.loggedAt)
+                            if !reduceMotion, age >= 0, age < 0.6 { tall *= 1 + 0.8 * CGFloat(pow(1 - age / 0.6, 2)) }
                             let c = ink.opacity(e.moment == .note ? 0.4 : (tint(e).map { 0.3 + 0.7 * $0 } ?? 0.25))
                             let rect = CGRect(x: x(e.loggedAt) - 1.5, y: axis - tall, width: 3, height: 2 * tall)
                             ctx.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(on ? c : c.opacity(0.85)))

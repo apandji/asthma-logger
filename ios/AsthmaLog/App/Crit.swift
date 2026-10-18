@@ -32,6 +32,13 @@ enum Crit {
         static let key = "crit.insightsEntry"
     }
 
+    enum LogStyle: String, CaseIterable, Identifiable {
+        case pull, menu
+        var id: String { rawValue }
+        var title: String { self == .pull ? "Pull the + (glass well)" : "System menu" }
+        static let key = "crit.logStyle"
+    }
+
     enum CaptureOrder: String, CaseIterable, Identifiable {
         case rescueFirst, standardFirst
         var id: String { rawValue }

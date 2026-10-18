@@ -424,8 +424,11 @@ struct CaptureReveal: ViewModifier {
     @State private var t: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// The + sits below the sky's bottom-right corner (under the timeline).
-    static func origin(in size: CGSize) -> CGPoint { CGPoint(x: size.width - 36, y: size.height + 150) }
+    /// The + sits below the sky's bottom corner on the rail's side (under the timeline).
+    static func origin(in size: CGSize) -> CGPoint {
+        let left = UserDefaults.standard.bool(forKey: Prefs.railLeft)
+        return CGPoint(x: left ? 36 : size.width - 36, y: size.height + 150)
+    }
     static func radius(_ t: CGFloat, in size: CGSize) -> CGFloat { t * hypot(size.width, size.height) * 1.1 }
 
     func body(content: Content) -> some View {

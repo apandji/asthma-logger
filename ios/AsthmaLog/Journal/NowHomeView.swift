@@ -172,15 +172,6 @@ struct NowHomeView: View {
                 // No tips until onboarding is done: they'd pop over the first-run screens.
                 CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
             }
-            .overlay(alignment: .top) {
-                if let e = toast {
-                    LoggedToast(event: e, undo: {
-                        withAnimation(.snappy) { toast = nil }
-                        Task { await services.undoPress(e, in: context) }
-                    })
-                    // No Note button here: Now's capture card asks (docs/design/header-ia.md).
-                }
-            }
             .sheet(isPresented: $showInsights) {
                 InsightsView().presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper)).presentationCornerRadius(32)
             }
@@ -246,7 +237,7 @@ struct NowHomeView: View {
         guard let e, e.moment != .okay, Date().timeIntervalSince(e.loggedAt) < 120, toast?.id != e.id else { return }
         withAnimation(Theme.lift) { toast = e }
         Task {
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(for: .seconds(10))
             if toast?.id == e.id { withAnimation(Theme.smooth) { toast = nil } }
         }
     }
@@ -750,7 +741,11 @@ struct NowHomeView: View {
         case .advice(let w, let icon, let title, let home, let ahead):
             AdviceCard(warning: w, icon: icon, title: title, home: home, ahead: ahead)
         case .capture(let e):
-            CaptureCard(event: e) { recording = e }
+            // The header already says "Rescue logged": no toast. Undo sits on the card for a bit (docs/design/polish-pass.md).
+            CaptureCard(event: e, record: { recording = e }, undo: toast?.id == e.id ? {
+                withAnimation(.snappy) { toast = nil }
+                Task { await services.undoPress(e, in: context) }
+            } : nil)
         }
     }
 
@@ -1820,12 +1815,23 @@ struct AdviceCard: View {
 struct CaptureCard: View {
     let event: LogEvent
     let record: () -> Void
+    /// Just logged: one quiet Undo, for a few seconds.
+    var undo: (() -> Void)? = nil
     @Environment(\.modelContext) private var context
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Say it or tap it").font(.subheadline.weight(.semibold))
+                HStack(spacing: 10) {
+                    Text("Say it or tap it").font(.subheadline.weight(.semibold))
+                    if let undo {
+                        Button("Undo", action: undo)
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+                            .buttonStyle(PressStyle())
+                            .transition(.opacity)
+                    }
+                }
+                .animation(Theme.smooth, value: undo == nil)
                 FlowLayout(spacing: 6) {
                     ForEach([JournalTag.exercise, .coldAir, .pets, .smoke], id: \.self) { t in
                         let on = event.tags.contains(t)

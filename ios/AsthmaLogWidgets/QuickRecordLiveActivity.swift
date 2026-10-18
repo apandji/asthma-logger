@@ -92,7 +92,9 @@ struct QuickRecordLockView: View {
                 }
                 Spacer(minLength: 0)
                 ZStack {
-                    DotRing(ink: Ink.pastel(state), strength: state.phase == .recording ? 1 : state.phase == .writing ? 0.6 : state.phase == .standby ? 0.2 : 0.35)
+                    // Standby is a waiting card: grey, barely a ring. Colour arrives with a moment.
+                    DotRing(ink: state.phase == .standby ? .white : Ink.pastel(state),
+                            strength: state.phase == .recording ? 1 : state.phase == .writing ? 0.6 : state.phase == .standby ? 0.06 : 0.35)
                         .frame(width: 68, height: 68)
                     MainButton(state: state, size: 46)
                 }
@@ -221,7 +223,7 @@ private struct DotRing: View {
 private enum Copy {
     static func title(_ p: QuickRecordAttributes.Phase) -> String {
         switch p {
-        case .standby: "Need your inhaler?"
+        case .standby: "Here if you need it."
         case .ready: "What's going on?"
         case .recording: "Listening…"
         case .writing: "Writing it down…"
@@ -238,7 +240,7 @@ private enum Copy {
 
     @ViewBuilder static func detail(_ s: QuickRecordAttributes.ContentState) -> some View {
         switch s.phase {
-        case .standby: Text("Tap the mic to log it and talk.")
+        case .standby: Text("The mic logs a rescue and listens.")
         case .ready: Text("Where you were, what you were doing.")
         case .recording:
             if let start = s.startedAt {

@@ -1925,18 +1925,17 @@ extension VerdictHeader {
     var verdictPill: some View {
         let ink = tint ?? Theme.secondaryText
         return Button { onVerdict?() } label: {
-            HStack(spacing: 6) {
-                // The one state that asks for attention gets the only motion on the line: a slow breath.
-                let matches = tint == Verdict.red
-                Circle().fill(ink).frame(width: 7, height: 7)
-                    .scaleEffect(matches && breath ? 1.35 : 1)
-                    .animation(matches && !reduceMotion ? .easeInOut(duration: 1.6).repeatForever(autoreverses: true) : .default, value: breath)
-                    .onChange(of: matches, initial: true) { _, m in breath = m && !reduceMotion }
-                // Shorter when a tag shares the line: "A bit like flare days", "Like flare days", "Like baseline days".
-                Text(tagText == nil ? (verdict ?? " ") : Self.short(verdict ?? " ")).lineLimit(1).fixedSize()
-                    .contentTransition(.opacity)
-                    .animation(settled ? .easeInOut(duration: 0.22) : nil, value: verdict)
-                if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }
+            Group {
+                if tagText == nil {
+                    pillFace(ink: ink, words: true)
+                } else {
+                    // With a tag on the line the words go before the place name does: the colour and the
+                    // chip still carry the verdict.
+                    ViewThatFits(in: .horizontal) {
+                        pillFace(ink: ink, words: true)
+                        pillFace(ink: ink, words: false)
+                    }
+                }
             }
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.primary)
@@ -1945,6 +1944,26 @@ extension VerdictHeader {
         }
         .buttonStyle(PressStyle())
         .disabled(onVerdict == nil)
+    }
+
+    /// The dot, the words (or not), the chevron.
+    private func pillFace(ink: Color, words: Bool) -> some View {
+        HStack(spacing: 6) {
+            // The one state that asks for attention gets the only motion on the line: a slow breath.
+            let matches = tint == Verdict.red
+            Circle().fill(ink).frame(width: 7, height: 7)
+                .scaleEffect(matches && breath ? 1.35 : 1)
+                .animation(matches && !reduceMotion ? .easeInOut(duration: 1.6).repeatForever(autoreverses: true) : .default, value: breath)
+                .onChange(of: matches, initial: true) { _, m in breath = m && !reduceMotion }
+            // Shorter when a tag shares the line: "A bit like flare days", "Like flare days", "Like baseline days".
+            if words {
+                Text(tagText == nil ? (verdict ?? " ") : Self.short(verdict ?? " ")).lineLimit(1).fixedSize()
+                    .contentTransition(.opacity)
+                    .animation(settled ? .easeInOut(duration: 0.22) : nil, value: verdict)
+            }
+            if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }
+        }
+        .accessibilityLabel(verdict ?? "")
     }
 }
 

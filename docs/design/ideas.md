@@ -56,3 +56,6 @@ Things noticed while building, not yet decided. Add as you go; move an item out 
   saved) rendered differently per surface: the rail panel (beside the thumb, prompts, lit words), the Lock
   Screen card (one line + mic, chips after), a notification (tap to open the panel), Control Center / Action
   button (starts listening, the Dynamic Island shows the words). To map out together.
+- **Journaling, clinical** (Oct 19): see journaling-clinical.md. Symptom tags as a second list, past-tense
+  focused prompts (NICE: focused beats "how have you been?"), a "For your next visit" page instead of any
+  control score, the action plan kept beside the diary. Questions for the doctor are in the doc.

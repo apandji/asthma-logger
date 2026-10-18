@@ -214,6 +214,10 @@ struct InsightsRingButton: View {
     var size: CGFloat = 56
     /// In the top bar the bubble hangs below the button instead of above it.
     var bubbleBelow = false
+    /// On the left (the rail is on the left): the bubble opens to the right.
+    var leading = false
+    var showsBubble = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: { bubbleDismissed = true; open() }) {
@@ -223,27 +227,29 @@ struct InsightsRingButton: View {
                     .stroke(learned ? Color.primary : Theme.secondaryText, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .animation(.smooth(duration: 1), value: progress)
+                // Sparkles while it learns (a slow breath); still, and two sparkles, once it has learned.
                 Image(systemName: learned ? "sparkles" : "sparkle")
                     .font(.body.weight(.semibold))
-                    .symbolEffect(.pulse, isActive: learned && !bubbleDismissed)
+                    .symbolEffect(.breathe, isActive: !learned && !reduceMotion)
+                    .symbolEffect(.bounce, value: learned)
             }
             .padding(size < 50 ? 4 : 5)
             .frame(width: size, height: size)
             .glassEffect(.regular.interactive(), in: .circle)
         }
         .buttonStyle(.plain)
-        .overlay(alignment: .topTrailing) {
-            if learned && !bubbleDismissed {
+        .overlay(alignment: leading ? .topLeading : .topTrailing) {
+            if showsBubble && learned && !bubbleDismissed {
                 bubble
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(width: 230, alignment: .trailing)
+                    .frame(width: 230, alignment: leading ? .leading : .trailing)
                     .offset(x: bubbleBelow ? 0 : 70, y: bubbleBelow ? size + 10 : -size - 26)
-                    .transition(.scale(scale: 0.6, anchor: bubbleBelow ? .topTrailing : .bottomTrailing).combined(with: .opacity))
+                    .transition(.scale(scale: 0.6, anchor: bubbleBelow ? (leading ? .topLeading : .topTrailing) : .bottomTrailing).combined(with: .opacity))
                     .onTapGesture { bubbleDismissed = true; open() }
             }
         }
         .animation(.spring(duration: 0.45, bounce: 0.3), value: learned)
-        .accessibilityLabel(learned ? "Insights: a pattern is ready" : "Insights: still learning, \(Int(progress * 100)) percent")
+        .accessibilityLabel(learned ? "Insights: learned" : "Insights: still learning")
         .task(id: events.count) {
             // Wait out the log animation (and any burst of logs) before recomputing patterns.
             try? await Task.sleep(for: .seconds(1.2))
@@ -255,8 +261,9 @@ struct InsightsRingButton: View {
 
     private var bubble: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("New pattern").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
-            Text(model.narration?.headline ?? "Your inhaler days have something in common.")
+            Text("Learned").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+            // Words only (the template headline carries counts): no numbers on screen.
+            Text("Your flare days have something in common. Tap to see what.")
                 .font(.subheadline).lineLimit(3)
         }
         .padding(12)

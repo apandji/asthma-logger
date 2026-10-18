@@ -39,6 +39,7 @@ struct NowHomeView: View {
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
     @State private var showInsights = false
+    @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var showSettings = false
     @State private var openDay: Date?
     @State private var toast: LogEvent?
@@ -62,7 +63,12 @@ struct NowHomeView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
-                header
+                // felt air learning, as a sparkle button in the top corner on the rail's side (Insights).
+                HStack(alignment: .top, spacing: 0) {
+                    if railLeft { learningButton.padding(.leading, 14).padding(.trailing, -8) }
+                    header
+                    if !railLeft { learningButton.padding(.trailing, 14).padding(.leading, -8) }
+                }
                     .opacity(probing ? 0.4 : 1)
                     .animation(Theme.smooth, value: probing)
                 // The cards: what to do or see at this time. Several can be true at once, so they stack and you
@@ -366,6 +372,12 @@ struct NowHomeView: View {
 
     // MARK: Header
 
+    private var learningButton: some View {
+        // Small, in the context row: no bubble up here, it would cover the sentence. Learning breathes; learned bounces once.
+        InsightsRingButton(open: { showInsights = true }, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false)
+            .padding(.top, 5)
+    }
+
     /// Top to bottom: where (a plain line, or a field you can change in the forecast), what the air is (the
     /// serif sentence), how it compares (the verdict pill). The inhaler tag sits with the place on moments.
     private var header: some View {
@@ -563,8 +575,11 @@ struct NowHomeView: View {
     private func standsOut(_ m: LogEvent) -> String? {
         guard let line = standsOutBody(m) else { return nil }
         guard let c = m.conditions, let e = Self.event(in: c) else { return line }
-        let fact = AirAdvice.afterFlare(e.advice, fallF: c.tempFallF)
-        return [fact, line.replacingOccurrences(of: "Nothing outdoors stood out this time.", with: "")]
+        // A drop now and the day before are one story: said once, as a change.
+        let dayBefore = e == .tempDrop && c.lookBack?.tempDropLevel == .earlier
+        let fact = AirAdvice.afterFlare(e.advice, fallF: c.tempFallF, dayBefore: dayBefore)
+        return [fact, line.replacingOccurrences(of: "Nothing outdoors stood out this time.", with: "")
+                          .replacingOccurrences(of: dayBefore ? Self.dayBeforeDrop : "\u{0}", with: "")]
             .joined(separator: " ").trimmingCharacters(in: .whitespaces)
     }
 
@@ -648,7 +663,7 @@ struct NowHomeView: View {
         let part = h < 12 ? "This morning" : h < 17 ? "This afternoon" : "This evening"
         let verdict = outlook(at: pick.date).text
         let title = isLearned ? "Today: \(verdict.prefix(1).lowercased() + verdict.dropFirst())" : "Today's air"
-        MorningBrief.schedule(title: title, body: aheadRead(pick, label: part))
+        MorningBrief.schedule(title: title, body: TheRead.spoken(aheadRead(pick, label: part)))
     }
 
     /// Ahead, the advice follows the forecast's place, not where you are.
@@ -724,7 +739,7 @@ struct NowHomeView: View {
         guard learned else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         if forced == .learned, !(model.progress?.isMet ?? false) {
             // The demo person's story, for moments without a real pattern behind them.
-            return ["High weed pollen was there. It often shows up on your flare days.", before].compactMap { $0 }.joined(separator: " ")
+            return [TheRead.marked("High weed pollen", time: .back, mark: .often), before].compactMap { $0 }.joined(separator: " ")
         }
         guard let frame = m.frame(), let rows = model.report?.gatedRows, !rows.isEmpty else {
             return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ")
@@ -741,6 +756,8 @@ struct NowHomeView: View {
         return [top, before].compactMap { $0 }.joined(separator: " ")
     }
 
+    static let dayBeforeDrop = "The temperature dropped fast the day before."
+
     /// "Fine particles were high in the two days before." Only signals whose two windows were read well
     /// enough count; a window that wasn't read is missing, not clean. High *now* is already in the frame.
     private static func before(_ lb: LookBack?) -> String? {
@@ -753,7 +770,7 @@ struct NowHomeView: View {
             let joined = names.count == 1 ? names[0] : "\(names[0]) and \(names[1])"
             parts.append(joined.prefix(1).uppercased() + joined.dropFirst() + (names.count == 1 && names[0] == "ozone" ? " was" : " were") + " high the two days before.")
         }
-        if lb.tempDropLevel == .earlier { parts.append("The temperature dropped fast the day before.") }
+        if lb.tempDropLevel == .earlier { parts.append(dayBeforeDrop) }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
@@ -1513,9 +1530,10 @@ struct VerdictHeader: View {
             .frame(minHeight: 30, alignment: .leading)
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
             // Never cut: the sentence takes the lines it needs and the sky gives up the room.
-            Text(title)
+            Self.marked(title)
                 .font(Theme.serifTitle).kerning(Theme.serifKerning)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(TheRead.spoken(title))
                 .contentTransition(.opacity)
                 .animation(settled ? .easeInOut(duration: 0.22) : nil, value: title)
             if let when {
@@ -1532,6 +1550,23 @@ struct VerdictHeader: View {
 }
 
 extension VerdictHeader {
+    /// The sentence with felt air's marks drawn as sparkles: two for "often shows up on your flare days",
+    /// one for "sometimes". Quieter than the words, so the fact leads.
+    static func marked(_ s: String) -> Text {
+        var out = Text(verbatim: "")
+        var run = ""
+        for ch in s {
+            if let mark = TheRead.Mark(rawValue: String(ch)) {
+                let icon = Text(Image(systemName: mark == .often ? "sparkles" : "sparkle")).font(.title3).foregroundStyle(.secondary)
+                out = Text("\(out)\(Text(verbatim: run))\(icon)")
+                run = ""
+            } else {
+                run.append(ch)
+            }
+        }
+        return Text("\(out)\(Text(verbatim: run))")
+    }
+
     /// How this time compares with your days, as a pill; tap for Insights.
     var verdictPill: some View {
         let ink = tint ?? Theme.secondaryText
@@ -1609,7 +1644,7 @@ enum AirEvent: Equatable {
         case .storm: return "A thunderstorm while pollen is high."
         case .smoke: return [t, "and there's wildfire smoke in the air."].compactMap { $0 }.joined(separator: ", ")
         case .tempDrop:
-            let fall = fallF.map { "\(Int($0.rounded()))° colder than three hours ago." } ?? "and getting colder fast."
+            let fall = fallF.map { "down \(Int($0.rounded()))° in three hours." } ?? "and getting colder fast."
             return [t, fall].compactMap { $0 }.joined(separator: ", ")
         case .mold: return [t, "rainy and humid."].compactMap { $0 }.joined(separator: ", ")
         }

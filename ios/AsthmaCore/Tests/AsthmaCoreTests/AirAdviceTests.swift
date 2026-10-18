@@ -34,8 +34,10 @@ import Testing
     }
 
     @Test func temperatureDropUsesTheNumber() {
-        #expect(AirAdvice.warning(.tempDrop, fallF: 15.6).headline == "It's 16° colder than three hours ago.")
-        #expect(AirAdvice.afterFlare(.tempDrop, fallF: 12) == "It was 12° colder than three hours before.")
+        #expect(AirAdvice.warning(.tempDrop, fallF: 15.6).headline == "The temperature has fallen 16° in three hours.")
+        #expect(AirAdvice.afterFlare(.tempDrop, fallF: 12) == "The temperature had fallen 12° in three hours.")
+        #expect(AirAdvice.afterFlare(.tempDrop, fallF: 20, dayBefore: true)
+                == "The temperature had fallen 20° in three hours, after a fast drop the day before.")
     }
 
     @Test func moldNeedsRainHumidityAndWarmth() {

@@ -48,14 +48,44 @@ public enum TheRead {
         }
     }
 
-    /// "High weed pollen often shows up on your flare days." In words, never counts: you're not a number
-    /// (owner, Oct 17). The only numbers on screen are readings, when you hold the sky.
-    /// `past`, for a logged moment: "High weed pollen was there. It often shows up on your flare days."
+    /// "Shows up on your flare days", as a mark instead of words (owner, Oct 17): the sentence states the fact
+    /// and ends with felt air's sparkle, two for often, one for sometimes. The view draws the mark; `spoken(_:)`
+    /// turns it back into words for VoiceOver and notifications. Private-use characters, so they never clash.
+    public enum Mark: String, CaseIterable, Sendable {
+        case often = "\u{E000}"
+        case sometimes = "\u{E001}"
+
+        public static func of(_ r: LiftRow) -> Mark { AirProfile.Strength.of(r) == .strong ? .often : .sometimes }
+
+        /// The words the mark stands for.
+        public var words: String {
+            switch self {
+            case .often: "It often shows up on your flare days."
+            case .sometimes: "It sometimes shows up on your flare days."
+            }
+        }
+    }
+
+    /// "High weed pollen is here. ✦✦" In words, never counts: you're not a number (owner, Oct 17). The only
+    /// numbers on screen are readings, when you hold the sky. Past: "Raised fine particles were there. ✦"
     public static func pattern(_ r: LiftRow, past: Bool = false) -> String {
-        let often = AirProfile.Strength.of(r) == .strong ? "often" : "sometimes"
-        let thing = noun(r.bin, r.level)
-        return past ? "\(thing) was there. It \(often) shows up on your flare days."
-                    : "\(thing) \(often) shows up on your flare days."
+        marked(noun(r.bin, r.level), time: past ? .back : .now, mark: .of(r))
+    }
+
+    /// A thing in the air, as a fact in the time's tense, then the mark.
+    public static func marked(_ thing: String, time: Time, mark: Mark) -> String {
+        let plural = thing.hasSuffix("particles")
+        let fact = switch time {
+        case .back: "\(thing) \(plural ? "were" : "was") there."
+        case .now: "\(thing) \(plural ? "are" : "is") here."
+        case .ahead: "\(thing) \(plural ? "are" : "is") in the forecast."
+        }
+        return fact + " " + mark.rawValue
+    }
+
+    /// The sentence with each mark said in words: for VoiceOver, notifications and anything without the sparkle.
+    public static func spoken(_ s: String) -> String {
+        Mark.allCases.reduce(s) { $0.replacingOccurrences(of: $1.rawValue, with: $1.words) }
     }
 
     /// The event as a fact, in the time's tense, without the temperature lead.
@@ -65,7 +95,8 @@ public enum TheRead {
         let drop = fallF.map { "\(Int($0.rounded()))°" }
         switch (e, time) {
         case (.tempDrop, .ahead(let when)): return "\(when): a sharp temperature drop on the way."
-        case (.tempDrop, _): return drop.map { "A sharp cold drop: \($0) in three hours." } ?? "A sharp cold drop."
+        case (.tempDrop, .back): return drop.map { "The temperature had fallen \($0) in three hours." } ?? "The temperature had dropped fast."
+        case (.tempDrop, _): return drop.map { "The temperature has fallen \($0) in three hours." } ?? "The temperature is dropping fast."
         case (.smoke, .ahead(let when)): return "\(when): wildfire smoke in the forecast."
         case (.smoke, .back): return "Wildfire smoke was in the air."
         case (.smoke, _): return [fires?.sentence, "Heavy smoke is drifting into your area."].compactMap { $0 }.joined(separator: " ")
@@ -98,7 +129,7 @@ public enum TheRead {
         case .ahead(let when):
             if learned, looksLikeFlare, let top = shared.first {
                 parts.append(event == nil ? "\(when) looks more like your flare days: \(noun(top.bin, top.level).lowercased())."
-                                          : pattern(top))
+                                          : marked(noun(top.bin, top.level), time: time, mark: .of(top)))
             } else if learned, event == nil {
                 parts.append("\(when) looks like your baseline days.")
             } else if event == nil, let n = notable.first {

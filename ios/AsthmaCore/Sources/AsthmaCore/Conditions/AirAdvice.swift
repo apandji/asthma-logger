@@ -68,7 +68,7 @@ public enum AirAdvice {
                     stayingPut: "Keep your windows shut until the storm has passed.",
                     goingOut: "If you've been outside, shower and change clothes when you get in, to rinse off pollen.")
         case .tempDrop:
-            Warning(headline: fallF.map { "It's \(Int($0.rounded()))° colder than three hours ago." } ?? "The temperature is dropping fast.",
+            Warning(headline: fallF.map { "The temperature has fallen \(Int($0.rounded()))° in three hours." } ?? "The temperature is dropping fast.",
                     stayingPut: "Keep the air indoors humidified if you can.",
                     goingOut: "Bring your inhaler. Breathe through your nose, or wear a loose scarf to warm the air.")
         case .mold:
@@ -79,8 +79,19 @@ public enum AirAdvice {
     }
 
     /// The fact for a flare moment logged during the event. What was in the air, nothing more.
-    public static func afterFlare(_ event: Event, fallF: Double? = nil) -> String {
-        switch event {
+    /// A drop is said as a change, never as a reading ("20° colder" read as "20° now", owner Oct 17).
+    /// `dayBefore`: it had also dropped fast the day before, folded into the same sentence.
+    public static func afterFlare(_ event: Event, fallF: Double? = nil, dayBefore: Bool = false) -> String {
+        if event == .tempDrop {
+            let fell = fallF.map { "The temperature had fallen \(Int($0.rounded()))° in three hours" }
+            switch (fell, dayBefore) {
+            case (let f?, true): return f + ", after a fast drop the day before."
+            case (let f?, false): return f + "."
+            case (nil, true): return "The temperature had been dropping fast since the day before."
+            case (nil, false): return "The temperature had dropped fast before this."
+            }
+        }
+        return switch event {
         case .smoke: "Wildfire smoke was in the air before this."
         case .stormPollen: "A thunderstorm came through while pollen was high."
         case .tempDrop: fallF.map { "It was \(Int($0.rounded()))° colder than three hours before." } ?? "The temperature had dropped fast before this."

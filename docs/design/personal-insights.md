@@ -64,3 +64,11 @@ A category counts when it has a pattern and is at least 60% as strong as the str
 - Launch arguments (Debug): `-dataSet <preset>`, `-freshStart`.
 - **Category cards:** the leading one opens, the rest are collapsed; inside, what stands out first (★ on what leads
   your profile), "See all" for the rest. A leaning needs at least two flare moments.
+
+## No numbers on screen (owner, Oct 17)
+
+felt air pushes back on the "quantified self": you're not a number. No counts or ratios anywhere: patterns read in words
+(Often · Sometimes · Maybe · No more than usual · Not tracked yet; categories Often · Maybe · Not much), the profile is
+**Still learning…** or **Learned · may shift with the seasons**, When/Where say "Mostly in the afternoon." The only
+numbers people see are readings with units, when they hold the sky on Now (an intention to learn). Counts stay in the
+data, the tests and the exported table. This supersedes the strength words and counts described above.

@@ -48,17 +48,14 @@ public enum TheRead {
         }
     }
 
-    /// "High weed pollen came up at 9 of your 14 rescue moments." When and where read as moments:
-    /// "4 of your 10 rescue moments were in the evening."
-    public static func counted(_ r: LiftRow) -> String {
-        let n = "\(r.attacksWith) of your \(r.nAttacks) rescue moments"
-        switch r.bin {
-        case "hour": return "\(n) were in the \(r.level)."
-        case "season": return "\(n) were in \(r.level)."
-        case "indoor_outdoor": return "\(n) were \(r.level == "indoor" ? "indoors" : "outdoors")."
-        case "place": return "\(n) were at \(r.level)."
-        default: return "\(noun(r.bin, r.level)) came up at \(n)."
-        }
+    /// "High weed pollen often shows up on your flare days." In words, never counts: you're not a number
+    /// (owner, Oct 17). The only numbers on screen are readings, when you hold the sky.
+    /// `past`, for a logged moment: "High weed pollen was there. It often shows up on your flare days."
+    public static func pattern(_ r: LiftRow, past: Bool = false) -> String {
+        let often = AirProfile.Strength.of(r) == .strong ? "often" : "sometimes"
+        let thing = noun(r.bin, r.level)
+        return past ? "\(thing) was there. It \(often) shows up on your flare days."
+                    : "\(thing) \(often) shows up on your flare days."
     }
 
     /// The event as a fact, in the time's tense, without the temperature lead.
@@ -92,7 +89,7 @@ public enum TheRead {
             break
         case .now:
             if learned, let top = shared.first {
-                parts.append(counted(top))
+                parts.append(pattern(top))
             } else if parts.isEmpty, let n = notable.first {
                 parts.append(n.prefix(1).uppercased() + n.dropFirst() + ".")
             } else if parts.isEmpty {
@@ -101,7 +98,7 @@ public enum TheRead {
         case .ahead(let when):
             if learned, looksLikeFlare, let top = shared.first {
                 parts.append(event == nil ? "\(when) looks more like your flare days: \(noun(top.bin, top.level).lowercased())."
-                                          : counted(top))
+                                          : pattern(top))
             } else if learned, event == nil {
                 parts.append("\(when) looks like your baseline days.")
             } else if event == nil, let n = notable.first {
@@ -113,19 +110,18 @@ public enum TheRead {
         return parts.joined(separator: " ")
     }
 
-    /// For Insights: "You used your inhaler most in the evening: 4 of your 10 rescue moments." Gated rows only.
+    /// For Insights: "You tend to use your inhaler in the evening." Gated rows only, no counts.
     public static func personal(_ rows: [LiftRow]) -> [String] {
         rows.filter { $0.gated && personalBins.contains($0.bin) && $0.attackRate > $0.baselineRate }
             .sorted { ($0.attackRate - $0.baselineRate) > ($1.attackRate - $1.baselineRate) }
             .map { r in
-                let n = "\(r.attacksWith) of your \(r.nAttacks) rescue moments"
                 let when: String = switch r.bin {
                 case "hour": "in the \(r.level)"
                 case "season": "in \(r.level)"
                 case "indoor_outdoor": r.level == "indoor" ? "indoors" : "outdoors"
                 default: "at \(r.level)"
                 }
-                return "You used your inhaler most \(when): \(n)."
+                return "You tend to use your inhaler \(when)."
             }
     }
 

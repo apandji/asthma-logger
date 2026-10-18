@@ -18,7 +18,7 @@ import Testing
         let a = Archetype(profile: p, learned: true)
         #expect(a.kind == .hotHazy)
         #expect(a.name == "Hot, hazy days")
-        #expect(a.evidence == "Most often: high ozone (8 of 10) and heat (7 of 10).")
+        #expect(a.evidence == "Most often: high ozone and heat.")
     }
 
     @Test func oneStrongCategoryNamesIt() {
@@ -64,7 +64,7 @@ import Testing
         let cal = Calendar(identifier: .gregorian)
         func at(_ h: Int) -> Date { cal.date(from: DateComponents(year: 2026, month: 10, day: 1, hour: h))! }
         let r = Rhythm(dates: [at(18), at(19), at(20), at(9)], calendar: cal)
-        #expect(r?.sentence == "You tend to use your inhaler in the evening: 3 of your 4 rescue moments.")
+        #expect(r?.sentence == "You tend to use your inhaler in the evening.")
         #expect(Rhythm(dates: [at(1), at(9)], calendar: cal) == nil)
     }
 

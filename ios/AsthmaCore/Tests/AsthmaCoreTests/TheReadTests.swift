@@ -7,7 +7,8 @@ import Testing
 
     @Test func nowLearnedLeadsWithCounts() {
         let s = TheRead.sentence(time: .now, learned: true, event: nil, fallF: nil, shared: [weed], notable: [])
-        #expect(s == "High weed pollen came up at 9 of your 14 rescue moments.")
+        #expect(s == "High weed pollen often shows up on your flare days.")
+        #expect(s.allSatisfy { !$0.isNumber })
     }
 
     @Test func eventLeadsWithoutTheTemperature() {
@@ -62,7 +63,7 @@ import Testing
     @Test func timeOfDayReadsAsMoments() {
         let r = LiftRow(bin: "hour", level: "evening", attacksWith: 4, baselinesWith: 2, nAttacks: 10, nBaselines: 30,
                         attackRate: 0.4, baselineRate: 0.07, lift: 6, gated: true)
-        #expect(TheRead.personal([r]) == ["You used your inhaler most in the evening: 4 of your 10 rescue moments."])
+        #expect(TheRead.personal([r]) == ["You tend to use your inhaler in the evening."])
     }
 
     @Test func theReadLeavesWhenAndWhereToInsights() {

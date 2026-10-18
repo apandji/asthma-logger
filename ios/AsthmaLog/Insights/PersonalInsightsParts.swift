@@ -37,7 +37,7 @@ struct CategoryCard: View {
                 let list = all || standingOut.isEmpty ? triggers : standingOut
                 ForEach(list) { t in item(t) }
                 if triggers.count > standingOut.count && !standingOut.isEmpty {
-                    Button(all ? "Show less" : "See all \(triggers.count)") { withAnimation(Theme.snap) { all.toggle() } }
+                    Button(all ? "Show less" : "See all") { withAnimation(Theme.snap) { all.toggle() } }
                         .font(.subheadline.weight(.semibold)).padding(.leading, 20)
                         .buttonStyle(.plain)
                 }
@@ -48,7 +48,11 @@ struct CategoryCard: View {
         .glassEffect(selected ? .regular.tint(AirRadar.ink(axis.category).opacity(0.25)) : .regular, in: .rect(cornerRadius: 22))
     }
 
-    private func item(_ t: AirProfile.Trigger) -> some View {
+    /// What's inside, in words. No counts on screen (owner, Oct 17); the numbers you see are readings,
+    /// when you hold the sky on Now.
+    private func item(_ t: AirProfile.Trigger) -> some View { itemLabel(t) }
+
+    private func itemLabel(_ t: AirProfile.Trigger) -> some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
@@ -58,10 +62,6 @@ struct CategoryCard: View {
                     }
                     Text(t.name).font(.subheadline)
                         .foregroundStyle(t.strength == .notTracked || t.strength == .none ? Theme.secondaryText : .primary)
-                }
-                if let r = t.row, [.strong, .some, .leaning].contains(t.strength) {
-                    Text("\(r.attacksWith) of \(r.nAttacks) flare · \(r.baselinesWith) of \(r.nBaselines) baseline")
-                        .font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
                 }
             }
             Spacer(minLength: 8)

@@ -93,10 +93,10 @@ public struct Archetype: Sendable, Equatable {
         }
     }
 
-    /// "Most often: high ozone (8 of 10) and heat (7 of 10)."
+    /// "Most often: high ozone and heat." No counts.
     public var evidence: String? {
         guard !leads.isEmpty else { return nil }
-        let parts = leads.prefix(3).map { "\(TheRead.noun($0.bin, $0.level).lowercased()) (\($0.attacksWith) of \($0.nAttacks))" }
+        let parts = leads.prefix(3).map { TheRead.noun($0.bin, $0.level).lowercased() }
         let list = parts.count == 1 ? parts[0] : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
         return "Most often: \(list)."
     }
@@ -110,12 +110,13 @@ public extension AirProfile {
     enum Strength: String, Sendable, Equatable {
         case strong, some, leaning, none, notTracked
 
+        /// Plain frequency, not statistics (owner, Oct 17: no "quantified self"). Counts are one tap away.
         public var word: String {
             switch self {
-            case .strong: "Strong"
-            case .some: "Some"
-            case .leaning: "Leaning"
-            case .none: "Not more than usual"
+            case .strong: "Often"
+            case .some: "Sometimes"
+            case .leaning: "Maybe"
+            case .none: "No more than usual"
             case .notTracked: "Not tracked yet"
             }
         }
@@ -176,8 +177,8 @@ public struct Rhythm: Sendable, Equatable {
         part = top.key; count = top.value; total = dates.count
     }
 
-    /// "You tend to use your inhaler in the evening: 4 of your 10 rescue moments."
-    public var sentence: String { "You tend to use your inhaler in the \(part): \(count) of your \(total) rescue moments." }
+    /// "You tend to use your inhaler in the evening." (`count`/`total` stay internal: never on screen.)
+    public var sentence: String { "You tend to use your inhaler in the \(part)." }
 }
 
 // MARK: Profile history

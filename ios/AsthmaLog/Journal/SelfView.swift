@@ -170,6 +170,8 @@ struct LiveWords: View {
     var ink: Color = Theme.rescueSoft
     var font: Font = .subheadline
     var lineLimit: Int? = 3
+    /// Only as wide as the words (a chat bubble), not the full width.
+    var hugs = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -200,7 +202,7 @@ struct LiveWords: View {
                     .animation(reduceMotion ? nil : Theme.snap, value: words.count)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
+        .frame(maxWidth: hugs ? nil : .infinity, minHeight: 20, alignment: .leading)
     }
 
     /// The words of every positive tag mention in the text, with the kind of tag they named (symptoms and

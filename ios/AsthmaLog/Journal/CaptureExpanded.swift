@@ -90,8 +90,8 @@ private struct ChatCapture: View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(session.turns) { turn in row(turn).id(turn.id) }
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(session.turns) { turn in row(turn, current: turn == currentQuestion).id(turn.id) }
                         if session.listening || session.writing {
                             bubble(Text(session.live.isEmpty ? "Listening…" : "").foregroundStyle(Theme.secondaryText), live: true)
                                 .id("live")
@@ -104,6 +104,9 @@ private struct ChatCapture: View {
                     .padding(.horizontal, 20).padding(.vertical, 12)
                 }
                 .scrollIndicators(.hidden)
+                // Earlier turns fade under the header rather than being cut by it.
+                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.05),
+                                             .init(color: .black, location: 1)], startPoint: .top, endPoint: .bottom))
                 .onChange(of: session.turns.count) { _, _ in withAnimation(Theme.smooth) { proxy.scrollTo(session.turns.last?.id, anchor: .bottom) } }
                 .onChange(of: session.live) { _, _ in proxy.scrollTo("live", anchor: .bottom) }
             }
@@ -112,15 +115,35 @@ private struct ChatCapture: View {
         }
     }
 
-    @ViewBuilder private func row(_ turn: CaptureSession.Turn) -> some View {
+    /// The question waiting for an answer: the last turn, while the interview is still going.
+    private var currentQuestion: CaptureSession.Turn? {
+        guard !session.done, let last = session.turns.last, case .question = last else { return nil }
+        return last
+    }
+
+    /// The question being asked is the sentence; answered ones step back to a quiet line above their answer,
+    /// so the thread reads as pairs and only one thing is large at a time.
+    @ViewBuilder private func row(_ turn: CaptureSession.Turn, current: Bool) -> some View {
         switch turn {
         case .question(let q):
-            Text(q.text)
-                .font(Theme.Typeface.sentence(size: 22)).kerning(Theme.serifKerning)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            Group {
+                if current {
+                    Text(q.text).font(Theme.Typeface.sentence(size: 22)).kerning(Theme.serifKerning)
+                } else {
+                    Text(q.text).font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, turn == session.turns.first ? 0 : 14)
+            .animation(Theme.smooth, value: current)
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
         case .answer(_, let text):
-            bubble(LiveWords(text: text, ink: Theme.rescueSoft, font: .body, lineLimit: nil))
+            if text == "…" {
+                // A voice answer with no words written down: say so, rather than an empty bubble.
+                bubble(Label("Voice note", systemImage: "waveform").font(.subheadline).foregroundStyle(Theme.secondaryText))
+            } else {
+                bubble(LiveWords(text: text, ink: Theme.rescueSoft, font: .body, lineLimit: nil, hugs: true))
+            }
         case .heard(_, let tags):
             // What felt air picked up, like an assistant's tool result: tap one to untick it.
             VStack(alignment: .leading, spacing: 6) {
@@ -139,7 +162,7 @@ private struct ChatCapture: View {
             Spacer(minLength: 48)
             Group {
                 if live, !session.live.isEmpty {
-                    LiveWords(text: session.live, ink: Theme.rescueSoft, font: .body, lineLimit: nil)
+                    LiveWords(text: session.live, ink: Theme.rescueSoft, font: .body, lineLimit: nil, hugs: true)
                 } else {
                     content
                 }

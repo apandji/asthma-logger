@@ -72,7 +72,9 @@ struct PullToLog: View {
                     .allowsHitTesting(false)
             }
         }
-        .contentShape(Rectangle())
+        // The hit shape is the + at rest and the whole well once open: the stops sit above the +'s frame,
+        // and outside the shape a tap would reach the catcher behind and close the well without logging.
+        .contentShape(Path(CGRect(x: 0, y: open ? button - wellHeight : 0, width: button, height: open ? wellHeight : button)))
         .gesture(drag)
         // Opened by a tap: a touch anywhere else closes it (the catcher is oversized on purpose; SwiftUI
         // hit-tests it even outside the +'s own frame), and it closes by itself after a few seconds.

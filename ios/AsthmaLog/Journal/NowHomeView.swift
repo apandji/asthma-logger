@@ -42,7 +42,6 @@ struct NowHomeView: View {
     /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
     /// top, the rail's icons, the + at the bottom, all on the same line.
     static let column: CGFloat = 36
-    private let sparkleTip = SparkleTip()
     /// Counts up each time a sentence with a sparkle lands: the sparkle button nods in sympathy.
     @State private var noticed = 0
     @Namespace private var hero
@@ -79,8 +78,8 @@ struct NowHomeView: View {
                     .opacity(probing ? 0.4 : 1)
                     .animation(Theme.smooth, value: probing)
                 // Once, the first time a sentence carries the sparkle: what it means.
-                if didOnboard, hasMark {
-                    TipView(sparkleTip)
+                if didOnboard, let mark = currentMark {
+                    TipView(SparkleTip(mark: mark))
                     .tint(.primary)
                     .padding(.horizontal, 16).padding(.top, 10)
                 }
@@ -397,6 +396,17 @@ struct NowHomeView: View {
     }
 
     // MARK: Header
+
+    /// The mark in the header's sentence, when it carries one.
+    private var currentMark: TheRead.Mark? {
+        let title: String? = switch focus {
+        case .now: justNow == nil && here != nil ? nowRead : nil
+        case .moment(let m): backRead(m)
+        case .hour(let h): aheadRead(h)
+        }
+        guard let title else { return nil }
+        return TheRead.Mark.allCases.first { title.contains($0.rawValue) }
+    }
 
     /// The header's sentence carries a sparkle mark (a pattern). Arms the one-time SparkleTip.
     private var hasMark: Bool {
@@ -1772,7 +1782,7 @@ struct MarkedSentence: View {
                             // A generous tap area that adds nothing to the layout.
                             .contentShape(Rectangle().inset(by: -10))
                             .onTapGesture { SparkleTip().invalidate(reason: .actionPerformed); showKey = true }
-                            .popover(isPresented: $showKey, arrowEdge: .top) { SparkleKey() }
+                            .popover(isPresented: $showKey, arrowEdge: .top) { SparkleKey(mark: mark) }
                             .accessibilityLabel(mark.words)
                             .accessibilityAddTraits(.isButton)
                     }
@@ -1793,16 +1803,15 @@ struct MarkedSentence: View {
     }
 }
 
-/// The key to the sparkle, as a popover: the marks and what they stand for.
+/// The key to the sparkle, as a popover: one line for the mark you tapped.
 struct SparkleKey: View {
+    let mark: TheRead.Mark
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Shows up on your flare days", systemImage: "sparkles").font(Theme.Typeface.sentence(size: 17))
-            SparkleTip.key.font(.subheadline).foregroundStyle(.secondary)
-        }
-        .padding(16)
-        .frame(width: 300, alignment: .leading)
-        .presentationCompactAdaptation(.popover)
+        SparkleTip.line(mark)
+            .font(.subheadline)
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .fixedSize()
+            .presentationCompactAdaptation(.popover)
     }
 }
 

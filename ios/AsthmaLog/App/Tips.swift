@@ -1,3 +1,4 @@
+import AsthmaCore
 import TipKit
 
 /// First-use hints in Apple's own tip style (TipKit). Each shows a couple of times, then stays away.
@@ -18,11 +19,17 @@ struct MomentsTip: Tip {
 /// Once, the first time a sentence carries felt air's sparkle: what the mark means. Now only draws its
 /// TipView while a sentence with a mark is on screen, so it needs no rule of its own.
 struct SparkleTip: Tip {
-    var title: Text { Text("\(Image(systemName: "sparkles")) Shows up on your flare days") }
-    // The marks themselves, as a key, instead of describing them in words.
-    var message: Text? { Self.key }
-    /// Shared with the popover you get by tapping a sentence's sparkle.
-    static var key: Text { Text("\(Image(systemName: "sparkles")) often   \(Image(systemName: "sparkle")) sometimes\nWhat felt air has noticed, not a cause.") }
+    /// The mark on screen: the tip reads for that one.
+    var mark: TheRead.Mark = .often
+    var title: Text { Self.line(mark) }
+    var message: Text? { nil }
+
+    /// One line, the word that matters emphasised: "✦✦ Shows up **often** on your flare days".
+    static func line(_ mark: TheRead.Mark) -> Text {
+        mark == .often
+            ? Text("\(Image(systemName: "sparkles")) Shows up **often** on your flare days")
+            : Text("\(Image(systemName: "sparkle")) Shows up **sometimes** on your flare days")
+    }
     var options: [any TipOption] { [Tips.MaxDisplayCount(1)] }
 }
 

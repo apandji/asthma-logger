@@ -15,6 +15,14 @@ struct MomentsTip: Tip {
     var image: Image? { Image(systemName: "hand.draw") }
 }
 
+/// Once, the first time a sentence carries felt air's sparkle: what the mark means. Now only draws its
+/// TipView while a sentence with a mark is on screen, so it needs no rule of its own.
+struct SparkleTip: Tip {
+    var title: Text { Text("\(Image(systemName: "sparkles")) Shows up on your flare days") }
+    var message: Text? { Text("A sparkle after something in the air means it often shows up on your flare days. One sparkle: sometimes. It's what felt air has noticed, not a cause.") }
+    var options: [any TipOption] { [Tips.MaxDisplayCount(1)] }
+}
+
 enum AppTips {
     static let resetKey = "resetTipsOnLaunch"
 

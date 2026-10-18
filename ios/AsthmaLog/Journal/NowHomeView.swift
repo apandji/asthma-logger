@@ -39,6 +39,7 @@ struct NowHomeView: View {
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
     @State private var showInsights = false
+    private let sparkleTip = SparkleTip()
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var showSettings = false
     @State private var openDay: Date?
@@ -71,6 +72,11 @@ struct NowHomeView: View {
                 }
                     .opacity(probing ? 0.4 : 1)
                     .animation(Theme.smooth, value: probing)
+                // Once, the first time a sentence carries the sparkle: what it means.
+                if didOnboard, hasMark {
+                    TipView(sparkleTip)
+                    .padding(.horizontal, 16).padding(.top, 10)
+                }
                 // The cards: what to do or see at this time. Several can be true at once, so they stack and you
                 // swipe through them, most important first (docs/design/header-ia.md).
                 let deck = cards
@@ -371,6 +377,17 @@ struct NowHomeView: View {
     }
 
     // MARK: Header
+
+    /// The header's sentence carries a sparkle mark (a pattern). Arms the one-time SparkleTip.
+    private var hasMark: Bool {
+        let title: String? = switch focus {
+        case .now: justNow == nil && here != nil ? nowRead : nil
+        case .moment(let m): backRead(m)
+        case .hour(let h): aheadRead(h)
+        }
+        let marked = title.map { s in TheRead.Mark.allCases.contains { s.contains($0.rawValue) } } ?? false
+        return marked
+    }
 
     private var learningButton: some View {
         // Small, in the context row: no bubble up here, it would cover the sentence. Learning breathes; learned bounces once.

@@ -209,6 +209,7 @@ struct InsightsRingButton: View {
     @AppStorage(Crit.InsightsState.key) private var forced = Crit.InsightsState.auto
     @State private var model = InsightsModel()
     @State private var bubbleDismissed = false
+    @State private var shown = false
 
     /// 56 by the +; 44 in the top bar, matching •••.
     var size: CGFloat = 56
@@ -222,17 +223,22 @@ struct InsightsRingButton: View {
     var body: some View {
         Button(action: { bubbleDismissed = true; open() }) {
             ZStack {
-                Circle().stroke(Theme.secondaryText.opacity(0.18), lineWidth: 3)
-                Circle().trim(from: 0, to: progress)
-                    .stroke(learned ? Color.primary : Theme.secondaryText, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.smooth(duration: 1), value: progress)
-                // Sparkles while it learns (a slow breath); still, and two sparkles, once it has learned.
+                // Learning, as a ring of riso dots that builds as felt air learns (Insights' LearningRing, small).
+                // It draws itself in from empty when it appears, so you see it building.
+                let dots = size < 50 ? 20 : 28
+                DotRing(fill: 1, dots: dots, on: 1.1, off: 1.1).fill(Theme.secondaryText.opacity(0.35))
+                DotRing(fill: shown ? progress : 0, dots: dots, on: size < 50 ? 1.7 : 2.4, off: 0)
+                    .fill(Color.primary.opacity(learned ? 1 : 0.8))
+                    .animation(reduceMotion ? nil : .smooth(duration: 1.4), value: shown ? progress : 0)
+                // SF Symbols' own animation: a slow breath while learning; one sparkle becomes two, with a
+                // bounce, once it has learned.
                 Image(systemName: learned ? "sparkles" : "sparkle")
-                    .font(.body.weight(.semibold))
-                    .symbolEffect(.breathe, isActive: !learned && !reduceMotion)
+                    .font(.system(size: size * 0.36, weight: .semibold))
+                    .contentTransition(.symbolEffect(.replace.magic(fallback: .downUp)))
+                    .symbolEffect(.breathe.pulse.byLayer, options: .repeat(.continuous), isActive: !learned && !reduceMotion)
                     .symbolEffect(.bounce, value: learned)
             }
+            .onAppear { shown = true }
             .padding(size < 50 ? 4 : 5)
             .frame(width: size, height: size)
             .glassEffect(.regular.interactive(), in: .circle)
@@ -288,6 +294,34 @@ struct InsightsRingButton: View {
             let b = min(1, Double(p.baselines) / Double(max(1, p.minBaselines)))
             return (a + b) / 2
         }
+    }
+}
+
+/// Dots around a circle, the first `fill` of them (clockwise from the top). Animatable, so the ring builds.
+nonisolated struct DotRing: Shape {
+    var fill: Double
+    var dots: Int
+    /// Radius of a dot that's on; `off` for the rest (0 leaves them out).
+    var on: CGFloat
+    var off: CGFloat
+
+    var animatableData: Double {
+        get { fill }
+        set { fill = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let c = CGPoint(x: rect.midX, y: rect.midY), radius = min(rect.width, rect.height) / 2 - on - 1
+        for i in 0..<dots {
+            let t = Double(i) / Double(dots)
+            let r = t < fill - 0.0001 ? on : off
+            guard r > 0 else { continue }
+            let a = t * 2 * .pi - .pi / 2
+            let pt = CGPoint(x: c.x + radius * cos(a), y: c.y + radius * sin(a))
+            p.addEllipse(in: CGRect(x: pt.x - r, y: pt.y - r, width: 2 * r, height: 2 * r))
+        }
+        return p
     }
 }
 

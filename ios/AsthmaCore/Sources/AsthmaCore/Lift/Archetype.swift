@@ -173,8 +173,10 @@ public extension AirProfile {
             return Trigger(name: name, strength: s, row: best)
         }
         // Bins the table tracks but has no rows for yet (a sharp temperature drop before one has happened):
-        // listed, so the family reads complete.
-        for def in Bins.all where Category.of(bin: def.bin) == c && bins[def.bin] == nil && !def.bin.hasPrefix("tag_") {
+        // listed, so the family reads complete. Journal tags wait for a reviewed note, except in Self, which
+        // is nothing but tags: without them the card would open on nothing.
+        for def in Bins.all where Category.of(bin: def.bin) == c && bins[def.bin] == nil
+            && (!def.bin.hasPrefix("tag_") || c == .exertion) {
             out.append(Trigger(name: Bins.label(def.bin), strength: .notTracked, row: nil))
         }
         for missing in notYet[c] ?? [] where !out.contains(where: { $0.name == missing }) {

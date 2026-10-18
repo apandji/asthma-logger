@@ -56,6 +56,7 @@ struct NowTimeline: View {
         var s = moments.filter { $0.loggedAt < now }.map { x($0.loggedAt) }
         s.append(x(now))
         var h = Calendar.current.dateInterval(of: .hour, for: now)?.start.addingTimeInterval(3600) ?? now
+        if h.timeIntervalSince(now) < 20 * 60 { h = h.addingTimeInterval(3600) }   // too close to now to be its own stop
         while h <= end { s.append(x(h)); h = h.addingTimeInterval(3600) }
         return s.sorted()
     }
@@ -136,7 +137,7 @@ struct NowTimeline: View {
         guard dragging else { return }
         let t = time(at: cx)
         let next: Date?
-        if abs(t.timeIntervalSince(now)) < 15 * 60 { next = nil }
+        if abs(t.timeIntervalSince(now)) < 10 * 60 { next = nil }
         else if t < now {
             // Behind now the playhead moves moment to moment, never in between: the nearest one reads.
             next = moments.filter { $0.loggedAt < now }.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) })?.loggedAt
@@ -162,7 +163,7 @@ struct NowTimeline: View {
         guard phase == .idle, old == .interacting || old == .decelerating else { return }
         // Settled by StopSnap on a stop: read it.
         let t = time(at: centerX)
-        if abs(t.timeIntervalSince(now)) < 15 * 60 { go(to: nil) }
+        if abs(x(now) - centerX) < 3 { go(to: nil) }
         else if t < now { go(to: moments.min(by: { abs(x($0.loggedAt) - centerX) < abs(x($1.loggedAt) - centerX) })?.loggedAt) }
         else { go(to: Self.hour(t)) }
         shown = focusTime
@@ -209,7 +210,7 @@ struct NowTimeline: View {
                 .allowsHitTesting(false)
             Button(action: { go(to: nil) }) { chipLabel }
                 .buttonStyle(PressStyle())
-                .offset(y: axis - 17 - 30)
+                .offset(y: axis - 23 - 52)
                 .disabled(focusTime == nil)
                 .accessibilityLabel(focusTime == nil ? "Now" : "Back to now")
         }
@@ -217,36 +218,50 @@ struct NowTimeline: View {
     }
 
     /// The chip's face: the time, a return arrow when away from now, the verdict's colour under the playhead.
+    /// With a verdict (now and ahead) it's two bubbles coming together: the verdict on top, the time tucked
+    /// under it in the same colour, so the pair reads as one shape and stays short.
     private var chipLabel: some View {
         let ahead = focusTime != nil && current > now
         let behind = focusTime != nil && current < now
         let fill: Color = verdictTint ?? ink
         let text: Color = verdictTint != nil ? .black : (scheme == .light ? Theme.linen : .black)
-        return HStack(spacing: 5) {
+        let verdict = (ahead || focusTime == nil) ? verdictText : nil
+        let time = HStack(spacing: 5) {
             if ahead { Image(systemName: "arrow.uturn.backward").font(.caption2.weight(.bold)) }
             Text(focusTime == nil ? Self.when(now, now: now) : relative(current))
-            if ahead, let verdictText {
-                Text("·").opacity(0.5)
-                Text(verdictText).lineLimit(1).transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
-            }
             if behind { Image(systemName: "arrow.uturn.forward").font(.caption2.weight(.bold)) }
         }
-        .font(.caption.weight(.semibold).monospacedDigit())
+        return VStack(spacing: -5) {
+            if let verdict {
+                Text(verdict)
+                    .font(.caption.weight(.semibold)).lineLimit(1)
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(fill, in: Capsule())
+                    .overlay { if ahead { Capsule().strokeBorder(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) } }
+                    .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .bottom)))
+                    .zIndex(1)
+            }
+            time
+                .font((verdict == nil ? Font.caption : .caption2).weight(.semibold).monospacedDigit())
+                .padding(.horizontal, verdict == nil ? 10 : 9).padding(.vertical, verdict == nil ? 4 : 3)
+                .padding(.top, verdict == nil ? 0 : 3)
+                .background(fill, in: Capsule())
+                // Ahead: a sketch, like the forecast sky (a dashed edge), so it never reads as a record.
+                .overlay { if ahead && verdict == nil { Capsule().strokeBorder(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) } }
+        }
         .tracking(0.2)
         .foregroundStyle(text)
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(fill, in: Capsule())
-        // Ahead: a sketch, like the forecast sky (a dashed edge), so it never reads as a record.
-        .overlay { if ahead { Capsule().strokeBorder(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) } }
         .animation(Theme.smooth, value: verdictTint)
-        .animation(Theme.smooth, value: verdictText)
+        .animation(Theme.smooth, value: verdict)
         .transaction { if dragging { $0.animation = nil } }   // while scrubbing the chip just changes, no roll
         .animation(Theme.snap, value: focusTime == nil)
         .fixedSize()
         .frame(minWidth: 40)
         // A small settle each time the playhead lands on a moment.
-        .scaleEffect(settle ? 1.07 : 1)
+        .scaleEffect(settle ? 1.07 : 1, anchor: .bottom)
         .animation(Theme.snap, value: settle)
+        // Grows upward: the bottom stays on the line.
+        .frame(height: 52, alignment: .bottom)
     }
 
     /// Everything on the track, drawn in one pass (a method rather than an inline closure: the type-checker
@@ -394,8 +409,11 @@ private struct StopSnap: ScrollTargetBehavior {
     func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
         guard !stops.isEmpty else { return }
         let x = target.rect.origin.x
-        // Near now, now wins (a little wider than half an hour ahead, 8 pt, so +1 h stays reachable).
-        if abs(x - now) < 6 { target.rect.origin.x = now; return }
-        if let nearest = stops.min(by: { abs($0 - x) < abs($1 - x) }) { target.rect.origin.x = nearest }
+        // Now only when you leave it right there. Moved off it, it never pulls you back (owner, Oct 18:
+        // "I can't even stay on +1 h"): ahead lands on the nearest hour, behind on the nearest moment.
+        if abs(x - now) < 3 { target.rect.origin.x = now; return }
+        let side = stops.filter { x > now ? $0 > now + 3 : $0 < now - 3 }
+        if let nearest = side.min(by: { abs($0 - x) < abs($1 - x) }) { target.rect.origin.x = nearest }
+        else { target.rect.origin.x = now }
     }
 }

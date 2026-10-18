@@ -482,9 +482,10 @@ struct NowHomeView: View {
                     AirReadings(conditions: j.conditions, weave: j.weave, pollen: nil, pending: j.envStatus == .pending)
                         .padding(.top, 6)
                 } else {
+                    // The verdict is on the timeline's chip now (playheadVerdict), not a pill up here.
                     VerdictHeader(place: AnyView(placeLabel(here?.lat, here?.lon, here?.place, current: true)),
                                   title: here == nil ? "Checking the air near you…" : nowRead,
-                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
+                                  verdict: nil, tint: nil)
                 }
             case .moment(let m):
                 VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
@@ -761,9 +762,10 @@ struct NowHomeView: View {
     }
 
     /// Ahead, the verdict in words grows out of the timeline's chip (it left the header, owner Oct 18).
+    /// On Now too: the verdict sits on the chip, not in the header (owner, Oct 18).
     private var playheadVerdict: String? {
-        guard let t = focusTime, t > now, playheadTint != nil else { return nil }
-        return outlook(at: t).text
+        guard playheadTint != nil, justNow == nil else { return nil }
+        return outlook(at: focusTime ?? now).text
     }
 
     /// The sky's base colour at the playhead, for Insights to start from.

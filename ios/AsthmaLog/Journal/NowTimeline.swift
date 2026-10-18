@@ -14,6 +14,8 @@ struct NowTimeline: View {
     var tint: (LogEvent) -> Double? = { _ in nil }
     /// The forecast ahead of now, hour by hour, in the verdict's colours (nil while still learning).
     var forecastTints: [(Date, Double?)] = []
+    /// The verdict's colour for the time under the playhead (Now and ahead), for the chip and the line.
+    var verdictTint: Color? = nil
     let hours: [NowHour]
     /// The clock, passed in so the track creeps forward while you watch.
     let now: Date
@@ -79,7 +81,8 @@ struct NowTimeline: View {
                         // red matches your flare days), so the track reads like the pill. While still learning it's a
                         // faint band in the ink, so the day's shape shows.
                         for (n, (date, v)) in forecastTints.enumerated() where date >= now {
-                            let w = dayWidth / 24 + 0.5
+                            // One bar per hour with a hairline gap: the forecast is hourly, and the track says so.
+                            let w = max(1, dayWidth / 24 - 1.2)
                             // Each hour breathes on its own phase, more the further out it is: not yet known.
                             let far = min(1, date.timeIntervalSince(now) / (48 * 3600))
                             let wave = sin(flux * 1.6 + Double(n) * 0.55)
@@ -89,22 +92,21 @@ struct NowTimeline: View {
                             let rect = CGRect(x: x(date), y: axis - h / 2, width: w, height: h)
                             ctx.fill(Path(rect), with: .color(tint.opacity(base * (0.8 + 0.2 * (0.5 + 0.5 * wave)))))
                         }
-                        // Moments: a tick per moment in the colour of the air that day. Rescue stands taller than
-                        // standard, so the kind reads in the shape and the comfort in the colour.
+                        // Moments: a dot on the axis per moment, in the colour of the air that day, so they never
+                        // read as the hour marks. Rescue is the bigger dot, standard smaller, a note the smallest.
+                        // A rescue with nothing said yet is hollow; it fills once you've noted it.
                         for e in moments {
                             let on = e.id == currentMoment?.id
-                            // Notes (no inhaler) are short and quiet.
-                            var tall: CGFloat = e.moment == .rescue ? 11 : e.moment == .note ? 4 : 7
-                            // Just logged: the tick lands, tall then settling, over half a second.
+                            var r: CGFloat = e.moment == .rescue ? 5 : e.moment == .note ? 2.2 : 3.6
+                            // Just logged: the dot lands, big then settling, over half a second.
                             let age = frame.date.timeIntervalSince(e.loggedAt)
-                            if !reduceMotion, age >= 0, age < 0.6 { tall *= 1 + 0.8 * CGFloat(pow(1 - age / 0.6, 2)) }
-                            let c = ink.opacity(e.moment == .note ? 0.4 : (tint(e).map { 0.3 + 0.7 * $0 } ?? 0.25))
-                            let rect = CGRect(x: x(e.loggedAt) - 1.5, y: axis - tall, width: 3, height: 2 * tall)
-                            ctx.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(on ? c : c.opacity(0.85)))
-                            // A rescue with nothing said yet: a small hollow ring above it, filled once noted.
+                            if !reduceMotion, age >= 0, age < 0.6 { r *= 1 + 0.8 * CGFloat(pow(1 - age / 0.6, 2)) }
+                            let c = ink.opacity(e.moment == .note ? 0.45 : (tint(e).map { 0.4 + 0.6 * $0 } ?? 0.3))
+                            let rect = CGRect(x: x(e.loggedAt) - r, y: axis - r, width: 2 * r, height: 2 * r)
                             if e.wantsNote {
-                                ctx.stroke(Path(ellipseIn: CGRect(x: x(e.loggedAt) - 3, y: axis - tall - 10, width: 6, height: 6)),
-                                           with: .color(Theme.rescueSoft.opacity(0.9)), lineWidth: 1.2)
+                                ctx.stroke(Path(ellipseIn: rect.insetBy(dx: 0.8, dy: 0.8)), with: .color(c), lineWidth: 1.6)
+                            } else {
+                                ctx.fill(Path(ellipseIn: rect), with: .color(on ? c : c.opacity(0.85)))
                             }
                             if on {
                                 ctx.stroke(Path(ellipseIn: CGRect(x: x(e.loggedAt) - 9, y: axis - 9, width: 18, height: 18)),
@@ -193,7 +195,7 @@ struct NowTimeline: View {
         }
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
-                Capsule().fill(ink).frame(width: 2, height: 30)
+                Capsule().fill(verdictTint ?? ink).frame(width: 2, height: 30)
                     .offset(y: axis - 15)
                     .allowsHitTesting(false)
                 // The pill is a button: tap it to step back through your moments, newest first.
@@ -207,9 +209,16 @@ struct NowTimeline: View {
                     }
                         .font(.caption.weight(.semibold).monospacedDigit())
                         .tracking(0.2)
-                        .foregroundStyle(scheme == .light ? Theme.linen : Color.black)
+                        .foregroundStyle(verdictTint != nil ? Color.black : scheme == .light ? Theme.linen : Color.black)
                         .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(ink, in: Capsule())
+                        .background(verdictTint ?? ink, in: Capsule())
+                        // Ahead: a sketch, like the forecast sky (a dashed edge), so it never reads as a record.
+                        .overlay {
+                            if focusTime != nil, current > now {
+                                Capsule().strokeBorder(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3]))
+                            }
+                        }
+                        .animation(Theme.smooth, value: verdictTint)
                         .contentTransition(.numericText())
                         .animation(Theme.snap, value: focusTime == nil)
                         .fixedSize()
@@ -266,7 +275,8 @@ struct NowTimeline: View {
         let s = t.timeIntervalSince(now)
         if s > 0 {
             let cal = Calendar.current
-            let h = t.formatted(.dateTime.hour())
+            // The full time, the way the phone writes it ("7:00 PM", or "19:00" on a 24-hour clock).
+            let h = t.formatted(.dateTime.hour().minute())
             return cal.isDateInToday(t) ? h : cal.isDateInTomorrow(t) ? "Tomorrow \(h)" : "\(t.formatted(.dateTime.weekday(.abbreviated))) \(h)"
         }
         let sign = s >= 0 ? "+" : "−"

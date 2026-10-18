@@ -19,16 +19,21 @@ struct MomentsTip: Tip {
 /// Once, the first time a sentence carries felt air's sparkle: what the mark means. Now only draws its
 /// TipView while a sentence with a mark is on screen, so it needs no rule of its own.
 struct SparkleTip: Tip {
-    /// The mark on screen: the tip reads for that one.
+    /// The mark on screen, and what it's about: the tip reads for that one.
     var mark: TheRead.Mark = .often
-    var title: Text { Self.line(mark) }
+    var factor: String? = nil
+    var title: Text { Self.line(mark, factor: factor) }
     var message: Text? { nil }
 
-    /// One line, the word that matters emphasised: "✦✦ Shows up **often** on your flare days".
-    static func line(_ mark: TheRead.Mark) -> Text {
-        mark == .often
-            ? Text("\(Image(systemName: "sparkles")) Shows up **often** on your flare days")
-            : Text("\(Image(systemName: "sparkle")) Shows up **sometimes** on your flare days")
+    /// One line, the same words as Insights, the word that matters emphasised:
+    /// "✦✦ High weed pollen shows up **often** on your flare days".
+    static func line(_ mark: TheRead.Mark, factor: String?) -> Text {
+        let icon = Image(systemName: mark == .often ? "sparkles" : "sparkle")
+        let what = factor ?? "Shows"
+        let verb = factor == nil ? "up" : "shows up"
+        return mark == .often
+            ? Text("\(icon) \(what) \(verb) **often** on your flare days")
+            : Text("\(icon) \(what) \(verb) **sometimes** on your flare days")
     }
     var options: [any TipOption] { [Tips.MaxDisplayCount(1)] }
 }

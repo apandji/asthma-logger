@@ -83,6 +83,27 @@ public enum TheRead {
         return fact + "\u{00A0}" + mark.rawValue   // non-breaking: the sparkle never wraps onto a line alone
     }
 
+    /// The thing the sparkle is about, read back out of a marked sentence ("High weed pollen was there. ✦" →
+    /// "High weed pollen"), so the key can say "High weed pollen shows up often on your flare days", the
+    /// same words as Insights. Nil when the sentence isn't one of ours.
+    public static func factor(in sentence: String) -> String? {
+        // The sentence that carries the mark, without the mark.
+        let marks = Mark.allCases.map(\.rawValue)
+        guard let range = marks.lazy.compactMap({ sentence.range(of: $0) }).min(by: { $0.lowerBound < $1.lowerBound }) else { return nil }
+        var s = String(sentence[..<range.lowerBound]).replacingOccurrences(of: "\u{00A0}", with: "").trimmingCharacters(in: .whitespaces)
+        if let dot = s.range(of: ". ", options: .backwards) { s = String(s[dot.upperBound...]) }   // the last sentence
+        if s.contains("temperature had fallen") || s.contains("temperature has fallen") { return noun("temp_drop", "yes") }
+        for tail in [" was there.", " were there.", " is here.", " are here.", " is in the forecast.", " are in the forecast."] where s.hasSuffix(tail) {
+            return String(s.dropLast(tail.count))
+        }
+        // Ahead: "Thursday afternoon: high weed pollen." → "High weed pollen".
+        if let colon = s.range(of: ": ") {
+            let n = s[colon.upperBound...].trimmingCharacters(in: CharacterSet(charactersIn: ". "))
+            return n.prefix(1).uppercased() + n.dropFirst()
+        }
+        return nil
+    }
+
     /// The sentence with each mark said in words: for VoiceOver, notifications and anything without the sparkle.
     public static func spoken(_ s: String) -> String {
         Mark.allCases.reduce(s) { $0.replacingOccurrences(of: "\u{00A0}" + $1.rawValue, with: " " + $1.words) }

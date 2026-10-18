@@ -50,6 +50,14 @@ import Testing
 }
 
 @Suite struct MarkTests {
+    @Test func factorReadBack() {
+        #expect(TheRead.factor(in: TheRead.marked("High weed pollen", time: .back, mark: .often)) == "High weed pollen")
+        #expect(TheRead.factor(in: "Humid air is here.\u{00A0}\u{E000}") == "Humid air")
+        #expect(TheRead.factor(in: "The temperature had fallen 19° in three hours.\u{00A0}\u{E001} The day before was wet.") == "A sharp temperature drop")
+        #expect(TheRead.factor(in: "Thursday afternoon: high weed pollen.\u{00A0}\u{E000}") == "High weed pollen")
+        #expect(TheRead.factor(in: "Nothing here.") == nil)
+    }
+
     @Test func pluralsAndTenses() {
         #expect(TheRead.marked("Raised fine particles", time: .back, mark: .sometimes) == "Raised fine particles were there.\u{00A0}\u{E001}")
         #expect(TheRead.marked("Humid air", time: .now, mark: .often) == "Humid air is here.\u{00A0}\u{E000}")

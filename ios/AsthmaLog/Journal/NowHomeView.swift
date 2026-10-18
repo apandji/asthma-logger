@@ -79,7 +79,7 @@ struct NowHomeView: View {
                     .animation(Theme.smooth, value: probing)
                 // Once, the first time a sentence carries the sparkle: what it means.
                 if didOnboard, let mark = currentMark {
-                    TipView(SparkleTip(mark: mark))
+                    TipView(SparkleTip(mark: mark, factor: currentTitle.flatMap(TheRead.factor(in:))))
                     .tint(.primary)
                     .padding(.horizontal, 16).padding(.top, 10)
                 }
@@ -118,15 +118,7 @@ struct NowHomeView: View {
                     }
                     .padding(.top, 4)
                 // Baselines are the engine's, not the journal's: no ticks for them (owner, Oct 17).
-                NowTimeline(moments: moments, baselines: [],
-                            tint: { airTint($0.weave) },
-                            forecastTints: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
-                            hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
-                    .frame(height: 104)
-                    // Full width; the + floats over its end, which fades out beneath it. The other end just softens.
-                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: railLeft ? 0.2 : 0.08),
-                                                 .init(color: .black, location: railLeft ? 0.92 : 0.8), .init(color: .clear, location: 1)],
-                                         startPoint: .leading, endPoint: .trailing))
+                timeline
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
@@ -212,9 +204,9 @@ struct NowHomeView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { await load() }
             // Back in the foreground with no place yet (the first fix timed out): try again.
-            .onChange(of: scenePhase) { _, p in if p == .active, here == nil { Task { await load() } } }
+            .onChange(of: scenePhase) { _, p in reloadIfNeeded(p) }
             // Re-runs when the location arrives, not only when the event changes.
-            .task(id: "\(liveEvent == .smoke)-\(here?.lat ?? 0)") {
+            .task(id: fireKey) {
                 guard liveEvent == .smoke, let p = here else { fires = nil; return }
                 fires = await AmbeeClient.wildfires(latitude: p.lat, longitude: p.lon)
             }
@@ -397,14 +389,18 @@ struct NowHomeView: View {
 
     // MARK: Header
 
-    /// The mark in the header's sentence, when it carries one.
-    private var currentMark: TheRead.Mark? {
-        let title: String? = switch focus {
+    /// The header's sentence, for the sparkle tip.
+    private var currentTitle: String? {
+        switch focus {
         case .now: justNow == nil && here != nil ? nowRead : nil
         case .moment(let m): backRead(m)
         case .hour(let h): aheadRead(h)
         }
-        guard let title else { return nil }
+    }
+
+    /// The mark in the header's sentence, when it carries one.
+    private var currentMark: TheRead.Mark? {
+        guard let title = currentTitle else { return nil }
         return TheRead.Mark.allCases.first { title.contains($0.rawValue) }
     }
 
@@ -475,7 +471,7 @@ struct NowHomeView: View {
                               title: backRead(m), verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
             case .hour(let h):
-                VerdictHeader(place: AnyView(placeField), title: aheadRead(h),
+                VerdictHeader(tagText: "Forecast", place: AnyView(placeField), title: aheadRead(h),
                               verdict: outlook(at: h.date).text, tint: outlook(at: h.date).tint, onVerdict: { showInsights = true })
             }
         }
@@ -659,6 +655,56 @@ struct NowHomeView: View {
                              pollen: DemoPollen.sample(at: h.date, season: pollenSeason),
                              mapID: mapID, coordinate: forecastCoordinate, sketch: true)
         }
+    }
+
+    private var timeline: some View {
+        let tints: [(Date, Double?)] = hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) }
+        let edge: Alignment = railLeft ? .topTrailing : .topLeading
+        let fadeIn: CGFloat = railLeft ? 0.2 : 0.08
+        let fadeOut: CGFloat = railLeft ? 0.92 : 0.8
+        return NowTimeline(moments: moments, baselines: [],
+                           tint: { airTint($0.weave) },
+                           forecastTints: tints, verdictTint: playheadTint,
+                           hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
+            .frame(height: 104)
+            // Away from now: one tap back, on the side the + isn't.
+            .overlay(alignment: edge) { backToNow }
+            // Full width; the + floats over its end, which fades out beneath it. The other end just softens.
+            .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: fadeIn),
+                                         .init(color: .black, location: fadeOut), .init(color: .clear, location: 1)],
+                                 startPoint: .leading, endPoint: .trailing))
+    }
+
+    /// Back in the foreground with no place yet (the first fix timed out): try again.
+    private func reloadIfNeeded(_ phase: ScenePhase) {
+        guard phase == .active, here == nil else { return }
+        Task { await load() }
+    }
+
+    /// Wildfires are looked up when smoke is live and a place is known.
+    private var fireKey: String { "\(liveEvent == .smoke)-\(here?.lat ?? 0)" }
+
+    @ViewBuilder private var backToNow: some View {
+        if focusTime != nil {
+            Button { withAnimation(Theme.smooth) { focusTime = nil } } label: {
+                Label("Now", systemImage: "arrow.uturn.backward")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+            }
+            .buttonStyle(PressStyle())
+            .padding(.horizontal, 16).padding(.top, 20)
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            .animation(Theme.snap, value: focusTime == nil)
+        }
+    }
+
+    /// The verdict's colour under the playhead, for the timeline's chip and line: Now and ahead only
+    /// (the past has no verdict).
+    private var playheadTint: Color? {
+        let t = focusTime ?? now
+        guard t >= now - 60 else { return nil }
+        return outlook(at: t).tint
     }
 
     /// The sky's base colour at the playhead, for Insights to start from.
@@ -1683,6 +1729,8 @@ struct MapZoomSource: ViewModifier {
 /// its height, so nothing jumps while you scrub.
 struct VerdictHeader: View {
     var tag: MomentKind? = nil
+    /// A plain tag in the tag's place ("Forecast").
+    var tagText: String? = nil
     let place: AnyView
     let title: String
     let verdict: String?
@@ -1704,9 +1752,11 @@ struct VerdictHeader: View {
         VStack(alignment: .leading, spacing: 8) {
             // The context line: tag, place, and the verdict (the place gives way first).
             HStack(spacing: 8) {
-                if let tag { MomentTag(moment: tag) }
+                if let tag { MomentTag(moment: tag) } else if let tagText { MomentTag(moment: .okay, text: tagText) }
                 place.layoutPriority(0)
-                if verdict != nil { verdictPill.layoutPriority(1) }
+                // With a tag on the line too there's no room for both; the verdict (also in the chip and
+                // the sky's colour) gives way to the place.
+                if verdict != nil { verdictPill.layoutPriority(tagText == nil ? 1 : -1) }
             }
             .frame(minHeight: 30, alignment: .leading)
             .padding(Edge.Set(corner.0), max(0, corner.1 - 20))
@@ -1782,7 +1832,7 @@ struct MarkedSentence: View {
                             // A generous tap area that adds nothing to the layout.
                             .contentShape(Rectangle().inset(by: -10))
                             .onTapGesture { SparkleTip().invalidate(reason: .actionPerformed); showKey = true }
-                            .popover(isPresented: $showKey, arrowEdge: .top) { SparkleKey(mark: mark) }
+                            .popover(isPresented: $showKey, arrowEdge: .top) { SparkleKey(mark: mark, factor: TheRead.factor(in: text)) }
                             .accessibilityLabel(mark.words)
                             .accessibilityAddTraits(.isButton)
                     }
@@ -1806,8 +1856,9 @@ struct MarkedSentence: View {
 /// The key to the sparkle, as a popover: one line for the mark you tapped.
 struct SparkleKey: View {
     let mark: TheRead.Mark
+    var factor: String? = nil
     var body: some View {
-        SparkleTip.line(mark)
+        SparkleTip.line(mark, factor: factor)
             .font(.subheadline)
             .padding(.horizontal, 16).padding(.vertical, 12)
             .fixedSize()

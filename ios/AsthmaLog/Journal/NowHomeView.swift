@@ -1781,9 +1781,6 @@ struct VerdictHeader: View {
                     .id(title)
                     .transition(reduceMotion || !settled ? AnyTransition.opacity : AnyTransition(.blurReplace))
             }
-                // Three lines' worth, always, so what's below (the sky, the rail) doesn't move as the sentence
-                // runs one line or three.
-                .frame(minHeight: typeSize.isAccessibilitySize ? 84 : 96, alignment: .topLeading)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(TheRead.spoken(title))
                 .animation(settled ? .easeInOut(duration: 0.26) : nil, value: title)
@@ -1803,7 +1800,8 @@ struct VerdictHeader: View {
                         .lineLimit(1)
                 }
             }
-            .frame(minHeight: 22, alignment: .topLeading)
+            // Not reserved: the header is its natural height and the sky takes the slack (its column is
+            // bottom-anchored, so nothing below moves as the sentence runs one line or three).
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)

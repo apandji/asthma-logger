@@ -233,7 +233,8 @@ final class QuickRecordLive {
         }
     }
 
-    private func endAll() {
+    /// Ends every card (also used by Fresh start).
+    func endAll() {
         for a in Live.activities {
             let id = a.id
             Task { await Self.end(id, nil, .immediate) }

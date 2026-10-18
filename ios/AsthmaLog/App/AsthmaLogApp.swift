@@ -38,6 +38,11 @@ struct AsthmaLogApp: App {
                     if args.contains("-demoWeek") { DemoSeeder.add(in: context) }
                     if args.contains("-skipOnboarding") { UserDefaults.standard.set(true, forKey: Prefs.didOnboard) }
                     if args.contains("-showOnboarding") { UserDefaults.standard.set(false, forKey: Prefs.didOnboard) }
+                    // `-dataSet hotHazy` (any DataSetPreset) loads a made-up person; `-freshStart` erases everything.
+                    if let i = args.firstIndex(of: "-dataSet"), i + 1 < args.count, let p = DataSetPreset(rawValue: args[i + 1]) {
+                        DataSets.load(p, context: context)
+                    }
+                    if args.contains("-freshStart") { DataSets.freshStart(context: context, button: button) }
                     #endif
                     QuickRecordCenter.shared.start(container: container)
                     watch.start { log in

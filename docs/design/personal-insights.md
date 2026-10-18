@@ -51,3 +51,16 @@ A category counts when it has a pattern and is at least 60% as strong as the str
 - **Profile history:** a snapshot when the archetype changes, or monthly. Hypothesis: it moves with the seasons.
 - **Profile as the app icon:** possible only by switching between pre-made icons (one per archetype), and iOS shows an
   alert on every switch. Later.
+
+## Data sets for demos (Settings › Data sets, Debug)
+
+- **Load a data set:** your saved usage, or a made-up person (Still learning, Allergen-led, Air-quality-led,
+  Weather-sensitive, Hot hazy days, Effort-led, Mixed, Nothing stands out). Made-up people run through the real
+  pattern maths; `DataSetPresetTests` checks each lands on its archetype. Loading replaces the Journal and keeps your
+  own data as "My data" first.
+- **Save current as…** keeps the Journal as a file on the phone (Documents/DataSets), e.g. "Andrew". Never committed.
+- **Fresh start:** erases moments, voice notes, settings, pairing, tips and profile history and opens onboarding.
+  Permissions survive until the app is deleted: `ios/scripts/fresh-install.sh` (optionally `--data hotHazy`).
+- Launch arguments (Debug): `-dataSet <preset>`, `-freshStart`.
+- **Category cards:** the leading one opens, the rest are collapsed; inside, what stands out first (★ on what leads
+  your profile), "See all" for the rest. A leaning needs at least two flare moments.

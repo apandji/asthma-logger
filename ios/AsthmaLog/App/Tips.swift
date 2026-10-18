@@ -20,7 +20,9 @@ struct MomentsTip: Tip {
 struct SparkleTip: Tip {
     var title: Text { Text("\(Image(systemName: "sparkles")) Shows up on your flare days") }
     // The marks themselves, as a key, instead of describing them in words.
-    var message: Text? { Text("\(Image(systemName: "sparkles")) often   \(Image(systemName: "sparkle")) sometimes\nWhat felt air has noticed, not a cause.") }
+    var message: Text? { Self.key }
+    /// Shared with the popover you get by tapping a sentence's sparkle.
+    static var key: Text { Text("\(Image(systemName: "sparkles")) often   \(Image(systemName: "sparkle")) sometimes\nWhat felt air has noticed, not a cause.") }
     var options: [any TipOption] { [Tips.MaxDisplayCount(1)] }
 }
 

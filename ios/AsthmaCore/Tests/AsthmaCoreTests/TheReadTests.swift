@@ -7,7 +7,7 @@ import Testing
 
     @Test func nowLearnedLeadsWithCounts() {
         let s = TheRead.sentence(time: .now, learned: true, event: nil, fallF: nil, shared: [weed], notable: [])
-        #expect(s == "High weed pollen is here. \u{E000}")
+        #expect(s == "High weed pollen is here.\u{00A0}\u{E000}")
         #expect(TheRead.spoken(s) == "High weed pollen is here. It often shows up on your flare days.")
         #expect(s.allSatisfy { !$0.isNumber })
     }
@@ -28,9 +28,12 @@ import Testing
     @Test func aheadNamesTheTimeAndFactor() {
         let s = TheRead.sentence(time: .ahead("Thursday afternoon"), learned: true, event: nil, fallF: nil, shared: [weed],
                                  notable: [], looksLikeFlare: true)
-        #expect(s == "Thursday afternoon looks more like your flare days: high weed pollen.")
+        #expect(TheRead.spoken(s) == "Thursday afternoon: high weed pollen. It often shows up on your flare days.")
+        // Never the verdict: that's the pill's job, so the two can't contradict.
         #expect(TheRead.sentence(time: .ahead("Thursday afternoon"), learned: true, event: nil, fallF: nil, shared: [],
-                                 notable: []) == "Thursday afternoon looks like your baseline days.")
+                                 notable: []) == "Thursday afternoon: nothing in the forecast stands out.")
+        #expect(TheRead.sentence(time: .ahead("Monday morning"), learned: true, event: nil, fallF: nil, shared: [],
+                                 notable: ["weed pollen is high"]) == "Monday morning: weed pollen is high.")
     }
 
     @Test func neverCausalOrOdds() {
@@ -48,8 +51,8 @@ import Testing
 
 @Suite struct MarkTests {
     @Test func pluralsAndTenses() {
-        #expect(TheRead.marked("Raised fine particles", time: .back, mark: .sometimes) == "Raised fine particles were there. \u{E001}")
-        #expect(TheRead.marked("Humid air", time: .now, mark: .often) == "Humid air is here. \u{E000}")
+        #expect(TheRead.marked("Raised fine particles", time: .back, mark: .sometimes) == "Raised fine particles were there.\u{00A0}\u{E001}")
+        #expect(TheRead.marked("Humid air", time: .now, mark: .often) == "Humid air is here.\u{00A0}\u{E000}")
         #expect(TheRead.spoken(TheRead.marked("Heat", time: .ahead("Friday"), mark: .sometimes))
                 == "Heat is in the forecast. It sometimes shows up on your flare days.")
     }

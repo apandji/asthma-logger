@@ -17,16 +17,28 @@ struct CaptureBar: View {
     @AppStorage(Crit.InsightsEntry.key) private var insightsEntry = Crit.InsightsEntry.topBar
     @AppStorage(Prefs.logButtons) private var useButtons = false
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// The + follows the rail to the hand's side.
+    @AppStorage(Prefs.railLeft) private var railLeft = false
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 12) {
+            if railLeft { logControl; Spacer() }
             switch insightsEntry {
             case .bottomStrip: InsightPeek(open: { showInsights = true })
             case .ringButton:
                 Spacer()
                 InsightsRingButton(open: { showInsights = true })
-            case .edgeTab, .topBar: Spacer()
+            case .edgeTab, .topBar: if !railLeft { Spacer() }
             }
+            if !railLeft { logControl }
+        }
+        .padding(railLeft ? .trailing : .leading, 16)
+        .padding(railLeft ? .leading : .trailing, NowHomeView.column - 28)  // the 56pt + on the hand's column
+        .padding(.bottom, 6)
+        .animation(.snappy, value: useButtons)
+    }
+
+    @ViewBuilder private var logControl: some View {
             if useButtons || typeSize.isAccessibilitySize {
                 // Two labelled buttons: chosen in Settings (or from the tip), and always at accessibility text sizes.
                 HStack(spacing: 8) {
@@ -43,11 +55,6 @@ struct CaptureBar: View {
                     if action.id == "buttons" { useButtons = true; tip?.invalidate(reason: .actionPerformed) }
                 }
             }
-        }
-        .padding(.leading, 16)
-        .padding(.trailing, JournalView.railAxis - 28)  // the 56pt + centers on the rail axis
-        .padding(.bottom, 6)
-        .animation(.snappy, value: useButtons)
     }
 }
 
@@ -218,6 +225,8 @@ struct InsightsRingButton: View {
     /// On the left (the rail is on the left): the bubble opens to the right.
     var leading = false
     var showsBubble = true
+    /// Its own glass circle; off when it sits in a group that has the glass (Now's top controls).
+    var glass = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -226,8 +235,9 @@ struct InsightsRingButton: View {
                 // Learning, as a ring of riso dots that builds as felt air learns (Insights' LearningRing, small).
                 // It draws itself in from empty when it appears, so you see it building.
                 let dots = size < 50 ? 20 : 28
-                DotRing(fill: 1, dots: dots, on: 1.1, off: 1.1).fill(Theme.secondaryText.opacity(0.35))
-                DotRing(fill: shown ? progress : 0, dots: dots, on: size < 50 ? 1.7 : 2.4, off: 0)
+                let big: CGFloat = size < 50 ? 1.6 : 2.3
+                DotRing(fill: 1, dots: dots, on: 0.9, inset: big + 1).fill(Theme.secondaryText.opacity(0.4))
+                DotRing(fill: shown ? progress : 0, dots: dots, on: big, inset: big + 1)
                     .fill(Color.primary.opacity(learned ? 1 : 0.8))
                     .animation(reduceMotion ? nil : .smooth(duration: 1.4), value: shown ? progress : 0)
                 // SF Symbols' own animation: a slow breath while learning; one sparkle becomes two, with a
@@ -241,7 +251,7 @@ struct InsightsRingButton: View {
             .onAppear { shown = true }
             .padding(size < 50 ? 4 : 5)
             .frame(width: size, height: size)
-            .glassEffect(.regular.interactive(), in: .circle)
+            .glassEffect(glass ? .regular.interactive() : .identity, in: .circle)
         }
         .buttonStyle(.plain)
         .overlay(alignment: leading ? .topLeading : .topTrailing) {
@@ -301,9 +311,10 @@ struct InsightsRingButton: View {
 nonisolated struct DotRing: Shape {
     var fill: Double
     var dots: Int
-    /// Radius of a dot that's on; `off` for the rest (0 leaves them out).
+    /// Radius of a dot that's on. Dots past `fill` are left out; the one at the edge grows in as `fill` passes it.
     var on: CGFloat
-    var off: CGFloat
+    /// How far the dots' centres sit inside the edge: the same for every ring drawn together, so they line up.
+    var inset: CGFloat
 
     var animatableData: Double {
         get { fill }
@@ -312,12 +323,13 @@ nonisolated struct DotRing: Shape {
 
     func path(in rect: CGRect) -> Path {
         var p = Path()
-        let c = CGPoint(x: rect.midX, y: rect.midY), radius = min(rect.width, rect.height) / 2 - on - 1
+        let c = CGPoint(x: rect.midX, y: rect.midY), radius = min(rect.width, rect.height) / 2 - inset
         for i in 0..<dots {
-            let t = Double(i) / Double(dots)
-            let r = t < fill - 0.0001 ? on : off
-            guard r > 0 else { continue }
-            let a = t * 2 * .pi - .pi / 2
+            // 0 before this dot's turn, 1 once fill has passed it: the ring builds one dot at a time, smoothly.
+            let grown = min(1, max(0, fill * Double(dots) - Double(i)))
+            let r = on * CGFloat(grown)
+            guard r > 0.05 else { continue }
+            let a = Double(i) / Double(dots) * 2 * .pi - .pi / 2
             let pt = CGPoint(x: c.x + radius * cos(a), y: c.y + radius * sin(a))
             p.addEllipse(in: CGRect(x: pt.x - r, y: pt.y - r, width: 2 * r, height: 2 * r))
         }

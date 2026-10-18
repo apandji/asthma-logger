@@ -39,6 +39,9 @@ struct NowHomeView: View {
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
     @State private var showInsights = false
+    /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
+    /// top, the rail's icons, the + at the bottom, all on the same line.
+    static let column: CGFloat = 36
     private let sparkleTip = SparkleTip()
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var showSettings = false
@@ -64,12 +67,7 @@ struct NowHomeView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
-                // felt air learning, as a sparkle button in the top corner on the rail's side (Insights).
-                HStack(alignment: .top, spacing: 0) {
-                    if railLeft { learningButton.padding(.leading, 14).padding(.trailing, -8) }
-                    header
-                    if !railLeft { learningButton.padding(.trailing, 14).padding(.leading, -8) }
-                }
+                header
                     .opacity(probing ? 0.4 : 1)
                     .animation(Theme.smooth, value: probing)
                 // Once, the first time a sentence carries the sparkle: what it means.
@@ -96,6 +94,15 @@ struct NowHomeView: View {
                     .environment(\.skyDent, skyDrag != nil && !reduceMotion ? SkyDent(point: skyDrag!.point, press: skyPress) : nil)
                     .gesture(skyScrub)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Insights and Settings head the rail's column: one strip on the hand's side, top to bottom.
+                    // They step aside while the rail is held open (it grows up into this space).
+                    .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
+                        learningButton
+                            .padding(.horizontal, NowHomeView.column - 22).padding(.top, 10)  // the 44pt pill on the column
+                            .opacity(probing ? 0 : 1)
+                            .allowsHitTesting(!probing)
+                            .animation(Theme.smooth, value: probing)
+                    }
                     .padding(.top, 4)
                 // Baselines are the engine's, not the journal's: no ticks for them (owner, Oct 17).
                 NowTimeline(moments: moments, baselines: [],
@@ -103,9 +110,9 @@ struct NowHomeView: View {
                             forecastTints: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
                             hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
                     .frame(height: 104)
-                    // Full width; the + and Settings float over its ends, which fade out beneath them.
-                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.2),
-                                                 .init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
+                    // Full width; the + floats over its end, which fades out beneath it. The other end just softens.
+                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: railLeft ? 0.2 : 0.08),
+                                                 .init(color: .black, location: railLeft ? 0.92 : 0.8), .init(color: .clear, location: 1)],
                                          startPoint: .leading, endPoint: .trailing))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -165,7 +172,6 @@ struct NowHomeView: View {
                 // No tips until onboarding is done: they'd pop over the first-run screens.
                 CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
             }
-            .overlay(alignment: .bottomLeading) { rail }
             .overlay(alignment: .top) {
                 if let e = toast {
                     LoggedToast(event: e, undo: {
@@ -389,10 +395,25 @@ struct NowHomeView: View {
         return marked
     }
 
+    /// Insights and Settings as one upright glass pill at the head of the rail's column, the sparkle on top.
+    /// Settings left the bottom corner, where it sat on the timeline.
     private var learningButton: some View {
-        // Small, in the context row: no bubble up here, it would cover the sentence. Learning breathes; learned bounces once.
-        InsightsRingButton(open: { showInsights = true }, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false)
-            .padding(.top, 5)
+        VStack(spacing: 2) {
+            // No bubble: it would cover the sky. Learning breathes; learned bounces once.
+            InsightsRingButton(open: { showInsights = true }, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false, glass: false)
+            settingsButton
+        }
+        .padding(4)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .padding(.top, 1)
+    }
+
+    private var settingsButton: some View {
+        Button { showSettings = true } label: {
+            Image(systemName: "gearshape").font(.body.weight(.semibold)).frame(width: 36, height: 36).contentShape(Circle())
+        }
+        .buttonStyle(PressStyle())
+        .accessibilityLabel("Settings")
     }
 
     /// Top to bottom: where (a plain line, or a field you can change in the forecast), what the air is (the
@@ -830,21 +851,6 @@ struct NowHomeView: View {
 
     // MARK: Right edge
 
-    /// Bottom-left, where nothing else lives, so the header can run the full width.
-    private var rail: some View {
-        HStack(spacing: 10) {
-            Button { showSettings = true } label: { railIcon("gearshape") }.accessibilityLabel("Settings")
-        }
-        .buttonStyle(PressStyle())
-        .padding(.leading, 16)
-        .padding(.bottom, 16)
-    }
-
-    private func railIcon(_ name: String) -> some View {
-        Image(systemName: name).font(.body.weight(.semibold)).frame(width: 44, height: 44)
-            .glassEffect(.regular.interactive(), in: .circle)
-    }
-
     // MARK: Data
 
     private func load() async {
@@ -1181,7 +1187,7 @@ struct NowSky: View {
             .overlay(alignment: railLeft ? .leading : .trailing) {
                 GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions),
                          voiceBadge: selfEvent?.wantsNote ?? false)
-                    .padding(railLeft ? .leading : .trailing, 18)
+                    .padding(railLeft ? .leading : .trailing, NowHomeView.column - 8)  // the sky sits 8pt in from the screen
                     .frame(width: 64, height: size.height, alignment: railLeft ? .leading : .trailing)
                     .contentShape(Rectangle())
                     .gesture(scrub(size))
@@ -1535,6 +1541,11 @@ struct VerdictHeader: View {
     var when: String? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skySettled) private var settled
+    /// Room kept at one end of the top line for controls floating over that corner.
+    @Environment(\.cornerInset) private var corner
+    /// Tapping a sentence with a sparkle opens the key (the one-time tip, again on demand).
+    @State private var showKey = false
+    private var hasMark: Bool { TheRead.Mark.allCases.contains { title.contains($0.rawValue) } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1545,12 +1556,24 @@ struct VerdictHeader: View {
                 if verdict != nil { verdictPill.layoutPriority(1) }
             }
             .frame(minHeight: 30, alignment: .leading)
+            .padding(Edge.Set(corner.0), max(0, corner.1 - 20))
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
             // Never cut: the sentence takes the lines it needs and the sky gives up the room.
             Self.marked(title)
                 .font(Theme.serifTitle).kerning(Theme.serifKerning)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel(TheRead.spoken(title))
+                .contentShape(Rectangle())
+                .onTapGesture { if hasMark { SparkleTip().invalidate(reason: .actionPerformed); showKey = true } }
+                .popover(isPresented: $showKey, arrowEdge: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Shows up on your flare days", systemImage: "sparkles").font(.headline)
+                        SparkleTip.key.font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    .padding(16)
+                    .frame(width: 300, alignment: .leading)
+                    .presentationCompactAdaptation(.popover)
+                }
                 .contentTransition(.opacity)
                 .animation(settled ? .easeInOut(duration: 0.22) : nil, value: title)
             if let when {
@@ -1609,6 +1632,14 @@ extension VerdictHeader {
 struct SkyDent: Equatable { var point: CGPoint; var press: CGFloat }
 private struct SkyDentKey: EnvironmentKey { static let defaultValue: SkyDent? = nil }
 private struct SkySettledKey: EnvironmentKey { static let defaultValue = true }
+private struct CornerInsetKey: EnvironmentKey { static let defaultValue: (Edge, CGFloat) = (.trailing, 0) }
+extension EnvironmentValues {
+    var cornerInset: (Edge, CGFloat) {
+        get { self[CornerInsetKey.self] }
+        set { self[CornerInsetKey.self] = newValue }
+    }
+}
+
 extension EnvironmentValues {
     var skyDent: SkyDent? {
         get { self[SkyDentKey.self] }

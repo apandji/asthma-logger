@@ -80,12 +80,12 @@ public enum TheRead {
         case .now: "\(thing) \(plural ? "are" : "is") here."
         case .ahead: "\(thing) \(plural ? "are" : "is") in the forecast."
         }
-        return fact + " " + mark.rawValue
+        return fact + "\u{00A0}" + mark.rawValue   // non-breaking: the sparkle never wraps onto a line alone
     }
 
     /// The sentence with each mark said in words: for VoiceOver, notifications and anything without the sparkle.
     public static func spoken(_ s: String) -> String {
-        Mark.allCases.reduce(s) { $0.replacingOccurrences(of: $1.rawValue, with: $1.words) }
+        Mark.allCases.reduce(s) { $0.replacingOccurrences(of: "\u{00A0}" + $1.rawValue, with: " " + $1.words) }
     }
 
     /// The event as a fact, in the time's tense, without the temperature lead.
@@ -110,7 +110,7 @@ public enum TheRead {
     /// The sentence for Now or Ahead.
     /// - `shared`: from `shared(_:rows:)` (empty before felt air has learned).
     /// - `notable`: what's at a high level, as present-tense clauses ("weed pollen is high"), for before it has learned.
-    /// - `verdict`: Ahead only, the look-ahead's call (looks like flare days, or not).
+    /// - `looksLikeFlare`: unused since the verdict moved to the pill alone (kept so callers needn't change).
     public static func sentence(time: Time, learned: Bool, event: AirAdvice.Event?, fallF: Double?, fires: WildfiresNearby? = nil,
                                 shared: [LiftRow], notable: [String], looksLikeFlare: Bool = false) -> String {
         var parts: [String] = []
@@ -124,14 +124,15 @@ public enum TheRead {
             } else if parts.isEmpty, let n = notable.first {
                 parts.append(n.prefix(1).uppercased() + n.dropFirst() + ".")
             } else if parts.isEmpty {
-                parts.append(learned ? "Nothing here stands out against your flare days." : "Nothing in the air stands out right now.")
+                // The verdict pill says how it compares; the sentence never repeats it (owner, Oct 17).
+                parts.append("Nothing in the air stands out right now.")
             }
         case .ahead(let when):
-            if learned, looksLikeFlare, let top = shared.first {
-                parts.append(event == nil ? "\(when) looks more like your flare days: \(noun(top.bin, top.level).lowercased())."
+            // What's in the forecast, never the verdict: the pill alone says how it compares (owner, Oct 17), so
+            // the two can't disagree. A factor that shows up on your flare days carries the sparkle.
+            if learned, let top = shared.first {
+                parts.append(event == nil ? "\(when): \(noun(top.bin, top.level).lowercased()).\u{00A0}\(Mark.of(top).rawValue)"
                                           : marked(noun(top.bin, top.level), time: time, mark: .of(top)))
-            } else if learned, event == nil {
-                parts.append("\(when) looks like your baseline days.")
             } else if event == nil, let n = notable.first {
                 parts.append("\(when): \(n).")
             } else if event == nil {

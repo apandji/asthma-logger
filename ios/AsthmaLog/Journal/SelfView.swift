@@ -247,6 +247,9 @@ struct BodyPanel: View {
                 if let v = h.sleep { BodyLine(name: "Sleep", text: v) }
                 if let v = h.heart { BodyLine(name: "Heart", text: v) }
                 if let v = h.breathing { BodyLine(name: "Breathing", text: v) }
+                // Asked, and nothing came back (not shared, or no data for the hours): say so rather than
+                // dropping the row.
+                if h.isEmpty { BodyLine(name: "Health", text: "Nothing to read yet.") }
             }
             if askHealth {
                 Button { Task { await HealthReader.shared.ask(); await load() } } label: {

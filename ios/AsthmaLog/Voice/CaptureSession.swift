@@ -78,7 +78,10 @@ final class CaptureSession: Identifiable {
         source = chat ? "chat" : "journal"
         chosen = event.tags
         // A/B test A3: the opener rotates, or is always "What were you doing?".
-        let q = UserDefaults.standard.string(forKey: "crit.opener") == "fixed" ? Interview.Question.doing
+        // Elevated air at a rescue: open on it ("Tree pollen was high around then. Were you outside?"), the
+        // one question only felt air can ask.
+        let q = (event.moment == .rescue && !elevated.isEmpty) ? Interview.Question.exposure
+            : UserDefaults.standard.string(forKey: "crit.opener") == "fixed" ? Interview.Question.doing
             : Interview.first(seed: Int(event.loggedAt.timeIntervalSince1970 / 60), isRescue: event.moment == .rescue)
         ask(q)
     }

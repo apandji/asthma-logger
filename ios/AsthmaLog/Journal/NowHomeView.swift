@@ -20,6 +20,7 @@ struct NowHomeView: View {
     @State private var showPlaces = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @AppStorage(Crit.DemoEvent.key) private var demoEvent = Crit.DemoEvent.none
+    @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The full air details, opened from the pin.
     @State private var pinDetails: LogEvent?
@@ -322,25 +323,12 @@ struct NowHomeView: View {
         return nil
     }
 
-    /// The live air, with the demo event's readings added so the particles show it too.
+    /// The live air, with the demo scenario's readings added so the particles show it too.
     private var liveAir: (conditions: Conditions?, weave: WeaveSpec, pollen: PollenSample?) {
         var c = here?.conditions
-        var pollen = DemoPollen.sample(at: now, season: pollenSeason)
-        switch demoEvent {
-        case .storm:
-            pollen = DemoPollen.sample(at: now, season: .ragweed)
-            c?.weatherCondition = "Thunderstorms"
-        case .smoke:
-            c?.observations.append(EnvObservation(signal: .pm25, value: 142, unit: "µg/m³", asOf: now, source: "Demo",
-                                                  spatialScale: .region, confidence: .low))
-        case .tempDrop:
-            c?.tempFallF = 16
-        case .mold:
-            c?.weatherCondition = "Rain"
-            c?.observations.append(EnvObservation(signal: .humidity, value: 88, unit: "%", asOf: now, source: "Demo",
-                                                  spatialScale: .region, confidence: .low))
-        case .none: break
-        }
+        let pollen = DemoPollen.sample(at: now, season: pollenSeason)
+        // The demo scenario's readings, applied now so switching it shows at once (DemoScenario).
+        if var cc = c { (DemoScenario(rawValue: demoScenario) ?? .off).apply(to: &cc, at: now); c = cc }
         return (c, c.map { WeaveSpec($0.input) } ?? here?.weave ?? WeaveSpec(), pollen)
     }
 
@@ -1434,8 +1422,10 @@ struct NowSky: View {
                     .gesture(scrub(size))
                     // A sky too short for its stops (the keyboard up in onboarding) would stack them on top
                     // of each other: the rail steps out instead.
-                    .opacity(size.height < CGFloat(rows.count) * 44 + 24 ? 0 : 1)
-                    .allowsHitTesting(size.height >= CGFloat(rows.count) * 44 + 24)
+                    // Judged on the folded rail: held open, its items are small dots and the stops squeeze to fit
+                    // (RailRow.ys), so a short sky (an advice card open) must not hide it mid-touch.
+                    .opacity(railFits(size) ? 1 : 0)
+                    .allowsHitTesting(railFits(size))
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Weather, particles and gases, biologics" + (showsSelf ? ", your voice and your body" : ""))
                     .accessibilityAdjustableAction { dir in
@@ -1489,6 +1479,10 @@ struct NowSky: View {
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotionEnv
+
+    private func railFits(_ size: CGSize) -> Bool {
+        size.height >= CGFloat(RailRow.rows(expanded: false, layers: layers, includesSelf: showsSelf).count) * 44 + 24
+    }
 
     /// Hold the rail: it opens (every group with its items' dots) and stays put while you slide; let go and it
     /// folds. Letting go on Self opens your words and activity.

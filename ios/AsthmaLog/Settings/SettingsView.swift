@@ -120,6 +120,7 @@ struct DeveloperSettings: View {
     @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
     @AppStorage(Crit.DemoEvent.key) private var critEvent = Crit.DemoEvent.none
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
+    @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
 
     var body: some View {
         Form {
@@ -178,19 +179,18 @@ struct DeveloperSettings: View {
                     tutorialNote = "Close felt air (swipe it away) and open it again to see the tutorial."
                 }
                 if let tutorialNote { Text(tutorialNote).font(.footnote).foregroundStyle(Theme.secondaryText) }
-                Picker("Pollen (demo)", selection: $demoPollen) {
-                    ForEach(DemoPollen.Season.allCases) { Text($0.title).tag($0) }
+                // One switch for the air of a day worth showing (it sets pollen and the air event underneath).
+                Picker("Demo scenario", selection: $demoScenario) {
+                    ForEach(DemoScenario.allCases) { Text($0.title).tag($0) }
                 }
-                Picker("Air event (demo)", selection: $critEvent) {
-                    ForEach(Crit.DemoEvent.allCases) { Text($0.title).tag($0) }
-                }
+                .onChange(of: demoScenario) { _, s in s.choose() }
                 Picker("Insights state", selection: $critInsightsState) {
                     ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
                 }
             } header: {
                 Text("Demo")
             } footer: {
-                Text("For demos and reviews: made-up pollen and air events (never used for patterns), and the Insights ring forced to a state.")
+                Text("\(demoScenario.shows) Made up, on Now and on moments logged while it's on, never used for patterns. Insights state forces the ring.")
             }
             #endif
 

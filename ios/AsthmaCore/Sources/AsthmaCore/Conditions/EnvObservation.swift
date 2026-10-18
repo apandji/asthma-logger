@@ -112,7 +112,7 @@ public struct Conditions: Codable, Sendable, Equatable {
 
     /// The best reading from a real source: Ambee's sample (until the contract) is shown, never binned.
     public func bestReal(_ signal: Signal) -> EnvObservation? {
-        observations.first { $0.signal == signal && $0.source != Ambee.demoSource }
+        observations.first { $0.signal == signal && !Ambee.isDemo($0.source) }
     }
 
     /// What the patterns see: real sources only (docs/ambee: the sample stands in on screen until the key).

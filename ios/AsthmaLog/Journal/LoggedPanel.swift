@@ -34,15 +34,16 @@ struct LoggedPanel: View {
                     record()
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "mic.fill").font(.title3.weight(.semibold))
-                        Text("What happened?").font(.subheadline.weight(.semibold))
+                        Image(systemName: "plus").font(.body.weight(.bold))
+                        Text("Quick journal").font(.subheadline.weight(.semibold)).lineLimit(1)
                     }
-                    .padding(.horizontal, 18).frame(height: 56)
+                    .padding(.horizontal, 20).frame(height: 56)
                     .foregroundStyle(.black)
                     .background(Capsule().fill(.white))
                 }
                 .buttonStyle(PressStyle())
-                .accessibilityLabel("Say what happened")
+                .accessibilityLabel("Quick journal")
+                .accessibilityHint("Opens the journal, listening")
             }
         }
         .padding(20)

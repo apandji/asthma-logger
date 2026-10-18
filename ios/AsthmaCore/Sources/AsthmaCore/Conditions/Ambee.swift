@@ -10,6 +10,9 @@ import Foundation
 public enum Ambee {
     public static let source = "Ambee"
     public static let demoSource = "Ambee (demo)"
+    /// Readings a demo scenario put in (Settings › Demo scenario): shown, never in patterns.
+    public static let scenarioSource = "Demo scenario"
+    public static func isDemo(_ source: String) -> Bool { source == demoSource || source == scenarioSource }
 
     // MARK: Responses (as documented)
 

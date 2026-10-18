@@ -52,6 +52,8 @@ struct ConditionsService {
         }
         result.tempFallF = await fall
         result.lookBack = await back
+        // A demo scenario's air, on every log while it's on (never in patterns).
+        DemoScenario.current.apply(to: &result)
 
         return result
     }

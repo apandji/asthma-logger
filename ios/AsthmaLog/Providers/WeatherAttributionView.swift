@@ -4,6 +4,7 @@ import WeatherKit
 /// Required wherever Apple Weather data appears: the Apple Weather mark and a link to its data sources.
 struct WeatherAttributionView: View {
     @State private var attribution: WeatherAttribution?
+    @State private var showSources = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -14,10 +15,13 @@ struct WeatherAttributionView: View {
                     Text(a.serviceName)
                 }
                 .frame(height: 12)
-                Link("Other data sources", destination: a.legalPageURL)
+                // Apple's legal page, as required; and every source felt air uses, in one place.
+                Link("Legal", destination: a.legalPageURL)
+                Button("All sources") { showSources = true }
             }
         }
         .font(.caption2)
         .task { attribution = try? await WeatherService.shared.attribution }
+        .sheet(isPresented: $showSources) { NavigationStack { SourcesView() }.presentationDragIndicator(.visible) }
     }
 }

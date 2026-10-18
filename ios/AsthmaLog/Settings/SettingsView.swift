@@ -70,11 +70,10 @@ struct SettingsView: View {
                     Text("Put the rail on the side of the hand you hold your phone with.")
                 }
 
-                Section("Data sources") {
-                    LabeledContent("Apple Weather", value: "On")
-                    LabeledContent("OpenAQ (PM2.5, ozone)", value: Secrets.openAQ == nil ? "No key" : "On")
-                    LabeledContent("AirNow (AQI, forecast)", value: Secrets.airNow == nil ? "No key" : "On")
-                    LabeledContent("Ambee (pollen)", value: Secrets.ambee == nil ? "Not yet" : "On")
+                Section {
+                    NavigationLink("Where your data comes from") { SourcesView() }
+                } footer: {
+                    Text("Apple Weather, OpenAQ, AirNow and Ambee for the air, and what comes from you.")
                 }
 
                 Section {

@@ -357,6 +357,8 @@ struct MomentDetailsView: View {
                 Text(ObservationCopy.line(o)).font(.caption).foregroundStyle(Theme.secondaryText)
             }
             if c.observations.contains(where: { $0.source == WeatherProvider.source }) { WeatherAttributionView() }
+            NavigationLink("Where your data comes from") { SourcesView() }
+                .font(.footnote.weight(.semibold))
         }
         .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
     }

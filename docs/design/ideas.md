@@ -59,3 +59,11 @@ Things noticed while building, not yet decided. Add as you go; move an item out 
 - **Journaling, clinical** (Oct 19): see journaling-clinical.md. Symptom tags as a second list, past-tense
   focused prompts (NICE: focused beats "how have you been?"), a "For your next visit" page instead of any
   control score, the action plan kept beside the diary. Questions for the doctor are in the doc.
+- **Sources by how local they are** (Oct 19, owner): modeled (Apple Weather, Ambee) → regional monitors
+  (AirNow) → the nearest monitor (OpenAQ) → sensors on your street. "Where your data comes from" is laid out
+  this way. Next step: when two sources give the same reading, prefer the more local one (EnvObservation
+  already carries spatialScale and distanceKm), and say which won on the reading.
+- **PurpleAir** (Oct 19): hyperlocal PM2.5 from community sensors, often a block away. Needs a key and paid
+  API points; raw readings need the EPA correction (humidity) before they match monitors; indoor sensors must be
+  filtered out. A new data source, so: owner's OK, the location card updated (another place the position goes),
+  and it counts toward the "hyperlocal" story for the study.

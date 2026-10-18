@@ -57,7 +57,11 @@ struct MomentPager: View {
             .modifier(SpotIf(id: "sky", spot: spot))
             .animation(.easeInOut(duration: 0.35), value: current?.id)
             .modifier(AnchorReport(key: "moment", store: anchorStore, hidden: anchorHidden))
-            .popoverTip(skyTip, arrowEdge: .bottom).tint(.primary)
+            // The tip is about the rail, so its arrow points at the rail, not the middle of the sky.
+            .overlay(alignment: .trailing) {
+                Color.clear.frame(width: 64, height: 160)
+                    .popoverTip(skyTip, arrowEdge: .trailing).tint(.primary)
+            }
             .task(id: current?.id) { await prefetchNeighbours() }
 
             TimelineTrack(events: events, selectedID: $selectedID)

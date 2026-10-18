@@ -45,3 +45,7 @@ Things noticed while building, not yet decided. Add as you go; move an item out 
 - **Undo merges, it doesn't delete.** A second press within two minutes adds a puff; Undo takes one off.
   Only a single-puff moment is deleted by Undo. Clear in the data model, less clear on screen: should the
   card say "2 puffs · Undo" so the arithmetic is visible?
+- **Counts on Insights.** "Your moments · 14" and "Your profile history · 1 so far" are the only numbers on
+  screen that aren't readings. They're list lengths, not stats, but worth a decision: keep, or "Your moments ›"
+  alone. (Oct 18)
+- **"Not tracked yet" rows** could say *when*: "Pressure swings · later", "Tree pollen · with Ambee". (Oct 18)

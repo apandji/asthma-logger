@@ -1678,27 +1678,28 @@ struct VerdictHeader: View {
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
             // Never cut: the sentence takes the lines it needs and the sky gives up the room.
             // Blurs between readings instead of cutting (the same as ScaleHeader), once the playhead has landed.
+            // Three lines at most: a long sentence sets a step smaller (26 → 23 → 20) rather than running on.
+            // A step smaller again at accessibility sizes.
+            let plain = TheRead.spoken(title).count
+            let size: CGFloat = plain > 100 ? 20 : plain > 78 ? 23 : 26
+            let font = Theme.Typeface.sentence(size: typeSize.isAccessibilitySize ? size - 4 : size)
             ZStack(alignment: .topLeading) {
-                Self.marked(title)
-                    // A step smaller at accessibility sizes, and as many lines as it needs.
-                    .font(Theme.Typeface.sentence(size: typeSize.isAccessibilitySize ? 22 : 26)).kerning(Theme.serifKerning)
+                Group {
+                    if hasMark {
+                        // The sparkle is its own view, so the key's arrow points at it.
+                        MarkedSentence(text: title, font: font, showKey: $showKey)
+                    } else {
+                        Text(title).font(font).kerning(Theme.serifKerning)
+                            .lineLimit(3).minimumScaleFactor(0.85)
+                    }
+                }
                     .fixedSize(horizontal: false, vertical: true)
                     .shimmer(title.hasSuffix("…"))
                     .id(title)
                     .transition(reduceMotion || !settled ? AnyTransition.opacity : AnyTransition(.blurReplace))
             }
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel(TheRead.spoken(title))
-                .contentShape(Rectangle())
-                .onTapGesture { if hasMark { SparkleTip().invalidate(reason: .actionPerformed); showKey = true } }
-                .popover(isPresented: $showKey, arrowEdge: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("Shows up on your flare days", systemImage: "sparkles").font(Theme.Typeface.sentence(size: 17))
-                        SparkleTip.key.font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    .padding(16)
-                    .frame(width: 300, alignment: .leading)
-                    .presentationCompactAdaptation(.popover)
-                }
                 .animation(settled ? .easeInOut(duration: 0.26) : nil, value: title)
             if let when {
                 Label(when, systemImage: "clock")
@@ -1710,6 +1711,59 @@ struct VerdictHeader: View {
         .padding(.horizontal, 20)
         .padding(.top, 6)
         .animation(settled ? .easeInOut(duration: 0.22) : nil, value: tint)
+    }
+}
+
+/// A sentence that ends in felt air's sparkle, laid out word by word so the sparkle is a view of its own:
+/// tap it for the key, and the popover's arrow points at it. A word joined to the mark by a non-breaking
+/// space stays on the mark's line.
+struct MarkedSentence: View {
+    let text: String
+    let font: Font
+    @Binding var showKey: Bool
+
+    var body: some View {
+        let tokens = text.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+        FlowLayout(spacing: 7, lineSpacing: -2) {
+            ForEach(Array(tokens.enumerated()), id: \.offset) { _, tok in
+                if let (word, mark) = Self.split(tok) {
+                    HStack(spacing: 7) {
+                        if !word.isEmpty { Text(word).font(font).kerning(Theme.serifKerning) }
+                        Image(systemName: mark == .often ? "sparkles" : "sparkle")
+                            .font(.title3).foregroundStyle(.secondary)
+                            .padding(6).contentShape(Rectangle())
+                            .onTapGesture { SparkleTip().invalidate(reason: .actionPerformed); showKey = true }
+                            .popover(isPresented: $showKey, arrowEdge: .top) { SparkleKey() }
+                            .accessibilityLabel(mark.words)
+                            .accessibilityAddTraits(.isButton)
+                    }
+                } else {
+                    Text(tok).font(font).kerning(Theme.serifKerning)
+                }
+            }
+        }
+    }
+
+    /// "there.\u{00A0}✦" → ("there.", .sometimes); nil for a plain word.
+    static func split(_ tok: String) -> (String, TheRead.Mark)? {
+        for m in TheRead.Mark.allCases where tok.contains(m.rawValue) {
+            let word = tok.replacingOccurrences(of: m.rawValue, with: "").replacingOccurrences(of: "\u{00A0}", with: "")
+            return (word, m)
+        }
+        return nil
+    }
+}
+
+/// The key to the sparkle, as a popover: the marks and what they stand for.
+struct SparkleKey: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Shows up on your flare days", systemImage: "sparkles").font(Theme.Typeface.sentence(size: 17))
+            SparkleTip.key.font(.subheadline).foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(width: 300, alignment: .leading)
+        .presentationCompactAdaptation(.popover)
     }
 }
 

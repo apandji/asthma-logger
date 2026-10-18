@@ -392,13 +392,15 @@ struct TagGrid: View {
 /// Wraps chips onto as many lines as they need.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
+    /// Between lines; the same as `spacing` unless set (text wants less than chips).
+    var lineSpacing: CGFloat? = nil
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
         var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0
         for v in subviews {
             let s = v.sizeThatFits(.unspecified)
-            if x + s.width > width, x > 0 { x = 0; y += row + spacing; row = 0 }
+            if x + s.width > width, x > 0 { x = 0; y += row + (lineSpacing ?? spacing); row = 0 }
             x += s.width + spacing; row = max(row, s.height)
         }
         return CGSize(width: width == .infinity ? x : width, height: y + row)
@@ -408,7 +410,7 @@ struct FlowLayout: Layout {
         var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
         for v in subviews {
             let s = v.sizeThatFits(.unspecified)
-            if x + s.width > bounds.maxX, x > bounds.minX { x = bounds.minX; y += row + spacing; row = 0 }
+            if x + s.width > bounds.maxX, x > bounds.minX { x = bounds.minX; y += row + (lineSpacing ?? spacing); row = 0 }
             v.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(s))
             x += s.width + spacing; row = max(row, s.height)
         }

@@ -152,8 +152,18 @@ public extension AirProfile {
         public var id: String { name }
     }
 
-    /// Every trigger in a category, strongest first: one per bin (its level that leans most toward flare days),
-    /// plus what isn't measured yet (tree and grass pollen until Ambee).
+    /// What each family will track that isn't measured yet, so the detail area shows the whole family, not
+    /// only what has data: pollen kinds and mould spores until Ambee, pressure and wind until they're bins,
+    /// PM10 and NO₂ (read on the rail, not yet in the table).
+    public static let notYet: [Category: [String]] = [
+        .weather: ["Pressure swings", "Wind", "Thunderstorms"],
+        .biologics: ["Tree pollen", "Grass pollen", "Mould spores"],
+        .particulates: ["Coarse dust (PM10)", "Traffic fumes (NO₂)"],
+        .exertion: [],
+    ]
+
+    /// Every trigger in a category: the biggest flare-vs-baseline gap first (that's the one that leads the
+    /// profile), then the rest by strength, then what isn't measured yet.
     static func triggers(_ c: Category, report: LiftReport) -> [Trigger] {
         let bins = Dictionary(grouping: report.rows.filter { Category.of(bin: $0.bin) == c }, by: \.bin)
         var out = bins.map { bin, rows -> Trigger in
@@ -162,13 +172,21 @@ public extension AirProfile {
             let name = (s == .none || s == .notTracked) ? Bins.label(bin) : TheRead.noun(best.bin, best.level)
             return Trigger(name: name, strength: s, row: best)
         }
-        if c == .biologics {
-            for missing in ["Tree pollen", "Grass pollen"] where !out.contains(where: { $0.name == missing }) {
-                out.append(Trigger(name: missing, strength: .notTracked, row: nil))
-            }
+        // Bins the table tracks but has no rows for yet (a sharp temperature drop before one has happened):
+        // listed, so the family reads complete.
+        for def in Bins.all where Category.of(bin: def.bin) == c && bins[def.bin] == nil && !def.bin.hasPrefix("tag_") {
+            out.append(Trigger(name: Bins.label(def.bin), strength: .notTracked, row: nil))
+        }
+        for missing in notYet[c] ?? [] where !out.contains(where: { $0.name == missing }) {
+            out.append(Trigger(name: missing, strength: .notTracked, row: nil))
         }
         let rank: [Strength: Int] = [.strong: 0, .some: 1, .leaning: 2, .none: 3, .notTracked: 4]
-        return out.sorted { (rank[$0.strength]!, $0.name) < (rank[$1.strength]!, $1.name) }
+        func gap(_ t: Trigger) -> Double { t.row.map { $0.attackRate - $0.baselineRate } ?? 0 }
+        return out.sorted { a, b in
+            if rank[a.strength]! != rank[b.strength]! { return rank[a.strength]! < rank[b.strength]! }
+            if gap(a) != gap(b) { return gap(a) > gap(b) }
+            return a.name < b.name
+        }
     }
 }
 

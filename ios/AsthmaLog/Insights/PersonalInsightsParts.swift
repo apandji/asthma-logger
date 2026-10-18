@@ -2,8 +2,9 @@ import AsthmaCore
 import MapKit
 import SwiftUI
 
-/// One category on Personal Insights. Collapsed: its ink, name and status. Open: what stands out inside it
-/// (a star on what leads your profile), with counts; "See all" lists everything, untracked included.
+/// One category on Personal Insights. Collapsed: its ink, name and status. Open: everything in the family,
+/// the one that leads your profile first (starred), then by strength, then what isn't tracked yet in grey.
+/// This is the detail area, so nothing is hidden behind a "See all".
 struct CategoryCard: View {
     let axis: AirProfile.Axis
     let triggers: [AirProfile.Trigger]
@@ -12,9 +13,11 @@ struct CategoryCard: View {
     let selected: Bool
     let expanded: Bool
     let toggle: () -> Void
-    @State private var all = false
-
-    private var standingOut: [AirProfile.Trigger] { triggers.filter { [.strong, .some, .leaning].contains($0.strength) } }
+    /// The starred one first, whatever its strength word says.
+    private var ordered: [AirProfile.Trigger] {
+        let lead = triggers.filter { t in t.row.map { starred.contains($0.id) } ?? false }
+        return lead + triggers.filter { t in !(t.row.map { starred.contains($0.id) } ?? false) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -37,13 +40,7 @@ struct CategoryCard: View {
             .buttonStyle(.plain)
             .accessibilityHint(expanded ? "Collapses" : "Shows what's inside")
             if expanded {
-                let list = all || standingOut.isEmpty ? triggers : standingOut
-                ForEach(list) { t in item(t) }
-                if triggers.count > standingOut.count && !standingOut.isEmpty {
-                    Button(all ? "Show less" : "See all") { withAnimation(Theme.snap) { all.toggle() } }
-                        .font(.subheadline.weight(.semibold)).padding(.leading, 20)
-                        .buttonStyle(.plain)
-                }
+                ForEach(ordered) { t in item(t) }
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 14)

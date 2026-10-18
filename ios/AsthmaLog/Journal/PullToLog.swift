@@ -39,14 +39,22 @@ struct PullToLog: View {
                         .glassEffectID("log", in: glass)
                         .transition(.identity)
                 } else {
-                    Color.clear.frame(width: button, height: button)
+                    // At rest the + is the glass circle's own content (a sibling drawn over the glass doesn't
+                    // survive the morph back).
+                    Image(systemName: "plus")
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: button, height: button)
                         .glassEffect(.regular.interactive(), in: .circle)
                         .glassEffectID("log", in: glass)
                         .transition(.identity)
                 }
-                // The + is the lens: it rides up the well with the finger and takes the stop's ink.
-                lens.offset(y: -lensRise)
-                    .animation(reduceMotion ? nil : .interactiveSpring(response: 0.2, dampingFraction: 0.85), value: lensRise)
+                // Open, the + is the lens: it rides up the well with the finger and takes the stop's ink.
+                if open {
+                    lens.offset(y: -lensRise)
+                        .animation(reduceMotion ? nil : .interactiveSpring(response: 0.2, dampingFraction: 0.85), value: lensRise)
+                        .transition(.identity)
+                }
             }
             .frame(width: button, height: wellHeight, alignment: .bottom)
         }

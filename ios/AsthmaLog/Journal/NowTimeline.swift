@@ -324,7 +324,8 @@ struct NowTimeline: View {
         let cal = Calendar.current
         var ft = cal.dateInterval(of: .hour, for: now)?.start ?? now
         while ft <= end {
-            if ft > now, [6, 18].contains(cal.component(.hour, from: ft)) {
+            // Not within the playhead's width of now: the line would run through the label.
+            if ft > now, abs(x(ft) - x(now)) > 14, [6, 18].contains(cal.component(.hour, from: ft)) {
                 let label = Text(ft.formatted(.dateTime.hour())).font(.caption2.weight(.medium)).foregroundStyle(ink.opacity(0.4))
                 // Just above the strip (the day names are beneath it, and the chip sits higher still).
                 ctx.draw(label, at: CGPoint(x: x(ft), y: axis - 16))

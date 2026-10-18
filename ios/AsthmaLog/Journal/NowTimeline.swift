@@ -52,7 +52,10 @@ struct NowTimeline: View {
     private var contentWidth: CGFloat { CGFloat(end.timeIntervalSince(start) / 86_400) * dayWidth }
     private func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(start) / 86_400) * dayWidth }
     private func time(at x: CGFloat) -> Date { start.addingTimeInterval(Double(x / dayWidth) * 86_400) }
-    private var current: Date { focusTime ?? now }
+    private var current: Date { (dragging ? shown : focusTime) ?? now }
+    /// What the chip shows while dragging (every frame); `focusTime` lags it on purpose (see the scroll handler).
+    @State private var shown: Date?
+    @State private var focusKey: Double?
     private var currentMoment: LogEvent? {
         moments.first { abs($0.loggedAt.timeIntervalSince(current)) < 20 * 60 }
     }
@@ -67,45 +70,9 @@ struct NowTimeline: View {
             if over > 56, dragging, pastEndArmed { pastEndArmed = false; UIImpactFeedbackGenerator(style: .medium).impactOccurred(); onPastEnd() }
             if over < 8 { pastEndArmed = true }
         }
-        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, cx in
-            centerX = cx
-            guard dragging else { return }
-            let t = time(at: cx)
-            if abs(t.timeIntervalSince(now)) < 15 * 60 { focusTime = nil }
-            else if t < now {
-                // Behind now: a moment within reach takes the playhead; between moments it reads the time.
-                if let m = moments.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }),
-                   abs(m.loggedAt.timeIntervalSince(t)) < 30 * 60 { focusTime = m.loggedAt } else { focusTime = t }
-            } else {
-                // Ahead, the forecast is hourly: the playhead reads whole hours.
-                focusTime = t > now ? Self.hour(t) : t
-            }
-        }
-        .onScrollPhaseChange { old, phase in
-            dragging = phase == .interacting || phase == .decelerating
-            scrubbing = dragging
-            // Settle on a moment if one is near the playhead, else exactly on now if near it.
-            if phase == .idle, old == .interacting || old == .decelerating {
-                if let m = moments.min(by: { abs(x($0.loggedAt) - centerX) < abs(x($1.loggedAt) - centerX) }),
-                   abs(x(m.loggedAt) - centerX) < 10 { go(to: m.loggedAt) }
-                else if abs(x(now) - centerX) < 10 || time(at: centerX) < now { go(to: focusTime) }
-            }
-        }
-        .overlay(alignment: .top) {
-            ZStack(alignment: .top) {
-                Capsule().fill(verdictTint ?? ink).frame(width: 2, height: 30)
-                    .offset(y: axis - 15)
-                    .allowsHitTesting(false)
-                // The chip is the way back (one control, like Calendar's Today): away from now it carries a return
-                // arrow and a tap jumps to Now. On Now it's a label.
-                Button(action: { go(to: nil) }) { chipLabel }
-                .buttonStyle(PressStyle())
-                .offset(y: axis - 17 - 30)
-                .disabled(focusTime == nil)
-                .accessibilityLabel(focusTime == nil ? "Now" : "Back to now")
-            }
-            .frame(maxWidth: .infinity)
-        }
+        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, cx in scrolled(to: cx) }
+        .onScrollPhaseChange { old, phase in phaseChanged(from: old, to: phase) }
+        .overlay(alignment: .top) { playhead }
         .animation(Theme.snap, value: focusTime == nil)
         .padding(.top, 24)
         .sensoryFeedback(.selection, trigger: currentMoment?.id)
@@ -135,6 +102,38 @@ struct NowTimeline: View {
         .accessibilityElement()
         .accessibilityLabel("Timeline")
         .accessibilityValue(focusTime == nil ? "Now" : current.formatted(date: .abbreviated, time: .shortened))
+    }
+
+    /// Every frame of a drag: the chip follows the thumb from local state (cheap, so it never waits on the
+    /// home); the home only hears about it when what it would show changes (a moment, an hour ahead, a few
+    /// minutes behind), since per pixel would stall the chip behind the heavy re-render.
+    private func scrolled(to cx: CGFloat) {
+        centerX = cx
+        guard dragging else { return }
+        let t = time(at: cx)
+        let next: Date?
+        if abs(t.timeIntervalSince(now)) < 15 * 60 { next = nil }
+        else if t < now {
+            // Behind now: a moment within reach takes the playhead; between moments it reads the time.
+            if let m = moments.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }),
+               abs(m.loggedAt.timeIntervalSince(t)) < 30 * 60 { next = m.loggedAt } else { next = t }
+        } else {
+            next = Self.hour(t)   // ahead, the forecast is hourly
+        }
+        shown = next
+        let key: Double? = next.map { $0 > now ? $0.timeIntervalSince1970 : $0.timeIntervalSince1970.rounded(toMultipleOf: 300) }
+        if key != focusKey { focusKey = key; focusTime = next }
+    }
+
+    /// Lifted: settle on a moment if one is near the playhead, else exactly on now if near it.
+    private func phaseChanged(from old: ScrollPhase, to phase: ScrollPhase) {
+        dragging = phase == .interacting || phase == .decelerating
+        scrubbing = dragging
+        guard phase == .idle, old == .interacting || old == .decelerating else { return }
+        if let m = moments.min(by: { abs(x($0.loggedAt) - centerX) < abs(x($1.loggedAt) - centerX) }),
+           abs(x(m.loggedAt) - centerX) < 10 { go(to: m.loggedAt) }
+        else if abs(x(now) - centerX) < 10 || time(at: centerX) < now { go(to: shown ?? focusTime) }
+        else { focusTime = shown }
     }
 
     /// The scrolling content: half a viewport of room, the drawn track with tap targets, half a viewport more.
@@ -168,6 +167,22 @@ struct NowTimeline: View {
         }
     }
 
+    /// The line and the chip over the centre of the track. The chip is the way back (one control, like
+    /// Calendar's Today): away from now it carries a return arrow and a tap jumps to Now; on Now it's a label.
+    private var playhead: some View {
+        ZStack(alignment: .top) {
+            Capsule().fill(verdictTint ?? ink).frame(width: 2, height: 30)
+                .offset(y: axis - 15)
+                .allowsHitTesting(false)
+            Button(action: { go(to: nil) }) { chipLabel }
+                .buttonStyle(PressStyle())
+                .offset(y: axis - 17 - 30)
+                .disabled(focusTime == nil)
+                .accessibilityLabel(focusTime == nil ? "Now" : "Back to now")
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     /// The chip's face: the time, a return arrow when away from now, the verdict's colour under the playhead.
     private var chipLabel: some View {
         let ahead = focusTime != nil && current > now
@@ -187,7 +202,7 @@ struct NowTimeline: View {
         // Ahead: a sketch, like the forecast sky (a dashed edge), so it never reads as a record.
         .overlay { if ahead { Capsule().strokeBorder(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) } }
         .animation(Theme.smooth, value: verdictTint)
-        .contentTransition(.numericText())
+        .transaction { if dragging { $0.animation = nil } }   // while scrubbing the chip just changes, no roll
         .animation(Theme.snap, value: focusTime == nil)
         .fixedSize()
         .frame(minWidth: 40)
@@ -293,8 +308,8 @@ struct NowTimeline: View {
         while ft <= end {
             if ft > now, [6, 18].contains(cal.component(.hour, from: ft)) {
                 let label = Text(ft.formatted(.dateTime.hour())).font(.caption2.weight(.medium)).foregroundStyle(ink.opacity(0.4))
-                // Beneath the strip, between the day names (midnight), which sit at axis + 26.
-                ctx.draw(label, at: CGPoint(x: x(ft), y: axis + 26))
+                // Just above the strip (the day names are beneath it, and the chip sits higher still).
+                ctx.draw(label, at: CGPoint(x: x(ft), y: axis - 16))
             }
             ft = cal.date(byAdding: .hour, value: 1, to: ft)!
         }
@@ -323,4 +338,8 @@ struct NowTimeline: View {
         focusTime = t
         withAnimation(.smooth(duration: 0.35)) { position.scrollTo(x: x(t ?? now)) }
     }
+}
+
+private extension Double {
+    func rounded(toMultipleOf m: Double) -> Double { (self / m).rounded() * m }
 }

@@ -418,38 +418,58 @@ struct NowHomeView: View {
 
     /// Insights and Settings as one upright glass pill at the head of the rail's column, the sparkle on top.
     /// Settings left the bottom corner, where it sat on the timeline.
+    /// Insights and Settings, worked like the rail: touch, and the one under the thumb grows and names itself;
+    /// slide between them; let go to open it (slide off the pill to let go of nothing). A plain tap opens too.
     private var learningButton: some View {
         VStack(spacing: 2) {
             // No bubble: it would cover the sky. Learning breathes; learned bounces once.
-            InsightsRingButton(open: { showInsights = true }, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false, glass: false, nod: noticed)
+            InsightsRingButton(open: {}, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false, glass: false, nod: noticed)
                 .matchedTransitionSource(id: "insights", in: hero)
-                .onLongPressGesture(minimumDuration: 0.25, perform: {}, onPressingChanged: { held = $0 ? "Insights" : nil })
-            settingsButton
-                .onLongPressGesture(minimumDuration: 0.25, perform: {}, onPressingChanged: { held = $0 ? "Settings" : nil })
+                .scaleEffect(held == "Insights" ? 1.2 : 1)
+                .allowsHitTesting(false)
+            // A different weight of mark from the sparkle: a slider glyph reads as "settings" and never as a ring.
+            Image(systemName: "slider.horizontal.3").font(.body.weight(.semibold))
+                .frame(width: 36, height: 36)
+                .scaleEffect(held == "Settings" ? 1.2 : 1)
+                .accessibilityLabel("Settings")
         }
         .padding(4)
-        .glassEffect(.regular, in: .capsule)   // not .interactive(): on a container it takes the buttons' taps
-        // Held: the button's name beside it, on the sky's side, like a reading beside the rail.
+        .glassEffect(.regular, in: .capsule)
+        .contentShape(Capsule())
+        .gesture(pillSlide)
+        // The name beside the one under the thumb, on the sky's side, like a reading beside the rail.
         .overlay(alignment: railLeft ? .trailing : .leading) {
             if let held {
                 Text(held).font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 12).padding(.vertical, 7)
                     .glassEffect(.regular, in: .capsule)
                     .fixedSize()
-                    .offset(x: railLeft ? 54 : -54, y: held == "Insights" ? -21 : 21)
+                    // Wholly beside the pill: its near edge 10 pt off the pill's edge, whatever its width.
+                    .alignmentGuide(railLeft ? .trailing : .leading) { d in railLeft ? d[.leading] - 10 : d[.trailing] + 10 }
+                    .offset(y: held == "Insights" ? -21 : 21)
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                     .allowsHitTesting(false)
             }
         }
         .animation(Theme.snap, value: held)
+        .sensoryFeedback(.selection, trigger: held)
+        .accessibilityElement(children: .contain)
     }
 
-    private var settingsButton: some View {
-        Button { showSettings = true } label: {
-            Image(systemName: "gearshape").font(.body.weight(.semibold)).frame(width: 36, height: 36).contentShape(Circle())
-        }
-        .buttonStyle(PressStyle())
-        .accessibilityLabel("Settings")
+    /// Touch down names the stop under the thumb, sliding moves between the two, lifting opens; off the pill
+    /// (more than 40 pt out) lifts to nothing.
+    private var pillSlide: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { v in
+                let inside = v.location.x > -40 && v.location.x < 84
+                let next: String? = !inside ? nil : v.location.y < 44 ? "Insights" : "Settings"
+                if next != held { held = next }
+            }
+            .onEnded { _ in
+                let picked = held
+                held = nil
+                if picked == "Insights" { showInsights = true } else if picked == "Settings" { showSettings = true }
+            }
     }
 
     /// Top to bottom: where (a plain line, or a field you can change in the forecast), what the air is (the
@@ -1843,8 +1863,9 @@ struct SparkleKey: View {
     var body: some View {
         SparkleTip.line(mark, factor: factor)
             .font(.subheadline)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 16).padding(.vertical, 12)
-            .fixedSize()
+            .frame(maxWidth: 300, alignment: .leading)
             .presentationCompactAdaptation(.popover)
     }
 }

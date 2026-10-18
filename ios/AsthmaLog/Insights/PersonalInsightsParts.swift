@@ -181,19 +181,13 @@ extension ProfileSnapshot {
 /// Every moment, newest first, by day. Tap one for its details; Export makes the table to share.
 struct MomentsLogView: View {
     let events: [LogEvent]
-    @State private var showAll = false
     @State private var exporting = false
 
     var body: some View {
-        let shown = events.filter { showAll || $0.moment != .okay }.sorted { $0.loggedAt > $1.loggedAt }
+        // Your journal: inhaler moments and notes. Baselines are the engine's (they're in the export).
+        let shown = events.filter { $0.moment != .okay }.sorted { $0.loggedAt > $1.loggedAt }
         let days = Dictionary(grouping: shown) { Calendar.current.startOfDay(for: $0.loggedAt) }.sorted { $0.key > $1.key }
         List {
-            Picker("Show", selection: $showAll) {
-                Text("Inhaler").tag(false)
-                Text("All, with baseline").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .listRowBackground(Color.clear)
             ForEach(days, id: \.key) { day, moments in
                 Section(day.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())) {
                     ForEach(moments) { m in

@@ -85,7 +85,8 @@ struct NowHomeView: View {
                     .gesture(skyScrub)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.top, 4)
-                NowTimeline(moments: moments, baselines: events.filter { $0.moment == .okay }.map(\.loggedAt),
+                // Baselines are the engine's, not the journal's: no ticks for them (owner, Oct 17).
+                NowTimeline(moments: moments, baselines: [],
                             tint: { airTint($0.weave) },
                             forecastTints: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
                             hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
@@ -157,7 +158,7 @@ struct NowHomeView: View {
                 if let e = toast {
                     LoggedToast(event: e, undo: {
                         withAnimation(.snappy) { toast = nil }
-                        Task { await services.delete(e, in: context) }
+                        Task { await services.undoPress(e, in: context) }
                     })
                     // No Note button here: Now's capture card asks (docs/design/header-ia.md).
                 }
@@ -527,7 +528,7 @@ struct NowHomeView: View {
                 NowSky(conditions: air.conditions, weave: air.weave, date: now,
                        pollen: air.pollen, probing: $probing,
                        mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() },
-                       event: liveEvent, showsSelf: true, onRecord: { recording = $0 },
+                       event: liveEvent, showsSelf: true, selfEvent: recentInhalerMoment, onRecord: { recording = $0 },
                        makeNote: { await services.log(.note, in: context, writeToHealth: false) })
                     .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
             }
@@ -542,6 +543,12 @@ struct NowHomeView: View {
                    pollen: DemoPollen.sample(at: h.date, season: pollenSeason), probing: $probing,
                    mapID: mapID, coordinate: forecastCoordinate, sketch: true)
         }
+    }
+
+    /// On Now, Voice and Body are about a rescue or Standard logged in the last 30 minutes, if there is one: a
+    /// note during a rescue goes into that moment. Otherwise saving a voice note makes a Note.
+    private var recentInhalerMoment: LogEvent? {
+        moments.last { ($0.moment == .rescue || $0.moment == .maintenance) && now.timeIntervalSince($0.loggedAt) < 30 * 60 }
     }
 
     private var mapID: String { chosen.map { "place-\($0.lat)-\($0.lon)" } ?? "here" }

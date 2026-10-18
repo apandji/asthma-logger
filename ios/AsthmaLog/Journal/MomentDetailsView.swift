@@ -112,6 +112,7 @@ struct MomentDetailsView: View {
 
     @ViewBuilder private var content: some View {
                 if mapNamespace == nil { header }
+                if !event.uses.isEmpty { usesCard }
                 if let c = event.conditions, !c.observations.isEmpty {
                     weather(c)
                     air(c)
@@ -135,6 +136,35 @@ struct MomentDetailsView: View {
     }
 
     // MARK: Sections
+
+    /// What was taken: each use, its inhaler, puffs and how it was logged. The one place puffs show (a fact
+    /// you logged, kept off Home, which stays in words).
+    private var usesCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(event.uses.sorted { $0.at < $1.at }) { u in
+                HStack(spacing: 12) {
+                    Image(systemName: "lungs.fill").foregroundStyle(u.kind == .rescue ? Theme.rescue : Theme.standard)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Inhaler.load().first { $0.id == u.inhalerID }?.name ?? u.inhalerName ?? (u.kind == .rescue ? "Rescue inhaler" : "Daily inhaler"))
+                            .font(.body.weight(.medium))
+                        Text([u.puffs == 1 ? "1 puff" : "\(u.puffs) puffs", Self.device(u)].compactMap { $0 }.joined(separator: " · "))
+                            .font(.caption).foregroundStyle(Theme.secondaryText)
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
+    }
+
+    private static func device(_ u: InhalerUse) -> String? {
+        switch InhalerUse.Device(rawValue: u.deviceRaw) {
+        case .button?: "felt button"
+        case .watch?: "Apple Watch"
+        case .phone?: "this iPhone"
+        default: nil
+        }
+    }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {

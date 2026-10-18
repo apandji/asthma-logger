@@ -13,7 +13,33 @@ enum EngineExport {
                                     .aqi, .pollenTree, .pollenGrass, .pollenWeed]
 
     static func files(events: [LogEvent]) -> [URL] {
-        [write("felt air moments.csv", moments(events)), write("felt air patterns.csv", patterns(events))]
+        [write("felt air moments.csv", moments(events)), write("felt air inhaler uses.csv", uses(events)),
+         write("felt air voice notes.csv", notes(events)), write("felt air patterns.csv", patterns(events))]
+    }
+
+    /// One row per inhaler use (puffs, inhaler, device), joined to moments by moment_id.
+    static func uses(_ events: [LogEvent]) -> [[String]] {
+        let iso = ISO8601DateFormatter()
+        var rows: [[String]] = [["moment_id", "use_id", "at", "last_press_at", "puffs", "kind", "inhaler", "device", "device_id", "health_sample_id"]]
+        for e in events.sorted(by: { $0.loggedAt < $1.loggedAt }) {
+            for u in e.uses.sorted(by: { $0.at < $1.at }) {
+                rows.append([e.id.uuidString, u.id.uuidString, iso.string(from: u.at), iso.string(from: u.lastPressAt), String(u.puffs),
+                             u.kindRaw, u.inhalerName ?? "", u.deviceRaw, u.deviceID ?? "", u.healthSampleID?.uuidString ?? ""])
+            }
+        }
+        return rows
+    }
+
+    /// One row per voice note, joined to moments by moment_id.
+    static func notes(_ events: [LogEvent]) -> [[String]] {
+        let iso = ISO8601DateFormatter()
+        var rows: [[String]] = [["moment_id", "note_id", "recorded_at", "source", "audio_file", "transcript"]]
+        for e in events.sorted(by: { $0.loggedAt < $1.loggedAt }) {
+            for n in e.notes.sorted(by: { $0.recordedAt < $1.recordedAt }) {
+                rows.append([e.id.uuidString, n.id.uuidString, iso.string(from: n.recordedAt), n.sourceRaw, n.audioFile ?? "", n.transcript])
+            }
+        }
+        return rows
     }
 
     // MARK: Moments

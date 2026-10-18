@@ -14,12 +14,13 @@ final class HealthWriter {
         try? await store.requestAuthorization(toShare: [type], read: [])
     }
 
-    /// Returns the HealthKit sample UUID so deletes stay in sync.
-    func savePuff(at date: Date, logID: UUID) async throws -> UUID {
+    /// Returns the HealthKit sample UUID so deletes stay in sync. `puffs`: one sample per inhaler use, its
+    /// value the puffs (a second press in the window replaces the sample with one more).
+    func savePuff(at date: Date, logID: UUID, puffs: Int = 1) async throws -> UUID {
         try await store.requestAuthorization(toShare: [type], read: [])
         let sample = HKQuantitySample(
             type: type,
-            quantity: HKQuantity(unit: .count(), doubleValue: 1),
+            quantity: HKQuantity(unit: .count(), doubleValue: Double(puffs)),
             start: date,
             end: date,
             metadata: [HKMetadataKeyExternalUUID: logID.uuidString]

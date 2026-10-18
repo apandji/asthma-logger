@@ -135,7 +135,7 @@ final class QuickRecordLive {
         if let e = event(state.momentID), let file = e.voiceNoteFile,
            let text = await NoteTranscriber.transcribe(VoiceNotes.shared.url(file)) {
             // The words are the person's own, so they're kept now; tags only count once they press Save.
-            e.voiceTranscript = text
+            e.addNote(file: file, transcript: text, source: "lock_screen")
             try? container?.mainContext.save()
             let result = await VoiceNoteTagger.suggest(transcript: text, using: ModelTagProposer())
             state.words = String(text.prefix(140))

@@ -11,12 +11,14 @@ struct AsthmaLogApp: App {
 
     init() {
         AppTips.configure()
-        do { container = try ModelContainer(for: LogEvent.self) }
+        do { container = try ModelContainer(for: LogEvent.self, InhalerUse.self, VoiceNote.self) }
         catch { fatalError("Couldn't open the journal store: \(error)") }
         let services = LogService()
         _services = State(initialValue: services)
         // Here, not in .task: a Lock Screen button can wake the app in the background with no scene.
         let container = container
+        // Moments gain inhaler uses and voice notes (docs/data-model.md): a one-time, additive upgrade.
+        ModelUpgrade.run(container.mainContext)
         QuickRecordCenter.shared.container = container
         // iOS relaunches the app in the background to deliver a visit: the log has to be listening from launch.
         VisitLog.shared.start()
@@ -66,9 +68,18 @@ struct AsthmaLogApp: App {
                     watch.start { log in
                         Task { await services.logFromWatch(log, in: context) }
                     }
-                    button.start { packet, received in
-                        Task { await services.logFromButton(packet, receivedAt: received, in: context) }
+                    button.start { packet, received, deviceID in
+                        Task { await services.logFromButton(packet, receivedAt: received, deviceID: deviceID, in: context) }
                     }
+                    #if DEBUG
+                    // `-pressTwice`: two orange-cap presses 5 s apart (one use, two puffs).
+                    if ProcessInfo.processInfo.arguments.contains("-pressTwice") {
+                        Task {
+                            try? await Task.sleep(for: .seconds(3)); button.simulatePress(.rescue)
+                            try? await Task.sleep(for: .seconds(5)); button.simulatePress(.rescue)
+                        }
+                    }
+                    #endif
                     await services.resumePending(in: context)
                     await services.backfillLookBack(in: context)
                 }

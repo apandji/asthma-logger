@@ -55,6 +55,11 @@ enum DataSets {
         var voiceNoteFile: String?
         var placeName: String?
         var isBackfilled: Bool?
+        var uses: [Use]?
+        var notes: [Note]?
+
+        struct Use: Codable { var at: Date; var lastPressAt: Date; var puffs: Int; var kind: String; var inhalerName: String?; var device: String; var deviceID: String?; var healthSampleID: UUID? }
+        struct Note: Codable { var recordedAt: Date; var audioFile: String?; var transcript: String; var source: String }
 
         init(_ e: LogEvent) {
             id = e.id; kindRaw = e.kindRaw; loggedAt = e.loggedAt; latitude = e.latitude; longitude = e.longitude
@@ -63,6 +68,9 @@ enum DataSets {
             tagsRaw = e.tagsRaw; note = e.note; isDemoMoment = e.isDemoMoment; isFirstCapture = e.isFirstCapture
             voiceTranscript = e.voiceTranscript; tagsReviewed = e.tagsReviewed; voiceNoteFile = e.voiceNoteFile; placeName = e.placeName
             isBackfilled = e.isBackfilled
+            uses = e.uses.map { Use(at: $0.at, lastPressAt: $0.lastPressAt, puffs: $0.puffs, kind: $0.kindRaw, inhalerName: $0.inhalerName,
+                                    device: $0.deviceRaw, deviceID: $0.deviceID, healthSampleID: $0.healthSampleID) }
+            notes = e.notes.map { Note(recordedAt: $0.recordedAt, audioFile: $0.audioFile, transcript: $0.transcript, source: $0.sourceRaw) }
         }
 
         var event: LogEvent {
@@ -73,6 +81,17 @@ enum DataSets {
             e.note = note; e.isDemoMoment = isDemoMoment; e.isFirstCapture = isFirstCapture
             e.voiceTranscript = voiceTranscript; e.tagsReviewed = tagsReviewed; e.voiceNoteFile = voiceNoteFile; e.placeName = placeName
             e.isBackfilled = isBackfilled ?? false
+            for u in uses ?? [] {
+                let kind = Inhaler.Kind(rawValue: u.kind) ?? .rescue
+                let use = InhalerUse(at: u.at, kind: kind, inhaler: Inhaler.current(kind), device: InhalerUse.Device(rawValue: u.device) ?? .unknown,
+                                     deviceID: u.deviceID, puffs: u.puffs)
+                use.lastPressAt = u.lastPressAt
+                use.healthSampleID = u.healthSampleID
+                e.uses.append(use)
+            }
+            for n in notes ?? [] {
+                e.notes.append(VoiceNote(recordedAt: n.recordedAt, audioFile: n.audioFile, transcript: n.transcript, source: n.source))
+            }
             return e
         }
     }
@@ -111,6 +130,8 @@ enum DataSets {
         wipeMoments(context)
         set.moments.forEach { context.insert($0.event) }
         try? context.save()
+        // Older saved sets have no uses or notes: give them theirs.
+        ModelUpgrade.run(context, force: true)
         UserDefaults.standard.set(set.profileHistory, forKey: "profileHistory")
         active = set.name == ownData ? nil : set.name
         BaselineFiller.reset()
@@ -133,6 +154,7 @@ enum DataSets {
             context.insert(e)
         }
         try? context.save()
+        ModelUpgrade.run(context, force: true)
         UserDefaults.standard.removeObject(forKey: "profileHistory")
         active = preset.title
     }

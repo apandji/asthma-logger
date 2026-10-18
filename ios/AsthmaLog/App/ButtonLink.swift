@@ -31,7 +31,8 @@ final class ButtonLink: NSObject {
     /// Live peripherals by id, and each one's ack characteristic once found.
     @ObservationIgnored private var peripherals: [UUID: CBPeripheral] = [:]
     @ObservationIgnored private var acks: [UUID: CBCharacteristic] = [:]
-    @ObservationIgnored private var onPress: ((ButtonPacket, Date) -> Void)?
+    /// A press: the packet, when it arrived, and which button (its id), for the inhaler use's device.
+    @ObservationIgnored private var onPress: ((ButtonPacket, Date, UUID?) -> Void)?
     @ObservationIgnored private var wantsScan = false
     @ObservationIgnored private var scanTimeout: Task<Void, Never>?
 
@@ -42,7 +43,7 @@ final class ButtonLink: NSObject {
     private let ackUUID = CBUUID(string: ButtonProtocol.ackUUID)
 
     /// Call at launch. Does nothing (and asks nothing) until a button has been paired.
-    func start(onPress: @escaping (ButtonPacket, Date) -> Void) {
+    func start(onPress: @escaping (ButtonPacket, Date, UUID?) -> Void) {
         self.onPress = onPress
         if isPaired { makeCentral() }
     }
@@ -121,7 +122,7 @@ final class ButtonLink: NSObject {
         }
         status = .connected
         connectedIDs = Set(buttons.map(\.id))
-        if isSyncing { syncPresses += 1; lastSyncCap = cap } else { lastPress = .now; onPress?(packet, .now) }
+        if isSyncing { syncPresses += 1; lastSyncCap = cap } else { lastPress = .now; onPress?(packet, .now, buttons.first?.id) }
     }
     #endif
 
@@ -185,7 +186,7 @@ final class ButtonLink: NSObject {
                 lastSyncCap = packet.cap
             } else {
                 lastPress = packet.pressedAt(receivedAt: received)
-                onPress?(packet, received)
+                onPress?(packet, received, p.identifier)
             }
         }
         ackOnly(packet, p)

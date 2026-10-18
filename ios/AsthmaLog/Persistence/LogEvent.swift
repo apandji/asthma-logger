@@ -50,6 +50,10 @@ final class LogEvent {
     /// A baseline moment filled in later from where you were and that hour's air (`BaselineFiller`), not
     /// taken live. Counts like any baseline.
     var isBackfilled: Bool = false
+    /// Inhaler uses in this moment, with puffs (docs/data-model.md). Empty for baselines and notes.
+    @Relationship(deleteRule: .cascade, inverse: \InhalerUse.moment) var uses: [InhalerUse] = []
+    /// Voice notes, several per moment. `voiceTranscript` stays their combined words.
+    @Relationship(deleteRule: .cascade, inverse: \VoiceNote.moment) var notes: [VoiceNote] = []
 
     init(moment: MomentKind, loggedAt: Date = .now, id: UUID = UUID()) {
         self.id = id

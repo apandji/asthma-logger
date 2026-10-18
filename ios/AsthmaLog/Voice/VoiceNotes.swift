@@ -32,7 +32,8 @@ final class VoiceNotes: NSObject, AVAudioPlayerDelegate {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
         try? session.setActive(true)
-        let file = "\(event.id.uuidString).m4a"
+        // Its own file per recording: a moment can have several voice notes.
+        let file = "\(event.id.uuidString)-\(Int(Date().timeIntervalSince1970)).m4a"
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44_100, AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,

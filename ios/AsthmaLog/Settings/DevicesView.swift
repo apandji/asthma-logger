@@ -10,9 +10,33 @@ struct DevicesView: View {
     @State private var renaming: PairedButton?
     @State private var newName = ""
     @State private var adding = false
+    @State private var inhalers = Inhaler.load()
+    @State private var renamingInhaler: Inhaler?
 
     var body: some View {
         List {
+            Section {
+                ForEach(inhalers) { i in
+                    Button { renamingInhaler = i; newName = i.name } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "lungs.fill").foregroundStyle(i.kind == .rescue ? Theme.rescue : Theme.standard)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(i.name).font(.body.weight(.medium))
+                                Text(i.kind == .rescue ? "Rescue · the orange cap logs it" : "Daily · the teal cap logs it")
+                                    .font(.caption).foregroundStyle(Theme.secondaryText)
+                            }
+                            Spacer()
+                            Image(systemName: "pencil").foregroundStyle(Theme.secondaryText)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                }
+            } header: {
+                Text("Inhalers")
+            } footer: {
+                Text("Each moment says which inhaler you used. Presses within 2 minutes count as more puffs of the same use.")
+            }
+
             Section {
                 if button.buttons.isEmpty {
                     Text("No felt button yet.").foregroundStyle(Theme.secondaryText)
@@ -65,6 +89,17 @@ struct DevicesView: View {
         .navigationTitle("Devices")
         .onChange(of: button.buttons.count) { old, new in if new > old { adding = false } }
         .onChange(of: button.status) { _, s in if adding, s != .searching, s != .connecting { adding = false } }
+        .alert("Rename this inhaler", isPresented: Binding(get: { renamingInhaler != nil }, set: { if !$0 { renamingInhaler = nil } })) {
+            TextField("Name", text: $newName)
+            Button("Save") {
+                if let r = renamingInhaler, let i = inhalers.firstIndex(where: { $0.id == r.id }) {
+                    let name = newName.trimmingCharacters(in: .whitespaces)
+                    if !name.isEmpty { inhalers[i].name = name; Inhaler.save(inhalers) }
+                }
+                renamingInhaler = nil
+            }
+            Button("Cancel", role: .cancel) { renamingInhaler = nil }
+        }
         .alert("Name this button", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
             Button("Save") { if let r = renaming { button.rename(r.id, to: newName) }; renaming = nil }

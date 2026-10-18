@@ -18,7 +18,7 @@ struct OnboardingView: View {
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
 
     enum Step: Int, CaseIterable, Comparable {
-        case welcome, here, button, permissions, learn
+        case welcome, here, button, inhalers, permissions, learn
         static func < (a: Step, b: Step) -> Bool { a.rawValue < b.rawValue }
     }
     @State private var step = Step.welcome
@@ -31,6 +31,9 @@ struct OnboardingView: View {
     @State private var askedHealth = false
     @State private var askedNotes = false
     @State private var probing = false
+    /// The inhalers' names (renamed later in Settings › Devices).
+    @State private var rescueName = ""
+    @State private var dailyName = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -86,6 +89,8 @@ struct OnboardingView: View {
             } else {
                 VerdictHeader(place: AnyView(placeLine), title: "Press your felt button.", verdict: nil, tint: nil)
             }
+        case .inhalers:
+            VerdictHeader(place: AnyView(placeLine), title: "Name your inhalers.", verdict: nil, tint: nil)
         case .permissions:
             VerdictHeader(place: AnyView(placeLine), title: "A few optional permissions.", verdict: nil, tint: nil)
         case .learn:
@@ -166,7 +171,7 @@ struct OnboardingView: View {
                 if first != nil {
                     Text("That press is your first capture: the air, here, right now. From now on each press saves a moment like it.")
                         .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                    primary("Next") { step = .permissions }
+                    primary("Next") { step = .inhalers }
                 } else {
                     Text(buttonStatus).font(.subheadline).foregroundStyle(Theme.secondaryText)
                     Text("Orange cap is Rescue, teal is Standard. This first press pairs the button; it isn't counted as inhaler use.")
@@ -179,6 +184,12 @@ struct OnboardingView: View {
                         }
                     }
                 }
+            case .inhalers:
+                Text("So each moment says which one you used. You can rename them in Settings › Devices.")
+                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                inhalerField("Rescue · orange cap", placeholder: "e.g. Ventolin", text: $rescueName)
+                inhalerField("Daily · teal cap", placeholder: "e.g. Flovent", text: $dailyName)
+                primary("Next") { saveInhalers(); step = .permissions }
             case .permissions:
                 permission("figure.walk", "Motion & Fitness", "Walking, driving or still helps guess if you were indoors or out.", done: askedMotion) {
                     Task { _ = await services.motion.recent(); askedMotion = true }
@@ -245,6 +256,26 @@ struct OnboardingView: View {
     }
 
     // MARK: Pieces
+
+    private func inhalerField(_ label: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.caption.weight(.medium)).foregroundStyle(Theme.secondaryText)
+            TextField(placeholder, text: text)
+                .textInputAutocapitalization(.words).autocorrectionDisabled()
+                .padding(.horizontal, 14).padding(.vertical, 11)
+                .glassEffect(.regular, in: .rect(cornerRadius: 14))
+        }
+    }
+
+    /// Keeps the names (blank keeps "Rescue inhaler" / "Daily inhaler").
+    private func saveInhalers() {
+        var list = Inhaler.load()
+        for i in list.indices {
+            let name = (list[i].kind == .rescue ? rescueName : dailyName).trimmingCharacters(in: .whitespaces)
+            if !name.isEmpty { list[i].name = name }
+        }
+        Inhaler.save(list)
+    }
 
     private func permission(_ symbol: String, _ title: String, _ detail: String, done: Bool, action: @escaping () -> Void) -> some View {
         HStack(alignment: .top, spacing: 12) {

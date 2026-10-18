@@ -1,8 +1,14 @@
-# The data model (proposal, Oct 17, 2026)
+# The data model (Oct 17, 2026)
 
 "Object model", "data model" or "domain model" all fit: the things felt air keeps, and how they relate. Today one
 SwiftData object, `LogEvent`, holds everything. That served the first build; the questions below (several voice notes,
-puffs, which inhaler, which device) say it's time to split it. **Proposal for review; nothing migrated yet.**
+puffs, which inhaler, which device) say it's time to split it.
+
+**Built (phase 1):** `LogEvent` is the moment and gains `uses: [InhalerUse]` and `notes: [VoiceNote]`; inhalers are
+named in onboarding and renamed in Settings › Devices; presses within 2 minutes add puffs; Apple Health gets one Inhaler
+Usage sample per use, valued in puffs (Apple's type is a cumulative count of puffs); baselines are hidden from the
+journal. A one-time additive upgrade (`ModelUpgrade`) gave existing moments their uses and notes. The fuller split below
+(a separate `Moment`, `Device` entity, derived kind) can follow when it pays for itself.
 
 ## The questions, answered
 
@@ -114,9 +120,15 @@ SwiftData `VersionedSchema` and a migration plan, on the phone, in one pass:
 Before migrating real data: **Settings › Data sets › Save current as…** (it's a file; it survives anything).
 Data set files need the same upgrade, so they read both shapes.
 
-## Open questions
+## Decisions (owner, Oct 17)
 
-- Puffs: should the phone's + ask "how many?", or always log one and let the button's double press add more?
-- Inhalers: ask for names in onboarding, or default to "Rescue inhaler" / "Daily inhaler" and let people rename?
-- A note during a rescue moment's window: same moment (likely) or its own Note?
-- Do baselines belong in this model at all, or in a separate `Sample` store, since they're the engine's, not the journal's?
+- **Puffs** come from presses within the 2-minute window (any device: felt button, watch, the phone's +). Undo takes
+  one puff off.
+- **Inhalers** are named in onboarding and renamed in Settings › Devices.
+- **A note during a rescue** goes into that moment (on Now: a rescue or Standard in the last 30 minutes), otherwise it
+  becomes a Note.
+- **Baselines** stay in the backend: filled in, used by the maths, in the export, never on the timeline or in the
+  moments list. Only the idea shows, in the verdict ("Looks like your baseline days").
+- **Apple Health** gets one sample per use, valued in puffs.
+- **Your own profile vs demos:** your data is a saved data set; the archetypes are made-up people you swap in
+  (Settings › Data sets). Saved sets keep uses and notes.

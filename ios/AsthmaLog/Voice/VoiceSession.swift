@@ -63,12 +63,8 @@ final class VoiceSession {
         var made: LogEvent?
         if target == nil { made = await makeNote() }
         guard let e = target ?? made else { return }
-        let text = words.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty {
-            let before = (e.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            e.voiceTranscript = before.isEmpty ? text : before + "\n" + text
-        }
-        if let file = scratch?.voiceNoteFile { e.voiceNoteFile = file }
+        // One more voice note on the moment (several are fine; a note during a rescue goes into it).
+        e.addNote(file: scratch?.voiceNoteFile, transcript: words, source: "rail", at: startedAt ?? .now)
         e.tags.formUnion(chosen)
         e.tagsReviewed = true
         try? context.save()

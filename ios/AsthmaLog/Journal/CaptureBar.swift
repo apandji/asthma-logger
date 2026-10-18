@@ -54,7 +54,9 @@ struct CaptureBar: View {
 extension CaptureBar {
     fileprivate func log(_ moment: MomentKind) {
         Task {
-            let e: LogEvent = await services.log(moment, in: context, writeToHealth: writeToHealth)
+            // Presses within 2 minutes add a puff to the same use (docs/data-model.md).
+            let e: LogEvent = moment == .okay ? await services.log(moment, in: context, writeToHealth: writeToHealth)
+                : await services.press(moment, device: .phone, in: context).event
             withAnimation(.snappy) { toast = e }
             // So the question is waiting on the Lock Screen when the phone goes back in the pocket.
             if e.moment != .okay, QuickRecordCenter.shared.enabled { QuickRecordLive.shared.begin(for: e) }

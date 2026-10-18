@@ -183,6 +183,8 @@ struct QuickRecordView: View {
     @State private var transcript = ""
     @State private var suggested: [JournalTag] = []
     @State private var confirmed: Set<JournalTag> = []
+    /// Words from a recording made here (saved as a new voice note), as opposed to edits of earlier ones.
+    @State private var recorded: String?
 
     enum Phase { case ready, recording, transcribing, review }
 
@@ -269,6 +271,7 @@ struct QuickRecordView: View {
             Task {
                 if let file = event.voiceNoteFile, let text = await NoteTranscriber.transcribe(notes.url(file)) {
                     transcript = text
+                    recorded = text
                     let result = await VoiceNoteTagger.suggest(transcript: text, using: ModelTagProposer())
                     suggested = result.suggestions.map(\.tag)
                     confirmed.formUnion(suggested)
@@ -333,7 +336,12 @@ struct QuickRecordView: View {
         event.tags = confirmed
         event.tagsReviewed = true
         let words = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        event.voiceTranscript = words.isEmpty ? nil : words
+        if recorded != nil {
+            // A new recording: one more voice note on the moment.
+            event.addNote(file: event.voiceNoteFile, transcript: words, source: "quick_record")
+        } else {
+            event.voiceTranscript = words.isEmpty ? nil : words
+        }
         try? context.save()
         QuickRecordCenter.shared.scheduleEvening()
         QuickRecordLive.shared.finished(momentID: event.id)

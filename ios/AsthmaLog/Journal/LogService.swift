@@ -1,3 +1,4 @@
+import UIKit
 import Observation
 import AsthmaCore
 import CoreLocation
@@ -27,9 +28,15 @@ final class LogService {
     @discardableResult
     func log(_ moment: MomentKind, at date: Date = .now, id: UUID = UUID(),
              lateNote: String = "Logged on Apple Watch while your iPhone was away, so there's no air reading.",
+             device: InhalerUse.Device = .phone, deviceID: String? = nil,
              in context: ModelContext, writeToHealth: Bool) async -> LogEvent {
         lastError = nil
         let event = LogEvent(moment: moment, loggedAt: date, id: id)
+        // An inhaler moment holds its use: which inhaler, one puff so far, how it was logged.
+        if moment == .rescue || moment == .maintenance {
+            let kind: Inhaler.Kind = moment == .rescue ? .rescue : .controller
+            event.uses.append(InhalerUse(at: date, kind: kind, inhaler: Inhaler.current(kind), device: device, deviceID: deviceID))
+        }
         context.insert(event)
         try? context.save()
 
@@ -44,6 +51,7 @@ final class LogService {
         if moment == .rescue && writeToHealth && health.isAvailable {
             do {
                 event.healthSampleID = try await health.savePuff(at: event.loggedAt, logID: event.id)
+                event.uses.first?.healthSampleID = event.healthSampleID
             } catch {
                 lastError = "Apple Health: \(error.localizedDescription)"
             }
@@ -67,26 +75,73 @@ final class LogService {
         try? context.save()
     }
 
+    /// A press from any device. Within 2 minutes of the last press of the same inhaler kind, it's another puff
+    /// in that use (and its Health sample is replaced with one more puff); otherwise a new moment.
+    /// Returns the moment and whether this press opened it.
+    @discardableResult
+    func press(_ moment: MomentKind, at date: Date = .now, id: UUID = UUID(), lateNote: String? = nil,
+               device: InhalerUse.Device, deviceID: String? = nil, in context: ModelContext) async -> (event: LogEvent, isNew: Bool) {
+        let kind: Inhaler.Kind = moment == .rescue ? .rescue : .controller
+        let since = date.addingTimeInterval(-InhalerUse.window)
+        var recent = FetchDescriptor<LogEvent>(predicate: #Predicate { $0.loggedAt >= since },
+                                              sortBy: [SortDescriptor(\.loggedAt, order: .reverse)])
+        recent.fetchLimit = 10
+        let candidates = (try? context.fetch(recent)) ?? []
+        if let e = candidates.first(where: { !$0.isDemo }),
+           let use = e.uses.last(where: { $0.kind == kind && date.timeIntervalSince($0.lastPressAt) <= InhalerUse.window && date >= $0.at }) {
+            use.puffs += 1
+            use.lastPressAt = date
+            try? context.save()
+            // Health: one sample per use, its value the puffs.
+            if let old = use.healthSampleID, kind == .rescue, health.isAvailable {
+                try? await health.deletePuff(sampleID: old)
+                use.healthSampleID = try? await health.savePuff(at: use.at, logID: e.id, puffs: use.puffs)
+                e.healthSampleID = use.healthSampleID
+                try? context.save()
+            }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            return (e, false)
+        }
+        let writeToHealth = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
+        let e = await log(moment, at: date, id: id,
+                          lateNote: lateNote ?? "Logged on Apple Watch while your iPhone was away, so there's no air reading.",
+                          device: device, deviceID: deviceID, in: context, writeToHealth: writeToHealth)
+        return (e, true)
+    }
+
+    /// Undo the last press: one puff off, or the whole moment when it was the only one.
+    func undoPress(_ event: LogEvent, in context: ModelContext) async {
+        if let use = event.uses.last, use.puffs > 1 {
+            use.puffs -= 1
+            if let old = use.healthSampleID, health.isAvailable {
+                try? await health.deletePuff(sampleID: old)
+                use.healthSampleID = try? await health.savePuff(at: use.at, logID: event.id, puffs: use.puffs)
+                event.healthSampleID = use.healthSampleID
+            }
+            try? context.save()
+        } else {
+            await delete(event, in: context)
+        }
+    }
+
     /// A moment logged on Apple Watch. Ignored if it already arrived (the watch can resend).
     func logFromWatch(_ log: WatchLog, in context: ModelContext) async {
         let id = log.id
         let existing = FetchDescriptor<LogEvent>(predicate: #Predicate { $0.id == id })
         if let count = try? context.fetchCount(existing), count > 0 { return }
         let moment: MomentKind = log.kind == .rescue ? .rescue : .maintenance
-        let writeToHealth = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
-        let e = await self.log(moment, at: log.at, id: log.id, in: context, writeToHealth: writeToHealth)
-        QuickRecordCenter.shared.notify(for: e)
+        let (e, isNew) = await press(moment, at: log.at, id: log.id, device: .watch, in: context)
+        if isNew { QuickRecordCenter.shared.notify(for: e) }
     }
 
     /// A press on the felt button. `ButtonLink` has already dropped resends; the press time comes
     /// from the button (it can queue presses while the phone is away).
-    func logFromButton(_ packet: ButtonPacket, receivedAt: Date, in context: ModelContext) async {
+    func logFromButton(_ packet: ButtonPacket, receivedAt: Date, deviceID: UUID?, in context: ModelContext) async {
         let moment: MomentKind = packet.cap == .rescue ? .rescue : .maintenance
-        let writeToHealth = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
-        let e = await log(moment, at: packet.pressedAt(receivedAt: receivedAt),
-                          lateNote: "Pressed on your felt button while your iPhone was away, so there's no air reading.",
-                          in: context, writeToHealth: writeToHealth)
-        QuickRecordCenter.shared.notify(for: e)
+        let (e, isNew) = await press(moment, at: packet.pressedAt(receivedAt: receivedAt),
+                                     lateNote: "Pressed on your felt button while your iPhone was away, so there's no air reading.",
+                                     device: .button, deviceID: deviceID?.uuidString, in: context)
+        if isNew { QuickRecordCenter.shared.notify(for: e) }
     }
 
     /// Onboarding's first press (or tap): a baseline moment with its own label, air and place stamped.

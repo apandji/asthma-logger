@@ -59,6 +59,8 @@ struct NowHomeView: View {
     @State private var showSettings = false
     @State private var openDay: Date?
     @State private var toast: LogEvent?
+    /// Just logged: the panel over the bottom (LoggedPanel), until it's swiped away, used or left alone.
+    @State private var logged: LogEvent?
     @State private var probing = false
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
     /// The timeline is moving: skies change without their ripple until it settles.
@@ -180,12 +182,7 @@ struct NowHomeView: View {
                 NavigationStack { MomentDetailsView(event: e) }
                     .presentationDragIndicator(.visible)
             }
-            .overlay(alignment: .bottom) {
-                // No tips until onboarding is done: they'd pop over the first-run screens.
-                CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
-                    .opacity(capture == nil ? 1 : 0)
-                    .allowsHitTesting(capture == nil)
-            }
+            .overlay(alignment: .bottom) { bottomBar }
             .sheet(isPresented: $showInsights) {
                 // The sparkle grows into the page (a zoom from the button), and the page starts in this sky's colour
                 // before its own bloom comes through: the same page, turned.
@@ -488,9 +485,11 @@ struct NowHomeView: View {
             switch focus {
             case .now:
                 if let j = justNow {
-                    // Just logged: Now is taken over by the capture. No verdict while it's happening.
+                    // Just logged: the air, as Now always says it ("It's 65°…"); the panel below says what was logged.
+                    // No verdict while it's happening.
                     VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place)),
-                                  title: TheRead.justLogged(j.moment.title), verdict: nil, tint: nil)
+                                  title: here == nil ? AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions) : nowRead,
+                                  verdict: nil, tint: nil)
                     // The air arriving for this moment: shimmering while it's fetched, then each reading lands.
                     AirReadings(conditions: j.conditions, weave: j.weave, pollen: nil, pending: j.envStatus == .pending)
                         .padding(.top, 6)
@@ -705,6 +704,9 @@ struct NowHomeView: View {
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: fadeIn),
                                          .init(color: .black, location: fadeOut), .init(color: .clear, location: 1)],
                                  startPoint: .leading, endPoint: .trailing))
+            // The logged panel covers it: out of the way rather than glowing through the glass.
+            .opacity(logged == nil ? 1 : 0)
+            .animation(Theme.smooth, value: logged == nil)
     }
 
     /// Back in the foreground with no place yet (the first fix timed out): try again.
@@ -722,6 +724,26 @@ struct NowHomeView: View {
         guard captureStyle != .sheet else { recording = e; return }
         let s = CaptureSession(event: e, chat: captureStyle == .chat, autoSelect: autoSelect == .ticked)
         withAnimation(reduceMotion ? nil : Theme.lift) { capture = s }
+    }
+
+    /// The + (and Insights), and, just logged, the panel that rises over the timeline and the + like a toast.
+    private var bottomBar: some View {
+        ZStack(alignment: .bottom) {
+            // No tips until onboarding is done: they'd pop over the first-run screens.
+            CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
+                .opacity(capture == nil && logged == nil ? 1 : 0)
+                .allowsHitTesting(capture == nil && logged == nil)
+            if let e = logged, capture == nil {
+                LoggedPanel(event: e, record: { closeLogged(); openCapture(e) }, close: closeLogged)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : Theme.lift, value: logged?.id)
+        .onChange(of: toast?.id) { _, _ in if let t = toast { logged = t } }
+    }
+
+    private func closeLogged() {
+        withAnimation(reduceMotion ? nil : Theme.smooth) { logged = nil }
     }
 
     @ViewBuilder private var captureOverlay: some View {
@@ -894,8 +916,9 @@ struct NowHomeView: View {
     private var cards: [HeaderCard] {
         switch focus {
         case .now:
-            if let j = justNow {
-                var deck: [HeaderCard] = [.capture(j)]
+            if justNow != nil {
+                // The capture lives in the panel at the bottom now (LoggedPanel), not in the deck.
+                var deck: [HeaderCard] = []
                 if let e = liveEvent { deck.append(.advice(AirAdvice.warning(e.advice, fallF: liveAir.conditions?.tempFallF), icon: e.icon, title: e.label, home: atHome, ahead: false)) }
                 return deck
             }

@@ -25,7 +25,6 @@ struct DoctorSheet: View {
                                 MomentDot(moment: e.moment, size: 8)
                                 Text(e.loggedAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute()))
                                     .font(.subheadline.weight(.medium))
-                                if e.isDemo { Text("Demo").font(.caption2.weight(.semibold)).foregroundStyle(Theme.secondaryText) }
                             }
                             Text(line(e)).font(.caption).foregroundStyle(Theme.secondaryText)
                         }

@@ -26,7 +26,7 @@ struct InsightsView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     // The home's header, word for word in style: where you are (Insights), the serif sentence,
                     // the status as a pill.
-                    VerdictHeader(place: AnyView(Label(["Insights", demo ? "Demo data" : nil, demoLearned ? "Demo person" : nil]
+                    VerdictHeader(place: AnyView(Label(["Insights"]
                                                             .compactMap { $0 }.joined(separator: " · "), systemImage: "sparkles")
                                                     .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)),
                                   title: learned ? (demoLearned ? "Weed pollen shows up on your flare days." : (model.narration?.headline ?? "felt air knows your pattern."))

@@ -220,7 +220,7 @@ struct MomentDetailsView: View {
                         Spacer()
                         VStack(alignment: .trailing, spacing: 1) {
                             Text(Tier(kind.level).word)
-                            Text("\(kind.count) grains/m³ · Demo").font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
+                            Text("\(kind.count) grains/m³").font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
                         }
                     }
                     .font(.subheadline).padding(.vertical, 8)

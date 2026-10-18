@@ -34,9 +34,12 @@ final class VoiceNotes: NSObject, AVAudioPlayerDelegate {
     func startRecording(for event: LogEvent) async -> Bool {
         stopPlaying()
         guard await AVAudioApplication.requestRecordPermission() else { denied = true; return false }
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
-        try? session.setActive(true)
+        // Off the main thread: activating the session can stall, and a runtime fault flags it there.
+        await Task.detached(priority: .userInitiated) {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            try? session.setActive(true)
+        }.value
         // Its own file per recording: a moment can have several voice notes.
         let file = "\(event.id.uuidString)-\(Int(Date().timeIntervalSince1970)).m4a"
         let engine = AVAudioEngine()

@@ -19,6 +19,7 @@ targets:
     sources:
       - AsthmaLog
       - Shared
+      - QuickRecordActivity
       # Owner photos for onboarding; gitignored, so absent in fresh clones (the app falls back).
       - path: PrivateMedia
         optional: true
@@ -26,6 +27,8 @@ targets:
       - package: AsthmaCore
       # The watch app ships inside the iPhone app.
       - target: AsthmaLogWatch
+      # Lock Screen recorder (Live Activity) and the Voice note control.
+      - target: AsthmaLogWidgets
     settings:
       base:
         SWIFT_VERSION: "6.0"
@@ -61,7 +64,13 @@ targets:
         NSMicrophoneUsageDescription: Record a short voice note about how you're feeling.
         NSSpeechRecognitionUsageDescription: Turns your voice note into text on this iPhone.
         NSBluetoothAlwaysUsageDescription: Connects to your felt button so a press logs a moment, even when the app is closed.
-        UIBackgroundModes: [bluetooth-central]
+        # audio: a voice note started from the Lock Screen keeps recording with the phone locked.
+        UIBackgroundModes: [bluetooth-central, audio]
+        NSSupportsLiveActivities: true
+        # feltair://record/<moment id>: tapping the Lock Screen recorder opens the in-app one.
+        CFBundleURLTypes:
+          - CFBundleURLName: felt-air
+            CFBundleURLSchemes: [feltair]
         OPENAQ_API_KEY: $(OPENAQ_API_KEY)
         AIRNOW_API_KEY: $(AIRNOW_API_KEY)
         AMBEE_API_KEY: $(AMBEE_API_KEY)
@@ -71,6 +80,40 @@ targets:
         com.apple.developer.weatherkit: true
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+
+  # Widget extension: the Quick Record Live Activity (Lock Screen + Dynamic Island) and the Voice note control.
+  # Its buttons run App Intents in the app's process.
+  AsthmaLogWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - AsthmaLogWidgets
+      - QuickRecordActivity
+      - path: AsthmaLog/Theme/Fonts/Recursive.ttf
+        buildPhase: resources
+    dependencies:
+      - package: AsthmaCore
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).asthmalog.widgets
+        SWIFT_VERSION: "6.0"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+    info:
+      path: AsthmaLogWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: felt air
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIAppFonts: [Recursive.ttf]
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
 
   # felt air on Apple Watch: two buttons that log a moment (orange rescue, blue standard).
   AsthmaLogWatch:

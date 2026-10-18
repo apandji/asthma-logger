@@ -100,6 +100,15 @@ struct NowHomeView: View {
             // Recordings: `-quickRecord` opens the recorder on the latest moment (unstructured, so the first
             // layout pass can't cancel it).
             .onAppear {
+                if ProcessInfo.processInfo.arguments.contains("-liveRecord") {
+                    // The Lock Screen card turns to the latest moment after 8 s, as a background press would
+                    // (go Home or lock the device first to see it update there).
+                    Task {
+                        try? await Task.sleep(for: .seconds(8))
+                        let all = (try? context.fetch(FetchDescriptor<LogEvent>(sortBy: [SortDescriptor(\.loggedAt)]))) ?? []
+                        if let e = all.last(where: { $0.moment != .okay }) { QuickRecordLive.shared.begin(for: e) }
+                    }
+                }
                 guard ProcessInfo.processInfo.arguments.contains("-quickRecord") else { return }
                 Task {
                     try? await Task.sleep(for: .seconds(2))
@@ -108,6 +117,11 @@ struct NowHomeView: View {
                 }
             }
             #endif
+            // Tapping the Lock Screen recorder (feltair://record/<moment id>) opens the in-app recorder.
+            .onOpenURL { url in
+                guard url.scheme == "feltair", url.host() == "record", let id = UUID(uuidString: url.lastPathComponent) else { return }
+                quick.pending = id
+            }
             .onChange(of: quick.pending) { _, id in
                 // Fetched by id from the store: a notification can arrive before this view's list has loaded.
                 guard let id, let e = try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.id == id })).first else { return }

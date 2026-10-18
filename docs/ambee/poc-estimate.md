@@ -15,7 +15,8 @@ This estimate uses Pandji's "Day in a Life (Bad Asthma Day, 3 inhaler uses)" mod
 | Each inhaler moment | Historical AQ + pollen at that place = **2** (the hour, plus the 48 h look-back if a range is one call) | history |
 | Checking a trip (e.g. Denver next week) | Forecast AQ + pollen = **2** (Ambee covers 5 days; WeatherKit covers 10) | forecast |
 | Baseline moments (about 3 ordinary hours a day, filled in a day later at a visited place or Home; `BaselineBackfill`, `BaselineFiller`) | 1 day of history per place per dataset: Home + Work = **4** (6 if a third place) | history |
-| Fire / natural disaster | **Conditional**: only when the air looks smoke-like (high PM2.5 at the moment; NowHomeView's `fireKey`), about 1–2 per smoke day | current |
+| Fire | **Conditional**: only when the air looks smoke-like (high PM2.5 at the moment; NowHomeView's `fireKey`), about 1–2 per smoke day | current |
+| Natural disasters | **Conditional** (proposed): with the morning pre-load, only when the weather forecast shows a severe condition (thunderstorm, high wind), Home and Work, about 0–2 a day on those days | not built |
 
 A place becomes **Frequent** after more than 12 hours there, or more than 2 visits a week for at least 2 weeks. Frequent places join the 7 am pre-cache. The figures below assume **2 Frequent places per person** (the high end of 1–2) = +4 a day. At 1 Frequent place, subtract 2.
 
@@ -77,7 +78,13 @@ Mixed realistic average per user: 70% quiet (16), 25% bad (22), 5% heavy (55) �
 >
 > felt air is an on-device asthma diary for people who use a rescue inhaler. Each puff is logged with the outdoor air at that moment, and the app compares inhaler moments with ordinary "baseline" hours to learn which conditions show up more often on someone's inhaler days. We already use Apple WeatherKit for weather. **Pollen and air quality are what we'd like from Ambee.** For the POC, each tester's phone would call your API directly and cache results by place and hour.
 >
-> How we'd use the API: each morning the app pre-loads the 5-day AQ and pollen forecast for a person's Home, Work and one or two places they visit often. We only make a call when someone stays somewhere new for more than 5 minutes, so no lookups while walking or driving through. Each inhaler moment, and about three baseline hours a day, gets that hour's AQ and pollen from history. The 5-day forecast is also used when someone checks an upcoming trip. We'd also like your fire data, called only when the air at a moment looks smoke-like (high PM2.5), so it's occasional.
+> **What we'd like from Ambee:**
+> - **Pollen** (tree, grass, weed, with species where available): latest, history and 5-day forecast.
+> - **Air quality**: latest, history and 5-day forecast.
+> - **Fire**: active fires near a place, called only when the air at a moment looks smoke-like (high PM2.5), so we can say "there are active wildfires 50 miles north" instead of just "smoky".
+> - **Natural disasters**: events near a person's Home and Work (storms, floods, dust storms), checked with the morning pre-load only when the weather forecast shows a severe condition, so it's also occasional.
+>
+> How we'd use the API: each morning the app pre-loads the 5-day AQ and pollen forecast for a person's Home, Work and one or two places they visit often. We only make a call when someone stays somewhere new for more than 5 minutes, so no lookups while walking or driving through. Each inhaler moment, and about three baseline hours a day, gets that hour's AQ and pollen from history. The 5-day forecast is also used when someone checks an upcoming trip. Fire and natural-disaster calls are conditional, as above.
 >
 > That works out to about **16 calls per person per day on a quiet day, about 22 on a bad asthma day, and up to about 55 while we're testing heavily** (assuming one history or forecast request counts as one call). For 10 testers that's about 160–550 a day, so 100/day would be used up by mid-morning. Could we have **600 calls/day (or an 18,000/month pool) for 60–90 days, plus about 5,000 one-off calls** for loading each tester's past days?
 >
@@ -89,7 +96,7 @@ Mixed realistic average per user: 70% quiet (16), 25% bad (22), 5% heavy (55) �
 > 3. Is historical pollen and AQ included, and how far back (we'd like 60 days)?
 > 4. Are there burst or per-minute limits? What happens on overage: a block, throttling, or a charge?
 > 5. Can the POC run for 60–90 days? Patterns take a few weeks of logs.
-> 6. Does the fire / natural-disaster API count against the same allowance?
+> 6. Are the fire and natural-disaster endpoints included in the POC, and do they count against the same allowance?
 > 7. What's the pricing path after the POC for about 100 and about 1,000 users?
 > 8. For a later study, may we cache results on our own server and share them between users in the same area?
 >

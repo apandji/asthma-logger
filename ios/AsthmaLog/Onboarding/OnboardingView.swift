@@ -71,28 +71,24 @@ struct OnboardingView: View {
 
     // MARK: Header (the home's)
 
+    /// The top is the air: where you are and what's in the air there, the same on every step once it's read
+    /// (and the first moment's once it's saved). Before there's a place, felt air's line.
     @ViewBuilder private var header: some View {
-        switch step {
-        case .welcome:
-            VerdictHeader(place: AnyView(Label("felt air", systemImage: "sparkles").font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)),
-                          title: "Your inhaler, and the air around it.", verdict: nil, tint: nil)
-        case .here:
+        if let f = first {
+            VerdictHeader(place: AnyView(HStack(spacing: 8) { MomentTag(moment: .okay, text: OnboardingCopy.firstTag); placeLine }),
+                          title: AirWords.sentence(tense: .present, weave: f.weave, conditions: f.conditions),
+                          verdict: nil, tint: nil)
+            AirReadings(conditions: f.conditions ?? here?.conditions, weave: f.weave,
+                        pollen: DemoPollen.sample(at: f.loggedAt, season: pollenSeason))
+        } else if step >= .here, here != nil || locating || noLocation {
             VerdictHeader(place: AnyView(placeLine), title: hereTitle, verdict: nil, tint: nil)
-        case .button:
-            if let f = first {
-                VerdictHeader(tag: nil, place: AnyView(HStack(spacing: 8) { MomentTag(moment: .okay, text: "First capture"); placeLine }),
-                              title: AirWords.sentence(tense: .present, weave: f.weave, conditions: f.conditions),
-                              verdict: nil, tint: nil)
-            } else {
-                VerdictHeader(place: AnyView(placeLine), title: "Press your felt button.", verdict: nil, tint: nil)
+            if let here {
+                AirReadings(conditions: here.conditions, weave: WeaveSpec(here.conditions.input),
+                            pollen: DemoPollen.sample(at: .now, season: pollenSeason))
             }
-        case .inhalers:
-            VerdictHeader(place: AnyView(placeLine), title: "Name your inhalers.", verdict: nil, tint: nil)
-        case .permissions:
-            VerdictHeader(place: AnyView(placeLine), title: "What felt air uses, and where it goes.", verdict: nil, tint: nil)
-        case .learn:
-            VerdictHeader(place: AnyView(placeLine), title: "It gets better with time.", verdict: nil, tint: nil,
-                          when: nil)
+        } else {
+            VerdictHeader(place: AnyView(Label("felt air", systemImage: "sparkles").font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)),
+                          title: OnboardingCopy.welcomeTop, verdict: nil, tint: nil)
         }
     }
 
@@ -106,7 +102,7 @@ struct OnboardingView: View {
 
     private var hereTitle: String {
         if let here { return AirWords.sentence(tense: .present, weave: WeaveSpec(here.conditions.input), conditions: here.conditions) }
-        return noLocation ? "You can still log without it." : (locating ? "Checking the air near you…" : "The air where you are.")
+        return noLocation ? "You can still log without it." : "Checking the air near you…"
     }
 
     // MARK: Sky
@@ -144,77 +140,91 @@ struct OnboardingView: View {
     // MARK: The card: one short paragraph and the actions
 
     @ViewBuilder private var card: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
+            // The step's name, inside the panel, in the sentence face.
+            Text(cardTitle)
+                .font(Theme.Typeface.sentence(size: 24)).kerning(Theme.serifKerning)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
             switch step {
             case .welcome:
-                Text("Each time you use your inhaler, felt air saves the outdoor air and weather. After a few weeks you can see what your flare days have in common.")
-                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                Text("Outdoor air only. Not medical advice.").font(.footnote).foregroundStyle(Theme.secondaryText)
-                primary("Get started") { goHere() }
+                body(OnboardingCopy.welcomeBody)
+                fine(OnboardingCopy.welcomeFine)
+                primary(OnboardingCopy.welcomeAction) { goHere() }
             case .here:
                 if here != nil {
-                    Text("felt air reads the air near you each time you log. The weather and air services get your area, never who you are. Your exact location stays on this iPhone.")
-                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    body(OnboardingCopy.hereBody)
                     WeatherAttributionView()
-                    primary("Next") { step = .button; button.beginSync() }
+                    primary(OnboardingCopy.next) { step = .button; button.beginSync() }
                 } else if noLocation {
-                    Text("Turn on location in Settings to add the air to each moment.")
-                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                    primary("Next") { step = .button; button.beginSync() }
+                    body(OnboardingCopy.hereNoLocation)
+                    primary(OnboardingCopy.next) { step = .button; button.beginSync() }
                 } else {
-                    HStack(spacing: 10) { ProgressView(); Text("The location prompt appears now.").font(.subheadline).foregroundStyle(Theme.secondaryText) }
+                    HStack(spacing: 10) { ProgressView(); body(OnboardingCopy.hereWaiting) }
                 }
             case .button:
                 if first != nil {
                     // Without a button there was no press: the + will be the way to log.
-                    Text(logMethod == "app"
-                         ? "This is your first capture: the air, here, right now. From now on each press of the + saves a moment like it."
-                         : "That press is your first capture: the air, here, right now. From now on each press saves a moment like it.")
-                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                    primary("Next") { step = .inhalers }
+                    body(logMethod == "app" ? OnboardingCopy.firstBodyApp : OnboardingCopy.firstBodyButton)
+                    primary(OnboardingCopy.next) { step = .inhalers }
                 } else {
-                    Text(buttonStatus).font(.subheadline).foregroundStyle(Theme.secondaryText)
-                    Text("Orange cap is Rescue, teal is Standard. This first press pairs the button, it isn't counted as inhaler use.")
-                        .font(.footnote).foregroundStyle(Theme.secondaryText)
-                    HStack(spacing: 10) {
-                        secondary("I don't have a button") {
-                            button.endSync()
-                            logMethod = "app"
-                            capture()
-                        }
+                    body(buttonStatus)
+                    fine(OnboardingCopy.buttonHint)
+                    secondary(OnboardingCopy.buttonSkip) {
+                        button.endSync()
+                        logMethod = "app"
+                        capture()
                     }
                 }
             case .inhalers:
-                Text("So each moment says which one you used. You can rename them in Settings › Devices.")
-                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)   // the keyboard squeezes the sky, not the words
-                inhalerField("Rescue · orange cap", placeholder: "e.g. Ventolin", text: $rescueName)
-                inhalerField("Daily · teal cap", placeholder: "e.g. Flovent", text: $dailyName)
-                primary("Next") { saveInhalers(); step = .permissions }
+                body(OnboardingCopy.inhalersBody)
+                inhalerField(OnboardingCopy.inhalerRescueLabel, placeholder: OnboardingCopy.inhalerRescuePlaceholder, text: $rescueName)
+                inhalerField(OnboardingCopy.inhalerDailyLabel, placeholder: OnboardingCopy.inhalerDailyPlaceholder, text: $dailyName)
+                primary(OnboardingCopy.next) { saveInhalers(); step = .permissions }
             case .permissions:
+                body(OnboardingCopy.dataBody)
                 // One card per source: what it uses, what it's for, and where it goes.
                 DataCards()
-                primary("Next") { step = .learn }
+                primary(OnboardingCopy.next) { step = .learn }
             case .learn:
-                Text("Each press saves a moment. felt air adds baseline moments on its own. With enough of both, Insights shows what your flare days have in common.")
-                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                body(OnboardingCopy.learnBody)
                 LearningRing(progress: GateProgress(nAttacks: events.filter { !$0.isDemo && $0.moment == .rescue }.count,
                                                     nBaselines: events.filter { !$0.isDemo && $0.moment == .okay }.count, gate: .default), size: 96)
-                primary("Start") { button.endSync(); didOnboard = true }
+                primary(OnboardingCopy.learnAction) { button.endSync(); didOnboard = true }
             }
         }
         .padding(20)
         .glassEffect(.regular, in: .rect(cornerRadius: 28))
+        .animation(Theme.smooth, value: cardTitle)
+    }
+
+    private var cardTitle: String {
+        switch step {
+        case .welcome: OnboardingCopy.welcomeTitle
+        case .here: OnboardingCopy.hereTitle
+        case .button: first == nil ? OnboardingCopy.buttonTitle : OnboardingCopy.firstTitle
+        case .inhalers: OnboardingCopy.inhalersTitle
+        case .permissions: OnboardingCopy.dataTitle
+        case .learn: OnboardingCopy.learnTitle
+        }
+    }
+
+    /// One text size for the panel's words (body, primary), and one for the fine print.
+    private func body(_ s: String) -> some View {
+        Text(s).font(.body).foregroundStyle(.primary.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func fine(_ s: String) -> some View {
+        Text(s).font(.footnote).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
     }
 
     private var buttonStatus: String {
         switch button.status {
-        case .notAllowed: "Bluetooth is off for felt air. Turn it on in Settings › felt air."
-        case .bluetoothOff: "Turn on Bluetooth to connect."
-        case .connected: "Connected. Press either cap."
-        case .connecting: "Connecting…"
-        default: "Listening. Keep the button close to your iPhone."
+        case .notAllowed: OnboardingCopy.buttonNotAllowed
+        case .bluetoothOff: OnboardingCopy.buttonBluetoothOff
+        case .connected: OnboardingCopy.buttonConnected
+        case .connecting: OnboardingCopy.buttonConnecting
+        default: OnboardingCopy.buttonListening
         }
     }
 

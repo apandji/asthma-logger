@@ -25,7 +25,7 @@ struct DataCards: View {
         Source(id: "location", symbol: "location.fill", title: "Location",
                uses: "Where you are when you log, and the places you spend time.",
                purpose: "The air and weather at each moment, and ordinary hours where you actually were.",
-               goes: "To get the air, an area about a kilometre across goes to Apple Weather, OpenAQ, AirNow and Ambee, with no name, account or device ID. Your exact location and your places stay on this iPhone.",
+               goes: "To get the air right where you are, your location goes to Apple Weather, OpenAQ, AirNow and Ambee with each request. No name, account or device ID goes with it, and they never get your history or your places. Those stay on this iPhone.",
                leaves: true),
         Source(id: "voice", symbol: "mic.fill", title: "Microphone and speech",
                uses: "Your voice notes.",
@@ -56,8 +56,6 @@ struct DataCards: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Everything is optional. Logging works without any of it.")
-                .font(.subheadline).foregroundStyle(Theme.secondaryText)
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(Self.sources) { s in card(s) }

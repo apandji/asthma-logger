@@ -1,10 +1,10 @@
 import Foundation
 
-/// The position that leaves the phone for the air services (OpenAQ, AirNow, Ambee), rounded to two decimal
-/// places: about a kilometre. The air readings are regional anyway (the nearest monitor is often miles away),
-/// so nothing is lost, and the services can't place a request at a home or a street. Requests carry felt
-/// air's key, never a name, an account or a device id. The exact fix stays on this iPhone, on the moment.
+/// The position that goes to the air services (OpenAQ, AirNow, Ambee), in one place. Sent precisely (four
+/// decimals, about 10 m): hyperlocal air needs it, and Ambee resolves to 500 m (owner, Oct 19: "just admit
+/// it"). What makes it not tracking is what's missing: each request carries felt air's key and the position,
+/// never a name, an account or a device id, and the services never get your history or your places. Onboarding
+/// says exactly this. A proxy (planned) will also hide the phone's IP address from them.
 nonisolated enum Coarse {
-    static func round(_ degrees: Double) -> Double { (degrees * 100).rounded() / 100 }
-    static func string(_ degrees: Double) -> String { String(format: "%.2f", round(degrees)) }
+    static func string(_ degrees: Double) -> String { String(format: "%.4f", degrees) }
 }

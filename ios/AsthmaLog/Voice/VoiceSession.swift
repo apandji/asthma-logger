@@ -41,7 +41,10 @@ final class VoiceSession {
         VoiceNotes.shared.stopRecording()
         phase = .writing
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        if let file = scratch?.voiceNoteFile, let text = await NoteTranscriber.transcribe(VoiceNotes.shared.url(file)) {
+        // The words were written down as you spoke; the file is only transcribed when live recognition was off.
+        var text = await VoiceNotes.shared.finishLive()
+        if text == nil, let file = scratch?.voiceNoteFile { text = await NoteTranscriber.transcribe(VoiceNotes.shared.url(file)) }
+        if let text {
             words = text
             let result = await VoiceNoteTagger.suggest(transcript: text, using: ModelTagProposer())
             suggested = result.suggestions.map(\.tag)

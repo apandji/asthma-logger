@@ -84,13 +84,15 @@ struct VoicePanel: View {
         VoiceGrain(level: Double(VoiceNotes.shared.level), listening: true,
                    ink: event?.moment == .rescue || event == nil ? Theme.rescueSoft : Theme.standardSoft)
             .frame(height: 96)
+        // Your words as you say them; the newest arrive at the end, older lines scroll off the top.
+        LiveWords(text: VoiceNotes.shared.liveWords)
         HStack {
-            Text("Listening…").font(.subheadline.weight(.semibold))
+            Text(VoiceNotes.shared.liveWords.isEmpty ? "Listening…" : "Still listening").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
             Spacer()
             if let start = session.startedAt {
                 TimelineView(.periodic(from: .now, by: 1)) { tl in
                     Text(Duration.seconds(tl.date.timeIntervalSince(start)).formatted(.time(pattern: .minuteSecond)))
-                        .font(.subheadline.monospacedDigit()).foregroundStyle(Theme.secondaryText)
+                        .font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
                 }
             }
         }
@@ -139,6 +141,34 @@ struct VoicePanel: View {
             }
             .buttonStyle(PressStyle())
         }
+    }
+}
+
+/// The transcript as it's being written: each new word slides in, the latest a touch brighter, and the text
+/// keeps its tail (head truncation) so you always see what you just said.
+struct LiveWords: View {
+    let text: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let words = text.split(separator: " ").map(String.init)
+        Group {
+            if words.isEmpty {
+                Text(" ").font(.subheadline)
+            } else {
+                // One Text so it wraps as a paragraph; the last word is brighter.
+                let head = words.dropLast().joined(separator: " ")
+                (Text(head.isEmpty ? "" : head + " ").foregroundStyle(.primary.opacity(0.75))
+                 + Text(words.last ?? "").foregroundStyle(.primary))
+                    .font(.subheadline)
+                    .lineLimit(3)
+                    .truncationMode(.head)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.interpolate)
+                    .animation(reduceMotion ? nil : Theme.snap, value: words.count)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
     }
 }
 

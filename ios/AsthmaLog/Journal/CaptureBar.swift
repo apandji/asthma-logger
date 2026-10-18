@@ -66,6 +66,7 @@ extension CaptureBar {
             let e: LogEvent = moment == .okay ? await services.log(moment, in: context, writeToHealth: writeToHealth)
                 : await services.press(moment, device: .phone, in: context).event
             withAnimation(.snappy) { toast = e }
+            Sounds.play(.log)
             // So the question is waiting on the Lock Screen when the phone goes back in the pocket.
             if e.moment != .okay, QuickRecordCenter.shared.enabled { QuickRecordLive.shared.begin(for: e) }
             // Undo stays on the capture card for a while, then goes quietly.
@@ -254,6 +255,7 @@ struct InsightsRingButton: View {
             }
         }
         .animation(.spring(duration: 0.45, bounce: 0.3), value: learned)
+        .onChange(of: learned) { was, now in if !was && now { Sounds.play(.learned) } }
         .accessibilityLabel(learned ? "Insights: learned" : "Insights: still learning")
         .task(id: events.count) {
             // Wait out the log animation (and any burst of logs) before recomputing patterns.

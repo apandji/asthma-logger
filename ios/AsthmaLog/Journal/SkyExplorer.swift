@@ -427,11 +427,20 @@ struct GroupRail: View {
     var weatherSymbol = Icons.weather
     /// The moment wants a note: Voice wears a small dot.
     var voiceBadge = false
+    /// The thumb's height while the rail is held: a lens. The stop under it grows and the two beside it
+    /// ease away, like the Dock, so the rail reads as a scale you slide along.
+    var fingerY: CGFloat? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             ForEach(Array(rows.enumerated()), id: \.element) { i, row in
-                mark(row).position(x: 0, y: mids[i])
+                let near = fingerY.map { max(0, 1 - abs(mids[i] - $0) / 64) } ?? 0
+                let push: CGFloat = fingerY.map { f in mids[i] < f ? -1 : (mids[i] > f ? 1 : 0) } ?? 0
+                mark(row)
+                    .scaleEffect(1 + 0.3 * near * near)
+                    .position(x: 0, y: mids[i] + push * 6 * near * (1 - near))
+                    .animation(reduceMotion ? nil : .interactiveSpring(response: 0.18, dampingFraction: 0.8), value: fingerY)
             }
         }
         .frame(width: 0)

@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.morningBrief) private var morningBrief = true
     @AppStorage(Prefs.railLeft) private var railLeft = false
+    @AppStorage(Prefs.sounds) private var sounds = true
 
     var body: some View {
         NavigationStack {
@@ -28,10 +29,12 @@ struct SettingsView: View {
                     }
                     Toggle("Morning look-ahead", isOn: $morningBrief)
                         .onChange(of: morningBrief) { _, on in if !on { MorningBrief.cancel() } }
+                    Toggle("Sounds", isOn: $sounds)
+                        .onChange(of: sounds) { _, on in if on { Sounds.play(.log) } }
                 } header: {
                     Text("Logging")
                 } footer: {
-                    Text("After a press, the Lock Screen asks what was going on, so you can say it without unlocking. The morning look-ahead is a notification at 8 with the day's air.")
+                    Text("After a press, the Lock Screen asks what was going on, so you can say it without unlocking. The morning look-ahead is a notification at 8 with the day's air. Sounds: a quiet tick when a moment is logged, silent with the ringer off.")
                 }
 
                 Section {

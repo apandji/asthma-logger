@@ -6,6 +6,8 @@ import SwiftUI
 /// flare days by category, when and where, then Profile History and every moment. Code finds every number
 /// (AsthmaCore: AirProfile, Archetype, Rhythm); this only lays them out.
 struct InsightsView: View {
+    /// The home sky's colour at the moment the page opened: the bloom starts from it.
+    var skyColor: Color? = nil
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @AppStorage(Prefs.useDemoData) private var demo = false
     @State private var model = InsightsModel()
@@ -16,6 +18,9 @@ struct InsightsView: View {
     /// Open category cards. The leading one starts open.
     @State private var open: Set<AirProfile.Category>?
     @State private var shown = false
+    /// The bloom's start: it blends from the sky's colour into your factors over the first second.
+    @State private var openedAt: Date?
+    @State private var shownName = false
 
     enum Page: Hashable { case history, moments }
 
@@ -30,6 +35,8 @@ struct InsightsView: View {
                         .padding(.top, 8)
                     if learned, let p = profile {
                         archetypeBlock(Archetype(profile: p, learned: true))
+                            // The name is the last thing to arrive, so the eye lands on it after the page.
+                            .opacity(shownName ? 1 : 0).offset(y: shownName ? 0 : 6)
                         AirRadar(profile: p, selected: $picked, size: 216).frame(maxWidth: .infinity)
                         categories(p)
                     } else {
@@ -63,14 +70,18 @@ struct InsightsView: View {
                 model.rebuild(events: events, demo: demo)
                 recordSnapshot()
             }
-            .onAppear { withAnimation(.easeOut(duration: 0.3)) { shown = true } }
+            .onAppear {
+                openedAt = .now
+                withAnimation(.easeOut(duration: 0.3)) { shown = true }
+                Task { try? await Task.sleep(for: .milliseconds(220)); withAnimation(.smooth(duration: 0.5)) { shownName = true } }
+            }
         }
     }
 
     private var paperBackground: some View {
         ZStack {
             Theme.paper(paper)
-            FactorBloom(colors: factorColors).opacity(0.85)
+            FactorBloom(colors: factorColors, from: skyColor, since: openedAt).opacity(0.85)
             // A dark wash keeps the text readable over the colour.
             LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.55), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
             SkyGrain(responds: false).opacity(0.5)
@@ -329,12 +340,19 @@ struct LearningRing: View {
 /// first colour gets the most room.
 struct FactorBloom: View {
     let colors: [Color]
+    /// A colour to start from (the sky the page opened over), blended into `colors` over 1.2 s from `since`.
+    var from: Color? = nil
+    var since: Date? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { frame in
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion && since == nil)) { frame in
             let t = reduceMotion ? 0 : frame.date.timeIntervalSinceReferenceDate
-            let a = colors.first ?? .blue, b = colors.count > 1 ? colors[1] : a, c = colors.count > 2 ? colors[2] : b
+            // 0 at open, 1 after 1.2 s, eased: how far from the sky's colour to your own.
+            let raw = since.map { min(1, frame.date.timeIntervalSince($0) / 1.2) } ?? 1
+            let blend = reduceMotion ? 1 : 1 - pow(1 - raw, 3)
+            let mixed: (Color) -> Color = { c in from.map { $0.mix(with: c, by: blend) } ?? c }
+            let a = mixed(colors.first ?? .blue), b = mixed(colors.count > 1 ? colors[1] : colors.first ?? .blue), c = mixed(colors.count > 2 ? colors[2] : colors.count > 1 ? colors[1] : colors.first ?? .blue)
             let w = { (p: Double, s: Double) in Float(0.5 + 0.18 * sin(t * s + p)) }
             MeshGradient(width: 3, height: 3, points: [
                 [0, 0], [0.5, 0], [1, 0],

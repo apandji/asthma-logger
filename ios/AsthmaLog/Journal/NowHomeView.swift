@@ -45,6 +45,7 @@ struct NowHomeView: View {
     private let sparkleTip = SparkleTip()
     /// Counts up each time a sentence with a sparkle lands: the sparkle button nods in sympathy.
     @State private var noticed = 0
+    @Namespace private var hero
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var showSettings = false
     @State private var openDay: Date?
@@ -176,7 +177,11 @@ struct NowHomeView: View {
                 CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
             }
             .sheet(isPresented: $showInsights) {
-                InsightsView().presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper)).presentationCornerRadius(32)
+                // The sparkle grows into the page (a zoom from the button), and the page starts in this sky's colour
+                // before its own bloom comes through: the same page, turned.
+                InsightsView(skyColor: skyColorNow)
+                    .navigationTransition(.zoom(sourceID: "insights", in: hero))
+                    .presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper)).presentationCornerRadius(32)
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .onChange(of: focusKey) { _, _ in if !scrubbing, hasMark { noticed += 1 } }
@@ -241,6 +246,7 @@ struct NowHomeView: View {
     private func announce(_ e: LogEvent?) {
         guard let e, e.moment != .okay, Date().timeIntervalSince(e.loggedAt) < 120, toast?.id != e.id else { return }
         withAnimation(Theme.lift) { toast = e }
+        Sounds.play(.log)
         Task {
             try? await Task.sleep(for: .seconds(10))
             if toast?.id == e.id { withAnimation(Theme.smooth) { toast = nil } }
@@ -397,6 +403,7 @@ struct NowHomeView: View {
         VStack(spacing: 2) {
             // No bubble: it would cover the sky. Learning breathes; learned bounces once.
             InsightsRingButton(open: { showInsights = true }, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false, glass: false, nod: noticed)
+                .matchedTransitionSource(id: "insights", in: hero)
             settingsButton
         }
         .padding(4)
@@ -615,6 +622,13 @@ struct NowHomeView: View {
                              pollen: DemoPollen.sample(at: h.date, season: pollenSeason),
                              mapID: mapID, coordinate: forecastCoordinate, sketch: true)
         }
+    }
+
+    /// The sky's base colour at the playhead, for Insights to start from.
+    private var skyColorNow: Color {
+        let s = skyInputs
+        let t = s.conditions?.best(.temperature)?.value ?? WeatherColor.fallbackTemp(s.weave)
+        return WeatherColor.light(WeatherColor.temperature(t), at: s.date)
     }
 
     /// The temperature at any time on the track, between the readings either side of it (moments, now, the
@@ -1108,6 +1122,8 @@ struct NowSky: View {
     @State private var row: RailRow?
     @State private var expanded = false
     @State private var pulse: Task<Void, Never>?
+    /// The thumb's height on the rail while it's held: the stop under it grows, its neighbours ease away.
+    @State private var railFinger: CGFloat?
     @State private var rippleAt: Date?
     @State private var rippleInk: Color = .white
     @AppStorage("sky.touched") private var touched = false
@@ -1240,7 +1256,17 @@ struct NowSky: View {
             // The scale: the legend, and the only place you read the air. Slide up and down it.
             .overlay(alignment: railLeft ? .leading : .trailing) {
                 GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions),
-                         voiceBadge: selfEvent?.wantsNote ?? false)
+                         voiceBadge: selfEvent?.wantsNote ?? false, fingerY: railFinger)
+                    // The stops sit in one glass well, the same material as the controls above and the + below.
+                    .background {
+                        if let first = mids.first, let last = mids.last {
+                            Capsule().fill(.clear)
+                                .glassEffect(.regular, in: .capsule)
+                                .frame(width: 44, height: last - first + 52)
+                                .position(x: 0, y: (first + last) / 2)
+                                .animation(Theme.smooth, value: mids.count)
+                        }
+                    }
                     .padding(railLeft ? .leading : .trailing, NowHomeView.column - 8)  // the sky sits 8pt in from the screen
                     .frame(width: 64, height: size.height, alignment: railLeft ? .leading : .trailing)
                     .contentShape(Rectangle())
@@ -1308,6 +1334,7 @@ struct NowSky: View {
                     probing = true; touched = true; startPulse()
                     withAnimation(.snappy(duration: 0.25)) { expanded = true }
                 }
+                railFinger = drag.location.y
                 // How far the thumb has slid off the rail toward the sky (the rail column is 64 pt wide).
                 let inward = railLeft ? drag.location.x - 32 : 32 - drag.location.x
                 // On Voice, slide sideways into its panel to record; slide back out to cancel.
@@ -1329,6 +1356,7 @@ struct NowSky: View {
             }
             .onEnded { _ in
                 stopPulse()
+                railFinger = nil
                 // Lift while recording: stop, write it down, review.
                 if voice.phase == .recording { Task { await voice.finish() } }
                 // Voice and Body stay open where you let go, the rail with them; the air's close.
@@ -1595,6 +1623,7 @@ struct VerdictHeader: View {
     var when: String? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skySettled) private var settled
+    @Environment(\.dynamicTypeSize) private var typeSize
     /// Room kept at one end of the top line for controls floating over that corner.
     @Environment(\.cornerInset) private var corner
     /// Tapping a sentence with a sparkle opens the key (the one-time tip, again on demand).
@@ -1617,8 +1646,10 @@ struct VerdictHeader: View {
             // Blurs between readings instead of cutting (the same as ScaleHeader), once the playhead has landed.
             ZStack(alignment: .topLeading) {
                 Self.marked(title)
-                    .font(Theme.serifTitle).kerning(Theme.serifKerning)
+                    // A step smaller at accessibility sizes, and as many lines as it needs.
+                    .font(Theme.Typeface.sentence(size: typeSize.isAccessibilitySize ? 22 : 26)).kerning(Theme.serifKerning)
                     .fixedSize(horizontal: false, vertical: true)
+                    .shimmer(title.hasSuffix("…"))
                     .id(title)
                     .transition(reduceMotion || !settled ? AnyTransition.opacity : AnyTransition(.blurReplace))
             }

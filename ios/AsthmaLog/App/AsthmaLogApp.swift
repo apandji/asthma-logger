@@ -11,6 +11,7 @@ struct AsthmaLogApp: App {
 
     init() {
         AppTips.configure()
+        ABTest.applyLaunchArguments()
         do { container = try ModelContainer(for: LogEvent.self, InhalerUse.self, VoiceNote.self) }
         catch { fatalError("Couldn't open the journal store: \(error)") }
         let services = LogService()

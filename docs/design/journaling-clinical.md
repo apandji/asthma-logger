@@ -174,6 +174,12 @@ Nothing is parsed; it's just there, because NICE's committee says that's the rig
 - Say cause. "Often shows up on your flare days" stays as the only claim.
 - Parse the action plan.
 
+## Built (Oct 19), as A/B test A1
+
+Symptom and outcome tags (kept out of the lift table), the interview (`AsthmaCore/Journal/Interview.swift`),
+live words lit in two inks, and two capture styles growing from the capture card: **chat** and **journal**. The
+current full-screen recorder is the third arm. See [ab-tests.md](ab-tests.md).
+
 ## Build order (if the critique agrees)
 
 1. Symptom tags in `JournalTag` (own list, own colour), rules, `BinSpec` bump, lit words by colour.

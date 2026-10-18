@@ -33,10 +33,10 @@ enum EngineExport {
     /// One row per voice note, joined to moments by moment_id.
     static func notes(_ events: [LogEvent]) -> [[String]] {
         let iso = ISO8601DateFormatter()
-        var rows: [[String]] = [["moment_id", "note_id", "recorded_at", "source", "audio_file", "transcript"]]
+        var rows: [[String]] = [["moment_id", "note_id", "recorded_at", "source", "question", "audio_file", "transcript"]]
         for e in events.sorted(by: { $0.loggedAt < $1.loggedAt }) {
             for n in e.notes.sorted(by: { $0.recordedAt < $1.recordedAt }) {
-                rows.append([e.id.uuidString, n.id.uuidString, iso.string(from: n.recordedAt), n.sourceRaw, n.audioFile ?? "", n.transcript])
+                rows.append([e.id.uuidString, n.id.uuidString, iso.string(from: n.recordedAt), n.sourceRaw, n.question ?? "", n.audioFile ?? "", n.transcript])
             }
         }
         return rows

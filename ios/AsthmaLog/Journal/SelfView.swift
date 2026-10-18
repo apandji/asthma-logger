@@ -168,6 +168,8 @@ struct VoicePanel: View {
 struct LiveWords: View {
     let text: String
     var ink: Color = Theme.rescueSoft
+    var font: Font = .subheadline
+    var lineLimit: Int? = 3
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -182,13 +184,16 @@ struct LiveWords: View {
                 words.enumerated().reduce(Text(verbatim: "")) { acc, pair in
                     let (i, w) = pair
                     let clean = w.lowercased().trimmingCharacters(in: .punctuationCharacters)
-                    let piece: Text = lit.contains(clean)
-                        ? Text(w).foregroundStyle(ink).fontWeight(.semibold)
-                        : Text(w).foregroundStyle(.primary.opacity(i == words.count - 1 ? 1 : 0.75))
+                    let piece: Text
+                    switch lit[clean] {
+                    case .symptom?, .outcome?: piece = Text(w).foregroundStyle(Theme.symptom).fontWeight(.semibold)
+                    case .trigger?: piece = Text(w).foregroundStyle(ink).fontWeight(.semibold)
+                    case nil: piece = Text(w).foregroundStyle(.primary.opacity(i == words.count - 1 ? 1 : 0.75))
+                    }
                     return acc + piece + Text(i == words.count - 1 ? "" : " ")
                 }
-                    .font(.subheadline)
-                    .lineLimit(3)
+                    .font(font)
+                    .lineLimit(lineLimit)
                     .truncationMode(.head)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.interpolate)
@@ -198,12 +203,12 @@ struct LiveWords: View {
         .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
     }
 
-    /// The words of every positive tag mention in the text (the keyword rules' phrases, split into words).
-    static func litWords(in text: String) -> Set<String> {
-        let scan = KeywordTagger.scan(text)
-        var out = Set<String>()
-        for m in scan.mentions where !m.negated {
-            for w in m.phrase.lowercased().split(separator: " ") { out.insert(String(w)) }
+    /// The words of every positive tag mention in the text, with the kind of tag they named (symptoms and
+    /// triggers light in different inks).
+    static func litWords(in text: String) -> [String: JournalTag.Kind] {
+        var out: [String: JournalTag.Kind] = [:]
+        for m in KeywordTagger.scan(text).mentions where !m.negated {
+            for w in m.phrase.lowercased().split(separator: " ") { out[String(w)] = m.tag.kind }
         }
         return out
     }

@@ -50,8 +50,10 @@ final class VoiceNote {
     var recordedAt: Date
     var audioFile: String?
     var transcript: String
-    /// "rail", "lock_screen", "quick_record" or "unknown" (from before notes existed).
+    /// "rail", "lock_screen", "quick_record", "chat", "journal" or "unknown" (from before notes existed).
     var sourceRaw: String
+    /// The question it answered, in the chat capture ("Did it wake you up?"). Nil for a free note.
+    var question: String?
     var moment: LogEvent?
 
     init(recordedAt: Date, audioFile: String?, transcript: String, source: String) {
@@ -95,8 +97,9 @@ nonisolated struct Inhaler: Codable, Identifiable, Equatable, Sendable {
 
 extension LogEvent {
     /// Adds a voice note, and keeps the moment's combined words (what tags and the read use) in step.
-    func addNote(file: String?, transcript: String, source: String, at: Date = .now) {
+    func addNote(file: String?, transcript: String, source: String, at: Date = .now, question: String? = nil) {
         let n = VoiceNote(recordedAt: at, audioFile: file, transcript: transcript, source: source)
+        n.question = question
         notes.append(n)
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty {

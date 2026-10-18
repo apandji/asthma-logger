@@ -25,6 +25,10 @@ struct NowHomeView: View {
     @State private var pinDetails: LogEvent?
     /// Quick Record: the moment whose recorder is open (from a notification, or the toast's Note button).
     @State private var recording: LogEvent?
+    /// The capture card grown into the chat or journal (Crit.CaptureStyle); the recorder sheet otherwise.
+    @State private var capture: CaptureSession?
+    @AppStorage(Crit.CaptureStyle.key) private var captureStyle = Crit.CaptureStyle.chat
+    @AppStorage(Crit.AutoSelect.key) private var autoSelect = Crit.AutoSelect.ticked
     @State private var quick = QuickRecordCenter.shared
 
     /// The air where the phone is. Now is always here.
@@ -138,6 +142,8 @@ struct NowHomeView: View {
             // Black paper, or linen when chosen; the forecast shifts the paper to warm graphite (above).
             .environment(\.colorScheme, paper == .linen ? .light : .dark)
             .fullScreenCover(item: $recording) { e in QuickRecordView(event: e) }
+            // The capture card, grown (Crit.CaptureStyle chat / journal).
+            .overlay { captureOverlay }
             #if DEBUG
             // Recordings: `-quickRecord` opens the recorder on the latest moment (unstructured, so the first
             // layout pass can't cancel it).
@@ -168,7 +174,7 @@ struct NowHomeView: View {
                 // Fetched by id from the store: a notification can arrive before this view's list has loaded.
                 guard let id, let e = try? context.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.id == id })).first else { return }
                 quick.pending = nil
-                recording = e
+                openCapture(e)
             }
             .sheet(item: $pinDetails) { e in
                 NavigationStack { MomentDetailsView(event: e) }
@@ -177,6 +183,8 @@ struct NowHomeView: View {
             .overlay(alignment: .bottom) {
                 // No tips until onboarding is done: they'd pop over the first-run screens.
                 CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
+                    .opacity(capture == nil ? 1 : 0)
+                    .allowsHitTesting(capture == nil)
             }
             .sheet(isPresented: $showInsights) {
                 // The sparkle grows into the page (a zoom from the button), and the page starts in this sky's colour
@@ -625,7 +633,7 @@ struct NowHomeView: View {
         return NowSky(conditions: s.conditions, weave: s.weave, date: s.date, pollen: s.pollen, probing: $probing,
                       mapID: s.mapID, coordinate: s.coordinate, mapNamespace: s.mapNamespace, captureInk: s.captureInk,
                       onPin: s.onPin, sketch: s.sketch, event: s.event, showsSelf: s.showsSelf, selfEvent: s.selfEvent,
-                      onRecord: { recording = $0 }, makeNote: s.makeNote,
+                      onRecord: { openCapture($0) }, makeNote: s.makeNote,
                       scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil,
                       onRailOpen: { railOpen = $0 })
             .onTapGesture { s.onTap() }
@@ -704,6 +712,24 @@ struct NowHomeView: View {
 
     /// Wildfires are looked up when smoke is live and a place is known.
     private var fireKey: String { "\(liveEvent == .smoke)-\(here?.lat ?? 0)" }
+
+    /// Every "add a note" path lands here: the capture card's mic, the rail's Self panel, a notification, the
+    /// Lock Screen card. The style is the A/B test's arm (docs/design/ab-tests.md).
+    private func openCapture(_ e: LogEvent) {
+        guard captureStyle != .sheet else { recording = e; return }
+        let s = CaptureSession(event: e, chat: captureStyle == .chat, autoSelect: autoSelect == .ticked)
+        withAnimation(reduceMotion ? nil : Theme.lift) { capture = s }
+    }
+
+    @ViewBuilder private var captureOverlay: some View {
+        if let s = capture {
+            CaptureExpanded(session: s, chat: captureStyle == .chat) {
+                withAnimation(reduceMotion ? nil : Theme.smooth) { capture = nil }
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .zIndex(10)
+        }
+    }
 
     /// The verdict's colour under the playhead, for the timeline's chip and line: Now and ahead only
     /// (the past has no verdict).
@@ -902,7 +928,7 @@ struct NowHomeView: View {
             AdviceCard(warning: w, icon: icon, title: title, home: home, ahead: ahead)
         case .capture(let e):
             // The header already says "Rescue logged": no toast. Undo sits on the card for a bit (docs/design/polish-pass.md).
-            CaptureCard(event: e, record: { recording = e }, undo: toast?.id == e.id ? {
+            CaptureCard(event: e, record: { openCapture(e) }, undo: toast?.id == e.id ? {
                 withAnimation(.snappy) { toast = nil }
                 Task { await services.undoPress(e, in: context) }
             } : nil)
@@ -1753,6 +1779,7 @@ struct VerdictHeader: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skySettled) private var settled
     @Environment(\.dynamicTypeSize) private var typeSize
+    @AppStorage("crit.patternMark") private var patternMark = "mark"
     /// Room kept at one end of the top line for controls floating over that corner.
     @Environment(\.cornerInset) private var corner
     /// Tapping a sentence with a sparkle opens the key (the one-time tip, again on demand).
@@ -1780,7 +1807,8 @@ struct VerdictHeader: View {
             // One size, never scaled or cut. The sentence carries at most two sentences; anything after that
             // is a quiet line beneath (the flow, not the type, keeps the header to about three lines).
             let font = Theme.Typeface.sentence(size: typeSize.isAccessibilitySize ? 22 : 26)
-            let (head, tail) = Self.flow(title)
+            // A/B test A4: the sparkle, or the words it stands for.
+            let (head, tail) = Self.flow(patternMark == "words" ? TheRead.spoken(title) : title)
             ZStack(alignment: .topLeading) {
                 Group {
                     if TheRead.Mark.allCases.contains(where: { head.contains($0.rawValue) }) {

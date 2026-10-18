@@ -1,0 +1,342 @@
+import AsthmaCore
+import SwiftUI
+
+/// The capture card, grown: it rises from where the card sat and stops short, so the moment's line and a
+/// band of its sky stay in view above it. Two styles to compare with people (Crit.CaptureStyle, test A1):
+/// a chat that asks one question at a time, and a classic journal with sections. Same session underneath.
+/// Swipe down or tap the sky above to close; anything said is kept.
+struct CaptureExpanded: View {
+    @Bindable var session: CaptureSession
+    let chat: Bool
+    let close: () -> Void
+    @Environment(\.modelContext) private var context
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var drag: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .bottom) {
+                // The sky above stays visible, dimmed; a tap there closes.
+                Color.black.opacity(0.35).ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: finish)
+                VStack(spacing: 0) {
+                    handle
+                    if chat { ChatCapture(session: session) } else { JournalCapture(session: session) }
+                }
+                .frame(height: g.size.height * 0.8)
+                .frame(maxWidth: .infinity)
+                .background(Theme.stage.opacity(0.55))
+                .glassEffect(.regular, in: UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28))
+                .offset(y: max(0, drag))
+                .gesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { drag = $0.translation.height }
+                        .onEnded { v in
+                            if v.translation.height > 120 || v.predictedEndTranslation.height > 260 { finish() }
+                            withAnimation(Theme.snap) { drag = 0 }
+                        }
+                )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        }
+        .ignoresSafeArea(.container, edges: .bottom)
+        .onChange(of: session.live) { _, words in if session.listening { session.hear(words) } }
+    }
+
+    /// The grabber, the moment, and Done.
+    private var handle: some View {
+        VStack(spacing: 10) {
+            Capsule().fill(Color.primary.opacity(0.3)).frame(width: 40, height: 5).padding(.top, 8)
+            HStack(spacing: 8) {
+                MomentTag(moment: session.event.moment)
+                Text(NowTimeline.when(session.event.loggedAt, now: .now))
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                Spacer()
+                Button("Done", action: finish)
+                    .font(.headline)
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .buttonStyle(PressStyle())
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.bottom, 6)
+    }
+
+    private func finish() {
+        if session.listening { Task { await session.stopListening(); keepOrDrop() } } else { keepOrDrop() }
+    }
+
+    private func keepOrDrop() {
+        if session.hasAnything { session.save(context: context) } else { session.discard() }
+        close()
+    }
+}
+
+// MARK: - Chat
+
+/// One question at a time, like an assistant's thread: felt air's question in the serif on the left, your
+/// answer in a bubble on the right (streaming as you speak, the words it's picking up lit), then what it
+/// heard as chips you can untick, then the next question. The questions are a fixed set (`Interview`), never
+/// generated, and it ends after a few. Quick replies sit above the composer for when you can't talk.
+private struct ChatCapture: View {
+    @Bindable var session: CaptureSession
+    @State private var typing = false
+    @State private var typed = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(session.turns) { turn in row(turn).id(turn.id) }
+                        if session.listening || session.writing {
+                            bubble(Text(session.live.isEmpty ? "Listening…" : "").foregroundStyle(Theme.secondaryText), live: true)
+                                .id("live")
+                        }
+                        if session.done {
+                            Text("That's everything. Done keeps it with this moment.")
+                                .font(.subheadline).foregroundStyle(Theme.secondaryText).id("done")
+                        }
+                    }
+                    .padding(.horizontal, 20).padding(.vertical, 12)
+                }
+                .scrollIndicators(.hidden)
+                .onChange(of: session.turns.count) { _, _ in withAnimation(Theme.smooth) { proxy.scrollTo(session.turns.last?.id, anchor: .bottom) } }
+                .onChange(of: session.live) { _, _ in proxy.scrollTo("live", anchor: .bottom) }
+            }
+            replies
+            composer
+        }
+    }
+
+    @ViewBuilder private func row(_ turn: CaptureSession.Turn) -> some View {
+        switch turn {
+        case .question(let q):
+            Text(q.text)
+                .font(Theme.Typeface.sentence(size: 22)).kerning(Theme.serifKerning)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+        case .answer(_, let text):
+            bubble(LiveWords(text: text, ink: Theme.rescueSoft, font: .body, lineLimit: nil))
+        case .heard(_, let tags):
+            // What felt air picked up, like an assistant's tool result: tap one to untick it.
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Heard", systemImage: "sparkles").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+                FlowLayout(spacing: 6) {
+                    ForEach(tags) { t in
+                        CaptureChip(tag: t, on: session.chosen.contains(t), suggested: session.suggested.contains(t), small: true) { session.toggle(t) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func bubble(_ content: some View, live: Bool = false) -> some View {
+        HStack {
+            Spacer(minLength: 48)
+            Group {
+                if live, !session.live.isEmpty {
+                    LiveWords(text: session.live, ink: Theme.rescueSoft, font: .body, lineLimit: nil)
+                } else {
+                    content
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.primary.opacity(live ? 0.14 : 0.1)))
+            .overlay {
+                if live { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.rescueSoft.opacity(0.6), lineWidth: 1.2) }
+            }
+        }
+    }
+
+    /// The current question's replies, big enough to hit mid-flare.
+    @ViewBuilder private var replies: some View {
+        if let q = session.question, !session.listening {
+            let rs = Interview.replies(q)
+            if !rs.isEmpty {
+                FlowLayout(spacing: 8) {
+                    ForEach(rs, id: \.self) { r in
+                        switch r {
+                        case .tag(let t):
+                            CaptureChip(tag: t, on: session.chosen.contains(t), suggested: session.suggested.contains(t)) { session.reply(r) }
+                        default:
+                            CaptureChip(label: r.label, on: false) { session.reply(r) }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20).padding(.vertical, 10)
+            }
+        }
+    }
+
+    /// Mic in the middle; type on the left; send the picked chips on the right.
+    private var composer: some View {
+        HStack(spacing: 16) {
+            Button { typing.toggle(); focused = typing } label: {
+                Image(systemName: "keyboard").font(.title3).frame(width: 48, height: 48)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityLabel("Type instead")
+            if typing {
+                TextField("Type an answer", text: $typed)
+                    .focused($focused)
+                    .submitLabel(.send)
+                    .onSubmit { session.answer(typed); typed = "" }
+                    .padding(.horizontal, 14).frame(height: 48)
+                    .glassEffect(.regular, in: .capsule)
+            } else {
+                Spacer()
+                MicButton(session: session)
+                Spacer()
+            }
+            Button { session.sendPicked() } label: {
+                Image(systemName: "arrow.up").font(.title3.weight(.semibold)).frame(width: 48, height: 48)
+                    .foregroundStyle(session.pickedForQuestion ? Color.black : Theme.secondaryText)
+                    .background(Circle().fill(session.pickedForQuestion ? Color.white : Color.clear))
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(PressStyle())
+            .disabled(!session.pickedForQuestion)
+            .accessibilityLabel("Send the picked answers")
+        }
+        .padding(.horizontal, 20).padding(.top, 4).padding(.bottom, 34)
+    }
+}
+
+// MARK: - Journal
+
+/// The classic journal entry: your words at the top (spoken or typed, the words it's picking up lit), then
+/// the same questions as sections of chips, in the providers' order. Everything visible at once, nothing
+/// asked; you fill what applies.
+private struct JournalCapture: View {
+    @Bindable var session: CaptureSession
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    words
+                    section("How did your breathing feel?", JournalTag.symptoms.filter { $0 != .wokeAtNight && $0 != .activityLimited })
+                    section("Did it…", [.wokeAtNight, .activityLimited, .secondPuff, .betterAfter])
+                    section("What were you doing?", [.exercise, .cooking, .cleaningProducts, .stress, .laughingOrCrying])
+                    section("What was around you?", [.pets, .smoke, .dust, .mold, .coldAir, .strongScents, .coldOrFlu])
+                    section("Anything else?", [.urgentVisit, .oralSteroids])
+                }
+                .padding(.horizontal, 20).padding(.vertical, 12)
+            }
+            .scrollIndicators(.hidden)
+            HStack { Spacer(); MicButton(session: session); Spacer() }
+                .padding(.top, 6).padding(.bottom, 34)
+        }
+    }
+
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("What happened?").font(Theme.Typeface.sentence(size: 22)).kerning(Theme.serifKerning)
+            ZStack(alignment: .topLeading) {
+                if session.listening {
+                    LiveWords(text: session.journalWords.isEmpty ? session.live : session.journalWords + " " + session.live,
+                              ink: Theme.rescueSoft, font: .body, lineLimit: nil)
+                } else {
+                    TextField("Say it or type it. Where you were, what you were doing, how it felt.",
+                              text: $session.journalWords, axis: .vertical)
+                        .font(.body).lineLimit(3...8)
+                        .onChange(of: session.journalWords) { _, w in session.hear(w) }
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.primary.opacity(0.08)))
+            .overlay {
+                if session.listening { RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.rescueSoft.opacity(0.6), lineWidth: 1.2) }
+            }
+        }
+    }
+
+    private func section(_ title: String, _ tags: [JournalTag]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.headline)
+            FlowLayout(spacing: 8) {
+                ForEach(tags) { t in
+                    CaptureChip(tag: t, on: session.chosen.contains(t), suggested: session.suggested.contains(t)) { session.toggle(t) }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Parts
+
+/// Tap to talk, tap to stop. While listening it takes the inhaler's ink and the grain breathes with you.
+private struct MicButton: View {
+    let session: CaptureSession
+
+    var body: some View {
+        Button {
+            Task { if session.listening { await session.stopListening() } else { await session.startListening() } }
+        } label: {
+            ZStack {
+                if session.listening {
+                    VoiceGrain(level: Double(VoiceNotes.shared.level), listening: true, ink: Theme.rescueSoft)
+                        .frame(width: 96, height: 96).allowsHitTesting(false)
+                }
+                Image(systemName: session.writing ? "ellipsis" : session.listening ? "stop.fill" : "mic.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(session.listening ? Color.black : .primary)
+                    .frame(width: 68, height: 68)
+                    .background(Circle().fill(session.listening ? AnyShapeStyle(Theme.rescueSoft) : AnyShapeStyle(Color.clear)))
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+        }
+        .buttonStyle(PressStyle())
+        .disabled(session.writing)
+        .accessibilityLabel(session.listening ? "Stop" : "Talk")
+    }
+}
+
+/// A big tappable chip: 44 pt tall, body text. Symptoms and outcomes in their own ink, triggers plain. A
+/// suggestion (heard, not ticked) has a dashed edge; one that was just heard pops in.
+struct CaptureChip: View {
+    var label: String
+    var kind: JournalTag.Kind?
+    let on: Bool
+    var suggested = false
+    var small = false
+    let action: () -> Void
+
+    init(tag: JournalTag, on: Bool, suggested: Bool = false, small: Bool = false, action: @escaping () -> Void) {
+        label = tag.label; kind = tag.kind; self.on = on; self.suggested = suggested; self.small = small; self.action = action
+    }
+
+    init(label: String, on: Bool, action: @escaping () -> Void) {
+        self.label = label; kind = nil; self.on = on; self.action = action
+    }
+
+    private var ink: Color { kind == .trigger || kind == nil ? .white : Theme.symptom }
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(small ? .subheadline.weight(.medium) : .body.weight(.medium))
+                .foregroundStyle(on ? Color.black : .primary)
+                .padding(.horizontal, small ? 12 : 16)
+                .frame(minHeight: small ? 32 : 44)
+                .background(Capsule().fill(on ? AnyShapeStyle(ink) : AnyShapeStyle(Color.primary.opacity(0.1))))
+                .overlay {
+                    if suggested && !on {
+                        Capsule().strokeBorder(ink.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
+                    } else if kind == .symptom || kind == .outcome, !on {
+                        Capsule().strokeBorder(Theme.symptom.opacity(0.45), lineWidth: 1)
+                    }
+                }
+        }
+        .buttonStyle(PressStyle())
+        .animation(Theme.snap, value: on)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+}

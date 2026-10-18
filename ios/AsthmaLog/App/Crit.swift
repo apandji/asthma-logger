@@ -32,6 +32,28 @@ enum Crit {
         static let key = "crit.insightsEntry"
     }
 
+    /// How a note is captured after a moment (docs/design/ab-tests.md, test A1).
+    enum CaptureStyle: String, CaseIterable, Identifiable {
+        case chat, journal, sheet
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .chat: "Chat: one question at a time"
+            case .journal: "Journal: your words and sections"
+            case .sheet: "Recorder sheet (current)"
+            }
+        }
+        static let key = "crit.captureStyle"
+    }
+
+    /// Whether heard tags are ticked for you or only suggested (test A2).
+    enum AutoSelect: String, CaseIterable, Identifiable {
+        case ticked, suggested
+        var id: String { rawValue }
+        var title: String { self == .ticked ? "Ticked as heard" : "Suggested, you tick" }
+        static let key = "crit.autoSelect"
+    }
+
     enum LogStyle: String, CaseIterable, Identifiable {
         case pull, menu
         var id: String { rawValue }
@@ -159,19 +181,6 @@ enum Crit {
     }
 
     static let performanceHUD = "crit.performanceHUD"
-
-    /// Which home: the Journal (moments and scales) or the sky-first "Now" screen.
-    enum Home: String, CaseIterable, Identifiable {
-        case journal, now
-        var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .journal: "Journal (moments and scales)"
-            case .now: "Now (sky first, one timeline)"
-            }
-        }
-        static let key = "crit.home"
-    }
 
     /// Three gesture models for the Journal, to compare in a crit.
     enum Gestures: String, CaseIterable, Identifiable {

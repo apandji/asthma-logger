@@ -109,9 +109,7 @@ struct DeveloperSettings: View {
     let close: () -> Void
     @Environment(\.modelContext) private var context
     @Environment(ButtonLink.self) private var button
-    @AppStorage(Prefs.logButtons) private var useButtons = false
     @AppStorage(Prefs.useDemoData) private var demo = false
-    @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
     @AppStorage(DataSets.activeKey) private var activeDataSet: String?
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
     @State private var naming = false
@@ -190,15 +188,22 @@ struct DeveloperSettings: View {
                 Picker("Insights state", selection: $critInsightsState) {
                     ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
                 }
-                Picker("Statement type", selection: $statementTypeface) {
-                    ForEach(Theme.Typeface.allCases) { Text($0.title).tag($0.rawValue) }
-                }
-                Toggle("Log with two buttons instead of the +", isOn: $useButtons)
             } header: {
-                Text("Design crit")
+                Text("Demo")
             } footer: {
-                Text("Switch variants live to compare them in a review. Demo pollen is made up and never used for patterns.")
+                Text("For demos and reviews: made-up pollen and air events (never used for patterns), and the Insights ring forced to a state.")
             }
+            #endif
+
+            // The open design decisions, set per session with people (docs/design/ab-tests.md). In every build,
+            // so a TestFlight session can be set up on the phone.
+            Section {
+                NavigationLink("A/B tests") { ABTestsView() }
+            } footer: {
+                Text(ABTest.all.map { "\($0.id) \($0.get())" }.joined(separator: " · "))
+            }
+
+            #if DEBUG
 
             Section {
                 Button("Reset onboarding and button", role: .destructive) {

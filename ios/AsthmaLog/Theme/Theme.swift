@@ -18,6 +18,9 @@ enum Theme {
     static let standard = Color(light: 0x2B8FD6, dark: 0x4FB0F5)  // blue
     /// The same two, softened: for the scan ripple, so they don't compete with the particles' inks.
     static let rescueSoft = Color(light: 0xF2B48C, dark: 0xFFC9A3)
+    /// What you felt (symptom tags and words), kept apart from the rescue orange so "felt" and "rescue"
+    /// never read as the same thing.
+    static let symptom = Color(light: 0xB8434D, dark: 0xF08A92)
     static let standardSoft = Color(light: 0x9CCBEA, dark: 0xB4DCF7)
 
     // Weave inks, one per outdoor factor (docs/design/visual-style.md, textile-direction.md).

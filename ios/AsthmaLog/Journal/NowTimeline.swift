@@ -42,6 +42,17 @@ struct NowTimeline: View {
     private let dayWidth: CGFloat = 64
     private let axis: CGFloat = 46
     private let hourTick = UISelectionFeedbackGenerator()
+    private let momentTap = UIImpactFeedbackGenerator(style: .medium)
+    private let nowThud = UIImpactFeedbackGenerator(style: .heavy)
+
+    /// Where the track can rest (offset space): each moment behind now, now itself, each hour ahead.
+    private var stops: [CGFloat] {
+        var s = moments.filter { $0.loggedAt < now }.map { x($0.loggedAt) }
+        s.append(x(now))
+        var h = Calendar.current.dateInterval(of: .hour, for: now)?.start.addingTimeInterval(3600) ?? now
+        while h <= end { s.append(x(h)); h = h.addingTimeInterval(3600) }
+        return s.sorted()
+    }
     private let height: CGFloat = 86
     private let cal = Calendar.current
 
@@ -62,6 +73,8 @@ struct NowTimeline: View {
 
     var body: some View {
         ScrollView(.horizontal) { track }
+        // The track settles on a stop, never between: your moments behind, now, and the hours ahead.
+        .scrollTargetBehavior(StopSnap(stops: stops, now: x(now)))
         .scrollIndicators(.hidden)
         .scrollPosition($position)
         .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.width } action: { _, w in viewport = w }
@@ -78,12 +91,7 @@ struct NowTimeline: View {
         .sensoryFeedback(.selection, trigger: currentMoment?.id)
         // Ahead, a tick per hour: the forecast's grain under the thumb. A generator kept warm for the whole
         // drag, and fired directly: `.sensoryFeedback` drops ticks that come fast, and the thumb crosses hours fast.
-        .onChange(of: current > now ? Self.hour(current) : nil) { was, next in
-            guard dragging, next != nil, was != nil else { return }
-            hourTick.selectionChanged()
-            hourTick.prepare()
-        }
-        .onChange(of: dragging) { _, d in if d { hourTick.prepare() } }
+        .onChange(of: dragging) { _, d in if d { hourTick.prepare(); momentTap.prepare(); nowThud.prepare() } }
         .onChange(of: currentMoment?.id) { _, id in
             guard id != nil else { return }
             settle = true
@@ -114,14 +122,20 @@ struct NowTimeline: View {
         let next: Date?
         if abs(t.timeIntervalSince(now)) < 15 * 60 { next = nil }
         else if t < now {
-            // Behind now: a moment within reach takes the playhead; between moments it reads the time.
-            if let m = moments.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }),
-               abs(m.loggedAt.timeIntervalSince(t)) < 30 * 60 { next = m.loggedAt } else { next = t }
+            // Behind now the playhead moves moment to moment, never in between: the nearest one reads.
+            next = moments.filter { $0.loggedAt < now }.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) })?.loggedAt
         } else {
             next = Self.hour(t)   // ahead, the forecast is hourly
         }
+        if next != shown {
+            // Three weights: landing on now is the heaviest, a moment behind is firm, an hour ahead is a tick.
+            if next == nil { nowThud.impactOccurred(intensity: 1); nowThud.prepare() }
+            else if next! < now { momentTap.impactOccurred(intensity: 0.8); momentTap.prepare() }
+            else if shown != nil, shown! > now { hourTick.selectionChanged(); hourTick.prepare() }
+            else { hourTick.selectionChanged(); hourTick.prepare() }
+        }
         shown = next
-        let key: Double? = next.map { $0 > now ? $0.timeIntervalSince1970 : $0.timeIntervalSince1970.rounded(toMultipleOf: 300) }
+        let key: Double? = next.map { $0.timeIntervalSince1970 }
         if key != focusKey { focusKey = key; focusTime = next }
     }
 
@@ -130,10 +144,12 @@ struct NowTimeline: View {
         dragging = phase == .interacting || phase == .decelerating
         scrubbing = dragging
         guard phase == .idle, old == .interacting || old == .decelerating else { return }
-        if let m = moments.min(by: { abs(x($0.loggedAt) - centerX) < abs(x($1.loggedAt) - centerX) }),
-           abs(x(m.loggedAt) - centerX) < 10 { go(to: m.loggedAt) }
-        else if abs(x(now) - centerX) < 10 || time(at: centerX) < now { go(to: shown ?? focusTime) }
-        else { focusTime = shown }
+        // Settled by StopSnap on a stop: read it.
+        let t = time(at: centerX)
+        if abs(t.timeIntervalSince(now)) < 15 * 60 { go(to: nil) }
+        else if t < now { go(to: moments.min(by: { abs(x($0.loggedAt) - centerX) < abs(x($1.loggedAt) - centerX) })?.loggedAt) }
+        else { go(to: Self.hour(t)) }
+        shown = focusTime
     }
 
     /// The scrolling content: half a viewport of room, the drawn track with tap targets, half a viewport more.
@@ -342,4 +358,18 @@ struct NowTimeline: View {
 
 private extension Double {
     func rounded(toMultipleOf m: Double) -> Double { (self / m).rounded() * m }
+}
+
+/// Settles the track on the nearest stop: a moment behind now, now, or an hour ahead. Flicks carry to the
+/// stop the scroll would have reached, not past it.
+private struct StopSnap: ScrollTargetBehavior {
+    let stops: [CGFloat]
+    let now: CGFloat
+    func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
+        guard !stops.isEmpty else { return }
+        let x = target.rect.origin.x
+        // Near now, now wins outright (a wider catch than the other stops).
+        if abs(x - now) < 28 { target.rect.origin.x = now; return }
+        if let nearest = stops.min(by: { abs($0 - x) < abs($1 - x) }) { target.rect.origin.x = nearest }
+    }
 }

@@ -31,6 +31,9 @@ struct NowTimeline: View {
     @State private var pastEndArmed = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settle = false
+    /// The chip's two parts, measured, for its one shape.
+    @State private var topSize: CGSize = .zero
+    @State private var bottomSize: CGSize = .zero
 
     @State private var position = ScrollPosition(edge: .trailing)
     @State private var centerX: CGFloat = 0
@@ -231,23 +234,25 @@ struct NowTimeline: View {
             Text(focusTime == nil ? Self.when(now, now: now) : relative(current))
             if behind { Image(systemName: "arrow.uturn.forward").font(.caption2.weight(.bold)) }
         }
-        return VStack(spacing: -5) {
+        return VStack(spacing: 4) {
             if let verdict {
                 Text(verdict)
                     .font(.caption.weight(.semibold)).lineLimit(1)
                     .padding(.horizontal, 12).padding(.vertical, 5)
-                    .background(fill, in: Capsule())
-                    .overlay { if ahead { Capsule().strokeBorder(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) } }
+                    .onGeometryChange(for: CGSize.self) { $0.size } action: { topSize = $0 }
                     .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .bottom)))
-                    .zIndex(1)
             }
             time
                 .font((verdict == nil ? Font.caption : .caption2).weight(.semibold).monospacedDigit())
                 .padding(.horizontal, verdict == nil ? 10 : 9).padding(.vertical, verdict == nil ? 4 : 3)
-                .padding(.top, verdict == nil ? 0 : 3)
-                .background(fill, in: Capsule())
-                // Ahead: a sketch, like the forecast sky (a dashed edge), so it never reads as a record.
-                .overlay { if ahead && verdict == nil { Capsule().strokeBorder(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) } }
+                .onGeometryChange(for: CGSize.self) { $0.size } action: { bottomSize = $0 }
+        }
+        // One shape: the verdict's capsule narrowing into the time's (a reversed trapezoid between them),
+        // or the time's capsule alone. Ahead it's a sketch, a dashed edge, so it never reads as a record.
+        .background {
+            let shape = ChipShape(top: verdict == nil ? .zero : topSize, bottom: bottomSize)
+            shape.fill(fill)
+                .overlay { if ahead { shape.stroke(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) } }
         }
         .tracking(0.2)
         .foregroundStyle(text)
@@ -394,6 +399,31 @@ struct NowTimeline: View {
     private func go(to t: Date?) {
         focusTime = t
         withAnimation(.smooth(duration: 0.35)) { position.scrollTo(x: x(t ?? now)) }
+    }
+}
+
+/// The playhead chip as one outline: a capsule on top (the verdict) narrowing with straight sides into a
+/// capsule beneath (the time), centred. With no top it's the bottom capsule alone.
+nonisolated private struct ChipShape: Shape {
+    var top: CGSize
+    var bottom: CGSize
+
+    func path(in rect: CGRect) -> Path {
+        let cx = rect.midX
+        let b = CGRect(x: cx - bottom.width / 2, y: rect.maxY - bottom.height, width: bottom.width, height: bottom.height)
+        let low = Path(roundedRect: b, cornerRadius: b.height / 2).cgPath
+        guard top.width > 0 else { return Path(low) }
+        let t = CGRect(x: cx - top.width / 2, y: rect.minY, width: top.width, height: top.height)
+        let high = Path(roundedRect: t, cornerRadius: t.height / 2).cgPath
+        // The neck: from just inside the top's rounded ends down to the bottom capsule's middle.
+        var neck = Path()
+        let inset = t.height * 0.35
+        neck.move(to: CGPoint(x: t.minX + inset, y: t.midY))
+        neck.addLine(to: CGPoint(x: t.maxX - inset, y: t.midY))
+        neck.addLine(to: CGPoint(x: b.maxX - b.height * 0.3, y: b.midY))
+        neck.addLine(to: CGPoint(x: b.minX + b.height * 0.3, y: b.midY))
+        neck.closeSubpath()
+        return Path(high.union(neck.cgPath).union(low))
     }
 }
 

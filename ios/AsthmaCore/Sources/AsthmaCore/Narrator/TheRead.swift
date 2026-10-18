@@ -125,6 +125,27 @@ public enum TheRead {
             }
     }
 
+    /// When there's no air reading. Never "nothing stands out": that would imply we looked and saw clean air.
+    /// `reason`: why, when known ("Logged on Apple Watch while your iPhone was away, so there's no air reading.").
+    public static func noReading(_ time: Time, checking: Bool = false, reason: String? = nil) -> String {
+        if checking { return time == .now ? "Checking the air near you…" : "Checking the air for this moment…" }
+        switch time {
+        case .now: return "Couldn't read the air here just now. Logging still works."
+        case .back: return reason ?? "No air reading for this moment."
+        case .ahead(let when): return "\(when): no forecast for here yet."
+        }
+    }
+
+    /// A Note (something said, no inhaler): its own words lead, else its tags.
+    public static func note(_ words: String?, tags: [JournalTag] = []) -> String {
+        let w = (words ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !w.isEmpty else {
+            return tags.isEmpty ? "A note, nothing said." : "A note: " + tags.map { $0.label.lowercased() }.joined(separator: ", ") + "."
+        }
+        let short = w.count > 90 ? String(w.prefix(87)) + "…" : w
+        return "You noted: “\(short)”"
+    }
+
     /// A Standard moment: it's routine, and it isn't part of the comparison.
     public static let standard = "Your daily inhaler. It doesn't count toward patterns."
 

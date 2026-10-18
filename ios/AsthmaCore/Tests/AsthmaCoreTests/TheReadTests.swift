@@ -44,6 +44,26 @@ import Testing
     }
 }
 
+@Suite struct NoReadingTests {
+    @Test func neverImpliesCleanAir() {
+        for t: TheRead.Time in [.now, .back, .ahead("Friday morning")] {
+            let s = TheRead.noReading(t)
+            #expect(!s.lowercased().contains("stand"))
+            #expect(!s.lowercased().contains("clear"))
+        }
+        #expect(TheRead.noReading(.back, reason: "Logged on Apple Watch while your iPhone was away, so there's no air reading.")
+                .hasPrefix("Logged on Apple Watch"))
+        #expect(TheRead.noReading(.now, checking: true) == "Checking the air near you…")
+    }
+
+    @Test func notesLeadWithTheirWords() {
+        #expect(TheRead.note("Tight chest after the bus") == "You noted: “Tight chest after the bus”")
+        #expect(TheRead.note(nil) == "A note, nothing said.")
+        #expect(TheRead.note(nil, tags: [.coldAir, .pets]) == "A note: cold air, pets.")
+        #expect(TheRead.note(String(repeating: "a", count: 120)).hasSuffix("…”"))
+    }
+}
+
 @Suite struct WildfireTests {
     @Test func demoFiresReadLikeTheBoard() throws {
         let lat = 38.6, lon = -90.25

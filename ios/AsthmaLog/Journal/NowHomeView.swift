@@ -382,7 +382,7 @@ struct NowHomeView: View {
                 }
             case .moment(let m):
                 VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
-                              title: m.moment == .maintenance ? TheRead.standard : (standsOut(m) ?? m.pastStatement), verdict: nil, tint: nil,
+                              title: backRead(m), verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
             case .hour(let h):
                 VerdictHeader(place: AnyView(placeField), title: aheadRead(h),
@@ -604,6 +604,8 @@ struct NowHomeView: View {
     /// Now: the event, then what you share with your flare days (counts), or what's high, never the weather.
     private var nowRead: String {
         let air = liveAir
+        // No reading (every source failed, or offline): say so, never "nothing stands out".
+        guard air.conditions?.input.hasAnyValue == true || liveEvent != nil else { return TheRead.noReading(.now) }
         return TheRead.sentence(time: .now, learned: isLearned, event: liveEvent?.advice, fallF: air.conditions?.tempFallF,
                                 fires: fires, shared: shared(air.conditions, at: now),
                                 notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false).map(\.clause))
@@ -690,6 +692,16 @@ struct NowHomeView: View {
         case .capture(let e):
             CaptureCard(event: e) { recording = e }
         }
+    }
+
+    /// Back: Standard is routine; a Note leads with its words; no reading says so (with the reason when known).
+    private func backRead(_ m: LogEvent) -> String {
+        if m.moment == .maintenance { return TheRead.standard }
+        if m.moment == .note { return TheRead.note(m.voiceTranscript, tags: m.tags.sorted()) }
+        guard m.conditions?.input.hasAnyValue == true else {
+            return TheRead.noReading(.back, checking: m.envStatus == .pending, reason: m.envError)
+        }
+        return standsOut(m) ?? m.pastStatement
     }
 
     private func standsOutBody(_ m: LogEvent) -> String? {

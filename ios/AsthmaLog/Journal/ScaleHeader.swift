@@ -108,7 +108,7 @@ struct MomentTag: View {
     var body: some View {
         // The word carries the kind; colour is kept for the air.
         let ink = moment == .rescue ? Color.primary : Theme.secondaryText
-        Text(text ?? (moment == .rescue ? "Rescue" : moment == .maintenance ? "Standard" : "Baseline"))
+        Text(text ?? moment.title)
             // The same size as the place beside it, so the top line reads as one line.
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(ink)

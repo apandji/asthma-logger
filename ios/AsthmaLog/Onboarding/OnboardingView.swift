@@ -79,14 +79,14 @@ struct OnboardingView: View {
                           title: AirWords.sentence(tense: .present, weave: f.weave, conditions: f.conditions),
                           verdict: nil, tint: nil)
             AirReadings(conditions: f.conditions ?? here?.conditions, weave: f.weave,
-                        pollen: DemoPollen.sample(at: f.loggedAt, season: pollenSeason))
+                        pollen: DemoPollen.sample(at: f.loggedAt, season: pollenSeason), named: true)
         } else if step >= .here, here != nil || locating || noLocation {
             VerdictHeader(place: AnyView(placeLine), title: hereTitle, verdict: nil, tint: nil)
             if let here {
                 AirReadings(conditions: here.conditions, weave: WeaveSpec(here.conditions.input),
-                            pollen: DemoPollen.sample(at: .now, season: pollenSeason))
+                            pollen: DemoPollen.sample(at: .now, season: pollenSeason), named: true)
             } else if locating {
-                AirReadings(conditions: nil, weave: WeaveSpec(), pollen: nil, pending: true)
+                AirReadings(conditions: nil, weave: WeaveSpec(), pollen: nil, pending: true, named: true)
             }
         } else {
             VerdictHeader(place: AnyView(Label("felt air", systemImage: "sparkles").font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)),

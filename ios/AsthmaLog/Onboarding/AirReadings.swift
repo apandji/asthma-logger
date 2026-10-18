@@ -11,7 +11,11 @@ struct AirReadings: View {
     let pollen: PollenSample?
     /// Still being fetched: three shimmering placeholders, then the readings arrive one by one.
     var pending = false
+    /// Spell out each family ("Particles & gases · Good"). Onboarding does, to teach the rail's icons; on Now the
+    /// chips are the icon and the word, and holding one spells out its family (hold to read, like the sky).
+    var named = false
     @State private var shown = 0
+    @State private var held: AirProfile.Category?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -19,7 +23,7 @@ struct AirReadings: View {
         FlowLayout(spacing: 8) {
             if pending {
                 ForEach(Self.families, id: \.self) { f in
-                    chip { Image(systemName: Self.icon(f)).font(.caption); Text(f.title) }
+                    chip { Image(systemName: Self.icon(f)).font(.caption); Text(Self.name(f)) }
                         .foregroundStyle(Theme.secondaryText).shimmer(true)
                 }
             } else {
@@ -32,7 +36,6 @@ struct AirReadings: View {
         .font(.subheadline.weight(.medium))
         .frame(minHeight: 32, alignment: .leading)
         .padding(.horizontal, 20)
-        .accessibilityElement(children: .combine)
         .task(id: pending) {
             guard !pending else { shown = 0; return }
             if reduceMotion { shown = 3; return }
@@ -49,24 +52,30 @@ struct AirReadings: View {
         let t = conditions?.best(.temperature)?.value
         let words = [weave.words[.temperature], weave.words[.humidity] == "comfortable" ? nil : weave.words[.humidity]]
             .compactMap { $0?.capitalized }
-        return chip {
+        // The sentence above already says the temperature: the chip gives its words ("Mild · Humid").
+        let value = words.isEmpty ? (t.map { "\(Int($0.rounded()))°" } ?? "No reading") : words.joined(separator: " · ")
+        return chip(.weather) {
             Image(systemName: Icons.weather).font(.caption)
-            // The sentence above already says the temperature: the chip gives its words ("Mild · Humid").
-            Text(AirProfile.Category.weather.title + " · " + (words.isEmpty ? (t.map { "\(Int($0.rounded()))°" } ?? "No reading") : words.joined(separator: " · ")))
+            Text(value)
         }
     }
 
     private func judged(_ family: AirProfile.Category, _ layer: AirLayers.Layer?) -> some View {
-        chip {
+        chip(family) {
             Image(systemName: Self.icon(family)).font(.caption)
             if let layer {
                 let tier = Tier(layer.level)
-                Text("\(family.title) · \(tier.word)")
+                Text(tier.word)
                 Circle().fill(Self.color(tier)).frame(width: 7, height: 7)
             } else {
-                Text("\(family.title) · No reading").foregroundStyle(Theme.secondaryText)
+                Text("No reading").foregroundStyle(Theme.secondaryText)
             }
         }
+    }
+
+    /// The family's name on a chip: "Weather" is enough there (the radar keeps "Weather dynamics").
+    static func name(_ f: AirProfile.Category) -> String {
+        f == .weather ? "Weather" : f.title
     }
 
     /// The rail's order: weather, particles & gases, biologics.
@@ -78,6 +87,45 @@ struct AirReadings: View {
         case .particulates: Icons.particles
         case .biologics: Icons.biologics
         case .exertion: Icons.me
+        }
+    }
+
+    /// A reading's chip: holding it spells out its family while the finger is down. VoiceOver always hears it.
+    /// The name sits small above the value, so a chip is only as wide as its name and the three keep one line.
+    private func chip(_ family: AirProfile.Category, @ViewBuilder _ content: () -> some View) -> some View {
+        let shows = named || held == family
+        return VStack(alignment: .leading, spacing: 1) {
+            if shows {
+                Text(Self.name(family)).font(.caption2.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+            HStack(spacing: 6) { content() }
+        }
+        .modifier(ChipBackground())
+        .onLongPressGesture(minimumDuration: 0.25, maximumDistance: 30) {
+            fold(family)
+        } onPressingChanged: { down in
+            guard down else { fold(family); return }
+            withAnimation(Theme.lift) { held = family }
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(family.title))
+    }
+
+    /// Let go: the name stays a moment, then folds away.
+    private func fold(_ family: AirProfile.Category) {
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            withAnimation(Theme.lift) { if held == family { held = nil } }
+        }
+    }
+
+    private struct ChipBackground: ViewModifier {
+        func body(content: Content) -> some View {
+            content.lineLimit(1)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(Capsule().fill(Color.primary.opacity(0.1)))
         }
     }
 

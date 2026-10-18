@@ -19,7 +19,8 @@ struct MomentsTip: Tip {
 /// TipView while a sentence with a mark is on screen, so it needs no rule of its own.
 struct SparkleTip: Tip {
     var title: Text { Text("\(Image(systemName: "sparkles")) Shows up on your flare days") }
-    var message: Text? { Text("A sparkle after something in the air means it often shows up on your flare days. One sparkle: sometimes. It's what felt air has noticed, not a cause.") }
+    // The marks themselves, as a key, instead of describing them in words.
+    var message: Text? { Text("\(Image(systemName: "sparkles")) often   \(Image(systemName: "sparkle")) sometimes\nWhat felt air has noticed, not a cause.") }
     var options: [any TipOption] { [Tips.MaxDisplayCount(1)] }
 }
 

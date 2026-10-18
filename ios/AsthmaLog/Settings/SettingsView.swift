@@ -85,7 +85,7 @@ struct SettingsView: View {
 
                 // Everything for demos, design reviews and testing: one row, at the very bottom.
                 Section {
-                    NavigationLink("Demo and development") { DeveloperSettings() }
+                    NavigationLink("Demo and development") { DeveloperSettings(close: { dismiss() }) }
                 } footer: {
                     Text("Data sets, demo moments, design switches and prototypes. Not part of felt air.")
                 }
@@ -104,7 +104,9 @@ struct SettingsView: View {
 /// Demo and development: data sets, demo moments, design crit switches, type, onboarding reset, prototypes.
 /// Data sets and demo moments are in every build (for demos on TestFlight); the rest is Debug only.
 struct DeveloperSettings: View {
-    @Environment(\.dismiss) private var dismiss
+    /// Closes the Settings sheet (this page is pushed inside it, so its own `dismiss` would only pop).
+    /// Onboarding is a full-screen cover under the sheet: it can't show until the sheet is gone.
+    let close: () -> Void
     @Environment(\.modelContext) private var context
     @Environment(ButtonLink.self) private var button
     @AppStorage(Prefs.logButtons) private var useButtons = false
@@ -143,7 +145,7 @@ struct DeveloperSettings: View {
             }
             .confirmationDialog("Erase everything and start onboarding?", isPresented: $confirmFresh, titleVisibility: .visible) {
                 Button("Fresh start", role: .destructive) {
-                    dismiss()
+                    close()
                     Task {
                         try? await Task.sleep(for: .milliseconds(450))
                         DataSets.freshStart(context: context, button: button)
@@ -161,7 +163,7 @@ struct DeveloperSettings: View {
                 }
                 Toggle("Show demo data in Insights", isOn: $demo)
                 Button("Play onboarding") {
-                    dismiss()
+                    close()
                     // Let the sheet finish closing, or SwiftUI drops the full-screen onboarding.
                     Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
                 }
@@ -202,7 +204,7 @@ struct DeveloperSettings: View {
                 Button("Reset onboarding and button", role: .destructive) {
                     button.resetForOnboarding()
                     UserDefaults.standard.set(true, forKey: AppTips.resetKey)
-                    dismiss()
+                    close()
                     Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
                 }
             } header: {

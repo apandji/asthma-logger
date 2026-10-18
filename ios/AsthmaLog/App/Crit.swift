@@ -62,7 +62,7 @@ enum Crit {
 
     /// For the presentation: make Now show an air event the real data hasn't produced today.
     enum DemoEvent: String, CaseIterable, Identifiable {
-        case none, storm, smoke, tempDrop
+        case none, storm, smoke, tempDrop, mold
         var id: String { rawValue }
         var title: String {
             switch self {
@@ -70,6 +70,7 @@ enum Crit {
             case .storm: "Thunderstorm with high pollen"
             case .smoke: "Wildfire smoke"
             case .tempDrop: "Sharp temperature drop"
+            case .mold: "Rainy, humid and warm (mold)"
             }
         }
         static let key = "crit.demoEvent"

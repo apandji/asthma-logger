@@ -60,6 +60,14 @@ struct NowHomeView: View {
                 header
                     .opacity(probing ? 0.4 : 1)
                     .animation(Theme.smooth, value: probing)
+                // What to do about the air right now: the event's warning, or the highest pollutant's.
+                if case .now = focus, justNow == nil, let w = nowWarning {
+                    AdviceCard(warning: w.warning, icon: w.icon, home: Self.knownPlace(here?.lat, here?.lon)?.name == "Home",
+                               showHeadline: w.showHeadline)
+                        .padding(.horizontal, 20).padding(.top, 10)
+                        .opacity(probing ? 0.4 : 1)
+                        .transition(.opacity)
+                }
                 // One sky at a time; the next settles in with a breath, not a cut.
                 ZStack { sky.id(focusKey).transition(.opacity) }
                     .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
@@ -261,9 +269,11 @@ struct NowHomeView: View {
         case .storm: return .storm
         case .smoke: return .smoke
         case .tempDrop: return .tempDrop
+        case .mold: return .mold
         case .none: break
         }
         guard let c = here?.conditions else { return nil }
+        if Self.isMold(c) { return .mold }
         let stormy = (c.weatherCondition ?? "").localizedCaseInsensitiveContains("thunder")
         let pollenHigh = DemoPollen.sample(at: now, season: pollenSeason)?.kinds.contains { $0.level == .high } ?? false
         if stormy && pollenHigh { return .storm }
@@ -271,7 +281,7 @@ struct NowHomeView: View {
         return nil
     }
 
-    /// The live air, with the demo event's readings added (labelled Demo) so the particles show it too.
+    /// The live air, with the demo event's readings added so the particles show it too.
     private var liveAir: (conditions: Conditions?, weave: WeaveSpec, pollen: PollenSample?) {
         var c = here?.conditions
         var pollen = DemoPollen.sample(at: now, season: pollenSeason)
@@ -284,6 +294,10 @@ struct NowHomeView: View {
                                                   spatialScale: .region, confidence: .low))
         case .tempDrop:
             c?.tempFallF = 16
+        case .mold:
+            c?.weatherCondition = "Rain"
+            c?.observations.append(EnvObservation(signal: .humidity, value: 88, unit: "%", asOf: now, source: "Demo",
+                                                  spatialScale: .region, confidence: .low))
         case .none: break
         }
         return (c, c.map { WeaveSpec($0.input) } ?? here?.weave ?? WeaveSpec(), pollen)
@@ -307,6 +321,7 @@ struct NowHomeView: View {
             case .storm: return Color(red: 0.2, green: 0.25, blue: 0.33)
             case .smoke: return Color(red: 0.55, green: 0.37, blue: 0.18)
             case .tempDrop: return Color(red: 0.42, green: 0.6, blue: 0.85)
+            case .mold: return Color(red: 0.27, green: 0.36, blue: 0.3)
             }
         }
         let (t, d): (Double?, Date) = switch focus {
@@ -350,7 +365,7 @@ struct NowHomeView: View {
                                   title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
                                   verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
                 } else if let e = liveEvent {
-                    VerdictHeader(place: AnyView(HStack(spacing: 8) { placeLabel(here?.lat, here?.lon, here?.place, current: true); EventChip(event: e, demo: demoEvent != .none) }),
+                    VerdictHeader(place: AnyView(HStack(spacing: 8) { placeLabel(here?.lat, here?.lon, here?.place, current: true); EventChip(event: e) }),
                                   title: e.sentence(temperature: liveAir.conditions?.best(.temperature)?.value, fallF: liveAir.conditions?.tempFallF),
                                   verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
                 } else {
@@ -538,7 +553,43 @@ struct NowHomeView: View {
     /// patterns (more common on flare days than baseline), named in plain words. Never a cause, never a
     /// percent: "Weed pollen was high and it was humid, as on most of your flare days." Nil when the moment
     /// isn't rescue, the gate isn't met, or nothing in it is a pattern; the weather sentence then stands.
+    /// A flare moment's line, led by the event that was going on (facts only: AirAdvice.afterFlare).
     private func standsOut(_ m: LogEvent) -> String? {
+        guard let line = standsOutBody(m) else { return nil }
+        guard let c = m.conditions, let e = Self.event(in: c) else { return line }
+        let fact = AirAdvice.afterFlare(e.advice, fallF: c.tempFallF)
+        return [fact, line.replacingOccurrences(of: "Nothing outdoors stood out this time.", with: "")]
+            .joined(separator: " ").trimmingCharacters(in: .whitespaces)
+    }
+
+    /// An event the moment's own readings show (no demo data: these lines are facts about a real moment).
+    static func event(in c: Conditions) -> AirEvent? {
+        if TempDrop.band(c.tempFallF) == .sharp { return .tempDrop }
+        if isMold(c) { return .mold }
+        return nil
+    }
+
+    static func isMold(_ c: Conditions) -> Bool {
+        AirAdvice.isMoldWeather(condition: c.weatherCondition, humidity: c.best(.humidity)?.value,
+                                temperatureF: c.best(.temperature)?.value)
+    }
+
+    /// Now's warning: the event's, else the pollutant or pollen that's highest (only at a high level).
+    private var nowWarning: (warning: AirAdvice.Warning, icon: String, showHeadline: Bool)? {
+        if let e = liveEvent {
+            // The header already says what's going on; the card leads with the advice.
+            return (AirAdvice.warning(e.advice, fallF: liveAir.conditions?.tempFallF), e.icon, false)
+        }
+        let air = liveAir
+        let layers = AirLayers(conditions: air.conditions, weave: air.weave, pollen: air.pollen)
+        let factors: [String: AirAdvice.Factor] = ["PM2.5": .pm25, "PM10": .pm10, "NO₂": .no2, "Ozone": .ozone,
+                                                   "Tree pollen": .treePollen, "Grass pollen": .grassPollen, "Weed pollen": .weedPollen]
+        guard let top = layers.all.filter({ $0.level == .high }).max(by: { $0.fraction < $1.fraction }),
+              let f = factors[top.name] else { return nil }
+        return (AirAdvice.warning(f), f.rawValue.hasSuffix("Pollen") ? "leaf.fill" : "aqi.medium", true)
+    }
+
+    private func standsOutBody(_ m: LogEvent) -> String? {
         guard m.moment == .rescue else { return nil }
         let learned = forced == .learned || (model.progress?.isMet ?? false)
         // What was in the air in the two days before (the look-back, docs/air-outlook.md): a flare often
@@ -1269,13 +1320,24 @@ extension EnvironmentValues {
 
 /// Weather that changes the air. Shown across the whole field, with a chip in the header.
 enum AirEvent: Equatable {
-    case storm, smoke, tempDrop
+    case storm, smoke, tempDrop, mold
+
+    /// The same event in the advice copy (AsthmaCore/Conditions/AirAdvice.swift).
+    var advice: AirAdvice.Event {
+        switch self {
+        case .storm: .stormPollen
+        case .smoke: .smoke
+        case .tempDrop: .tempDrop
+        case .mold: .mold
+        }
+    }
 
     var icon: String {
         switch self {
         case .storm: "cloud.bolt.rain.fill"
         case .smoke: "smoke.fill"
         case .tempDrop: "thermometer.low"
+        case .mold: "humidity.fill"
         }
     }
 
@@ -1284,6 +1346,7 @@ enum AirEvent: Equatable {
         case .storm: "Storm and pollen"
         case .smoke: "Wildfire smoke"
         case .tempDrop: "Temperature drop"
+        case .mold: "Damp air"
         }
     }
 
@@ -1296,6 +1359,7 @@ enum AirEvent: Equatable {
         case .tempDrop:
             let fall = fallF.map { "\(Int($0.rounded()))° colder than three hours ago." } ?? "and getting colder fast."
             return [t, fall].compactMap { $0 }.joined(separator: ", ")
+        case .mold: return [t, "rainy and humid."].compactMap { $0 }.joined(separator: ", ")
         }
     }
 }
@@ -1313,5 +1377,43 @@ struct EventChip: View {
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.primary.opacity(0.12)))
             .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.primary.opacity(0.3), lineWidth: 0.8))
+    }
+}
+
+/// What to do about the air right now, for where you are: staying put at Home, going out anywhere else (tap
+/// to see the other). The advice is a provocation for provider testing (docs/air-advice.md), so it always
+/// says it isn't medical advice.
+struct AdviceCard: View {
+    let warning: AirAdvice.Warning
+    let icon: String
+    let home: Bool
+    var showHeadline = true
+    @State private var picked: AirAdvice.Context?
+
+    var body: some View {
+        let context = picked ?? .at(home: home)
+        VStack(alignment: .leading, spacing: 8) {
+            if showHeadline {
+                Label(warning.headline, systemImage: icon).font(.subheadline.weight(.semibold))
+            }
+            HStack(spacing: 6) {
+                ForEach(AirAdvice.Context.allCases, id: \.self) { c in
+                    Button { withAnimation(Theme.snap) { picked = c } } label: {
+                        Text(c.label).font(.caption.weight(.semibold))
+                            .foregroundStyle(c == context ? Color.black : .primary)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(Capsule().fill(c == context ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary.opacity(0.12))))
+                    }
+                    .buttonStyle(PressStyle())
+                    .accessibilityAddTraits(c == context ? .isSelected : [])
+                }
+            }
+            Text(warning.advice(context)).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+            Text(AirAdvice.disclaimer).font(.caption2).foregroundStyle(Theme.secondaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 }

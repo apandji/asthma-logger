@@ -126,7 +126,8 @@ public extension AirProfile {
             guard r.nAttacks > 0, r.nBaselines > 0 else { return .notTracked }
             let gap = r.attackRate - r.baselineRate
             if r.gated && gap > 0 { return gap >= 0.3 ? .strong : .some }
-            return r.attacksWith > 0 && gap > 0 ? .leaning : .none
+            // One moment is noise, not a leaning.
+            return r.attacksWith >= 2 && gap > 0 ? .leaning : .none
         }
     }
 

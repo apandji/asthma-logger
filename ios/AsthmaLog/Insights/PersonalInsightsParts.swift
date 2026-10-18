@@ -2,17 +2,23 @@ import AsthmaCore
 import MapKit
 import SwiftUI
 
-/// One category on Personal Insights: its ink, name and status, then each thing inside it with how strongly
-/// it shows up on flare days, and the counts behind it.
+/// One category on Personal Insights. Collapsed: its ink, name and status. Open: what stands out inside it
+/// (a star on what leads your profile), with counts; "See all" lists everything, untracked included.
 struct CategoryCard: View {
     let axis: AirProfile.Axis
     let triggers: [AirProfile.Trigger]
+    /// LiftRow ids behind your archetype.
+    let starred: Set<String>
     let selected: Bool
-    let action: () -> Void
+    let expanded: Bool
+    let toggle: () -> Void
+    @State private var all = false
+
+    private var standingOut: [AirProfile.Trigger] { triggers.filter { [.strong, .some, .leaning].contains($0.strength) } }
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: toggle) {
                 HStack(spacing: 10) {
                     Circle().fill(axis.status == .notTracked ? Theme.secondaryText.opacity(0.4) : AirRadar.ink(axis.category))
                         .frame(width: 10, height: 10)
@@ -20,31 +26,49 @@ struct CategoryCard: View {
                     Spacer(minLength: 8)
                     Text(axis.status.word).font(.caption.weight(.semibold))
                         .foregroundStyle(axis.status == .pattern ? Color.primary : Theme.secondaryText)
+                    Image(systemName: "chevron.down").font(.caption.weight(.bold)).foregroundStyle(Theme.secondaryText)
+                        .rotationEffect(.degrees(expanded ? 180 : 0))
                 }
-                ForEach(triggers) { t in
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(t.name).font(.subheadline)
-                                .foregroundStyle(t.strength == .notTracked || t.strength == .none ? Theme.secondaryText : .primary)
-                            if let r = t.row, [.strong, .some, .leaning].contains(t.strength) {
-                                Text("\(r.attacksWith) of \(r.nAttacks) flare · \(r.baselinesWith) of \(r.nBaselines) baseline")
-                                    .font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
-                            }
-                        }
-                        Spacer(minLength: 8)
-                        Text(t.strength.word).font(.caption.weight(t.strength == .strong ? .bold : .semibold))
-                            .foregroundStyle(t.strength == .strong || t.strength == .some ? Color.primary : Theme.secondaryText)
-                    }
-                    .padding(.leading, 20)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(expanded ? "Collapses" : "Shows what's inside")
+            if expanded {
+                let list = all || standingOut.isEmpty ? triggers : standingOut
+                ForEach(list) { t in item(t) }
+                if triggers.count > standingOut.count && !standingOut.isEmpty {
+                    Button(all ? "Show less" : "See all \(triggers.count)") { withAnimation(Theme.snap) { all.toggle() } }
+                        .font(.subheadline.weight(.semibold)).padding(.leading, 20)
+                        .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(selected ? .regular.tint(AirRadar.ink(axis.category).opacity(0.25)).interactive() : .regular.interactive(),
-                         in: .rect(cornerRadius: 22))
         }
-        .buttonStyle(PressStyle())
-        .foregroundStyle(.primary)
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassEffect(selected ? .regular.tint(AirRadar.ink(axis.category).opacity(0.25)) : .regular, in: .rect(cornerRadius: 22))
+    }
+
+    private func item(_ t: AirProfile.Trigger) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    if let r = t.row, starred.contains(r.id) {
+                        Image(systemName: "star.fill").font(.caption2).foregroundStyle(AirRadar.ink(axis.category))
+                            .accessibilityLabel("Leads your profile")
+                    }
+                    Text(t.name).font(.subheadline)
+                        .foregroundStyle(t.strength == .notTracked || t.strength == .none ? Theme.secondaryText : .primary)
+                }
+                if let r = t.row, [.strong, .some, .leaning].contains(t.strength) {
+                    Text("\(r.attacksWith) of \(r.nAttacks) flare · \(r.baselinesWith) of \(r.nBaselines) baseline")
+                        .font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
+                }
+            }
+            Spacer(minLength: 8)
+            Text(t.strength.word).font(.caption.weight(t.strength == .strong ? .bold : .semibold))
+                .foregroundStyle(t.strength == .strong || t.strength == .some ? Color.primary : Theme.secondaryText)
+        }
+        .padding(.leading, 20)
     }
 }
 

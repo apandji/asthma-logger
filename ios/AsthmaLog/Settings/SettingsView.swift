@@ -15,6 +15,10 @@ struct SettingsView: View {
     @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
     @Environment(\.modelContext) private var context
     @Environment(ButtonLink.self) private var button
+    @AppStorage(DataSets.activeKey) private var activeDataSet: String?
+    @State private var naming = false
+    @State private var setName = "Andrew"
+    @State private var confirmFresh = false
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
     @State private var demoNote: String?
     @State private var tutorialNote: String?
@@ -151,6 +155,35 @@ struct SettingsView: View {
                 }
 
                 #if DEBUG
+                Section {
+                    LabeledContent("Showing", value: activeDataSet ?? "Your own data")
+                    NavigationLink("Load a data set") { DataSetsView() }
+                    Button("Save current as…") { naming = true }
+                    Button("Fresh start", role: .destructive) { confirmFresh = true }
+                } header: {
+                    Text("Data sets (debug)")
+                } footer: {
+                    Text("Load your saved usage or a made-up person (Still learning, Allergen-led, Hot hazy days…). Loading replaces the Journal; your own data is kept as “My data” first. Fresh start erases everything and opens onboarding. iOS keeps permissions you've granted until the app is deleted: to see those prompts again, reinstall with ios/scripts/fresh-install.sh.")
+                }
+                .alert("Save the Journal as", isPresented: $naming) {
+                    TextField("Name", text: $setName)
+                    Button("Save") { DataSets.save(as: setName.trimmingCharacters(in: .whitespaces).isEmpty ? "Saved" : setName, context: context) }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Kept on this phone, not shared anywhere.")
+                }
+                .confirmationDialog("Erase everything and start onboarding?", isPresented: $confirmFresh, titleVisibility: .visible) {
+                    Button("Fresh start", role: .destructive) {
+                        dismiss()
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(450))
+                            DataSets.freshStart(context: context, button: button)
+                        }
+                    }
+                } message: {
+                    Text("Moments, voice notes, settings and the paired button are erased. Your own data is saved as “My data” first, and saved data sets stay.")
+                }
+
                 Section {
                     Button("Reset onboarding and button", role: .destructive) {
                         button.resetForOnboarding()

@@ -15,6 +15,8 @@ struct InsightsView: View {
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @State private var path: [Page] = []
     @State private var picked: AirProfile.Category?
+    /// Open category cards. The leading one starts open.
+    @State private var open: Set<AirProfile.Category>?
     @State private var shown = false
 
     enum Page: Hashable { case history, moments }
@@ -108,7 +110,8 @@ struct InsightsView: View {
         VStack(spacing: 10) {
             Text(a.name).font(Theme.serifTitleLarge).kerning(Theme.serifKerning).multilineTextAlignment(.center)
             Text(a.line).font(.body).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-            Text([a.evidence, "So far, \(basis.prefix(1).lowercased() + basis.dropFirst())"].compactMap { $0 }.joined(separator: " "))
+            // The evidence lives in the categories below (the leads carry a star).
+            Text("So far, \(basis.prefix(1).lowercased() + basis.dropFirst())")
                 .font(.subheadline).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -145,10 +148,19 @@ struct InsightsView: View {
         let axes = p.axes.sorted { (rank[$0.status]!, -$0.strength) < (rank[$1.status]!, -$1.strength) }
         return VStack(alignment: .leading, spacing: 10) {
             Text("What shows up on your flare days").font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+            let arch = Archetype(profile: p, learned: true)
+            let lead = arch.categories.first ?? axes.first?.category
+            let opened = open ?? Set([lead].compactMap { $0 })
             ForEach(axes) { a in
                 CategoryCard(axis: a, triggers: report.map { AirProfile.triggers(a.category, report: $0) } ?? [],
-                             selected: picked == a.category) {
-                    withAnimation(Theme.snap) { picked = picked == a.category ? nil : a.category }
+                             starred: Set(arch.leads.map(\.id)), selected: picked == a.category,
+                             expanded: opened.contains(a.category)) {
+                    withAnimation(Theme.snap) {
+                        var next = opened
+                        if next.contains(a.category) { next.remove(a.category) } else { next.insert(a.category) }
+                        open = next
+                        picked = next.contains(a.category) ? a.category : nil
+                    }
                 }
             }
         }

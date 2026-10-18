@@ -221,7 +221,8 @@ private struct JournalCapture: View {
                 VStack(alignment: .leading, spacing: 22) {
                     words
                     section("How did your breathing feel?", JournalTag.symptoms.filter { $0 != .wokeAtNight && $0 != .activityLimited })
-                    section("Did it…", [.wokeAtNight, .activityLimited, .secondPuff, .betterAfter])
+                    // Puffs are counted where they were logged (LoggedPanel), so no "second puff" chip here.
+                    section("Did it…", [.wokeAtNight, .activityLimited, .betterAfter])
                     section("What were you doing?", [.exercise, .cooking, .cleaningProducts, .stress, .laughingOrCrying])
                     section("What was around you?", [.pets, .smoke, .dust, .mold, .coldAir, .strongScents, .coldOrFlu])
                     section("Anything else?", [.urgentVisit, .oralSteroids])

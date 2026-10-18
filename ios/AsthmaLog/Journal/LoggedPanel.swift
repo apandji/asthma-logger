@@ -35,14 +35,14 @@ struct LoggedPanel: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "mic.fill").font(.title3.weight(.semibold))
-                        Text("What's going on?").font(.subheadline.weight(.semibold))
+                        Text("What happened?").font(.subheadline.weight(.semibold))
                     }
                     .padding(.horizontal, 18).frame(height: 56)
                     .foregroundStyle(.black)
                     .background(Capsule().fill(.white))
                 }
                 .buttonStyle(PressStyle())
-                .accessibilityLabel("Record what's going on")
+                .accessibilityLabel("Say what happened")
             }
         }
         .padding(20)

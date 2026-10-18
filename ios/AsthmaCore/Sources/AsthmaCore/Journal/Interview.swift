@@ -21,7 +21,8 @@ public enum Interview {
             case .symptoms: "How did your breathing feel?"
             case .activity: "Did it keep you from doing something?"
             case .night: "Did it wake you up?"
-            case .reliever: "Did you need a second puff?"
+            // How many puffs is counted where it was logged (the panel); this asks how the reliever worked.
+            case .reliever: "Did the puff help?"
             case .around: "What was around you?"
             case .anythingElse: "Anything else?"
             }
@@ -32,7 +33,7 @@ public enum Interview {
             switch self {
             case .activity: .activityLimited
             case .night: .wokeAtNight
-            case .reliever: .secondPuff
+            case .reliever: .betterAfter
             default: nil
             }
         }
@@ -106,7 +107,7 @@ public enum Interview {
         switch q {
         case .symptoms: [.tag(.wheezing), .tag(.coughing), .tag(.chestTightness), .tag(.shortOfBreath), .none]
         case .activity, .night: [.yes, .no]
-        case .reliever: [.tag(.secondPuff), .tag(.betterAfter), .no]
+        case .reliever: [.yes, .no]
         case .doing: [.tag(.exercise), .tag(.cooking), .tag(.cleaningProducts), .tag(.stress), .tag(.laughingOrCrying)]
         case .place: []
         case .around: [.tag(.pets), .tag(.smoke), .tag(.dust), .tag(.mold), .tag(.coldAir), .tag(.strongScents)]
@@ -131,7 +132,7 @@ public enum Interview {
     static func applies(_ q: Question, _ c: Context) -> Bool {
         switch q {
         case .night: c.isRescue && (c.hour >= 22 || c.hour < 7)
-        case .reliever: c.isRescue && c.puffs <= 1
+        case .reliever: c.isRescue
         case .symptoms, .activity: c.isRescue
         default: true
         }
@@ -143,7 +144,7 @@ public enum Interview {
         case .symptoms: return c.tags.contains { $0.kind == .symptom && $0 != .wokeAtNight && $0 != .activityLimited }
         case .activity: return c.tags.contains(.activityLimited)
         case .night: return c.tags.contains(.wokeAtNight)
-        case .reliever: return c.tags.contains(.secondPuff) || c.tags.contains(.betterAfter)
+        case .reliever: return c.tags.contains(.betterAfter)
         case .doing:
             return c.tags.contains { [.exercise, .cooking, .cleaningProducts, .laughingOrCrying].contains($0) }
                 || doingWords.contains { w.contains($0) }

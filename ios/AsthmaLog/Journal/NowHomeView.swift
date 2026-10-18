@@ -720,10 +720,17 @@ struct NowHomeView: View {
 
     /// Every "add a note" path lands here: the capture card's mic, the rail's Self panel, a notification, the
     /// Lock Screen card. The style is the A/B test's arm (docs/design/ab-tests.md).
-    private func openCapture(_ e: LogEvent) {
+    /// `listen`: opened from a mic, so it starts listening straight away (you already said you'd talk).
+    private func openCapture(_ e: LogEvent, listen: Bool = false) {
         guard captureStyle != .sheet else { recording = e; return }
         let s = CaptureSession(event: e, chat: captureStyle == .chat, autoSelect: autoSelect == .ticked)
         withAnimation(reduceMotion ? nil : Theme.lift) { capture = s }
+        if listen {
+            Task {
+                try? await Task.sleep(for: .milliseconds(450))   // after the capture has risen
+                await s.startListening()
+            }
+        }
     }
 
     /// The + (and Insights), and, just logged, the panel that rises over the timeline and the + like a toast.
@@ -734,7 +741,7 @@ struct NowHomeView: View {
                 .opacity(capture == nil && logged == nil ? 1 : 0)
                 .allowsHitTesting(capture == nil && logged == nil)
             if let e = logged, capture == nil {
-                LoggedPanel(event: e, record: { closeLogged(); openCapture(e) }, close: closeLogged)
+                LoggedPanel(event: e, record: { closeLogged(); openCapture(e, listen: true) }, close: closeLogged)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }

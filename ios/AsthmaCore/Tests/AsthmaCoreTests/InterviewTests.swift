@@ -37,7 +37,7 @@ import Testing
         c.asked += [.symptoms]
         #expect(Interview.next(c) == .activity)
         c.asked += [.activity]
-        // Afternoon: no night question. One puff: ask about a second.
+        // Afternoon: no night question. Then how the reliever worked.
         #expect(Interview.next(c) == .reliever)
     }
 

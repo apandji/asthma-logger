@@ -491,8 +491,9 @@ struct NowHomeView: View {
                               title: backRead(m), verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
             case .hour(let h):
-                VerdictHeader(tagText: "Forecast", place: AnyView(placeField), title: aheadRead(h),
-                              verdict: outlook(at: h.date).text, tint: outlook(at: h.date).tint, onVerdict: { showInsights = true })
+                // No "Forecast" tag and no verdict pill: the dashed chip on the timeline says it's ahead, and
+                // carries the verdict (playheadVerdict).
+                VerdictHeader(place: AnyView(placeField), title: aheadRead(h), verdict: nil, tint: nil)
             }
         }
         .padding(.top, 2)
@@ -685,7 +686,7 @@ struct NowHomeView: View {
         let fadeOut: CGFloat = railLeft ? 0.92 : 0.8
         return NowTimeline(moments: moments, baselines: [],
                            tint: { airTint($0.weave) },
-                           forecastTints: tints, verdictTint: playheadTint,
+                           forecastTints: tints, verdictTint: playheadTint, verdictText: playheadVerdict,
                            hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
             .frame(height: 104)
             // Full width; the + floats over its end, which fades out beneath it. The other end just softens.
@@ -757,6 +758,12 @@ struct NowHomeView: View {
         let t = focusTime ?? now
         guard t >= now - 60 else { return nil }
         return outlook(at: t).tint
+    }
+
+    /// Ahead, the verdict in words grows out of the timeline's chip (it left the header, owner Oct 18).
+    private var playheadVerdict: String? {
+        guard let t = focusTime, t > now, playheadTint != nil else { return nil }
+        return outlook(at: t).text
     }
 
     /// The sky's base colour at the playhead, for Insights to start from.

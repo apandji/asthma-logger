@@ -16,6 +16,9 @@ struct NowTimeline: View {
     var forecastTints: [(Date, Double?)] = []
     /// The verdict's colour for the time under the playhead (Now and ahead), for the chip and the line.
     var verdictTint: Color? = nil
+    /// The verdict in words for a forecast hour ("A bit like your flare days"): the chip grows to say it.
+    /// A label, not a button (Insights has its own).
+    var verdictText: String? = nil
     let hours: [NowHour]
     /// The clock, passed in so the track creeps forward while you watch.
     let now: Date
@@ -210,6 +213,10 @@ struct NowTimeline: View {
         return HStack(spacing: 5) {
             if ahead { Image(systemName: "arrow.uturn.backward").font(.caption2.weight(.bold)) }
             Text(focusTime == nil ? Self.when(now, now: now) : relative(current))
+            if ahead, let verdictText {
+                Text("·").opacity(0.5)
+                Text(verdictText).lineLimit(1).transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+            }
             if behind { Image(systemName: "arrow.uturn.forward").font(.caption2.weight(.bold)) }
         }
         .font(.caption.weight(.semibold).monospacedDigit())
@@ -220,6 +227,7 @@ struct NowTimeline: View {
         // Ahead: a sketch, like the forecast sky (a dashed edge), so it never reads as a record.
         .overlay { if ahead { Capsule().strokeBorder(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) } }
         .animation(Theme.smooth, value: verdictTint)
+        .animation(Theme.smooth, value: verdictText)
         .transaction { if dragging { $0.animation = nil } }   // while scrubbing the chip just changes, no roll
         .animation(Theme.snap, value: focusTime == nil)
         .fixedSize()

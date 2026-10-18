@@ -7,21 +7,44 @@ paper diary asks for) and NICE guideline NG245, evidence review L, "Symptom diar
 US provider works from: NHLBI's NAEPP guidelines (EPR-3 and the 2020 update) and GINA, which the BREATHE
 journal itself cites. For the doctor critique on Friday.
 
-## The US frame: the four control domains
+## The US frame: the four control domains (sources quoted)
 
-Both NAEPP and GINA assess control over the past 2–4 weeks on the same four things, and these are the words
-a US provider uses:
+Both NAEPP and GINA assess control over the past 2–4 weeks on the same four things. The exact wording, so
+the critique can hold us to it:
 
-| Domain (NAEPP / GINA) | Asked as | In felt air |
+**NAEPP EPR-3 (NHLBI, 2007), Figure 3–5c "Assessing asthma control in youths ≥12 years of age and adults",
+p. 77.** Components of control, impairment domain, with the Well-Controlled / Not Well-Controlled / Very
+Poorly Controlled thresholds:
+- *Symptoms*: ≤2 days/week · >2 days/week · throughout the day
+- *Nighttime awakening*: ≤2×/month · 1–3×/week · ≥4×/week
+- *Interference with normal activity*: none · some limitation · extremely limited
+- *Short-acting beta2-agonist use for symptom control (not prevention of EIB)*: ≤2 days/week · >2 days/week ·
+  several times per day
+- *FEV1 or peak flow*: >80% · 60–80% · <60% predicted / personal best
+- *Validated questionnaires*: ATAQ 0 · 1–2 · 3–4; ACQ ≤0.75 · ≥1.5; ACT ≥20 · 16–19 · ≤15
+Risk domain: *exacerbations requiring oral systemic corticosteroids* 0–1/year vs ≥2/year. Note: "Assess
+impairment domain by patient's recall of previous 2–4 weeks."
+
+**GINA 2024, Box 2-2 "GINA assessment of asthma control at clinical visits in adults, adolescents and
+children 6–11 years", p. 37.** Part A, "In the past 4 weeks, has the patient had:"
+- Daytime asthma symptoms more than twice/week?
+- Any night waking due to asthma?
+- SABA reliever for symptoms more than twice/week?
+- Any activity limitation due to asthma?
+Well controlled = none of these; partly controlled = 1–2; uncontrolled = 3–4. Part B lists risk factors for
+exacerbations independent of symptoms, including *exposures: smoking, e-cigarettes, allergen exposure if
+sensitized, air pollution*, and *SABA over-use*. Footnote: "There are no validated tools for assessing
+long-term symptom control, i.e., over periods longer than 4 weeks."
+
+| Domain (NAEPP / GINA) | How a patient says it | In felt air |
 |---|---|---|
 | **Symptoms** (daytime) | wheezing, coughing, chest tightness, shortness of breath | symptom tags (new) |
-| **Nighttime awakenings** | "woke up at night because of asthma" | `wokeAtNight` (new) |
-| **Interference with normal activity** | "kept you from doing something" | `activityLimited` (new) |
-| **Quick-relief inhaler use** (SABA, for symptoms) | puffs, how often | automatic from the press |
+| **Nighttime awakenings** / night waking | "it woke me up" | `wokeAtNight` (new) |
+| **Interference with normal activity** / activity limitation | "it kept me from doing something" | `activityLimited` (new) |
+| **SABA use for symptom control** / reliever for symptoms | puffs, how often | automatic from the press |
 
-NAEPP's fifth and sixth are lung function (peak flow / FEV1) and validated questionnaires (ACT, ACQ, ATAQ),
-both out of scope for a voice note. "Quick-relief" is NAEPP's term for what we call Rescue; both are fine on
-screen, and providers hear "rescue inhaler" every day.
+Lung function and the questionnaires are out of scope for a voice note. NAEPP says "short-acting
+beta2-agonist", GINA "SABA reliever", patients say "rescue inhaler"; Rescue stays on screen.
 
 ## What the evidence says, in one paragraph
 
@@ -57,6 +80,30 @@ reliever use > 2×/week, refills > 2×/year, oral steroids > 2×/year).
 | Peak flow | not captured | out of scope for voice; a HealthKit read later |
 | Controller taken (AM/PM) | Standard moments | none |
 | "Rules of 2" | never shown (no counts on screen) | by design; the export has the data |
+
+## The evidence our engine stands on (for "does inhaler use track the air at all?")
+
+- **Su JG, Barrett MA, Combs V, Henderson K.** Identifying impacts of air pollution on subacute asthma
+  symptoms using digital medication sensors. *Int J Epidemiol* 2022;51(1):213–224. PMID 34664072. 1,039
+  people in Jefferson County, KY; 286,980 sensor-logged rescue uses over 193,697 patient-days, each tied to
+  the nearest monitor's SO2, NO2, PM2.5 and O3. An interquartile rise in each pollutant raised rescue use per
+  person per day; "time-lagged exposure effects of 0–3 days were observed." This is the population-level
+  version of what felt air does per person, and the lag finding is why our frames carry a 48-hour look-back.
+- **Su JG et al.** Health effects of air pollution on respiratory symptoms: a longitudinal study using digital
+  health sensors. *Environ Int* 2024;189:108810. PMID 38875815. 456,779 SABA puffs, 3,386 people, California,
+  2012–2019: daily NO2, PM2.5 and O3 each raised daily SABA use.
+- **Barrett M, Combs V, Su JG, Henderson K.** AIR Louisville: addressing asthma with technology,
+  crowdsourcing, cross-sector collaboration, and policy. *Health Aff* 2018;37(4):525–534. PMID 29608361.
+  The programme behind the data: inhaler sensors, where and when, fed back to the person and to city policy.
+
+## The method our journal uses (capture at the moment, not recall)
+
+- **Shiffman S, Stone AA, Hufford MR.** Ecological momentary assessment. *Annu Rev Clin Psychol*
+  2008;4:1–32. PMID 18509902. "Assessment … typically relies on global retrospective self-reports … which are
+  limited by recall bias"; EMA "involves repeated sampling of subjects' current behaviors and experiences in
+  real time, in subjects' natural environments" and "aims to minimize recall bias." A note that starts when
+  the inhaler does is EMA; a daily diary is the retrospective report both NICE's lay members and Shiffman
+  warn about.
 
 ## The proposal
 

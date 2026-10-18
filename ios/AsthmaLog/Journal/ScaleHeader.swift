@@ -113,8 +113,8 @@ struct MomentTag: View {
             .foregroundStyle(ink)
             .lineLimit(1).fixedSize()
             // One width for every kind, so the tag doesn't resize as you scrub between moments; a custom
-            // word ("First capture") gets what it needs.
-            .frame(minWidth: 84)
+            // word ("Forecast", "First capture") gets only what it needs.
+            .frame(minWidth: text == nil ? 84 : 0)
             .padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(ink.opacity(0.12)))
             .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(ink.opacity(0.35), lineWidth: 0.8))

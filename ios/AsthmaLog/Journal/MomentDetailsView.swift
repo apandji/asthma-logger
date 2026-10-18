@@ -105,7 +105,8 @@ struct MomentDetailsView: View {
             .padding(.bottom, 40)
         }
         .background { AmbientField(weave: event.weave, temperatureF: event.conditions?.best(.temperature)?.value, date: event.loggedAt, conditions: event.conditions, pollen: pollen).ignoresSafeArea() }
-        .navigationTitle(event.moment.title)
+        // A live snapshot (not saved) is Now, not a baseline.
+        .navigationTitle(event.modelContext == nil && event.moment == .okay ? "Now" : event.moment.title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadAround() }
     }

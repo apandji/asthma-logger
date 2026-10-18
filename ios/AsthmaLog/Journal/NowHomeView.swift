@@ -49,6 +49,7 @@ struct NowHomeView: View {
     @State private var railOpen = false
     /// The pill button being held, for its label.
     @State private var held: String?
+    @State private var labelWidth: CGFloat = 80
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var showSettings = false
@@ -444,9 +445,9 @@ struct NowHomeView: View {
                     .padding(.horizontal, 12).padding(.vertical, 7)
                     .glassEffect(.regular, in: .capsule)
                     .fixedSize()
-                    // Wholly beside the pill: its near edge 10 pt off the pill's edge, whatever its width.
-                    .alignmentGuide(railLeft ? .trailing : .leading) { d in railLeft ? d[.leading] - 10 : d[.trailing] + 10 }
-                    .offset(y: held == "Insights" ? -21 : 21)
+                    // Wholly beside the pill, whatever its width: its near edge 10 pt off the pill's edge.
+                    .background { GeometryReader { g in Color.clear.onAppear { labelWidth = g.size.width } } }
+                    .offset(x: railLeft ? labelWidth + 10 : -(labelWidth + 10), y: held == "Insights" ? -21 : 21)
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                     .allowsHitTesting(false)
             }
@@ -665,7 +666,8 @@ struct NowHomeView: View {
                              mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() },
                              event: liveEvent, showsSelf: true, selfEvent: recentInhalerMoment,
                              makeNote: { await services.log(.note, in: context, writeToHealth: false) },
-                             onTap: { openDay = Calendar.current.startOfDay(for: now) })
+                             // A tap on Now reads the air in full (the same details a moment opens), not an empty day.
+                             onTap: { pinDetails = liveSnapshot() })
         case .moment(let m):
             return SkyInputs(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
                              pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason),

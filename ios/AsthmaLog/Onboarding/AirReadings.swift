@@ -1,9 +1,10 @@
 import AsthmaCore
 import SwiftUI
 
-/// The air at a moment, in one glance under the sentence: the weather (a reading, with its word), then the
-/// air and pollen, each in Good / OK / Not good with the level's colour. The worst item of each group stands
-/// for it; a group with no reading says so rather than looking clean.
+/// The air at a moment, in one glance under the sentence, in the three families the rail and the Insights radar
+/// use (`AirProfile.Category`), in the rail's order and with its icons: weather dynamics (its words, never a
+/// judgement), then particles & gases and biologics, each in Good / OK / Not good with the level's colour. The
+/// worst layer of a family stands for it; a family with no reading says so rather than looking clean.
 struct AirReadings: View {
     let conditions: Conditions?
     let weave: WeaveSpec
@@ -15,16 +16,17 @@ struct AirReadings: View {
 
     var body: some View {
         let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen)
-        HStack(spacing: 8) {
+        FlowLayout(spacing: 8) {
             if pending {
-                ForEach(["Weather", "Air", "Pollen"], id: \.self) { name in
-                    chip { Text(name).foregroundStyle(Theme.secondaryText) }.shimmer(true)
+                ForEach(Self.families, id: \.self) { f in
+                    chip { Image(systemName: Self.icon(f)).font(.caption); Text(f.title) }
+                        .foregroundStyle(Theme.secondaryText).shimmer(true)
                 }
             } else {
                 // The magic moment: each reading lands in turn, with a tick, as if just fetched.
                 if shown > 0 { weather.transition(.scale(scale: 0.8).combined(with: .opacity)) }
-                if shown > 1 { judged("Air", worst([layers.pm25, layers.pm10, layers.no2, layers.ozone])).transition(.scale(scale: 0.8).combined(with: .opacity)) }
-                if shown > 2 { judged("Pollen", worst([layers.tree, layers.grass, layers.weed])).transition(.scale(scale: 0.8).combined(with: .opacity)) }
+                if shown > 1 { judged(.particulates, worst([layers.pm25, layers.pm10, layers.no2, layers.ozone])).transition(.scale(scale: 0.8).combined(with: .opacity)) }
+                if shown > 2 { judged(.biologics, worst([layers.tree, layers.grass, layers.weed])).transition(.scale(scale: 0.8).combined(with: .opacity)) }
             }
         }
         .font(.subheadline.weight(.medium))
@@ -50,19 +52,32 @@ struct AirReadings: View {
         return chip {
             Image(systemName: Icons.weather).font(.caption)
             // The sentence above already says the temperature: the chip gives its words ("Mild · Humid").
-            Text(words.isEmpty ? (t.map { "\(Int($0.rounded()))°" } ?? "No reading") : words.joined(separator: " · "))
+            Text(AirProfile.Category.weather.title + " · " + (words.isEmpty ? (t.map { "\(Int($0.rounded()))°" } ?? "No reading") : words.joined(separator: " · ")))
         }
     }
 
-    private func judged(_ name: String, _ layer: AirLayers.Layer?) -> some View {
+    private func judged(_ family: AirProfile.Category, _ layer: AirLayers.Layer?) -> some View {
         chip {
+            Image(systemName: Self.icon(family)).font(.caption)
             if let layer {
                 let tier = Tier(layer.level)
+                Text("\(family.title) · \(tier.word)")
                 Circle().fill(Self.color(tier)).frame(width: 7, height: 7)
-                Text("\(name) · \(tier.word)")
             } else {
-                Text("\(name) · No reading").foregroundStyle(Theme.secondaryText)
+                Text("\(family.title) · No reading").foregroundStyle(Theme.secondaryText)
             }
+        }
+    }
+
+    /// The rail's order: weather, particles & gases, biologics.
+    static let families: [AirProfile.Category] = [.weather, .particulates, .biologics]
+
+    static func icon(_ f: AirProfile.Category) -> String {
+        switch f {
+        case .weather: Icons.weather
+        case .particulates: Icons.particles
+        case .biologics: Icons.biologics
+        case .exertion: Icons.me
         }
     }
 

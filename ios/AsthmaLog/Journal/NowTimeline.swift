@@ -43,6 +43,9 @@ struct NowTimeline: View {
     private var ink: Color { scheme == .light ? Color(red: 0.12, green: 0.1, blue: 0.09) : .white }
 
     private let dayWidth: CGFloat = 64
+    /// Ahead of now the track is this many times wider (16 pt an hour): the forecast is read hour by hour,
+    /// and at the past's scale an hour was under 3 pt, too fine to land on (owner, Oct 18).
+    private let aheadScale: CGFloat = 6
     private let axis: CGFloat = 46
     private let hourTick = UISelectionFeedbackGenerator()
     private let momentTap = UIImpactFeedbackGenerator(style: .medium)
@@ -63,9 +66,18 @@ struct NowTimeline: View {
         cal.startOfDay(for: min(moments.first?.loggedAt ?? now, cal.date(byAdding: .day, value: -3, to: now)!))
     }
     private var end: Date { cal.date(byAdding: .day, value: 2, to: cal.startOfDay(for: now))! }
-    private var contentWidth: CGFloat { CGFloat(end.timeIntervalSince(start) / 86_400) * dayWidth }
-    private func x(_ d: Date) -> CGFloat { CGFloat(d.timeIntervalSince(start) / 86_400) * dayWidth }
-    private func time(at x: CGFloat) -> Date { start.addingTimeInterval(Double(x / dayWidth) * 86_400) }
+    private var contentWidth: CGFloat { x(end) }
+    /// Behind now: a day is `dayWidth`. Ahead: `aheadScale` times that.
+    private func x(_ d: Date) -> CGFloat {
+        let n = CGFloat(now.timeIntervalSince(start) / 86_400) * dayWidth
+        guard d > now else { return CGFloat(d.timeIntervalSince(start) / 86_400) * dayWidth }
+        return n + CGFloat(d.timeIntervalSince(now) / 86_400) * dayWidth * aheadScale
+    }
+    private func time(at x: CGFloat) -> Date {
+        let n = CGFloat(now.timeIntervalSince(start) / 86_400) * dayWidth
+        guard x > n else { return start.addingTimeInterval(Double(x / dayWidth) * 86_400) }
+        return now.addingTimeInterval(Double((x - n) / (dayWidth * aheadScale)) * 86_400)
+    }
     private var current: Date { (dragging ? shown : focusTime) ?? now }
     /// What the chip shows while dragging (every frame); `focusTime` lags it on purpose (see the scroll handler).
     @State private var shown: Date?
@@ -254,17 +266,20 @@ struct NowTimeline: View {
         // red matches your flare days), so the track reads like the pill. While still learning it's a
         // faint band in the ink, so the day's shape shows.
         for (n, (date, v)) in forecastTints.enumerated() where date >= now {
-            // One bar per hour with a hairline gap: the forecast is hourly, and the track says so.
-            let w = max(1, dayWidth / 24 - 1.2)
-            // Each hour breathes on its own phase, more the further out it is: not yet known.
+            // Four thin bars per hour (the hour is wide now), one colour per hour: the texture of the past's
+            // scale, the hour still reading as one slot.
+            let slot = dayWidth * aheadScale / 24
             let far = min(1, date.timeIntervalSince(now) / (48 * 3600))
-            let wave: Double = sin(flux * 1.6 + Double(n) * 0.55)
-            let h: CGFloat = 8 + CGFloat((2 + 4 * far) * wave)
             let tint: Color = Self.verdictColor(v, ink: ink)
             let base: Double = v == nil ? 0.1 : 0.7
-            let alpha: Double = base * (0.8 + 0.2 * (0.5 + 0.5 * wave))
-            let rect = CGRect(x: x(date), y: axis - h / 2, width: w, height: h)
-            ctx.fill(Path(rect), with: .color(tint.opacity(alpha)))
+            for k in 0..<4 {
+                // Each bar breathes on its own phase, more the further out it is: not yet known.
+                let wave: Double = sin(flux * 1.6 + Double(n * 4 + k) * 0.55)
+                let h: CGFloat = 8 + CGFloat((2 + 4 * far) * wave)
+                let alpha: Double = base * (0.8 + 0.2 * (0.5 + 0.5 * wave))
+                let rect = CGRect(x: x(date) + CGFloat(k) * slot / 4, y: axis - h / 2, width: max(1, slot / 4 - 1.4), height: h)
+                ctx.fill(Path(rect), with: .color(tint.opacity(alpha)))
+            }
         }
         // Moments: a dot on the axis per moment, in the colour of the air that day, so they never
         // read as the hour marks. Rescue is the bigger dot, standard smaller, a note the smallest.
@@ -314,7 +329,7 @@ struct NowTimeline: View {
                 let label = cal.isDateInToday(t) ? "Today" : cal.isDateInTomorrow(t) ? "Tomorrow"
                     : t.formatted(.dateTime.weekday(.abbreviated).day())
                 ctx.draw(Text(label).font(.caption2.weight(.medium)).tracking(0.3).foregroundStyle(ink.opacity(t > now ? 0.3 : 0.45)),
-                         at: CGPoint(x: x(t) + dayWidth / 2, y: axis + 26))
+                         at: CGPoint(x: (x(t) + x(t.addingTimeInterval(86_400))) / 2, y: axis + 26))
             }
             t = cal.date(byAdding: .hour, value: 6, to: t)!
         }
@@ -379,8 +394,8 @@ private struct StopSnap: ScrollTargetBehavior {
     func updateTarget(_ target: inout ScrollTarget, context: TargetContext) {
         guard !stops.isEmpty else { return }
         let x = target.rect.origin.x
-        // Near now, now wins outright (a wider catch than the other stops).
-        if abs(x - now) < 28 { target.rect.origin.x = now; return }
+        // Near now, now wins (a little wider than half an hour ahead, 8 pt, so +1 h stays reachable).
+        if abs(x - now) < 6 { target.rect.origin.x = now; return }
         if let nearest = stops.min(by: { abs($0 - x) < abs($1 - x) }) { target.rect.origin.x = nearest }
     }
 }

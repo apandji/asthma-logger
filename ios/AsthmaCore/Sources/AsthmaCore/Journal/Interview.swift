@@ -11,14 +11,15 @@ import Foundation
 /// Both capture styles use it: chat asks one at a time; the classic journal shows them as sections.
 public enum Interview {
     public enum Question: String, Sendable, CaseIterable, Identifiable {
-        case doing, place, symptoms, activity, night, reliever, around, anythingElse
+        case doing, place, symptoms, exposure, activity, night, reliever, around, anythingElse
         public var id: String { rawValue }
 
         public var text: String {
             switch self {
             case .doing: "What were you doing?"
             case .place: "Where were you?"
-            case .symptoms: "How did your breathing feel?"
+            case .symptoms: "Did you experience any of the following symptoms?"
+            case .exposure: "Were you outside?"
             case .activity: "Did it keep you from doing something?"
             case .night: "Did it wake you up?"
             // How many puffs is counted where it was logged (the panel); this asks how the reliever worked.
@@ -26,6 +27,16 @@ public enum Interview {
             case .around: "What was around you?"
             case .anythingElse: "Anything else?"
             }
+        }
+
+        /// The question as asked about this moment. We know where you were, so "Where were you?" would sound
+        /// like we don't: it names the place and time instead ("What can you tell me about University City at
+        /// 4:52 PM?"). Without a place it falls back to the plain question.
+        /// The exposure question states what was elevated first ("Tree pollen was high around then. …").
+        public func text(place: String?, time: String?, elevated: Elevated? = nil) -> String {
+            if self == .exposure, let elevated { return elevated.question }
+            guard self == .place, let place, !place.isEmpty else { return text }
+            return "What can you tell me about \(place)" + (time.map { " at \($0)" } ?? "") + "?"
         }
 
         /// The tag a plain "yes" means, for the yes/no questions.
@@ -72,8 +83,54 @@ public enum Interview {
         /// A rescue moment (symptom questions only make sense there).
         public var isRescue: Bool
 
-        public init(asked: [Question] = [], tags: Set<JournalTag> = [], words: String = "", hour: Int, puffs: Int, isRescue: Bool) {
+        /// What was elevated in the outdoor air at the moment, most notable first (`Elevated`).
+        public var elevated: [Elevated]
+
+        public init(asked: [Question] = [], tags: Set<JournalTag> = [], words: String = "", hour: Int, puffs: Int, isRescue: Bool,
+                    elevated: [Elevated] = []) {
             self.asked = asked; self.tags = tags; self.words = words; self.hour = hour; self.puffs = puffs; self.isRescue = isRescue
+            self.elevated = elevated
+        }
+    }
+
+    /// Something in the outdoor air at the moment that clinical guidance says to ask about. Thresholds are the
+    /// guidance's own, not ours: pollutants at the EPA's "Unhealthy for Sensitive Groups" (AQI 101+, PM2.5 over
+    /// 35.4 µg/m³, ozone over 70 ppb: people with asthma should cut back on outdoor exertion), pollen at
+    /// "high" (Ambee's risk bands), cold air (a common bronchoconstriction trigger, NAEPP EPR-3, below 40 °F),
+    /// heat (the National Weather Service's heat advisory range, 90 °F and up).
+    /// The question states the fact, then asks about exposure. Never a cause: "Tree pollen was high around
+    /// then. Were you outside?", not "Tree pollen set this off".
+    public enum Elevated: String, Sendable, CaseIterable {
+        case particles, ozone, treePollen, grassPollen, weedPollen, cold, heat
+
+        /// The fact, then the exposure question.
+        public var question: String {
+            switch self {
+            case .particles: "Fine particles were high around then. Were you outside?"
+            case .ozone: "Ozone was high around then. Were you active outdoors?"
+            case .treePollen: "Tree pollen was high around then. Were you outside?"
+            case .grassPollen: "Grass pollen was high around then. Were you outside?"
+            case .weedPollen: "Weed pollen was high around then. Were you outside?"
+            case .cold: "It was cold out. Were you breathing cold air?"
+            case .heat: "It was hot out. Were you active outdoors?"
+            }
+        }
+
+        /// What a "yes" says: a trigger to tick, and whether you were outdoors (it corrects the indoor guess).
+        public var yes: (tag: JournalTag?, outdoors: Bool) {
+            switch self {
+            case .cold: (.coldAir, true)
+            case .ozone, .heat: (.exercise, true)
+            case .particles, .treePollen, .grassPollen, .weedPollen: (nil, true)
+            }
+        }
+
+        /// A "no" to "were you outside?" says indoors; to the cold or activity questions it says nothing more.
+        public var noMeansIndoors: Bool {
+            switch self {
+            case .particles, .treePollen, .grassPollen, .weedPollen: true
+            case .ozone, .heat, .cold: false
+            }
         }
     }
 
@@ -94,7 +151,7 @@ public enum Interview {
         if c.asked.contains(.anythingElse) { return nil }
         if c.asked.filter({ $0 != .anythingElse }).count >= limit { return .anythingElse }
         let order: [Question] = c.isRescue
-            ? [.symptoms, .activity, .night, .reliever, .doing, .place, .around]
+            ? [.symptoms, .exposure, .activity, .night, .reliever, .doing, .place, .around]
             : [.doing, .place, .around, .symptoms]
         for q in order where !c.asked.contains(q) && applies(q, c) && !covered(q, c) {
             return q
@@ -106,7 +163,7 @@ public enum Interview {
     public static func replies(_ q: Question) -> [Reply] {
         switch q {
         case .symptoms: [.tag(.wheezing), .tag(.coughing), .tag(.chestTightness), .tag(.shortOfBreath), .none]
-        case .activity, .night: [.yes, .no]
+        case .activity, .night, .exposure: [.yes, .no]
         case .reliever: [.yes, .no]
         case .doing: [.tag(.exercise), .tag(.cooking), .tag(.cleaningProducts), .tag(.stress), .tag(.laughingOrCrying)]
         case .place: []
@@ -132,6 +189,7 @@ public enum Interview {
     static func applies(_ q: Question, _ c: Context) -> Bool {
         switch q {
         case .night: c.isRescue && (c.hour >= 22 || c.hour < 7)
+        case .exposure: c.isRescue && !c.elevated.isEmpty
         case .reliever: c.isRescue
         case .symptoms, .activity: c.isRescue
         default: true
@@ -149,6 +207,9 @@ public enum Interview {
             return c.tags.contains { [.exercise, .cooking, .cleaningProducts, .laughingOrCrying].contains($0) }
                 || doingWords.contains { w.contains($0) }
         case .place: return placeWords.contains { w.contains($0) }
+        case .exposure:
+            if c.elevated.first == .cold, c.tags.contains(.coldAir) { return true }
+            return [" outside", " outdoors", " inside", " indoors"].contains { w.contains($0) }
         case .around: return c.tags.contains { $0.kind == .trigger && ![.exercise, .stress, .laughingOrCrying].contains($0) }
         case .anythingElse: return false
         }

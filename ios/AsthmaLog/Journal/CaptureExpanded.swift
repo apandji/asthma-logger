@@ -128,9 +128,9 @@ private struct ChatCapture: View {
         case .question(let q):
             Group {
                 if current {
-                    Text(q.text).font(Theme.Typeface.sentence(size: 22)).kerning(Theme.serifKerning)
+                    Text(session.text(q)).font(Theme.Typeface.sentence(size: 22)).kerning(Theme.serifKerning)
                 } else {
-                    Text(q.text).font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                    Text(session.text(q)).font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -195,38 +195,73 @@ private struct ChatCapture: View {
         }
     }
 
+    private var canSendTyped: Bool { typing && !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var canSend: Bool { canSendTyped || session.pickedForQuestion }
+
+    private func sendTyped() {
+        guard canSendTyped else { return }
+        session.answer(typed)
+        typed = ""
+    }
+
+    private func switchMode() {
+        if typing {
+            focused = false
+            withAnimation(Theme.smooth) { typing = false }
+            Task { await session.startListening() }
+        } else if session.listening {
+            Task {
+                await session.stopListening(toType: true)
+                typed = [typed, session.draft ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
+                session.draft = nil
+                withAnimation(Theme.smooth) { typing = true }
+                focused = true
+            }
+        } else {
+            withAnimation(Theme.smooth) { typing = true }
+            focused = true
+        }
+    }
+
     /// Mic in the middle; type on the left; send the picked chips on the right.
     private var composer: some View {
-        HStack(spacing: 16) {
-            Button { typing.toggle(); focused = typing } label: {
-                Image(systemName: "keyboard").font(.title3).frame(width: 48, height: 48)
+        HStack(alignment: .bottom, spacing: 16) {
+            // Speaking ⇄ typing in one tap: mid-sentence, what you said so far becomes the text to edit; while
+            // typing, the same button is the mic again.
+            Button { switchMode() } label: {
+                Image(systemName: typing ? "mic" : "keyboard").font(.title3).frame(width: 48, height: 48)
+                    .contentTransition(.symbolEffect(.replace))
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(PressStyle())
-            .accessibilityLabel("Type instead")
+            .accessibilityLabel(typing ? "Speak instead" : "Type instead")
             if typing {
-                TextField("Type an answer", text: $typed)
+                // Grows to a few lines: an answer switched over from speaking is often a sentence or two.
+                TextField("Type an answer", text: $typed, axis: .vertical)
+                    .lineLimit(1...4)
                     .focused($focused)
                     .submitLabel(.send)
-                    .onSubmit { session.answer(typed); typed = "" }
-                    .padding(.horizontal, 14).frame(height: 48)
-                    .glassEffect(.regular, in: .capsule)
+                    .onSubmit(sendTyped)
+                    .padding(.horizontal, 14).padding(.vertical, 12).frame(minHeight: 48)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 24))
             } else {
                 Spacer()
                 MicButton(session: session)
                 Spacer()
             }
-            Button { session.sendPicked() } label: {
+            Button { canSendTyped ? sendTyped() : session.sendPicked() } label: {
                 Image(systemName: "arrow.up").font(.title3.weight(.semibold)).frame(width: 48, height: 48)
-                    .foregroundStyle(session.pickedForQuestion ? Color.black : Theme.secondaryText)
-                    .background(Circle().fill(session.pickedForQuestion ? Color.white : Color.clear))
+                    .foregroundStyle(canSend ? Color.black : Theme.secondaryText)
+                    .background(Circle().fill(canSend ? Color.white : Color.clear))
                     .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(PressStyle())
-            .disabled(!session.pickedForQuestion)
-            .accessibilityLabel("Send the picked answers")
+            .disabled(!canSend)
+            .accessibilityLabel(canSendTyped ? "Send" : "Send the picked answers")
         }
         .padding(.horizontal, 20).padding(.top, 4).padding(.bottom, 34)
+        // The thread above gives way, so the field can grow to its lines.
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -243,7 +278,7 @@ private struct JournalCapture: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     words
-                    section("How did your breathing feel?", JournalTag.symptoms.filter { $0 != .wokeAtNight && $0 != .activityLimited })
+                    section(Interview.Question.symptoms.text, JournalTag.symptoms.filter { $0 != .wokeAtNight && $0 != .activityLimited })
                     // Puffs are counted where they were logged (LoggedPanel), so no "second puff" chip here.
                     section("Did it…", [.wokeAtNight, .activityLimited, .betterAfter])
                     section("What were you doing?", [.exercise, .cooking, .cleaningProducts, .stress, .laughingOrCrying])

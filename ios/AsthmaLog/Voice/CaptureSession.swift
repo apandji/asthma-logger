@@ -35,6 +35,10 @@ final class CaptureSession: Identifiable {
 
     let id = UUID()
     let event: LogEvent
+    /// What was elevated in the outdoor air at this moment, for the exposure question (Interview.Elevated).
+    let elevated: [Interview.Elevated]
+    /// Outdoors or indoors, when an exposure answer said so: it corrects the moment's indoor guess on save.
+    @ObservationIgnored private var saidOutdoors: Bool?
     private(set) var turns: [Turn] = []
     private(set) var question: Interview.Question?
     private(set) var listening = false
@@ -69,6 +73,7 @@ final class CaptureSession: Identifiable {
 
     init(event: LogEvent, chat: Bool, autoSelect: Bool) {
         self.event = event
+        elevated = Self.elevated(event)
         self.autoSelect = autoSelect
         source = chat ? "chat" : "journal"
         chosen = event.tags
@@ -116,8 +121,18 @@ final class CaptureSession: Identifiable {
         listening = true
     }
 
+    /// What was said when you switched to typing: the words to edit, and the recording they came from.
+    var draft: String?
+    private var draftFile: String?
+
+    /// A question as asked about this moment (the place question names the place and time).
+    func text(_ q: Interview.Question) -> String {
+        q.text(place: event.placeName, time: event.loggedAt.formatted(date: .omitted, time: .shortened), elevated: elevated.first)
+    }
+
     /// Stops, writes it down, and takes it as the answer (chat) or adds it to your words (journal).
-    func stopListening() async {
+    /// `toType`: you switched to the keyboard mid-sentence, so the words become a draft to edit, not the answer.
+    func stopListening(toType: Bool = false) async {
         guard listening else { return }
         listening = false
         UIImpactFeedbackGenerator(style: .soft).impactOccurred()
@@ -139,6 +154,11 @@ final class CaptureSession: Identifiable {
             scratch = nil
         }
         let words = (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if toType, source != "journal" {
+            draft = words
+            draftFile = file
+            return
+        }
         if source == "journal" {
             if !words.isEmpty { journalWords = journalWords.isEmpty ? words : journalWords + " " + words }
             if let file { answers.append(Answer(question: nil, text: "", file: file, at: startedAt ?? .now)) }
@@ -163,11 +183,15 @@ final class CaptureSession: Identifiable {
 
     /// A spoken or typed answer to the current question.
     func answer(_ text: String, file: String? = nil) {
+        // A typed answer that started as speech keeps its recording.
+        let file = file ?? draftFile
+        draftFile = nil
         let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !words.isEmpty || file != nil else { return }
         let before = beforeAnswer ?? chosen.union(suggested)
         beforeAnswer = nil
         hear(words)
+        if question == .exposure, let yes = Interview.yesNo(words) { exposure(yes) }
         answers.append(Answer(question: question, text: words, file: file, at: startedAt ?? .now))
         turns.append(.answer(UUID(), words.isEmpty ? "…" : words))
         let heard = chosen.union(suggested).subtracting(before)
@@ -181,9 +205,11 @@ final class CaptureSession: Identifiable {
         case .tag(let t): toggle(t)
         case .yes:
             if let t = question?.yesTag { chosen.insert(t); removed.remove(t) }
+            if question == .exposure { exposure(true) }
             post("Yes")
         case .no:
             if let t = question?.yesTag { chosen.remove(t) }
+            if question == .exposure { exposure(false) }
             post("No")
         case .none: post("None of these")
         }
@@ -215,7 +241,7 @@ final class CaptureSession: Identifiable {
         let words = answers.map(\.text).joined(separator: " ")
         let c = Interview.Context(asked: asked, tags: chosen.union(suggested), words: words,
                                   hour: Calendar.current.component(.hour, from: event.loggedAt),
-                                  puffs: event.puffs, isRescue: event.moment == .rescue)
+                                  puffs: event.puffs, isRescue: event.moment == .rescue, elevated: elevated)
         if let q = Interview.next(c) { ask(q) } else { question = nil; done = true }
     }
 
@@ -223,6 +249,36 @@ final class CaptureSession: Identifiable {
         question = q
         asked.append(q)
         turns.append(.question(q))
+    }
+
+    // MARK: Exposure
+
+    /// A yes or no to the exposure question: ticks its trigger (cold air, exercise) and notes outdoors / indoors.
+    private func exposure(_ yes: Bool) {
+        guard let e = elevated.first else { return }
+        if yes {
+            if let t = e.yes.tag { chosen.insert(t); removed.remove(t); suggested.remove(t) }
+            saidOutdoors = e.yes.outdoors
+        } else if e.noMeansIndoors {
+            saidOutdoors = false
+        }
+    }
+
+    /// The moment's elevated readings at the guidance's thresholds (see Interview.Elevated): pollutants at the
+    /// EPA's sensitive-groups level (the "high" layer), pollen high, below 40 °F, 90 °F and up.
+    static func elevated(_ event: LogEvent) -> [Interview.Elevated] {
+        guard let c = event.conditions else { return [] }
+        let layers = AirLayers(conditions: c, weave: event.weave, pollen: DemoPollen.from(c))
+        var out: [Interview.Elevated] = []
+        if layers.pm25?.level == .high { out.append(.particles) }
+        if layers.ozone?.level == .high { out.append(.ozone) }
+        if layers.tree?.level == .high { out.append(.treePollen) }
+        if layers.grass?.level == .high { out.append(.grassPollen) }
+        if layers.weed?.level == .high { out.append(.weedPollen) }
+        if let t = c.best(.temperature)?.value {
+            if t < 40 { out.append(.cold) } else if t >= 90 { out.append(.heat) }
+        }
+        return out
     }
 
     // MARK: Tags
@@ -248,11 +304,13 @@ final class CaptureSession: Identifiable {
             if !words.isEmpty || file != nil { event.addNote(file: file, transcript: words, source: source, at: startedAt ?? .now) }
         } else {
             for a in answers where !a.text.isEmpty || a.file != nil {
-                event.addNote(file: a.file, transcript: a.text, source: source, at: a.at, question: a.question?.text)
+                event.addNote(file: a.file, transcript: a.text, source: source, at: a.at, question: a.question.map(text))
             }
         }
         event.tags = chosen
         event.tagsReviewed = true
+        // Your answer beats the guess (a correction is a label, AGENTS.md › Indoor / outdoor).
+        if let out = saidOutdoors { event.indoorConfirmedRaw = (out ? IndoorOutdoor.outdoor : .indoor).rawValue }
         try? context.save()
         QuickRecordCenter.shared.scheduleEvening()
         UINotificationFeedbackGenerator().notificationOccurred(.success)

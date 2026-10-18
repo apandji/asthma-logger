@@ -56,6 +56,29 @@ import Testing
         #expect(Interview.next(c) != .night)
     }
 
+    @Test func elevatedAirAsksAboutExposureAfterSymptoms() {
+        var c = Interview.Context(hour: 15, puffs: 1, isRescue: true, elevated: [.treePollen])
+        c.asked = [.doing, .symptoms]
+        #expect(Interview.next(c) == .exposure)
+        #expect(Interview.Question.exposure.text(place: nil, time: nil, elevated: .treePollen)
+                == "Tree pollen was high around then. Were you outside?")
+        // Said already: not asked again.
+        c.words = "I was outside walking the dog"
+        #expect(Interview.next(c) != .exposure)
+        // Nothing elevated: never asked.
+        var clean = Interview.Context(hour: 15, puffs: 1, isRescue: true)
+        clean.asked = [.doing, .symptoms]
+        #expect(Interview.next(clean) == .activity)
+    }
+
+    @Test func exposureQuestionsStateAFactNeverACause() {
+        for e in Interview.Elevated.allCases {
+            let q = e.question.lowercased()
+            #expect(q.hasSuffix("?"))
+            for banned in ["caused", "triggered", "because", "set off", "attack", "%"] { #expect(!q.contains(banned)) }
+        }
+    }
+
     @Test func itEnds() {
         var c = rescue
         c.asked = [.doing, .symptoms, .activity, .reliever]

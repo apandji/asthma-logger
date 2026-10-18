@@ -70,7 +70,8 @@ final class VoiceNotes: NSObject, AVAudioPlayerDelegate {
         let sink = Sink(file: audioFile, request: request, task: task)
         self.sink = sink
         liveWords = ""
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+        // @Sendable: the tap runs on the audio thread, so the closure must not be main-actor (the app's default).
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
             sink.take(buffer)
         }
         engine.prepare()

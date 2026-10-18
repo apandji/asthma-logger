@@ -46,6 +46,8 @@ struct NowHomeView: View {
     /// Counts up each time a sentence with a sparkle lands: the sparkle button nods in sympathy.
     @State private var noticed = 0
     @Namespace private var hero
+    /// The rail is open (held or pinned): the pill above it steps aside.
+    @State private var railOpen = false
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var showSettings = false
     @State private var openDay: Date?
@@ -103,9 +105,9 @@ struct NowHomeView: View {
                     .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
                         learningButton
                             .padding(.horizontal, NowHomeView.column - 22).padding(.top, 10)  // the 44pt pill on the column
-                            .opacity(probing ? 0 : 1)
-                            .allowsHitTesting(!probing)
-                            .animation(Theme.smooth, value: probing)
+                            .opacity(probing || railOpen ? 0 : 1)
+                            .allowsHitTesting(!(probing || railOpen))
+                            .animation(Theme.smooth, value: probing || railOpen)
                     }
                     .padding(.top, 4)
                 // Baselines are the engine's, not the journal's: no ticks for them (owner, Oct 17).
@@ -407,7 +409,7 @@ struct NowHomeView: View {
             settingsButton
         }
         .padding(4)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .glassEffect(.regular, in: .capsule)   // not .interactive(): on a container it takes the buttons' taps
         .padding(.top, 1)
     }
 
@@ -571,7 +573,8 @@ struct NowHomeView: View {
                       mapID: s.mapID, coordinate: s.coordinate, mapNamespace: s.mapNamespace, captureInk: s.captureInk,
                       onPin: s.onPin, sketch: s.sketch, event: s.event, showsSelf: s.showsSelf, selfEvent: s.selfEvent,
                       onRecord: { recording = $0 }, makeNote: s.makeNote,
-                      scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil)
+                      scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil,
+                      onRailOpen: { railOpen = $0 })
             .onTapGesture { s.onTap() }
     }
 
@@ -1094,6 +1097,8 @@ struct NowSky: View {
     var makeNote: (() async -> LogEvent?)? = nil
     /// While scrubbing: the temperature between readings, for a hue that flows with the playhead.
     var scrubTemperature: Double? = nil
+    /// Told when the rail opens or closes (held, or pinned on Voice / Body), so what sits above it can step aside.
+    var onRailOpen: ((Bool) -> Void)? = nil
     @State private var voice = VoiceSession()
     @Environment(\.modelContext) private var modelContext
     /// Let go on a Self row and its panel stays, the rail open beside it.
@@ -1124,6 +1129,9 @@ struct NowSky: View {
     @State private var pulse: Task<Void, Never>?
     /// The thumb's height on the rail while it's held: the stop under it grows, its neighbours ease away.
     @State private var railFinger: CGFloat?
+    /// When the rail opens, everything would slide to make room. This keeps the stop you pressed where it
+    /// was (the rail grows around your thumb), clamped so the rail stays on the sky.
+    @State private var railShift: CGFloat = 0
     @State private var rippleAt: Date?
     @State private var rippleInk: Color = .white
     @AppStorage("sky.touched") private var touched = false
@@ -1136,7 +1144,7 @@ struct NowSky: View {
             let size = geo.size
             let stack = SkyExplorer.stack(layers)
             let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: showsSelf)
-            let mids = RailRow.mids(rows).map { CGFloat($0) * size.height }
+            let mids = RailRow.mids(rows).map { CGFloat($0) * size.height + (expanded ? railShift : 0) }
             ZStack {
                 AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
                 if let (lat, lon) = coordinate {
@@ -1194,6 +1202,7 @@ struct NowSky: View {
                               maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: dent != nil)
             // A sky ripples once you've landed on it, not while the timeline is moving past it.
             .onAppear { if settled { ripple() } }
+            .onChange(of: expanded, initial: true) { _, open in onRailOpen?(open) }
             .onChange(of: date) { _, _ in if settled { ripple() } }
             .onChange(of: settled) { _, s in if s { ripple() } }
             .mask {
@@ -1332,6 +1341,18 @@ struct NowSky: View {
             .onChanged { drag in
                 if !probing {
                     probing = true; touched = true; startPulse()
+                    if !expanded {
+                        // Which stop is under the thumb now, and where it will be once the rail opens.
+                        let closed = RailRow.rows(expanded: false, layers: layers, includesSelf: showsSelf)
+                        let cm = RailRow.mids(closed).map { CGFloat($0) * size.height }
+                        let i = cm.enumerated().min { abs($0.element - drag.location.y) < abs($1.element - drag.location.y) }?.offset ?? 0
+                        let opened = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
+                        let om = RailRow.mids(opened).map { CGFloat($0) * size.height }
+                        if let j = opened.firstIndex(of: closed[i]), let first = om.first, let last = om.last {
+                            let wanted = cm[i] - om[j]
+                            railShift = min(max(wanted, 44 - first), size.height - 44 - last)
+                        }
+                    }
                     withAnimation(.snappy(duration: 0.25)) { expanded = true }
                 }
                 railFinger = drag.location.y
@@ -1350,7 +1371,7 @@ struct NowSky: View {
                     }
                 }
                 let rows = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
-                let mids = RailRow.mids(rows).map { CGFloat($0) * size.height }
+                let mids = RailRow.mids(rows).map { CGFloat($0) * size.height + railShift }
                 let nearest = mids.enumerated().min { abs($0.element - drag.location.y) < abs($1.element - drag.location.y) }?.offset ?? 0
                 if rows[nearest] != row { select(rows[nearest]) }
             }
@@ -1361,7 +1382,7 @@ struct NowSky: View {
                 if voice.phase == .recording { Task { await voice.finish() } }
                 // Voice and Body stay open where you let go, the rail with them; the air's close.
                 let keep = (row?.isSelf ?? false) ? row : nil
-                withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil; pinned = keep; expanded = keep != nil }
+                withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil; pinned = keep; expanded = keep != nil; if keep == nil { railShift = 0 } }
                 probing = false
             }
     }

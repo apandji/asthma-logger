@@ -32,3 +32,16 @@ Things noticed while building, not yet decided. Add as you go; move an item out 
 - **Sound design proper.** If the two test sounds land, a small set (log, learned, note saved, undo) from one
   instrument, composed, not stock. (Oct 18)
 - **Apple Intelligence / Siri**: see apple-intelligence-later.md.
+
+## Found while building (Oct 18, night)
+
+- **The rail moved out from under the thumb.** Holding a stop opened the rail and every stop slid to make
+  room, so the selection jumped to whatever landed under the finger. Fixed: the rail now grows around the
+  pressed stop (`railShift`). Worth a look on the phone: does the rail ever push off the top or bottom?
+- **Interactive glass on a container swallows its buttons' taps.** The Insights/Settings pill was built with
+  `.glassEffect(.regular.interactive())` around two Buttons and neither responded. Plain `.regular` on the
+  container, press feedback on the buttons. Rule for the design system: interactive glass goes on the
+  button's label, never around a group.
+- **Undo merges, it doesn't delete.** A second press within two minutes adds a puff; Undo takes one off.
+  Only a single-puff moment is deleted by Undo. Clear in the data model, less clear on screen: should the
+  card say "2 puffs · Undo" so the arithmetic is visible?

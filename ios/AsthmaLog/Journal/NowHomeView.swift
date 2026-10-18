@@ -967,9 +967,11 @@ struct NowSky: View {
     /// The moment Self is about (nil for Now with nothing logged), and how to record a note for it.
     var selfEvent: LogEvent? = nil
     var onRecord: ((LogEvent) -> Void)? = nil
-    /// Let go on Self and it stays, the rail still beside it.
-    @State private var selfPinned = false
+    /// Let go on a Self row and its panel stays, the rail open beside it.
+    @State private var pinned: RailRow?
     @Environment(\.skyDent) private var dent
+    /// Settings › Rail: left for left hands (the panels read on the other side of the thumb).
+    @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var flash = 0.0
     @State private var pinPulse = false
     /// Past: a moment more than 20 minutes ago (not a forecast, not a fresh log).
@@ -1072,23 +1074,39 @@ struct NowSky: View {
             }
             // The label sits beside the icon being read, never at a spot on the map.
             .overlay {
-                // The reading stays in one place (top left), whatever row the thumb is on.
-                if let probe, row?.reads ?? false {
-                    SkyProbeOverlay(point: .zero, probe: probe, width: size.width, showsGlow: false, topLeading: true)
-                        .transition(.opacity)
+                // Beside the thumb, at the row's height: an item's (or Weather's) full reading, or for a group,
+                // the list of everything it tracks. Each names itself, so the thumb never hides what you're on.
+                // A Self panel left open: tapping the open sky around it closes it (under the panel, so its
+                // buttons still work).
+                if pinned != nil && row == nil {
+                    Color.clear.contentShape(Rectangle())
+                        .onTapGesture { withAnimation(Theme.smooth) { pinned = nil; expanded = false } }
                 }
-            }
-            // The name follows the thumb, just to its left, so the thumb never covers it.
-            .overlay {
-                if let row, let i = rows.firstIndex(of: row) {
-                    Text(row.name)
-                        .font(.subheadline.weight(.semibold)).lineLimit(1)
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .glassEffect(.regular, in: .capsule)
-                        .frame(width: size.width - 64, alignment: .trailing)
-                        .position(x: (size.width - 64) / 2, y: mids[i])
-                        .allowsHitTesting(false)
-                        .animation(.snappy(duration: 0.18), value: row)
+                if let shown = row ?? pinned, let i = rows.firstIndex(of: shown) {
+                    let x = railLeft ? 64 + 130 : size.width - 64 - 130, y = min(max(mids[i], 110), size.height - 110)
+                    switch shown {
+                    case .header(let g) where !g.items.isEmpty:
+                        GroupSummary(group: g, layers: layers)
+                            .frame(width: 224)
+                            .position(x: railLeft ? 64 + 118 : size.width - 64 - 118, y: min(max(mids[i], 90), size.height - 90))
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    case .me:
+                        SelfSummary(event: selfEvent, date: selfEvent?.loggedAt ?? date)
+                            .frame(width: 248).position(x: x, y: y).transition(.opacity)
+                    case .voice:
+                        VoicePanel(event: selfEvent, interactive: !probing, record: { onRecord?($0) })
+                            .frame(width: 248).position(x: x, y: y).transition(.opacity)
+                    case .body:
+                        BodyPanel(date: selfEvent?.loggedAt ?? date, interactive: !probing)
+                            .frame(width: 248).position(x: x, y: y).transition(.opacity)
+                    default:
+                        if let probe {
+                            SkyProbeOverlay(point: CGPoint(x: railLeft ? 64 + 118 : size.width - 64 - 118, y: mids[i]), probe: probe, width: size.width,
+                                            showsGlow: false, beside: true)
+                                .transition(.opacity)
+                        }
+                    }
                 }
             }
             // The pin wants a tap: the full details for here and now.
@@ -1099,25 +1117,11 @@ struct NowSky: View {
                         .accessibilityLabel("Air details")
                 }
             }
-            // Self: on the rail's last stop the sky dims and your words, activity and Health sit on top. The rail
-            // stays, so it's one surface you slide up and down.
-            .overlay {
-                if showsSelf && (row == .me || (selfPinned && row == nil)) {
-                    ZStack {
-                        // No dim: tapping the open sky around the cards goes back to the air.
-                        Color.clear.contentShape(Rectangle())
-                            .onTapGesture { withAnimation(Theme.smooth) { selfPinned = false } }
-                        SelfPanel(event: selfEvent, date: selfEvent?.loggedAt ?? date, interactive: !probing,
-                                  record: { onRecord?($0) })
-                    }
-                    .transition(.opacity)
-                }
-            }
             // The scale: the legend, and the only place you read the air. Slide up and down it.
-            .overlay(alignment: .trailing) {
-                GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? (selfPinned ? .me : nil), weatherSymbol: SkyExplorer.weatherIcon(conditions))
-                    .padding(.trailing, 18)
-                    .frame(width: 64, height: size.height, alignment: .trailing)
+            .overlay(alignment: railLeft ? .leading : .trailing) {
+                GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions))
+                    .padding(railLeft ? .leading : .trailing, 18)
+                    .frame(width: 64, height: size.height, alignment: railLeft ? .leading : .trailing)
                     .contentShape(Rectangle())
                     .gesture(scrub(size))
                     .accessibilityElement(children: .ignore)
@@ -1140,7 +1144,16 @@ struct NowSky: View {
             // `-railOpen`: the rail held open on weed pollen, for screenshots.
             if ProcessInfo.processInfo.arguments.contains("-railOpen"), !sketch {
                 expanded = true
-                Task { try? await Task.sleep(for: .seconds(1.5)); select(.item("Weed pollen")) }
+                // `-railOpen particles` / `body` / `voice`: open on that row instead.
+                let args = ProcessInfo.processInfo.arguments
+                let next = args.firstIndex(of: "-railOpen").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+                let target: RailRow = switch next {
+                case "particles": .header(.particles)
+                case "body": .body
+                case "voice": .voice
+                default: .item("Weed pollen")
+                }
+                Task { try? await Task.sleep(for: .seconds(1.5)); select(target); if target.isSelf { pinned = target; row = nil } }
             }
             #endif
             guard !isPast, !sketch, !reduceMotionEnv else { return }
@@ -1181,8 +1194,9 @@ struct NowSky: View {
             }
             .onEnded { _ in
                 stopPulse()
-                let landedOnSelf = row == .me
-                withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil; expanded = false; selfPinned = landedOnSelf }
+                // Self's rows stay open where you let go, the rail with them; the air's close.
+                let keep = (row?.isSelf ?? false) ? row : nil
+                withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil; pinned = keep; expanded = keep != nil }
                 probing = false
             }
     }
@@ -1217,8 +1231,8 @@ struct NowSky: View {
             }
         case .item(let n):
             p = SkyExplorer.layerProbe(n, layers: layers, conditions: conditions, pollen: pollen)
-        case .me:
-            p = nil   // Self shows itself: the panel, not a label.
+        case .me, .voice, .body:
+            p = nil   // Self's panels read themselves.
         }
         if var probe = p, let h = history {
             switch probe.name {

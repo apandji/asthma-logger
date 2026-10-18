@@ -12,6 +12,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.logButtons) private var useButtons = false
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.morningBrief) private var morningBrief = true
+    @AppStorage(Prefs.railLeft) private var railLeft = false
     @AppStorage(Prefs.useDemoData) private var demo = false
     @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
     @Environment(\.modelContext) private var context
@@ -108,6 +109,10 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker("Rail", selection: $railLeft) {
+                        Text("Right").tag(false)
+                        Text("Left").tag(true)
+                    }
                     Toggle("Log with two buttons instead of the +", isOn: $useButtons)
                     Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
                     Toggle("After a press, ask what was going on", isOn: $quickRecord)

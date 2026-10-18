@@ -18,6 +18,8 @@ enum Prefs {
     static let lockScreenReady = "lockScreenReady"
     /// 8 am notification with the day's look-ahead; opening it renews the Lock Screen card.
     static let morningBrief = "morningBrief"
+    /// The rail on the left edge of the sky (left-handed use).
+    static let railLeft = "railLeft"
     /// Big-statement typeface: `system` (New York), `recursive` (default), or `funnelSans`.
     /// UI chrome stays SF. Legacy bool `useFunnelSans` is still read once for migration.
     static let statementTypeface = "statementTypeface"

@@ -2,28 +2,113 @@ import AsthmaCore
 import CoreMotion
 import SwiftUI
 
-/// Self, the last stop on the rail: the sky dims and this sits on top, with the rail still there, so reading
-/// the air and reading yourself are one slide up and down. What the sky can't show: your words and tags,
-/// how active you'd been, and Apple Health (sleep, heart, breathing), all in words, never numbers.
-struct SelfPanel: View {
-    /// The moment this is about; nil for Now with nothing logged.
+/// Self is a group on the rail like the others: the header lists what it tracks (your voice, your body), and
+/// each item reads beside the thumb. Let go on any of them and it stays open. In words, never numbers.
+
+/// The shared panel look: the same glass label as a reading on the rail.
+private struct RailPanel<Content: View>: View {
+    let title: String
+    let icon: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: icon).font(.subheadline.weight(.semibold))
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+    }
+}
+
+/// A grey label and its value on one line, one size throughout.
+private struct BodyLine: View {
+    let name: String
+    let text: String
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(name).font(.caption.weight(.medium)).foregroundStyle(Theme.secondaryText).frame(width: 64, alignment: .leading)
+            Text(text).font(.subheadline)
+        }
+    }
+}
+
+/// Self's header: what it tracks, like Particles & gases lists its items.
+struct SelfSummary: View {
     let event: LogEvent?
     let date: Date
-    /// Read-only while the finger is still on the rail; buttons work once it's let go.
+    @State private var activity: String?
+
+    var body: some View {
+        RailPanel(title: "Self", icon: Icons.me) {
+            let words = (event?.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            BodyLine(name: "Voice", text: words.isEmpty ? (event == nil ? "Nothing logged" : "Nothing said yet") : "“\(words.prefix(28))\(words.count > 28 ? "…" : "")”")
+            BodyLine(name: "Body", text: activity ?? "…")
+        }
+        .task(id: date) { activity = await ActivityWords.before(date) }
+    }
+}
+
+/// Your voice: your words and tags, and a way to add them.
+struct VoicePanel: View {
+    let event: LogEvent?
     let interactive: Bool
     let record: (LogEvent) -> Void
+
+    var body: some View {
+        RailPanel(title: "Your voice", icon: "waveform") {
+            let text = (event?.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if text.isEmpty {
+                Text(event == nil ? "Nothing logged right now." : "Nothing said yet.").font(.subheadline).foregroundStyle(Theme.secondaryText)
+            } else {
+                Text("“\(text)”").font(.subheadline).italic().lineLimit(5)
+            }
+            if let tags = event?.tags, !tags.isEmpty {
+                Text(tags.sorted().map(\.label).joined(separator: " · ")).font(.caption.weight(.semibold))
+            }
+            if let event, event.moment != .okay {
+                Button { record(event) } label: {
+                    Label(text.isEmpty ? "Say what was going on" : "Add more", systemImage: "mic.fill")
+                        .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 8)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                }
+                .buttonStyle(PressStyle())
+                .disabled(!interactive)
+                .opacity(interactive ? 1 : 0.5)
+            }
+        }
+    }
+}
+
+/// Your body: activity (motion sensor) and Apple Health (sleep, heart, breathing), in words.
+struct BodyPanel: View {
+    let date: Date
+    let interactive: Bool
     @State private var activity: String?
     @State private var health: HealthReader.Words?
     @State private var askHealth = false
 
-    /// Two cards, like "Your note" elsewhere: your words, and your body in a few short lines.
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            card("Your words", "waveform") { words }
-            card("Your body", "figure.walk") { bodyLines }
+        RailPanel(title: "Your body", icon: "figure.walk") {
+            BodyLine(name: "Activity", text: activity ?? "…")
+            if let h = health {
+                if let v = h.sleep { BodyLine(name: "Sleep", text: v) }
+                if let v = h.heart { BodyLine(name: "Heart", text: v) }
+                if let v = h.breathing { BodyLine(name: "Breathing", text: v) }
+            }
+            if askHealth {
+                Button { Task { await HealthReader.shared.ask(); await load() } } label: {
+                    Label("Connect Apple Health", systemImage: "heart.fill")
+                        .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 8)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                }
+                .buttonStyle(PressStyle())
+                .disabled(!interactive)
+                .opacity(interactive ? 1 : 0.5)
+                Text("Adds sleep, heart and breathing, in words.").font(.caption).foregroundStyle(Theme.secondaryText)
+            }
         }
-        .padding(.leading, 20).padding(.trailing, 60).padding(.top, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task(id: date) { await load() }
     }
 
@@ -31,68 +116,6 @@ struct SelfPanel: View {
         askHealth = await HealthReader.shared.shouldAsk()
         activity = await ActivityWords.before(date)
         health = askHealth ? nil : await HealthReader.shared.words(before: date)
-    }
-
-    @ViewBuilder private var words: some View {
-        let text = (event?.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty {
-            Text(event == nil ? "Nothing logged right now." : "Nothing said yet.").foregroundStyle(Theme.secondaryText)
-        } else {
-            Text("“\(text)”").italic().lineLimit(4)
-        }
-        if let tags = event?.tags, !tags.isEmpty {
-            Text(tags.sorted().map(\.label).joined(separator: " · ")).font(.subheadline.weight(.semibold))
-        }
-        if let event, event.moment != .okay {
-            Button { record(event) } label: {
-                Label(text.isEmpty ? "Say what was going on" : "Add more", systemImage: "mic.fill").font(.subheadline.weight(.semibold))
-            }
-            .buttonStyle(PressStyle())
-            .disabled(!interactive)
-        }
-    }
-
-    @ViewBuilder private var bodyLines: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            line("Activity", activity ?? "…")
-            if let h = health {
-                if let v = h.sleep { line("Sleep", v) }
-                if let v = h.heart { line("Heart", v) }
-                if let v = h.breathing { line("Breathing", v) }
-            }
-        }
-        if askHealth {
-            // A real button: sleep, heart and breathing come from Apple Health.
-            Button { Task { await HealthReader.shared.ask(); await load() } } label: {
-                Label("Connect Apple Health", systemImage: "heart.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity).padding(.vertical, 10)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-            }
-            .buttonStyle(PressStyle())
-            .disabled(!interactive)
-            .padding(.top, 4)
-            Text("Adds sleep, heart and breathing, in words.").font(.caption).foregroundStyle(Theme.secondaryText)
-        }
-    }
-
-    /// A small grey label and its value on one line, one size throughout.
-    private func line(_ name: String, _ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(name).font(.caption.weight(.medium)).foregroundStyle(Theme.secondaryText).frame(width: 64, alignment: .leading)
-            Text(text).font(.subheadline)
-        }
-    }
-
-    /// The same card as "Your note" (Now's cards): a small titled glass panel.
-    private func card<Content: View>(_ title: String, _ icon: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: icon).font(.subheadline.weight(.semibold))
-            content().font(.subheadline)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 }
 

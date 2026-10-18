@@ -370,7 +370,11 @@ enum RailGroup: String, CaseIterable {
 enum RailRow: Hashable {
     case header(RailGroup)
     case item(String)
-    case me
+    /// Self, a group like the others: your voice (words, tags) and your body (activity, Apple Health).
+    case me, voice, body
+
+    /// Self's rows stay open when you let go on them.
+    var isSelf: Bool { self == .me || self == .voice || self == .body }
 
     /// Folded: four stops. Held: every group with its items' dots underneath, laid out once for the whole
     /// hold so nothing shifts under the finger. Items only for layers this sky has.
@@ -381,7 +385,10 @@ enum RailRow: Hashable {
             out.append(.header(g))
             if expanded { out += g.items.filter(present.contains).map { .item($0) } }
         }
-        if includesSelf { out.append(.me) }
+        if includesSelf {
+            out.append(.me)
+            if expanded { out += [.voice, .body] }
+        }
         return out
     }
 
@@ -399,6 +406,8 @@ enum RailRow: Hashable {
         case .header(let g): g.title
         case .item(let n): n
         case .me: "Self"
+        case .voice: "Your voice"
+        case .body: "Your body"
         }
     }
 
@@ -406,7 +415,7 @@ enum RailRow: Hashable {
     var reads: Bool {
         switch self {
         case .header(let g): g.items.isEmpty   // Weather reads; Particles & gases and Biologics just name.
-        case .item, .me: true
+        case .item, .me, .voice, .body: true
         }
     }
 }
@@ -455,6 +464,13 @@ struct GroupRail: View {
                 .frame(width: 30, height: 18)
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.2).frame(width: 20, height: 20) } }
                 .accessibilityLabel(name)
+        case .voice, .body:
+            // Self's items: dots, like the air's.
+            Circle().fill(Color.primary.opacity(on ? 0.95 : 0.5))
+                .frame(width: on ? 10 : 7, height: on ? 10 : 7)
+                .frame(width: 30, height: 18)
+                .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.2).frame(width: 20, height: 20) } }
+                .accessibilityLabel(row.name)
         case .me:
             // A stop like the others.
             Image(systemName: Icons.me)
@@ -508,6 +524,37 @@ struct StrataScale: View {
             .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.5) } }
             .animation(.snappy(duration: 0.2), value: on)
             .accessibilityLabel(name)
+    }
+}
+
+/// A group on the rail (Particles & gases, Biologics): everything it tracks, each with its amount and level,
+/// so the header gives the overview and the items below give the detail.
+struct GroupSummary: View {
+    let group: RailGroup
+    let layers: AirLayers
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(group.title, systemImage: group.icon).font(.subheadline.weight(.semibold))
+            ForEach(group.items, id: \.self) { name in
+                let layer = layers.readable.first { ($0.name == "Air" ? "PM2.5" : $0.name) == name }
+                HStack(spacing: 8) {
+                    Image(systemName: Icons.layer(name)).font(.caption)
+                        .foregroundStyle(layer?.color ?? Theme.secondaryText).frame(width: 18)
+                    Text(name).font(.subheadline)
+                        .foregroundStyle(layer == nil ? Theme.secondaryText : .primary)
+                    Spacer(minLength: 6)
+                    if let layer {
+                        AmountDots(level: layer.level, ink: layer.color)
+                        Text(Tier(layer.level).word).font(.caption2.weight(.semibold)).frame(width: 52, alignment: .trailing)
+                    } else {
+                        Text("No reading").font(.caption2).foregroundStyle(Theme.secondaryText)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .glassEffect(.regular, in: .rect(cornerRadius: 16))
     }
 }
 

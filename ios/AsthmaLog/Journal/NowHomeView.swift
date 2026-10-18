@@ -382,8 +382,9 @@ struct NowHomeView: View {
         if let m = moments.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }),
            abs(m.loggedAt.timeIntervalSince(t)) < 20 * 60 { return .moment(m) }
         if t > now, let h = hours.min(by: { abs($0.date.timeIntervalSince(t)) < abs($1.date.timeIntervalSince(t)) }) { return .hour(h) }
-        // Behind now there's nothing between moments: the nearest one stands in.
-        if t < now, let m = moments.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }) { return .moment(m) }
+        // Behind now, between moments: the nearest earlier moment's air stands in (there's no reading of
+        // its own), with the playhead's time.
+        if t < now, let m = moments.last(where: { $0.loggedAt <= t }) ?? moments.first { return .moment(m) }
         return .now
     }
 
@@ -659,7 +660,6 @@ struct NowHomeView: View {
 
     private var timeline: some View {
         let tints: [(Date, Double?)] = hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) }
-        let edge: Alignment = railLeft ? .topTrailing : .topLeading
         let fadeIn: CGFloat = railLeft ? 0.2 : 0.08
         let fadeOut: CGFloat = railLeft ? 0.92 : 0.8
         return NowTimeline(moments: moments, baselines: [],
@@ -667,8 +667,6 @@ struct NowHomeView: View {
                            forecastTints: tints, verdictTint: playheadTint,
                            hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
             .frame(height: 104)
-            // Away from now: one tap back, on the side the + isn't.
-            .overlay(alignment: edge) { backToNow }
             // Full width; the + floats over its end, which fades out beneath it. The other end just softens.
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: fadeIn),
                                          .init(color: .black, location: fadeOut), .init(color: .clear, location: 1)],
@@ -683,21 +681,6 @@ struct NowHomeView: View {
 
     /// Wildfires are looked up when smoke is live and a place is known.
     private var fireKey: String { "\(liveEvent == .smoke)-\(here?.lat ?? 0)" }
-
-    @ViewBuilder private var backToNow: some View {
-        if focusTime != nil {
-            Button { withAnimation(Theme.smooth) { focusTime = nil } } label: {
-                Label("Now", systemImage: "arrow.uturn.backward")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-            }
-            .buttonStyle(PressStyle())
-            .padding(.horizontal, 16).padding(.top, 20)
-            .transition(.opacity.combined(with: .scale(scale: 0.9)))
-            .animation(Theme.snap, value: focusTime == nil)
-        }
-    }
 
     /// The verdict's colour under the playhead, for the timeline's chip and line: Now and ahead only
     /// (the past has no verdict).
@@ -1758,6 +1741,8 @@ struct VerdictHeader: View {
                 // the sky's colour) gives way to the place.
                 if verdict != nil { verdictPill.layoutPriority(tagText == nil ? 1 : -1) }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)   // never wider than the page: the pill clips, not the margin
+            .clipped()
             .frame(minHeight: 30, alignment: .leading)
             .padding(Edge.Set(corner.0), max(0, corner.1 - 20))
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
@@ -1865,6 +1850,15 @@ struct SparkleKey: View {
 }
 
 extension VerdictHeader {
+    static func short(_ v: String) -> String {
+        switch v {
+        case "Matches your flare days": "Like flare days"
+        case "A bit like your flare days": "A bit like flare days"
+        case "Looks like your baseline days": "Like baseline days"
+        default: v
+        }
+    }
+
     /// The first two sentences for the big type; the rest for the line beneath. A sentence ends at ". ",
     /// "? " or "! ", or at a sparkle that follows one ("there.\u{00A0}✦ The…").
     static func flow(_ s: String) -> (String, String?) {
@@ -1913,7 +1907,8 @@ extension VerdictHeader {
                     .scaleEffect(matches && breath ? 1.35 : 1)
                     .animation(matches && !reduceMotion ? .easeInOut(duration: 1.6).repeatForever(autoreverses: true) : .default, value: breath)
                     .onChange(of: matches, initial: true) { _, m in breath = m && !reduceMotion }
-                Text(verdict ?? " ").lineLimit(1).fixedSize()
+                // Shorter when a tag shares the line: "A bit like flare days", "Like flare days", "Like baseline days".
+                Text(tagText == nil ? (verdict ?? " ") : Self.short(verdict ?? " ")).lineLimit(1).fixedSize()
                     .contentTransition(.opacity)
                     .animation(settled ? .easeInOut(duration: 0.22) : nil, value: verdict)
                 if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }

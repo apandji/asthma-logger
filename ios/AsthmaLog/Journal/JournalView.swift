@@ -565,7 +565,7 @@ struct MomentDot: View {
         case .maintenance:
             // With Differentiate Without Color, standard doses are squares, not just blue.
             RoundedRectangle(cornerRadius: noColor ? size * 0.15 : size / 2).fill(Theme.standard).frame(width: size, height: size)
-        case .okay: Circle().strokeBorder(Theme.secondaryText, lineWidth: max(1.5, size / 5)).frame(width: size, height: size)
+        case .okay, .note: Circle().strokeBorder(Theme.secondaryText, lineWidth: max(1.5, size / 5)).frame(width: size, height: size)
         }
     }
 }

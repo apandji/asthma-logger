@@ -247,7 +247,7 @@ enum AirMark {
             ctx.fill(p, with: .color(Theme.rescue))
         case .maintenance:
             ctx.fill(Sparkle.path(center: c, radius: size * 0.48), with: .color(Theme.standard))
-        case .okay:
+        case .okay, .note:
             break
         }
     }

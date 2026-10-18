@@ -10,6 +10,8 @@ Names for the pieces of the app, so we can talk about them (and so code, docs an
 | **Rescue** | A moment with the rescue inhaler. Orange. | "attack" (never on screen) |
 | **Standard** | A moment with the daily (maintenance) inhaler. Blue. | "maintenance" on screen |
 | **Baseline** | The ordinary days felt air compares against: moments it saves on its own, without an inhaler, and your first capture. | "calm", "I'm okay", "usual days" on screen (decided Oct 16, 2026) |
+| **Note** | Something you said with no inhaler logged (Voice on Now). Kept with the air; never in patterns. | "entry" |
+| **Voice** / **Body** | Stops on the rail: your words and tags (slide into the panel to record, lift to stop, then Save), and your activity and Apple Health in words. A rescue with nothing said wears a hollow ring on the timeline and a dot on Voice. | "Self", "journal" on screen |
 | **Flare day** | A day with rescue use. Patterns compare flare days with your baseline. | "attack", "bad day" |
 
 ## The picture of the air

@@ -129,7 +129,7 @@ enum StrandBuild {
                 switch m.moment {
                 case .rescue: knots.append(StrandKnot(at: at, kind: 0, color: Theme.rescue))
                 case .maintenance: knots.append(StrandKnot(at: at, kind: 1, color: Theme.standard))
-                case .okay: knots.append(StrandKnot(at: at, kind: 2, color: okay))
+                case .okay, .note: knots.append(StrandKnot(at: at, kind: 2, color: okay))
                 }
             }
         }

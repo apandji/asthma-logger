@@ -2,8 +2,8 @@ import AsthmaCore
 import CoreMotion
 import SwiftUI
 
-/// Self is a group on the rail like the others: the header lists what it tracks (your voice, your body), and
-/// each item reads beside the thumb. Let go on any of them and it stays open. In words, never numbers.
+/// Voice and Body: stops on the rail like the air's, reading beside the thumb. Let go on either and it stays
+/// open. In words, never numbers.
 
 /// The shared panel look: the same glass label as a reading on the rail.
 private struct RailPanel<Content: View>: View {
@@ -34,49 +34,110 @@ private struct BodyLine: View {
     }
 }
 
-/// Self's header: what it tracks, like Particles & gases lists its items.
-struct SelfSummary: View {
-    let event: LogEvent?
-    let date: Date
-    @State private var activity: String?
-
-    var body: some View {
-        RailPanel(title: "Self", icon: Icons.me) {
-            let words = (event?.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            BodyLine(name: "Voice", text: words.isEmpty ? (event == nil ? "Nothing logged" : "Nothing said yet") : "“\(words.prefix(28))\(words.count > 28 ? "…" : "")”")
-            BodyLine(name: "Body", text: activity ?? "…")
-        }
-        .task(id: date) { activity = await ActivityWords.before(date) }
-    }
-}
-
-/// Your voice: your words and tags, and a way to add them.
+/// Voice, a stop on the rail. Slide into this panel to record (lift to stop), or tap Record once you've let go.
+/// Then a light review: your words (fix them if they came out wrong), the tags they suggest, Save or Redo.
 struct VoicePanel: View {
     let event: LogEvent?
+    let session: VoiceSession
+    /// False while the thumb is still on the rail.
     let interactive: Bool
-    let record: (LogEvent) -> Void
+    let save: () -> Void
 
     var body: some View {
-        RailPanel(title: "Your voice", icon: "waveform") {
-            let text = (event?.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if text.isEmpty {
-                Text(event == nil ? "Nothing logged right now." : "Nothing said yet.").font(.subheadline).foregroundStyle(Theme.secondaryText)
-            } else {
-                Text("“\(text)”").font(.subheadline).italic().lineLimit(5)
+        RailPanel(title: "Your voice", icon: Icons.voice) {
+            switch session.phase {
+            case .idle: idle
+            case .recording: recording
+            case .writing:
+                HStack(spacing: 8) { ProgressView(); Text("Writing it down…").font(.subheadline) }
+            case .review: review
             }
-            if let tags = event?.tags, !tags.isEmpty {
-                Text(tags.sorted().map(\.label).joined(separator: " · ")).font(.caption.weight(.semibold))
+        }
+    }
+
+    @ViewBuilder private var idle: some View {
+        let text = (event?.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            Text("“\(text)”").font(.subheadline).italic().lineLimit(4)
+        }
+        if let tags = event?.tags, !tags.isEmpty {
+            Text(tags.sorted().map(\.label).joined(separator: " · ")).font(.caption.weight(.semibold))
+        }
+        if session.denied {
+            Text("The microphone is off for felt air. Turn it on in Settings › felt air.").font(.caption).foregroundStyle(Theme.secondaryText)
+        } else if interactive {
+            Button { Task { await session.start() } } label: {
+                Label(text.isEmpty ? "Record" : "Add more", systemImage: "mic.fill")
+                    .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 8)
+                    .glassEffect(.regular.interactive(), in: .capsule)
             }
-            if let event, event.moment != .okay {
-                Button { record(event) } label: {
-                    Label(text.isEmpty ? "Say what was going on" : "Add more", systemImage: "mic.fill")
-                        .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 8)
-                        .glassEffect(.regular.interactive(), in: .capsule)
+            .buttonStyle(PressStyle())
+        } else {
+            Label("Slide in to record", systemImage: "mic").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+        }
+        if event == nil && !interactive {
+            Text("Saved as a note, with the air right now.").font(.caption).foregroundStyle(Theme.secondaryText)
+        }
+    }
+
+    @ViewBuilder private var recording: some View {
+        VoiceGrain(level: Double(VoiceNotes.shared.level), listening: true,
+                   ink: event?.moment == .rescue || event == nil ? Theme.rescueSoft : Theme.standardSoft)
+            .frame(height: 96)
+        HStack {
+            Text("Listening…").font(.subheadline.weight(.semibold))
+            Spacer()
+            if let start = session.startedAt {
+                TimelineView(.periodic(from: .now, by: 1)) { tl in
+                    Text(Duration.seconds(tl.date.timeIntervalSince(start)).formatted(.time(pattern: .minuteSecond)))
+                        .font(.subheadline.monospacedDigit()).foregroundStyle(Theme.secondaryText)
+                }
+            }
+        }
+        if interactive {
+            Button { Task { await session.finish() } } label: {
+                Label("Stop", systemImage: "stop.fill").font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity).padding(.vertical, 8)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+            }
+            .buttonStyle(PressStyle())
+        } else {
+            Text("Lift to stop. Slide back out to cancel.").font(.caption).foregroundStyle(Theme.secondaryText)
+        }
+    }
+
+    @ViewBuilder private var review: some View {
+        @Bindable var session = session
+        TextField("No words came through. Type a few if you like.", text: $session.words, axis: .vertical)
+            .font(.subheadline).lineLimit(2...5)
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(0.08)))
+        FlowLayout(spacing: 6) {
+            let quick: [JournalTag] = [.exercise, .coldAir, .pets, .smoke]
+            ForEach(session.suggested + quick.filter { !session.suggested.contains($0) }, id: \.self) { t in
+                let on = session.chosen.contains(t)
+                Button {
+                    if on { session.chosen.remove(t) } else { session.chosen.insert(t) }
+                    UISelectionFeedbackGenerator().selectionChanged()
+                } label: {
+                    Text(t.label).font(.caption.weight(.semibold))
+                        .foregroundStyle(on ? Color.black : .primary)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Capsule().fill(on ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary.opacity(0.12))))
                 }
                 .buttonStyle(PressStyle())
-                .disabled(!interactive)
-                .opacity(interactive ? 1 : 0.5)
             }
+        }
+        HStack(spacing: 12) {
+            Button("Redo") { session.discard() }
+                .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+            Spacer()
+            Button(action: save) {
+                Text("Save").font(.subheadline.weight(.semibold)).foregroundStyle(.black)
+                    .padding(.horizontal, 22).padding(.vertical, 8)
+                    .background(Capsule().fill(.white))
+            }
+            .buttonStyle(PressStyle())
         }
     }
 }
@@ -90,7 +151,7 @@ struct BodyPanel: View {
     @State private var askHealth = false
 
     var body: some View {
-        RailPanel(title: "Your body", icon: "figure.walk") {
+        RailPanel(title: "Your body", icon: Icons.body) {
             BodyLine(name: "Activity", text: activity ?? "…")
             if let h = health {
                 if let v = h.sleep { BodyLine(name: "Sleep", text: v) }

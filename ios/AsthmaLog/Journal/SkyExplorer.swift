@@ -370,11 +370,11 @@ enum RailGroup: String, CaseIterable {
 enum RailRow: Hashable {
     case header(RailGroup)
     case item(String)
-    /// Self, a group like the others: your voice (words, tags) and your body (activity, Apple Health).
-    case me, voice, body
+    /// Your voice (words, tags; slide in to record) and your body (activity, Apple Health): stops of their own.
+    case voice, body
 
-    /// Self's rows stay open when you let go on them.
-    var isSelf: Bool { self == .me || self == .voice || self == .body }
+    /// Voice and Body stay open when you let go on them.
+    var isSelf: Bool { self == .voice || self == .body }
 
     /// Folded: four stops. Held: every group with its items' dots underneath, laid out once for the whole
     /// hold so nothing shifts under the finger. Items only for layers this sky has.
@@ -385,10 +385,7 @@ enum RailRow: Hashable {
             out.append(.header(g))
             if expanded { out += g.items.filter(present.contains).map { .item($0) } }
         }
-        if includesSelf {
-            out.append(.me)
-            if expanded { out += [.voice, .body] }
-        }
+        if includesSelf { out += [.voice, .body] }
         return out
     }
 
@@ -405,7 +402,6 @@ enum RailRow: Hashable {
         switch self {
         case .header(let g): g.title
         case .item(let n): n
-        case .me: "Self"
         case .voice: "Your voice"
         case .body: "Your body"
         }
@@ -415,7 +411,7 @@ enum RailRow: Hashable {
     var reads: Bool {
         switch self {
         case .header(let g): g.items.isEmpty   // Weather reads; Particles & gases and Biologics just name.
-        case .item, .me, .voice, .body: true
+        case .item, .voice, .body: true
         }
     }
 }
@@ -428,6 +424,8 @@ struct GroupRail: View {
     let mids: [CGFloat]
     let selected: RailRow?
     var weatherSymbol = Icons.weather
+    /// The moment wants a note: Voice wears a small dot.
+    var voiceBadge = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -465,20 +463,18 @@ struct GroupRail: View {
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.2).frame(width: 20, height: 20) } }
                 .accessibilityLabel(name)
         case .voice, .body:
-            // Self's items: dots, like the air's.
-            Circle().fill(Color.primary.opacity(on ? 0.95 : 0.5))
-                .frame(width: on ? 10 : 7, height: on ? 10 : 7)
-                .frame(width: 30, height: 18)
-                .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.2).frame(width: 20, height: 20) } }
-                .accessibilityLabel(row.name)
-        case .me:
-            // A stop like the others.
-            Image(systemName: Icons.me)
+            // Their own stops, with the group icons' look.
+            Image(systemName: row == .voice ? Icons.voice : Icons.body)
                 .font(.system(size: on ? 18 : 15, weight: .semibold))
                 .foregroundStyle(on ? Color.primary : Color.primary.opacity(0.6))
                 .frame(width: 30, height: 30)
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.5) } }
-                .accessibilityLabel("Self")
+                .overlay(alignment: .topTrailing) {
+                    if row == .voice && voiceBadge && !on {
+                        Circle().fill(Theme.rescueSoft).frame(width: 7, height: 7).offset(x: -2, y: 3)
+                    }
+                }
+                .accessibilityLabel(row == .voice ? (voiceBadge ? "Your voice, nothing said yet" : "Your voice") : "Your body")
         }
     }
 }

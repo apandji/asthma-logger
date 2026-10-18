@@ -89,10 +89,16 @@ struct NowTimeline: View {
                         // standard, so the kind reads in the shape and the comfort in the colour.
                         for e in moments {
                             let on = e.id == currentMoment?.id
-                            let tall: CGFloat = e.moment == .rescue ? 11 : 7
-                            let c = ink.opacity(tint(e).map { 0.3 + 0.7 * $0 } ?? 0.25)
+                            // Notes (no inhaler) are short and quiet.
+                            let tall: CGFloat = e.moment == .rescue ? 11 : e.moment == .note ? 4 : 7
+                            let c = ink.opacity(e.moment == .note ? 0.4 : (tint(e).map { 0.3 + 0.7 * $0 } ?? 0.25))
                             let rect = CGRect(x: x(e.loggedAt) - 1.5, y: axis - tall, width: 3, height: 2 * tall)
                             ctx.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(on ? c : c.opacity(0.85)))
+                            // A rescue with nothing said yet: a small hollow ring above it, filled once noted.
+                            if e.wantsNote {
+                                ctx.stroke(Path(ellipseIn: CGRect(x: x(e.loggedAt) - 3, y: axis - tall - 10, width: 6, height: 6)),
+                                           with: .color(Theme.rescueSoft.opacity(0.9)), lineWidth: 1.2)
+                            }
                             if on {
                                 ctx.stroke(Path(ellipseIn: CGRect(x: x(e.loggedAt) - 9, y: axis - 9, width: 18, height: 18)),
                                            with: .color(ink), lineWidth: 1.5)

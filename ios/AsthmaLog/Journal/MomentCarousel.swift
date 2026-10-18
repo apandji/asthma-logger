@@ -190,7 +190,7 @@ struct FolderCard: View {
         switch event.moment {
         case .rescue: Theme.rescue
         case .maintenance: Theme.standard
-        case .okay: Color.secondary.opacity(0.35)
+        case .okay, .note: Color.secondary.opacity(0.35)
         }
     }
 

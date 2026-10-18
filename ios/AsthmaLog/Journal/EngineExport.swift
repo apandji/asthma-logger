@@ -109,6 +109,7 @@ enum EngineExport {
         case .rescue: "rescue"
         case .maintenance: "standard"
         case .okay: "baseline"
+        case .note: "note"
         }
     }
 

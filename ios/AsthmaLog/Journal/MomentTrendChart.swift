@@ -73,7 +73,7 @@ struct MomentTrendChart: View {
                         switch p.moment {
                         case .rescue: Circle().fill(Theme.rescue).frame(width: 9, height: 9)
                         case .maintenance: Circle().fill(Theme.standard).frame(width: 9, height: 9)
-                        case .okay: Circle().strokeBorder(Theme.secondaryText, lineWidth: 1.5).frame(width: 8, height: 8)
+                        case .okay, .note: Circle().strokeBorder(Theme.secondaryText, lineWidth: 1.5).frame(width: 8, height: 8)
                         }
                     }
             }

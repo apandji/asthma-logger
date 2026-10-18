@@ -125,7 +125,7 @@ enum BouquetBuild {
             switch m.moment {
             case .rescue: fallen.append(Theme.rescue)
             case .maintenance: fallen.append(Theme.standard)
-            case .okay: fallen.append(StrandBuild.okay)
+            case .okay, .note: fallen.append(StrandBuild.okay)
             }
         }
 

@@ -243,7 +243,7 @@ struct MomentGlyph: View {
                 ctx.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .color(Theme.rescue))
             case .maintenance:
                 ctx.fill(Sparkle.path(center: c, radius: sz.width * 0.48), with: .color(Theme.standard))
-            case .okay:
+            case .okay, .note:
                 ctx.stroke(Path(ellipseIn: CGRect(x: c.x - sz.width * 0.3, y: c.y - sz.width * 0.3, width: sz.width * 0.6, height: sz.width * 0.6)), with: .color(Theme.secondaryText), lineWidth: 2)
             }
         }

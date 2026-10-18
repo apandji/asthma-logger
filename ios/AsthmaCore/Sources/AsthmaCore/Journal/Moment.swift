@@ -11,6 +11,9 @@ public enum MomentKind: String, Codable, Sendable, CaseIterable {
     case maintenance
     /// A baseline sample (ordinary moment, no inhaler), captured automatically or as first capture.
     case okay = "baseline"
+    /// Something you said with no inhaler logged (Voice on Now): kept in the journal with the air, never in
+    /// the patterns (owner, Oct 17).
+    case note
 
     public init(_ kind: FrameKind) {
         self = kind == .attack ? .rescue : .okay
@@ -21,7 +24,7 @@ public enum MomentKind: String, Codable, Sendable, CaseIterable {
         switch self {
         case .rescue: .attack
         case .okay: .baseline
-        case .maintenance: nil
+        case .maintenance, .note: nil
         }
     }
 
@@ -30,6 +33,7 @@ public enum MomentKind: String, Codable, Sendable, CaseIterable {
         case .rescue: "Rescue"
         case .maintenance: "Standard"
         case .okay: "Baseline"
+        case .note: "Note"
         }
     }
 }

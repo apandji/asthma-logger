@@ -234,7 +234,7 @@ struct NowHomeView: View {
 
     /// A moment logged in the last couple of minutes: Now shows it, not the live reading.
     private var justNow: LogEvent? {
-        guard let m = moments.last, now.timeIntervalSince(m.loggedAt) < 120 else { return nil }
+        guard let m = moments.last(where: { $0.moment != .note }), now.timeIntervalSince(m.loggedAt) < 120 else { return nil }
         return m
     }
 
@@ -527,7 +527,8 @@ struct NowHomeView: View {
                 NowSky(conditions: air.conditions, weave: air.weave, date: now,
                        pollen: air.pollen, probing: $probing,
                        mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() },
-                       event: liveEvent, showsSelf: true, onRecord: { recording = $0 })
+                       event: liveEvent, showsSelf: true, onRecord: { recording = $0 },
+                       makeNote: { await services.log(.note, in: context, writeToHealth: false) })
                     .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
             }
         case .moment(let m):
@@ -659,10 +660,9 @@ struct NowHomeView: View {
             let air = liveAir
             return adviceDeck(event: liveEvent, fallF: air.conditions?.tempFallF,
                               notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false), home: atHome, ahead: false)
-        case .moment(let m):
-            // A rescue always gets its note card (to add one, if there's none); a Standard only when it has one.
-            let hasNote = !(m.voiceTranscript ?? "").isEmpty || !m.tags.isEmpty || m.voiceNoteFile != nil
-            return m.moment == .rescue || hasNote ? [.note(m)] : []
+        case .moment:
+            // No note card: Voice on the rail is where you say what was going on.
+            return []
         case .hour(let h):
             return adviceDeck(event: aheadEvent(h), fallF: h.conditions.tempFallF,
                               notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true),
@@ -689,8 +689,6 @@ struct NowHomeView: View {
             AdviceCard(warning: w, icon: icon, title: title, home: home, ahead: ahead)
         case .capture(let e):
             CaptureCard(event: e) { recording = e }
-        case .note(let e):
-            NoteCard(event: e) { recording = e }
         }
     }
 
@@ -967,6 +965,10 @@ struct NowSky: View {
     /// The moment Self is about (nil for Now with nothing logged), and how to record a note for it.
     var selfEvent: LogEvent? = nil
     var onRecord: ((LogEvent) -> Void)? = nil
+    /// Saving a voice note on Now with nothing logged makes a Note moment (never in patterns).
+    var makeNote: (() async -> LogEvent?)? = nil
+    @State private var voice = VoiceSession()
+    @Environment(\.modelContext) private var modelContext
     /// Let go on a Self row and its panel stays, the rail open beside it.
     @State private var pinned: RailRow?
     @Environment(\.skyDent) private var dent
@@ -1080,7 +1082,10 @@ struct NowSky: View {
                 // buttons still work).
                 if pinned != nil && row == nil {
                     Color.clear.contentShape(Rectangle())
-                        .onTapGesture { withAnimation(Theme.smooth) { pinned = nil; expanded = false } }
+                        .onTapGesture {
+                            if voice.phase != .idle { voice.discard() }
+                            withAnimation(Theme.smooth) { pinned = nil; expanded = false }
+                        }
                 }
                 if let shown = row ?? pinned, let i = rows.firstIndex(of: shown) {
                     let x = railLeft ? 64 + 130 : size.width - 64 - 130, y = min(max(mids[i], 110), size.height - 110)
@@ -1091,12 +1096,14 @@ struct NowSky: View {
                             .position(x: railLeft ? 64 + 118 : size.width - 64 - 118, y: min(max(mids[i], 90), size.height - 90))
                             .allowsHitTesting(false)
                             .transition(.opacity)
-                    case .me:
-                        SelfSummary(event: selfEvent, date: selfEvent?.loggedAt ?? date)
-                            .frame(width: 248).position(x: x, y: y).transition(.opacity)
                     case .voice:
-                        VoicePanel(event: selfEvent, interactive: !probing, record: { onRecord?($0) })
-                            .frame(width: 248).position(x: x, y: y).transition(.opacity)
+                        VoicePanel(event: selfEvent, session: voice, interactive: !probing, save: {
+                            Task {
+                                await voice.save(into: selfEvent, makeNote: { await makeNote?() }, context: modelContext)
+                                withAnimation(Theme.smooth) { pinned = nil; expanded = false }
+                            }
+                        })
+                        .frame(width: 260).position(x: x, y: y).transition(.opacity)
                     case .body:
                         BodyPanel(date: selfEvent?.loggedAt ?? date, interactive: !probing)
                             .frame(width: 248).position(x: x, y: y).transition(.opacity)
@@ -1119,13 +1126,14 @@ struct NowSky: View {
             }
             // The scale: the legend, and the only place you read the air. Slide up and down it.
             .overlay(alignment: railLeft ? .leading : .trailing) {
-                GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions))
+                GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions),
+                         voiceBadge: selfEvent?.wantsNote ?? false)
                     .padding(railLeft ? .leading : .trailing, 18)
                     .frame(width: 64, height: size.height, alignment: railLeft ? .leading : .trailing)
                     .contentShape(Rectangle())
                     .gesture(scrub(size))
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Weather, particles and gases, biologics" + (showsSelf ? ", and self" : ""))
+                    .accessibilityLabel("Weather, particles and gases, biologics" + (showsSelf ? ", your voice and your body" : ""))
                     .accessibilityAdjustableAction { dir in
                         let all = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
                         let i = row.flatMap { all.firstIndex(of: $0) } ?? -1
@@ -1187,6 +1195,20 @@ struct NowSky: View {
                     probing = true; touched = true; startPulse()
                     withAnimation(.snappy(duration: 0.25)) { expanded = true }
                 }
+                // How far the thumb has slid off the rail toward the sky (the rail column is 64 pt wide).
+                let inward = railLeft ? drag.location.x - 32 : 32 - drag.location.x
+                // On Voice, slide sideways into its panel to record; slide back out to cancel.
+                if row == .voice || voice.phase == .recording {
+                    if voice.phase == .idle && inward > 72 {
+                        stopPulse()
+                        Task { await voice.start() }
+                        return
+                    }
+                    if voice.phase == .recording {
+                        if inward < 28 { voice.cancel(); UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+                        return   // recording: the rail holds still on Voice
+                    }
+                }
                 let rows = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
                 let mids = RailRow.mids(rows).map { CGFloat($0) * size.height }
                 let nearest = mids.enumerated().min { abs($0.element - drag.location.y) < abs($1.element - drag.location.y) }?.offset ?? 0
@@ -1194,7 +1216,9 @@ struct NowSky: View {
             }
             .onEnded { _ in
                 stopPulse()
-                // Self's rows stay open where you let go, the rail with them; the air's close.
+                // Lift while recording: stop, write it down, review.
+                if voice.phase == .recording { Task { await voice.finish() } }
+                // Voice and Body stay open where you let go, the rail with them; the air's close.
                 let keep = (row?.isSelf ?? false) ? row : nil
                 withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil; pinned = keep; expanded = keep != nil }
                 probing = false
@@ -1231,7 +1255,7 @@ struct NowSky: View {
             }
         case .item(let n):
             p = SkyExplorer.layerProbe(n, layers: layers, conditions: conditions, pollen: pollen)
-        case .me, .voice, .body:
+        case .voice, .body:
             p = nil   // Self's panels read themselves.
         }
         if var probe = p, let h = history {
@@ -1595,14 +1619,11 @@ enum HeaderCard: Identifiable {
     case advice(AirAdvice.Warning, icon: String, title: String, home: Bool, ahead: Bool)
     /// Just logged: say what's going on.
     case capture(LogEvent)
-    /// A past moment's note and tags, or a way to add them.
-    case note(LogEvent)
 
     var id: String {
         switch self {
         case .advice(_, _, let title, _, _): "advice-\(title)"
         case .capture(let e): "capture-\(e.id)"
-        case .note(let e): "note-\(e.id)"
         }
     }
 }
@@ -1739,39 +1760,3 @@ struct CaptureCard: View {
     }
 }
 
-/// A past moment's note: your words and tags, or a way to add them.
-struct NoteCard: View {
-    let event: LogEvent
-    let add: () -> Void
-
-    var body: some View {
-        let words = (event.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let tags = event.tags.sorted()
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Your note", systemImage: "waveform").font(.subheadline.weight(.semibold))
-            if words.isEmpty && tags.isEmpty {
-                Text("Nothing noted yet.").font(.subheadline).foregroundStyle(Theme.secondaryText)
-            }
-            if !words.isEmpty {
-                Text("“\(words)”").font(.subheadline).italic().lineLimit(3)
-            }
-            if !tags.isEmpty {
-                FlowLayout(spacing: 6) {
-                    ForEach(tags) { t in
-                        Text(t.label).font(.caption.weight(.semibold))
-                            .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background(Capsule().fill(Color.primary.opacity(0.12)))
-                    }
-                }
-            }
-            Button(action: add) {
-                Text(words.isEmpty && tags.isEmpty ? "Add what was going on" : "Edit")
-                    .font(.subheadline.weight(.semibold))
-            }
-            .buttonStyle(PressStyle())
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
-    }
-}

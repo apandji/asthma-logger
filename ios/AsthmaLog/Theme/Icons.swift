@@ -8,6 +8,9 @@ enum Icons {
     static let particles = "aqi.medium"
     static let biologics = "allergens"
     static let me = "person.fill"
+    /// Your voice and your body: their own stops on the rail.
+    static let voice = "waveform"
+    static let body = "figure.walk"
 
     /// One symbol per layer of the sky. PM2.5 shares its group's symbol: it's the particle people know.
     static func layer(_ name: String) -> String {

@@ -35,7 +35,7 @@ struct MomentSwatch: View {
         switch event.moment {
         case .rescue: Theme.rescue
         case .maintenance: Theme.standard
-        case .okay: .white.opacity(0.5)
+        case .okay, .note: .white.opacity(0.5)
         }
     }
 }

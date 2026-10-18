@@ -102,6 +102,9 @@ final class LogEvent {
 
     var isDemo: Bool { isDemoMoment || note == Self.legacyDemoNote }
 
+    /// A rescue moment with nothing said and no tags reviewed: the timeline rings it, Voice wears a dot.
+    var wantsNote: Bool { moment == .rescue && (voiceTranscript ?? "").isEmpty && !tagsReviewed && !isDemo }
+
     /// Feature frame for insights, or nil when no outdoor value was stamped (same rule as the web prototype).
     func frame(calendar: Calendar = .current) -> FeatureFrame? {
         guard !isDemo, moment.frameKind != nil, let c = conditions, c.input.hasAnyValue else { return nil }

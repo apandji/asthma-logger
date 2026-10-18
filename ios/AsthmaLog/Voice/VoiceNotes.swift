@@ -37,7 +37,8 @@ final class VoiceNotes: NSObject, AVAudioPlayerDelegate {
         // Off the main thread: activating the session can stall, and a runtime fault flags it there.
         await Task.detached(priority: .userInitiated) {
             let session = AVAudioSession.sharedInstance()
-            try? session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+            // Spoken audio: tuned for a voice, not music or a call (no echo cancelling the words away).
+            try? session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
             try? session.setActive(true)
         }.value
         // Its own file per recording: a moment can have several voice notes.
@@ -50,14 +51,19 @@ final class VoiceNotes: NSObject, AVAudioPlayerDelegate {
                   AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: format.sampleRate, AVNumberOfChannelsKey: 1,
                   AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
               ], commonFormat: format.commonFormat, interleaved: format.isInterleaved) else { return false }
-        // Live words, when speech recognition is allowed and the recogniser is up.
+        // Live words: Apple's newer on-device model first; the older recogniser when it isn't on the phone yet.
         var request: SFSpeechAudioBufferRecognitionRequest?
         var task: SFSpeechRecognitionTask?
-        if await NoteTranscriber.authorize(), let r = SFSpeechRecognizer(), r.isAvailable {
+        let authorized = await NoteTranscriber.authorize()
+        let live: LiveTranscriber? = authorized ? await LiveTranscriber.make { @Sendable [weak self] text in
+            Task { @MainActor in self?.liveWords = text }
+        } : nil
+        if live == nil, authorized, let r = SFSpeechRecognizer(), r.isAvailable {
             let req = SFSpeechAudioBufferRecognitionRequest()
             req.shouldReportPartialResults = true
             req.requiresOnDeviceRecognition = r.supportsOnDeviceRecognition
             req.addsPunctuation = true
+            req.contextualStrings = LiveTranscriber.vocabulary
             request = req
             task = r.recognitionTask(with: req) { @Sendable [weak self] result, _ in
                 guard let result else { return }
@@ -70,7 +76,7 @@ final class VoiceNotes: NSObject, AVAudioPlayerDelegate {
                 }
             }
         }
-        let sink = Sink(file: audioFile, request: request, task: task)
+        let sink = Sink(file: audioFile, request: request, task: task, live: live)
         self.sink = sink
         liveWords = ""
         // @Sendable: the tap runs on the audio thread, so the closure must not be main-actor (the app's default).
@@ -102,6 +108,11 @@ final class VoiceNotes: NSObject, AVAudioPlayerDelegate {
     /// The final transcript from live recognition, waiting a moment for the recogniser to settle. Nil when
     /// live recognition wasn't running (transcribe the file instead).
     func finishLive() async -> String? {
+        if let live = sink?.live {
+            let text = await live.finish() ?? (liveWords.isEmpty ? nil : liveWords)
+            self.sink = nil
+            return text
+        }
         guard let sink, sink.request != nil else { self.sink = nil; return nil }
         let text = await sink.finalText(timeout: .seconds(2)) ?? liveWords
         self.sink = nil
@@ -143,6 +154,7 @@ final class VoiceNotes: NSObject, AVAudioPlayerDelegate {
 nonisolated private final class Sink: @unchecked Sendable {
     let file: AVAudioFile
     let request: SFSpeechAudioBufferRecognitionRequest?
+    let live: LiveTranscriber?
     private let task: SFSpeechRecognitionTask?
     private let lock = NSLock()
     private var closed = false
@@ -150,9 +162,10 @@ nonisolated private final class Sink: @unchecked Sendable {
     private var final: String?
     private var waiters: [CheckedContinuation<String?, Never>] = []
 
-    init(file: AVAudioFile, request: SFSpeechAudioBufferRecognitionRequest?, task: SFSpeechRecognitionTask?) {
+    init(file: AVAudioFile, request: SFSpeechAudioBufferRecognitionRequest?, task: SFSpeechRecognitionTask?, live: LiveTranscriber?) {
         self.file = file
         self.request = request
+        self.live = live
         self.task = task
     }
 
@@ -161,6 +174,7 @@ nonisolated private final class Sink: @unchecked Sendable {
         guard !closed else { return }
         try? file.write(from: buffer)
         request?.append(buffer)
+        live?.append(buffer)
         // The level: RMS of the buffer, every few buffers, to the main actor.
         frames += 1
         if frames % 3 == 0, let data = buffer.floatChannelData?[0] {

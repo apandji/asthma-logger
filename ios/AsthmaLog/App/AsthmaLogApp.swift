@@ -35,6 +35,8 @@ struct AsthmaLogApp: App {
                 .environment(button)
                 .tint(Theme.tint)
                 .task {
+                    // The speech model for voice notes, fetched ahead so the first note is transcribed well.
+                    Task.detached(priority: .utility) { await LiveTranscriber.prepare() }
                     let context = container.mainContext
                     #if DEBUG
                     // For demos and recordings: `-demoWeek` loads the labelled demo week, `-skipOnboarding` skips first run.

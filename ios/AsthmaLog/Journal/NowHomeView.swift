@@ -48,6 +48,8 @@ struct NowHomeView: View {
     @State private var skyPress: CGFloat = 0
     /// The clock. Ticks so "now" creeps along the track while you watch.
     @State private var now = Date()
+    /// Active wildfires near here, while smoke is the event (Ambee, demo until the key arrives).
+    @State private var fires: WildfiresNearby?
     @Namespace private var mapZoom
     @State private var tips = TipGroup(.ordered) { PullToLogTip() }
 
@@ -60,11 +62,13 @@ struct NowHomeView: View {
                 header
                     .opacity(probing ? 0.4 : 1)
                     .animation(Theme.smooth, value: probing)
-                // What to do about the air right now: the event's warning, or the highest pollutant's.
-                if case .now = focus, justNow == nil, let w = nowWarning {
-                    AdviceCard(warning: w.warning, icon: w.icon, home: Self.knownPlace(here?.lat, here?.lon)?.name == "Home",
-                               showHeadline: w.showHeadline)
-                        .padding(.horizontal, 20).padding(.top, 10)
+                // The cards: what to do or see at this time. Several can be true at once, so they stack and you
+                // swipe through them, most important first (docs/design/header-ia.md).
+                let deck = cards
+                if !deck.isEmpty {
+                    CardStack(cards: deck) { card($0) }
+                        .id(focusKey)
+                        .padding(.top, 10)
                         .opacity(probing ? 0.4 : 1)
                         .transition(.opacity)
                 }
@@ -150,10 +154,8 @@ struct NowHomeView: View {
                     LoggedToast(event: e, undo: {
                         withAnimation(.snappy) { toast = nil }
                         Task { await services.delete(e, in: context) }
-                    }, note: {
-                        withAnimation(.snappy) { toast = nil }
-                        recording = e
                     })
+                    // No Note button here: Now's capture card asks (docs/design/header-ia.md).
                 }
             }
             .sheet(isPresented: $showInsights) {
@@ -176,6 +178,11 @@ struct NowHomeView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .task { await load() }
+            // Re-runs when the location arrives, not only when the event changes.
+            .task(id: "\(liveEvent == .smoke)-\(here?.lat ?? 0)") {
+                guard liveEvent == .smoke, let p = here else { fires = nil; return }
+                fires = await AmbeeClient.wildfires(latitude: p.lat, longitude: p.lon)
+            }
             // Every moment's map, newest first, drawn ahead of time: scrubbing never finds a blank.
             .task(id: moments.count) {
                 for m in moments.reversed() {
@@ -361,24 +368,20 @@ struct NowHomeView: View {
             switch focus {
             case .now:
                 if let j = justNow {
+                    // Just logged: Now is taken over by the capture. No verdict while it's happening.
                     VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place)),
-                                  title: AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions),
-                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
-                } else if let e = liveEvent {
-                    VerdictHeader(place: AnyView(HStack(spacing: 8) { placeLabel(here?.lat, here?.lon, here?.place, current: true); EventChip(event: e) }),
-                                  title: e.sentence(temperature: liveAir.conditions?.best(.temperature)?.value, fallF: liveAir.conditions?.tempFallF),
-                                  verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
+                                  title: TheRead.justLogged(j.moment.title), verdict: nil, tint: nil)
                 } else {
                     VerdictHeader(place: AnyView(placeLabel(here?.lat, here?.lon, here?.place, current: true)),
-                                  title: here?.statement ?? "Checking the air near you…",
+                                  title: here == nil ? "Checking the air near you…" : nowRead,
                                   verdict: outlook(at: now).text, tint: outlook(at: now).tint, onVerdict: { showInsights = true })
                 }
             case .moment(let m):
                 VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
-                              title: standsOut(m) ?? m.pastStatement, verdict: nil, tint: nil,
+                              title: m.moment == .maintenance ? TheRead.standard : (standsOut(m) ?? m.pastStatement), verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
             case .hour(let h):
-                VerdictHeader(place: AnyView(placeField), title: h.statement,
+                VerdictHeader(place: AnyView(placeField), title: aheadRead(h),
                               verdict: outlook(at: h.date).text, tint: outlook(at: h.date).tint, onVerdict: { showInsights = true })
             }
         }
@@ -419,8 +422,7 @@ struct NowHomeView: View {
         case let p?: ("location", Self.clean(p.name))
         }
         return HStack(spacing: 8) {
-            // The label keeps its width; the field gives way and truncates.
-            Text("Forecast for").foregroundStyle(Theme.secondaryText).lineLimit(1).fixedSize()
+            // No "Forecast for": the read names the time, and the verdict sits beside this on the context line.
             Button { showPlaces = true } label: {
                 HStack(spacing: 6) {
                     Image(systemName: icon).font(.caption)
@@ -492,13 +494,9 @@ struct NowHomeView: View {
     /// Before felt air has learned: how far along it is.
     private var sentence: String {
         if let p = model.progress, !p.isMet {
-            let needRescue = max(0, p.minAttacks - p.attacks), needCalm = max(0, p.minBaselines - p.baselines)
-            // "Learning: 1 rescue and 14 baseline moments to go"
-            var parts: [String] = []
-            if needRescue > 0 { parts.append("\(needRescue) rescue") }
-            if needCalm > 0 { parts.append("\(needCalm) baseline") }
-            let total = needRescue + needCalm
-            return "Learning: " + parts.joined(separator: " and ") + (total == 1 ? " moment to go" : " moments to go")
+            // "Learning: 25 moments to go". The pill stays one line; Insights' ring has the split.
+            let total = max(0, p.minAttacks - p.attacks) + max(0, p.minBaselines - p.baselines)
+            return "Learning: \(total) " + (total == 1 ? "moment to go" : "moments to go")
         }
         return "Learning your days"
     }
@@ -574,19 +572,109 @@ struct NowHomeView: View {
                                 temperatureF: c.best(.temperature)?.value)
     }
 
-    /// Now's warning: the event's, else the pollutant or pollen that's highest (only at a high level).
-    private var nowWarning: (warning: AirAdvice.Warning, icon: String, showHeadline: Bool)? {
-        if let e = liveEvent {
-            // The header already says what's going on; the card leads with the advice.
-            return (AirAdvice.warning(e.advice, fallF: liveAir.conditions?.tempFallF), e.icon, false)
-        }
+    // MARK: The read and the cards (docs/design/header-ia.md)
+
+    private var isLearned: Bool { forced == .learned || (forced == .auto && (model.progress?.isMet ?? false)) }
+
+    /// Gated rows to compare against: yours, or the demo person's while Design crit forces "learned".
+    private var gatedRows: [LiftRow] {
+        if forced == .learned, !(model.progress?.isMet ?? false) { return AirProfile.demoPerson.axes.compactMap(\.lead).filter(\.gated) }
+        return model.report?.gatedRows ?? []
+    }
+
+    private func shared(_ c: Conditions?, at d: Date) -> [LiftRow] {
+        guard let c, c.input.hasAnyValue else { return [] }
+        return TheRead.shared(FrameBuilder.frame(id: "read", kind: .baseline, date: d, conditions: c.input), rows: gatedRows)
+    }
+
+    /// What's at a high level, most first, as a clause: "weed pollen is high" (or "looks high", ahead).
+    private func notable(_ c: Conditions?, weave: WeaveSpec, pollen: PollenSample?, ahead: Bool) -> [(factor: AirAdvice.Factor, clause: String)] {
+        let names: [String: (AirAdvice.Factor, String)] = [
+            "PM2.5": (.pm25, "fine particles"), "PM10": (.pm10, "coarse dust"), "NO₂": (.no2, "traffic pollution"),
+            "Ozone": (.ozone, "ozone"), "Tree pollen": (.treePollen, "tree pollen"), "Grass pollen": (.grassPollen, "grass pollen"),
+            "Weed pollen": (.weedPollen, "weed pollen"),
+        ]
+        return AirLayers(conditions: c, weave: weave, pollen: pollen).all
+            .filter { $0.level == .high }
+            .sorted { $0.fraction > $1.fraction }
+            .compactMap { l in names[l.name].map { ($0.0, "\($0.1) \(ahead ? "looks" : "is") high") } }
+    }
+
+    /// Now: the event, then what you share with your flare days (counts), or what's high, never the weather.
+    private var nowRead: String {
         let air = liveAir
-        let layers = AirLayers(conditions: air.conditions, weave: air.weave, pollen: air.pollen)
-        let factors: [String: AirAdvice.Factor] = ["PM2.5": .pm25, "PM10": .pm10, "NO₂": .no2, "Ozone": .ozone,
-                                                   "Tree pollen": .treePollen, "Grass pollen": .grassPollen, "Weed pollen": .weedPollen]
-        guard let top = layers.all.filter({ $0.level == .high }).max(by: { $0.fraction < $1.fraction }),
-              let f = factors[top.name] else { return nil }
-        return (AirAdvice.warning(f), f.rawValue.hasSuffix("Pollen") ? "leaf.fill" : "aqi.medium", true)
+        return TheRead.sentence(time: .now, learned: isLearned, event: liveEvent?.advice, fallF: air.conditions?.tempFallF,
+                                fires: fires, shared: shared(air.conditions, at: now),
+                                notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false).map(\.clause))
+    }
+
+    /// An event the forecast shows (a sharp drop, mold weather).
+    private func aheadEvent(_ h: NowHour) -> AirEvent? {
+        if TempDrop.band(h.conditions.tempFallF) == .sharp { return .tempDrop }
+        return Self.isMold(h.conditions) ? .mold : nil
+    }
+
+    private func aheadRead(_ h: NowHour) -> String {
+        let tint = outlook(at: h.date).tint
+        return TheRead.sentence(time: .ahead(Self.when(h.date)), learned: isLearned, event: aheadEvent(h)?.advice,
+                                fallF: h.conditions.tempFallF, shared: shared(h.conditions, at: h.date),
+                                notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true).map(\.clause),
+                                looksLikeFlare: tint == Self.red || tint == Self.yellow)
+    }
+
+    private var atHome: Bool { Self.knownPlace(here?.lat, here?.lon)?.name == "Home" }
+
+    /// Ahead, the advice follows the forecast's place, not where you are.
+    private var forecastAtHome: Bool {
+        guard let chosen else { return atHome }
+        return chosen == SavedPlace.load(SavedPlace.homeKey)
+    }
+
+    /// The deck for the playhead's time, most important first.
+    private var cards: [HeaderCard] {
+        switch focus {
+        case .now:
+            if let j = justNow {
+                var deck: [HeaderCard] = [.capture(j)]
+                if let e = liveEvent { deck.append(.advice(AirAdvice.warning(e.advice, fallF: liveAir.conditions?.tempFallF), icon: e.icon, title: e.label, home: atHome, ahead: false)) }
+                return deck
+            }
+            let air = liveAir
+            return adviceDeck(event: liveEvent, fallF: air.conditions?.tempFallF,
+                              notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false), home: atHome, ahead: false)
+        case .moment(let m):
+            // A rescue always gets its note card (to add one, if there's none); a Standard only when it has one.
+            let hasNote = !(m.voiceTranscript ?? "").isEmpty || !m.tags.isEmpty || m.voiceNoteFile != nil
+            return m.moment == .rescue || hasNote ? [.note(m)] : []
+        case .hour(let h):
+            return adviceDeck(event: aheadEvent(h), fallF: h.conditions.tempFallF,
+                              notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true),
+                              home: forecastAtHome, ahead: true)
+        }
+    }
+
+    private func adviceDeck(event: AirEvent?, fallF: Double?, notable: [(factor: AirAdvice.Factor, clause: String)],
+                            home: Bool, ahead: Bool) -> [HeaderCard] {
+        var deck: [HeaderCard] = []
+        if let event { deck.append(.advice(AirAdvice.warning(event.advice, fallF: fallF), icon: event.icon, title: event.label, home: home, ahead: ahead)) }
+        for n in notable.prefix(3) {
+            let w = AirAdvice.warning(n.factor)
+            deck.append(.advice(w, icon: n.factor.rawValue.hasSuffix("Pollen") ? "leaf.fill" : "aqi.medium",
+                                title: w.headline.replacingOccurrences(of: " today.", with: "").replacingOccurrences(of: ".", with: ""),
+                                home: home, ahead: ahead))
+        }
+        return deck
+    }
+
+    @ViewBuilder private func card(_ c: HeaderCard) -> some View {
+        switch c {
+        case .advice(let w, let icon, let title, let home, let ahead):
+            AdviceCard(warning: w, icon: icon, title: title, home: home, ahead: ahead)
+        case .capture(let e):
+            CaptureCard(event: e) { recording = e }
+        case .note(let e):
+            NoteCard(event: e) { recording = e }
+        }
     }
 
     private func standsOutBody(_ m: LogEvent) -> String? {
@@ -602,7 +690,7 @@ struct NowHomeView: View {
         guard learned else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         if forced == .learned, !(model.progress?.isMet ?? false) {
             // The demo person's story, for moments without a real pattern behind them.
-            return ["Weed pollen was high, as on most of your flare days.", before].compactMap { $0 }.joined(separator: " ")
+            return ["High weed pollen came up at 9 of your 14 rescue moments.", before].compactMap { $0 }.joined(separator: " ")
         }
         guard let frame = m.frame(), let rows = model.report?.gatedRows, !rows.isEmpty else {
             return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ")
@@ -614,10 +702,9 @@ struct NowHomeView: View {
         }
         .sorted { $0.1 > $1.1 }
         guard !hits.isEmpty else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
-        let named = hits.prefix(2).map(\.0)
-        let joined = named.count == 1 ? named[0] : "\(named[0]) and \(named[1])"
-        let now = joined.prefix(1).uppercased() + joined.dropFirst() + ", as on most of your flare days."
-        return [now, before].compactMap { $0 }.joined(separator: " ")
+        // Raw counts, not "as on most of your flare days".
+        let top = TheRead.shared(frame, rows: rows).first.map(TheRead.counted)
+        return [top, before].compactMap { $0 }.joined(separator: " ")
     }
 
     /// "Fine particles were high in the two days before." Only signals whose two windows were read well
@@ -1261,9 +1348,11 @@ struct VerdictHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // The context line: tag, place, and the verdict (the place gives way first).
             HStack(spacing: 8) {
                 if let tag { MomentTag(moment: tag) }
-                place
+                place.layoutPriority(0)
+                if verdict != nil { verdictPill.layoutPriority(1) }
             }
             .frame(minHeight: 30, alignment: .leading)
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
@@ -1273,39 +1362,38 @@ struct VerdictHeader: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(settled ? .easeInOut(duration: 0.22) : nil, value: title)
-            let ink = tint ?? Theme.secondaryText
-            Button { onVerdict?() } label: {
-                HStack(spacing: 7) {
-                    Circle().fill(ink).frame(width: 7, height: 7)
-                    Text(verdict ?? " ").lineLimit(1)
-                        .contentTransition(.opacity)
-                        .animation(settled ? .easeInOut(duration: 0.22) : nil, value: verdict)
-                    if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .background(Capsule().fill(ink.opacity(0.16)))
-            }
-            .buttonStyle(PressStyle())
-            .disabled(onVerdict == nil)
-            .opacity(verdict == nil ? 0 : 1)
-            .contentTransition(.opacity)
-            .overlay(alignment: .leading) {
-                if verdict == nil, let when {
-                    // Sized to its own text, not the hidden pill's (which is one space wide).
-                    Label(when, systemImage: "clock")
-                        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
-                        .fixedSize()
-                        .transition(.opacity)
-                }
+            if let when {
+                Label(when, systemImage: "clock")
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.top, 6)
         .animation(settled ? .easeInOut(duration: 0.22) : nil, value: tint)
+    }
+}
+
+extension VerdictHeader {
+    /// How this time compares with your days, as a pill; tap for Insights.
+    var verdictPill: some View {
+        let ink = tint ?? Theme.secondaryText
+        return Button { onVerdict?() } label: {
+            HStack(spacing: 6) {
+                Circle().fill(ink).frame(width: 7, height: 7)
+                Text(verdict ?? " ").lineLimit(1).fixedSize()
+                    .contentTransition(.opacity)
+                    .animation(settled ? .easeInOut(duration: 0.22) : nil, value: verdict)
+                if onVerdict != nil { Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6) }
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Capsule().fill(ink.opacity(0.16)))
+        }
+        .buttonStyle(PressStyle())
+        .disabled(onVerdict == nil)
     }
 }
 
@@ -1380,21 +1468,85 @@ struct EventChip: View {
     }
 }
 
-/// What to do about the air right now, for where you are: staying put at Home, going out anywhere else (tap
-/// to see the other). The advice is a provocation for provider testing (docs/air-advice.md), so it always
-/// says it isn't medical advice.
+/// What sits under the header at each time (docs/design/header-ia.md).
+enum HeaderCard: Identifiable {
+    /// Advice for Now or Ahead: staying put or going out.
+    case advice(AirAdvice.Warning, icon: String, title: String, home: Bool, ahead: Bool)
+    /// Just logged: say what's going on.
+    case capture(LogEvent)
+    /// A past moment's note and tags, or a way to add them.
+    case note(LogEvent)
+
+    var id: String {
+        switch self {
+        case .advice(_, _, let title, _, _): "advice-\(title)"
+        case .capture(let e): "capture-\(e.id)"
+        case .note(let e): "note-\(e.id)"
+        }
+    }
+}
+
+/// Several cards true at once: a row you swipe through, the next one peeking in, with page dots.
+struct CardStack<Content: View>: View {
+    let cards: [HeaderCard]
+    @ViewBuilder let content: (HeaderCard) -> Content
+    @State private var page: String?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(cards) { c in
+                        content(c)
+                            // Full width when alone; with more, narrower so the next one shows at the edge.
+                            .containerRelativeFrame(.horizontal) { w, _ in w - (cards.count > 1 ? 28 : 0) }
+                            .id(c.id)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .contentMargins(.horizontal, 20, for: .scrollContent)
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $page)
+            .sensoryFeedback(.selection, trigger: page)
+            if cards.count > 1 {
+                HStack(spacing: 6) {
+                    ForEach(cards) { c in
+                        Circle().fill(Color.primary.opacity((page ?? cards.first?.id) == c.id ? 0.9 : 0.25)).frame(width: 6, height: 6)
+                    }
+                }
+                .accessibilityElement()
+                .accessibilityLabel("\(cards.count) cards")
+            }
+        }
+    }
+}
+
+/// What to do about the air, for where you are: staying put at Home, going out anywhere else (tap to see the
+/// other). Ahead, it's for planning. The advice is a provocation for provider conversations
+/// (docs/air-advice.md); the "i" says it isn't medical advice.
 struct AdviceCard: View {
     let warning: AirAdvice.Warning
     let icon: String
+    let title: String
     let home: Bool
-    var showHeadline = true
+    var ahead = false
     @State private var picked: AirAdvice.Context?
+    @State private var showNote = false
 
     var body: some View {
         let context = picked ?? .at(home: home)
         VStack(alignment: .leading, spacing: 8) {
-            if showHeadline {
-                Label(warning.headline, systemImage: icon).font(.subheadline.weight(.semibold))
+            HStack(spacing: 6) {
+                Label(ahead ? "Planning ahead · \(title)" : title, systemImage: icon)
+                    .font(.subheadline.weight(.semibold)).lineLimit(1)
+                Spacer(minLength: 4)
+                Button { withAnimation(Theme.snap) { showNote.toggle() } } label: {
+                    Image(systemName: "info.circle").font(.subheadline).foregroundStyle(Theme.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("About this suggestion")
             }
             HStack(spacing: 6) {
                 ForEach(AirAdvice.Context.allCases, id: \.self) { c in
@@ -1410,7 +1562,92 @@ struct AdviceCard: View {
             }
             Text(warning.advice(context)).font(.subheadline).fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
-            Text(AirAdvice.disclaimer).font(.caption2).foregroundStyle(Theme.secondaryText)
+            if showNote {
+                Text(AirAdvice.disclaimer).font(.caption2).foregroundStyle(Theme.secondaryText).transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    }
+}
+
+/// Just logged, on Now: say what's going on, or tap what fits. The same choices as the Lock Screen card.
+struct CaptureCard: View {
+    let event: LogEvent
+    let record: () -> Void
+    @Environment(\.modelContext) private var context
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Say it or tap it").font(.subheadline.weight(.semibold))
+                FlowLayout(spacing: 6) {
+                    ForEach([JournalTag.exercise, .coldAir, .pets, .smoke], id: \.self) { t in
+                        let on = event.tags.contains(t)
+                        Button { toggle(t) } label: {
+                            Text(t.label).font(.caption.weight(.semibold))
+                                .foregroundStyle(on ? Color.black : .primary)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Capsule().fill(on ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary.opacity(0.12))))
+                        }
+                        .buttonStyle(PressStyle())
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            Button(action: record) {
+                Image(systemName: "mic.fill").font(.title3.weight(.semibold))
+                    .frame(width: 56, height: 56)
+                    .glassEffect(.regular.interactive(), in: .circle)
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityLabel("Record a voice note")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    }
+
+    private func toggle(_ t: JournalTag) {
+        if event.tags.contains(t) { event.tags.remove(t) } else { event.tags.insert(t) }
+        event.tagsReviewed = true
+        try? context.save()
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+}
+
+/// A past moment's note: your words and tags, or a way to add them.
+struct NoteCard: View {
+    let event: LogEvent
+    let add: () -> Void
+
+    var body: some View {
+        let words = (event.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let tags = event.tags.sorted()
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Your note", systemImage: "waveform").font(.subheadline.weight(.semibold))
+            if words.isEmpty && tags.isEmpty {
+                Text("Nothing noted yet.").font(.subheadline).foregroundStyle(Theme.secondaryText)
+            }
+            if !words.isEmpty {
+                Text("“\(words)”").font(.subheadline).italic().lineLimit(3)
+            }
+            if !tags.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(tags) { t in
+                        Text(t.label).font(.caption.weight(.semibold))
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(Capsule().fill(Color.primary.opacity(0.12)))
+                    }
+                }
+            }
+            Button(action: add) {
+                Text(words.isEmpty && tags.isEmpty ? "Add what was going on" : "Edit")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(PressStyle())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)

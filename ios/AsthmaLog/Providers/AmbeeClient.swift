@@ -42,6 +42,20 @@ nonisolated struct AmbeeClient: AmbeeSource {
         return Array(all.filter { $0.date >= from.addingTimeInterval(-3600) }.prefix(hours))
     }
 
+    /// Active fires near the place (`/fire/latest/by-lat-lng`).
+    func fires(latitude: Double, longitude: Double) async -> [Ambee.FireResponse.Fire] {
+        let r: Ambee.FireResponse? = try? await get("/fire/latest/by-lat-lng", latitude, longitude)
+        return r?.data ?? []
+    }
+
+    /// Wildfires near a place: live Ambee when there's a key, the demo's otherwise.
+    @MainActor static func wildfires(latitude: Double, longitude: Double) async -> WildfiresNearby? {
+        let fires: [Ambee.FireResponse.Fire]
+        if let key = Secrets.ambee { fires = await AmbeeClient(key: key).fires(latitude: latitude, longitude: longitude) }
+        else { fires = DemoAmbee().fires(latitude: latitude, longitude: longitude) }
+        return WildfiresNearby(fires: fires, latitude: latitude, longitude: longitude)
+    }
+
     private func get<T: Decodable & Sendable>(_ path: String, _ lat: Double, _ lng: Double, _ extra: [String: String] = [:]) async throws -> T {
         var c = URLComponents(string: base + path)!
         c.queryItems = [URLQueryItem(name: "lat", value: String(lat)), URLQueryItem(name: "lng", value: String(lng))]

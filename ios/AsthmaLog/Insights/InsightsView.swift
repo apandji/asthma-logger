@@ -137,6 +137,18 @@ struct InsightsView: View {
                     withAnimation(Theme.snap) { picked = picked == a.category ? nil : a.category }
                 }
             }
+            // About you rather than the air: when and where (time of day, indoors or out), from the same table.
+            let personal = demoLearned ? ["You used your inhaler most in the afternoon: 8 of your 14 rescue moments."]
+                                       : TheRead.personal(model.report?.rows ?? [])
+            if !personal.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("When and where", systemImage: "clock").font(.body.weight(.medium))
+                    ForEach(personal, id: \.self) { Text($0).font(.subheadline).foregroundStyle(Theme.secondaryText) }
+                }
+                .padding(.horizontal, 16).padding(.vertical, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassEffect(.regular, in: .rect(cornerRadius: 22))
+            }
             Text("How much more often each family shows up on your flare moments than on baseline ones. The counts are the evidence.")
                 .font(.caption).foregroundStyle(Theme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)

@@ -110,6 +110,10 @@ public enum Ambee {
             public var frp: Double?
             public var confidence: String?
             public var fireType: String?
+
+            public init(lat: Double?, lng: Double?, frp: Double? = nil, confidence: String? = nil, fireType: String? = nil) {
+                self.lat = lat; self.lng = lng; self.frp = frp; self.confidence = confidence; self.fireType = fireType
+            }
         }
     }
 }

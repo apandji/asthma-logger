@@ -9,7 +9,7 @@ Built in `ios/AsthmaLog/Journal/NowHomeView.swift` (header, cards) and `ios/Asth
 | Slot | What | Word |
 |---|---|---|
 | 1 | Where and when: the moment's tag (Rescue / Standard), the place, and the **verdict** beside them. No event chip: the read and the cards already name the event | **Context line** |
-| 2 | One sentence about *you*: why this time matters. Never a weather readout (the sky and Weather details have the numbers) | **The read** |
+| 2 | One sentence on why this time matters to you: the air, compared with your days. Never a weather readout (the sky and Weather details have the numbers) | **The read** |
 | 3 | How it compares with your days: green / yellow / red, or the learning pill. Sits on the context line | **Verdict** |
 | 4 | What to do or see. When several are true, they **stack**: swipe through them, most important first, with page dots | **Cards** |
 

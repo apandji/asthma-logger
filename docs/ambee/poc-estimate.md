@@ -4,71 +4,70 @@ Ambee's offer (Oct 2026): *up to 10 users, 100 API calls per day across Pollen, 
 
 This estimate uses Pandji's "Day in a Life (Bad Asthma Day, 3 inhaler uses)" model. **AQ and pollen come from Ambee; weather stays on WeatherKit** and isn't counted. Where we weren't sure, we rounded up, because testing will be heavy.
 
+**The POC has no server.** Each phone calls Ambee directly, with the key in the app (an accepted TestFlight risk, per AGENTS.md). Caching is per phone, by place and hour, so one phone never asks twice for the same place and hour. A server is likely for a larger study; see the end.
+
 ## The model
 
 | When | Ambee calls | Kind |
 |------|-------------|------|
-| 7 am, every day | Forecast AQ + pollen for **Home** and **Work** = **4** | forecast (up to 120 h / 5 days per request) |
+| 7 am, every day | Forecast AQ + pollen for **Home**, **Work** and each **Frequent** place = 4, plus 2 per Frequent place | forecast (up to 120 h / 5 days per request) |
 | Each new place you stay at **more than 5 minutes** | Forecast AQ + pollen there = **2** | forecast |
 | Each inhaler moment | Historical AQ + pollen at that place = **2** (the hour, plus the 48 h look-back if a range is one call) | history |
 | Checking a trip (e.g. Denver next week) | Forecast AQ + pollen = **2** (Ambee covers 5 days; WeatherKit covers 10) | forecast |
 | Baseline moments (about 3 ordinary hours a day, filled in a day later at a visited place or Home; `BaselineBackfill`, `BaselineFiller`) | 1 day of history per place per dataset: Home + Work = **4** (6 if a third place) | history |
-| Fire / natural disaster (optional) | **1–2** a day (Home, maybe Work) | current |
+| Fire / natural disaster | **Conditional**: only when the air looks smoke-like (high PM2.5 at the moment; NowHomeView's `fireKey`), about 1–2 per smoke day | current |
 
-Pandji's bad day as drawn: 4 pre-cache + 5 conditional × 2 = **14**, plus 4 baselines and 1 fire = **19**.
+A place becomes **Frequent** after more than 12 hours there, or more than 2 visits a week for at least 2 weeks. Frequent places join the 7 am pre-cache. The figures below assume **2 Frequent places per person** (the high end of 1–2) = +4 a day. At 1 Frequent place, subtract 2.
 
-A place becomes Frequent after more than 12 hours there, or more than 2 visits a week for at least 2 weeks. After that it joins the 7 am pre-cache, which adds 2 a day per Frequent place.
+**Fire** is triggered by the air only: one call when the air at a moment looks smoke-like (high PM2.5), as the app does today. There's no season or region logic, so fire calls are occasional and come only on smoke-like days, about 1–2 per person on such a day.
 
 ### Two assumptions about history
 
 - **A (used below): one history request = one call**, whether it returns a day or a range. A moment's 48 h look-back is then one call per dataset.
 - **B: billed per hour returned.** A day becomes 24 calls, and a moment with a 48 h look-back becomes 48 per dataset (about 96 per moment). That doesn't work. We would have to request only the moment's hour (2 calls) and drop the AQ/pollen look-back (OpenAQ already gives PM2.5 and ozone look-back). Baselines would be 3 hours × 2 = 6 a day. If forecasts were also billed per hour, one 120 h forecast would be 120 calls. **This is the most important thing to ask Ambee.**
 
-## Per user per day (assumption A)
+## Per user per day (assumption A, 2 Frequent places)
 
 | Day | Pre-cache | Moments (history + new places + trips) | Baselines | Fire | **Total** |
 |-----|-----------|-----------------------------------------|-----------|------|-----------|
-| (a) Quiet: 0–1 uses, maybe 1 new place | 4 | 2 + 2 = 4 | 4 | 1 | **13** |
-| (b) Bad day as drawn: 3 uses, 1 new place, 1 trip | 4 | 6 + 2 + 2 = 10 | 4 | 1 | **19** |
-| (c) Heavy testing: 10 test logs across 3–4 places, forecasts reopened about 4 times | 4 | 20 + 6 + 8 = 34 | 8 | 2 | **48 (call it 50)** |
+| (a) Quiet: 0–1 uses, maybe 1 new place | 8 | 2 + 2 = 4 | 4 | 0 | **16** |
+| (b) Bad day as drawn: 3 uses, 1 new place, 1 trip | 8 | 6 + 2 + 2 = 10 | 4 | 0 (1–2 on a smoke day) | **22** (24 if smoky) |
+| (c) Heavy testing: 10 test logs across 3–4 places, forecasts reopened about 4 times | 8 | 20 + 6 + 8 = 34 | 8 | 2 | **52 (call it 55)** |
 
-Loading the bundled data sets makes no Ambee calls: they're made-up, and backfill skips them. But loading **"My data"** back resets the backfill (`DataSets.load` → `BaselineFiller.reset`), so the 60-day pull below runs again unless the proxy caches it.
+With 1 Frequent place: 14 / 20 / 50. The phone's own cache may trim heavy testing (reopened forecasts, repeat logs at the same place in the same hour) to about 40. We count it at 55 to stay on the safe side.
+
+Loading the bundled data sets makes no Ambee calls: they're made-up, and backfill skips them. But loading **"My data"** back resets the backfill (`DataSets.load` → `BaselineFiller.reset`), so the 60-day pull below runs again for that phone.
 
 ## 10-user POC
 
 | Scenario | Per day | Per 30 days |
 |----------|---------|-------------|
-| Everyone quiet | 130 | 3,900 |
-| Everyone on a bad day | 190 | 5,700 |
-| Everyone testing heavily | 480 | 14,400 |
+| Everyone quiet | 160 | 4,800 |
+| Everyone on a bad day | 220 (240 if smoky) | 6,600 |
+| Everyone testing heavily | 520–550 | about 16,000 |
 
-The offer is 100/day. That doesn't cover even a quiet day for 10 people (130).
+The offer is 100/day. That doesn't cover even a quiet day for 10 people (160).
 
-**One-off backfill when someone joins** (up to 60 days, Home + Work, 2 datasets). A brand-new user has no past moments, so backfill grows a day at a time and is already counted under Baselines. The one-off case is someone bringing data in, or a reset.
-- A day per call: 60 × 2 places × 2 datasets = **240 per user** (360 with a third place). For 10 users: **2,400–3,600**.
-- A range per call: **1 per place per dataset**, so 4–6 per user and 40–60 for 10. (If Ambee caps a range at 30 days: 8–12 per user.)
+**One-off backfill when someone joins** (up to 60 days, Home + Work + Frequent places, 2 datasets). A brand-new user has no past moments, so backfill grows a day at a time and is already counted under Baselines. The one-off case is someone bringing data in, or a reset.
+- A day per call: 60 × 2 datasets × 3–4 places = **360–480 per user**. For 10 users: **3,600–4,800**.
+- A range per call: **1 per place per dataset**, so 6–8 per user and 60–80 for 10. (If Ambee caps a range at 30 days: 12–16 per user.)
 
-**Ask:** **500 calls/day** (or a **15,000/month pool**) for 60–90 days. Add a one-off **3,600** for backfills, and bursts up to about 100 an hour, since a backfill runs 7 days at a time.
+**Ask:** **600 calls/day** (or an **18,000/month pool**) for 60–90 days. Add a one-off **5,000** for backfills, and bursts up to about 100 an hour, since a backfill runs 7 days at a time on one phone.
 
-## The 100-person study (next semester, about 4 months / 120 days)
+## A possible larger study (around 100 people, next semester; not defined yet)
 
-Mixed realistic average per user: 70% quiet (13), 25% bad (19), 5% heavy (48) ≈ **16 a day**.
+Mixed realistic average per user: 70% quiet (16), 25% bad (22), 5% heavy (55) ≈ **20 a day**, plus 1–2 fire calls per person on smoke-like days.
 
-| Scenario, 100 users | Per day | Per month (30 d) | Per semester (120 d) |
+**The plan is the same no-server setup, with each phone calling directly:**
+
+| Scenario, 100 users | Per day | Per month (30 d) | Per 4 months (120 d) |
 |---------------------|---------|-------------------|----------------------|
-| Everyone quiet | 1,300 | 39,000 | 156,000 |
-| Everyone on a bad day | 1,900 | 57,000 | 228,000 |
-| Mixed average | **1,600** | **48,000** | **195,000** |
-| Onboarding backfills, once | a day per call: 24,000–36,000 · a range per call: 400–600 | | |
+| Everyone quiet | 1,600 | 48,000 | 192,000 |
+| Everyone on a bad day | 2,200 | 66,000 | 264,000 |
+| Mixed average | **2,000** | **60,000** | **240,000** |
+| Onboarding backfills, once | a day per call: 36,000–48,000 · a range per call: 600–800 | | |
 
-### What a shared proxy cache saves in one town
-
-AQ and pollen are regional: a monitor or a pollen grid cell covers kilometers, not a street. If the proxy keys its cache by about a 2–5 km cell and the hour, everyone in the same cell shares each call. Assume a university town is about 10 cells:
-- Forecasts: 10 cells × 2 datasets × a refresh every 3 h (about 6 a day) = about 120.
-- History (moments and baselines): about 1 day-pull per cell per dataset (20), plus deduped same-day moment pulls (roughly 100–200).
-- Trips and places out of town: about 50–100.
-
-That's **about 300–450 a day instead of about 1,600 (70–80% less)**, or about 10,000–14,000 a month. Backfill becomes per cell, not per person: 10 × 2 × 60 = 1,200 (a day per call) or 20 (a range per call). This needs Ambee to allow us to **store and share their data on our server**, which is a question for them. On the privacy side: the phone sends only the cell center, never the precise point. AGENTS.md says to ask before sending user data off the device, so that's a decision for the owner.
+**Possible later saving: a server with a shared cache.** This needs Ambee's OK to cache their data and share it between users. Pandji's OK is also needed, since the phone would send its area's center off the device. AQ and pollen are regional. If participants cluster in one town and the server caches by about a 2–5 km cell and the hour, everyone in a cell shares each call: forecasts, history, and baselines. That could be **about 70–80% less: around 400–600 a day** instead of 2,000. Backfills would then count per cell, not per person. This is a later option, not the plan.
 
 ## Draft email
 
@@ -76,13 +75,13 @@ That's **about 300–450 a day instead of about 1,600 (70–80% less)**, or abou
 >
 > Thank you for the POC offer. It's really helpful.
 >
-> felt air is an on-device asthma diary for people who use a rescue inhaler. Each puff is logged with the outdoor air at that moment, and the app compares inhaler moments with ordinary "baseline" hours to learn which conditions show up more often on someone's inhaler days. We already use Apple WeatherKit for weather. **Pollen and air quality are what we'd like from Ambee.**
+> felt air is an on-device asthma diary for people who use a rescue inhaler. Each puff is logged with the outdoor air at that moment, and the app compares inhaler moments with ordinary "baseline" hours to learn which conditions show up more often on someone's inhaler days. We already use Apple WeatherKit for weather. **Pollen and air quality are what we'd like from Ambee.** For the POC, each tester's phone would call your API directly and cache results by place and hour.
 >
-> How we'd use the API: each morning we pre-load the 5-day AQ and pollen forecast for a person's Home and Work. We only make a call when someone stays somewhere new for more than 5 minutes, so no lookups while walking or driving through. Each inhaler moment, and about three baseline hours a day, gets that hour's AQ and pollen from history. The 5-day forecast is also used when someone checks an upcoming trip.
+> How we'd use the API: each morning the app pre-loads the 5-day AQ and pollen forecast for a person's Home, Work and one or two places they visit often. We only make a call when someone stays somewhere new for more than 5 minutes, so no lookups while walking or driving through. Each inhaler moment, and about three baseline hours a day, gets that hour's AQ and pollen from history. The 5-day forecast is also used when someone checks an upcoming trip. We'd also like your fire data, called only when the air at a moment looks smoke-like (high PM2.5), so it's occasional.
 >
-> That works out to about **13 calls per user per day on a quiet day, about 19 on a bad asthma day, and up to about 50 while we're testing heavily** (assuming a history or forecast request counts as one call). For 10 testers that's about 130–500 a day, so 100/day would be used up by mid-morning. Could we have **500 calls/day (or a 15,000/month pool) for 60–90 days, plus about 3,600 one-off calls** for loading each tester's past days? On our side we'll route every call through one server, so the key isn't in the app. It will cache per area and hour, enforce a hard daily cap, and fall back gracefully, so the app never fails without your data.
+> That works out to about **16 calls per person per day on a quiet day, about 22 on a bad asthma day, and up to about 55 while we're testing heavily** (assuming one history or forecast request counts as one call). For 10 testers that's about 160–550 a day, so 100/day would be used up by mid-morning. Could we have **600 calls/day (or an 18,000/month pool) for 60–90 days, plus about 5,000 one-off calls** for loading each tester's past days?
 >
-> We see this POC as the first step toward a **~100-person study next semester (about 4 months)**. Our estimate is about 1,600 calls a day without caching, and about 300–450 a day if participants are in one town and share the cache. Could you share pricing, or a research/academic rate, for that study?
+> Looking ahead, we may run a larger study, around 100 people, next semester. By the same estimate that's about 2,000 calls a day. We'd likely add a server for that, so it would help to know whether caching your data on our side would be allowed. What would pricing look like at that scale, and is there a research or academic rate?
 >
 > A few questions that decide whether this works:
 > 1. Is the allowance per key (shared across users) or per user?
@@ -90,17 +89,9 @@ That's **about 300–450 a day instead of about 1,600 (70–80% less)**, or abou
 > 3. Is historical pollen and AQ included, and how far back (we'd like 60 days)?
 > 4. Are there burst or per-minute limits? What happens on overage: a block, throttling, or a charge?
 > 5. Can the POC run for 60–90 days? Patterns take a few weeks of logs.
-> 6. Is it OK to call through our own server and cache results by area and hour, shared between users?
-> 7. Does the fire / natural-disaster API count against the same allowance?
-> 8. What's the pricing path after the POC for about 100 and about 1,000 users?
+> 6. Does the fire / natural-disaster API count against the same allowance?
+> 7. What's the pricing path after the POC for about 100 and about 1,000 users?
+> 8. For a later study, may we cache results on our own server and share them between users in the same area?
 >
 > Thanks again. Happy to get on a call.
 > Pandji
-
-## Questions for Pandji before sending
-
-1. Should the proxy be built for the POC? The email commits to it, and it's the main way to reduce calls. Sending cell centers off the phone needs your OK.
-2. Should Frequent places join the 7 am pre-cache? Each one adds 2 a day per user.
-3. Is the fire API under the same contract and key as this POC?
-4. Is the study in one town, and roughly when does it start?
-5. Are you comfortable showing per-user call counts to Ambee? They're only in this email, never on screen.

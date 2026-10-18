@@ -24,7 +24,6 @@ import Testing
         for a in p.axes where a.status == .pattern || a.status == .early {
             let r = try! #require(a.lead)
             #expect(r.attacksWith > 0 && r.attackRate > r.baselineRate)
-            #expect(AirProfile.counts(r).contains("of \(r.nAttacks) flare moments"))
         }
     }
 

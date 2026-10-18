@@ -37,7 +37,8 @@ struct InsightsView: View {
                     } else {
                         LearningRing(progress: model.progress, forcedLearned: forced == .learned, size: 184)
                             .frame(maxWidth: .infinity)
-                        Text("Your profile appears once there are enough rescue and baseline moments to compare. felt air adds baseline moments on its own.")
+                        Text("Still learning…").font(Theme.serifTitleLarge).kerning(Theme.serifKerning)
+                        Text("Keep logging when you use your inhaler. felt air fills in your ordinary moments on its own, and your profile appears here once it has learned.")
                             .font(.subheadline).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
                     }
                     whenAndWhere
@@ -110,20 +111,19 @@ struct InsightsView: View {
         VStack(spacing: 10) {
             Text(a.name).font(Theme.serifTitleLarge).kerning(Theme.serifKerning).multilineTextAlignment(.center)
             Text(a.line).font(.body).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-            // The evidence lives in the categories below (the leads carry a star).
-            Text("So far, \(basis.prefix(1).lowercased() + basis.dropFirst())")
-                .font(.subheadline).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+            // Learned, not a score. It can move: felt air keeps learning, and seasons change what's in the air.
+            Button { path.append(Page.history) } label: {
+                HStack(spacing: 6) {
+                    Circle().fill(Verdict.green).frame(width: 7, height: 7)
+                    Text("Learned · may shift with the seasons").lineLimit(1)
+                    Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6)
+                }
+                .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+            }
+            .buttonStyle(PressStyle())
         }
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity)
-    }
-
-    /// "From 10 rescue and 24 baseline moments."
-    private var basis: String {
-        if demoLearned { return "From 14 rescue and 40 baseline moments." }
-        let c = model.frameCount
-        return "From \(c.attacks) rescue and \(c.baselines) baseline moments."
     }
 
     /// The four categories from the lift table (or the demo person's).
@@ -173,12 +173,12 @@ struct InsightsView: View {
     /// Two boxes on one line. Plain counts of your rescue moments, not a comparison (baseline moments aren't
     /// spread across the day yet).
     @ViewBuilder private var whenAndWhere: some View {
-        let when = demoLearned ? "In the afternoon: 8 of your 14 rescue moments." : Rhythm(dates: rescues.map(\.loggedAt)).map { "In the \($0.part): \($0.count) of your \($0.total) rescue moments." }
-        let place = demoLearned ? "At home: 9 of your 14 rescue moments." : wherePlace
+        let when = demoLearned ? "Mostly in the afternoon." : Rhythm(dates: rescues.map(\.loggedAt)).map { "Mostly in the \($0.part)." }
+        let place = demoLearned ? "Mostly at home." : wherePlace
         if when != nil || place != nil {
             HStack(alignment: .top, spacing: 10) {
-                SmallBox(title: "When", icon: "clock", text: when ?? "No clear time of day yet.")
-                SmallBox(title: "Where", icon: "mappin", text: place ?? "No one place yet.", pins: rescues.compactMap { e in
+                SmallBox(title: "When", icon: "clock", text: when ?? "No one time of day.")
+                SmallBox(title: "Where", icon: "mappin", text: place ?? "No one place.", pins: rescues.compactMap { e in
                     e.latitude.flatMap { lat in e.longitude.map { (lat, $0) } } })
             }
         }
@@ -190,8 +190,7 @@ struct InsightsView: View {
         guard names.count >= 3 else { return nil }
         let counts = Dictionary(grouping: names, by: { $0 }).mapValues(\.count)
         guard let top = counts.max(by: { $0.value < $1.value }), Double(top.value) / Double(names.count) >= 0.4 else { return nil }
-        let place = top.key == "Home" ? "At home" : top.key == "Work" ? "At work" : "Around \(top.key)"
-        return "\(place): \(top.value) of your \(names.count) rescue moments."
+        return top.key == "Home" ? "Mostly at home." : top.key == "Work" ? "Mostly at work." : "Mostly around \(top.key)."
     }
 
     // MARK: Tiles
@@ -320,28 +319,13 @@ struct LearningRing: View {
             }
             .frame(width: size, height: size)
             .onAppear { shownAt = .now }
-            if let p = progress, !done {
-                HStack(spacing: 32) {
-                    count("Rescue moments", p.attacks, p.minAttacks, .primary)
-                    count("Baseline moments", p.baselines, p.minBaselines, Theme.secondaryText)
-                }
-            }
+            // No counts: you're not a number (owner, Oct 17). The ring filling is enough.
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(done ? "Learned" : "Learning, \(Int(fill * 100)) percent")
+        .accessibilityLabel(done ? "Learned" : "Still learning")
     }
 
-    private func count(_ label: String, _ n: Int, _ goal: Int, _ ink: Color) -> some View {
-        VStack(spacing: 2) {
-            Text("\(min(n, goal)) of \(goal)").font(.title3.weight(.semibold)).monospacedDigit().contentTransition(.numericText())
-            HStack(spacing: 5) {
-                Circle().fill(ink).frame(width: 6, height: 6)
-                Text(label)
-            }
-            .font(Theme.caption).foregroundStyle(Theme.secondaryText)
-        }
-    }
 }
 
 /// Soft blobs of colour that drift slowly, like Apple Card's: a 3×3 mesh whose inner points wander. The

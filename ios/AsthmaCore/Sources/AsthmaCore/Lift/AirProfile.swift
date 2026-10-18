@@ -99,10 +99,6 @@ public struct AirProfile: Sendable, Equatable {
         axes.filter { $0.status == .pattern }.max { $0.strength < $1.strength }
     }
 
-    /// "Weed pollen high: 9 of 14 flare moments, 6 of 40 baseline." Raw counts, always.
-    public static func counts(_ r: LiftRow) -> String {
-        "\(r.attacksWith) of \(r.nAttacks) flare moments, \(r.baselinesWith) of \(r.nBaselines) baseline"
-    }
 
     /// The presentation's made-up person (Design crit › Insights state › learned): pollen-led, as the rest
     /// of the demo story ("Weed pollen showed up on 9 of 14 flare days vs 6 of 40 baseline days").

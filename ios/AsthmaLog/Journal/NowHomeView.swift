@@ -494,15 +494,8 @@ struct NowHomeView: View {
 
     private static let green = Verdict.green, yellow = Verdict.yellow, red = Verdict.red
 
-    /// Before felt air has learned: how far along it is.
-    private var sentence: String {
-        if let p = model.progress, !p.isMet {
-            // "Learning: 25 moments to go". The pill stays one line; Insights' ring has the split.
-            let total = max(0, p.minAttacks - p.attacks) + max(0, p.minBaselines - p.baselines)
-            return "Learning: \(total) " + (total == 1 ? "moment to go" : "moments to go")
-        }
-        return "Learning your days"
-    }
+    /// Before felt air has learned. Not a countdown: you're not a number (owner, Oct 17).
+    private var sentence: String { "Still learning" }
 
     private static func when(_ d: Date) -> String {
         let cal = Calendar.current
@@ -710,7 +703,7 @@ struct NowHomeView: View {
         guard learned else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         if forced == .learned, !(model.progress?.isMet ?? false) {
             // The demo person's story, for moments without a real pattern behind them.
-            return ["High weed pollen came up at 9 of your 14 rescue moments.", before].compactMap { $0 }.joined(separator: " ")
+            return ["High weed pollen was there. It often shows up on your flare days.", before].compactMap { $0 }.joined(separator: " ")
         }
         guard let frame = m.frame(), let rows = model.report?.gatedRows, !rows.isEmpty else {
             return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ")
@@ -723,7 +716,7 @@ struct NowHomeView: View {
         .sorted { $0.1 > $1.1 }
         guard !hits.isEmpty else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         // Raw counts, not "as on most of your flare days".
-        let top = TheRead.shared(frame, rows: rows).first.map(TheRead.counted)
+        let top = TheRead.shared(frame, rows: rows).first.map { TheRead.pattern($0, past: true) }
         return [top, before].compactMap { $0 }.joined(separator: " ")
     }
 

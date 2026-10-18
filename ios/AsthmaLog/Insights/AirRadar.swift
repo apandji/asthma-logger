@@ -175,10 +175,10 @@ extension AirProfile.Category {
 extension AirProfile.Status {
     var word: String {
         switch self {
-        case .pattern: "Pattern"
-        case .early: "Leaning"
-        case .nothing: "Nothing yet"
-        case .notTracked: "Not tracked"
+        case .pattern: "Often"
+        case .early: "Maybe"
+        case .nothing: "Not much"
+        case .notTracked: "Not tracked yet"
         }
     }
 

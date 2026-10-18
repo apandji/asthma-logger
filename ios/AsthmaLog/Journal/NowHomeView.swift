@@ -2208,6 +2208,14 @@ struct CardStack<Content: View>: View {
 /// other). Ahead, it's for planning. The advice is a provocation for provider conversations
 /// (docs/air-advice.md); the "i" says it isn't medical advice.
 struct AdviceCard: View {
+    /// Ahead: "Plan for temperature drop". A headline-shaped title turns around: "Tree pollen is high" →
+    /// "Plan for high tree pollen".
+    static func planFor(_ title: String) -> String {
+        let parts = title.components(separatedBy: " is ")
+        if parts.count == 2 { return "Plan for \(parts[1].lowercased()) \(parts[0].lowercased())" }
+        return "Plan for \(title.prefix(1).lowercased() + title.dropFirst())"
+    }
+
     let warning: AirAdvice.Warning
     let icon: String
     let title: String
@@ -2220,7 +2228,7 @@ struct AdviceCard: View {
         let context = picked ?? .at(home: home)
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Label(ahead ? "Planning ahead · \(title)" : title, systemImage: icon)
+                Label(ahead ? Self.planFor(title) : title, systemImage: icon)
                     .font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer(minLength: 4)
                 Button { withAnimation(Theme.snap) { showNote.toggle() } } label: {

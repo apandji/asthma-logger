@@ -12,6 +12,9 @@ struct CaptureExpanded: View {
     @Environment(\.modelContext) private var context
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drag: CGFloat = 0
+    @State private var map: UIImage?
+    /// What was on your calendar then (EventKit, on this iPhone; the title never leaves it).
+    @State private var around: CalendarReader.Event?
 
     var body: some View {
         GeometryReader { g in
@@ -22,7 +25,7 @@ struct CaptureExpanded: View {
                     .onTapGesture(perform: finish)
                 VStack(spacing: 0) {
                     handle
-                    if chat { ChatCapture(session: session) } else { JournalCapture(session: session) }
+                    if chat { ChatCapture(session: session, finish: finish) } else { JournalCapture(session: session) }
                 }
                 .frame(height: g.size.height * 0.8)
                 .frame(maxWidth: .infinity)
@@ -42,6 +45,18 @@ struct CaptureExpanded: View {
         }
         .ignoresSafeArea(.container, edges: .bottom)
         .onChange(of: session.live) { _, words in if session.listening { session.hear(words) } }
+        .task {
+            let t = session.event.loggedAt
+            around = CalendarReader.shared.events(from: t.addingTimeInterval(-3600), to: t.addingTimeInterval(900))
+                .first { !$0.isAllDay }
+        }
+        .task {
+            // The same snapshot the sky drew (cached), so it's there at once.
+            guard let lat = session.event.latitude, let lon = session.event.longitude else { return }
+            let img = await MapSnapshots.image(id: session.event.id.uuidString, latitude: lat, longitude: lon,
+                                               size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale)
+            withAnimation(Theme.smooth) { map = img }
+        }
     }
 
     /// The grabber, the moment, and Done.
@@ -49,19 +64,53 @@ struct CaptureExpanded: View {
         VStack(spacing: 10) {
             Capsule().fill(Color.primary.opacity(0.3)).frame(width: 40, height: 5).padding(.top, 8)
             HStack(spacing: 8) {
-                MomentTag(moment: session.event.moment)
-                Text(NowTimeline.when(session.event.loggedAt, now: .now))
-                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                // The sheet covers the map: a small one comes along, with where and when.
+                if let map {
+                    // The middle of the snapshot (the pin and its streets), not the whole wide view.
+                    Image(uiImage: map).resizable().scaledToFill()
+                        .frame(width: 40, height: 40).scaleEffect(3).frame(width: 40, height: 40).clipShape(Circle())
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.2), lineWidth: 1))
+                        .overlay(Circle().fill(Color.white).frame(width: 6, height: 6))
+                        .transition(.opacity)
+                        .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    MomentTag(moment: session.event.moment)
+                    Text([session.event.placeName, NowTimeline.when(session.event.loggedAt, now: .now)]
+                            .compactMap { $0 }.joined(separator: " · "))
+                        .font(.footnote.weight(.medium)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                    if let around { aroundLine(around) }
+                }
                 Spacer()
-                Button("Done", action: finish)
-                    .font(.headline)
-                    .padding(.horizontal, 16).padding(.vertical, 8)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-                    .buttonStyle(PressStyle())
+                // The chat finishes at the thumb (its bottom-right button); the journal keeps Done up here.
+                if !chat {
+                    Button("Done", action: finish)
+                        .font(.headline)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .buttonStyle(PressStyle())
+                }
             }
+            .frame(minHeight: 40)
             .padding(.horizontal, 20)
         }
         .padding(.bottom, 6)
+    }
+
+    /// "Team sync, 4–5 PM" from the calendar. While the question is what you were doing or where, a tap
+    /// answers it with the event; otherwise it's just there to jog the memory.
+    private func aroundLine(_ e: CalendarReader.Event) -> some View {
+        let answers = chat && (session.question == .doing || session.question == .place) && !session.listening
+        return Button {
+            session.answer("At \(e.title)")
+        } label: {
+            Label(e.line, systemImage: "calendar")
+                .font(.footnote.weight(.medium)).lineLimit(1)
+                .foregroundStyle(answers ? Color.primary : Theme.secondaryText)
+        }
+        .buttonStyle(PressStyle())
+        .disabled(!answers)
+        .accessibilityHint(answers ? "Answers with this event" : "")
     }
 
     private func finish() {
@@ -82,6 +131,7 @@ struct CaptureExpanded: View {
 /// generated, and it ends after a few. Quick replies sit above the composer for when you can't talk.
 private struct ChatCapture: View {
     @Bindable var session: CaptureSession
+    let finish: () -> Void
     @State private var typing = false
     @State private var typed = ""
     @FocusState private var focused: Bool
@@ -92,6 +142,8 @@ private struct ChatCapture: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
                         ForEach(session.turns) { turn in row(turn, current: turn == currentQuestion).id(turn.id) }
+                        // The answers sit under their question, in the thread, not parked above the composer.
+                        replies.id("replies")
                         if session.listening || session.writing {
                             bubble(Text(session.live.isEmpty ? "Listening…" : "").foregroundStyle(Theme.secondaryText), live: true)
                                 .id("live")
@@ -107,10 +159,9 @@ private struct ChatCapture: View {
                 // Earlier turns fade under the header rather than being cut by it.
                 .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.05),
                                              .init(color: .black, location: 1)], startPoint: .top, endPoint: .bottom))
-                .onChange(of: session.turns.count) { _, _ in withAnimation(Theme.smooth) { proxy.scrollTo(session.turns.last?.id, anchor: .bottom) } }
+                .onChange(of: session.turns.count) { _, _ in withAnimation(Theme.smooth) { proxy.scrollTo("replies", anchor: .bottom) } }
                 .onChange(of: session.live) { _, _ in proxy.scrollTo("live", anchor: .bottom) }
             }
-            replies
             composer
         }
     }
@@ -190,7 +241,8 @@ private struct ChatCapture: View {
                         }
                     }
                 }
-                .padding(.horizontal, 20).padding(.vertical, 10)
+                .padding(.top, 4)
+                .transition(.opacity)
             }
         }
     }
@@ -223,7 +275,32 @@ private struct ChatCapture: View {
         }
     }
 
-    /// Mic in the middle; type on the left; send the picked chips on the right.
+    /// The last question (or all asked): the arrow becomes a checkmark that finishes.
+    private var isLast: Bool { session.done || session.question == .anythingElse }
+
+    /// The one action at the thumb: an arrow that sends what you typed or the chips you picked (quiet, it
+    /// skips the question), and on the last question a checkmark that sends them and finishes. Swiping down also keeps it, at any point.
+    private var primary: some View {
+        let on = canSend || isLast
+        return Button {
+            if canSendTyped { sendTyped() } else if session.pickedForQuestion { session.sendPicked() }
+            else if !isLast { session.skip() }
+            if isLast { finish() }
+        } label: {
+            Image(systemName: isLast ? "checkmark" : "arrow.up").font(.title3.weight(.semibold))
+                .frame(width: 48, height: 48)
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(on ? Color.black : Theme.secondaryText)
+                .background(Circle().fill(on ? Color.white : Color.clear))
+                .glassEffect(.regular.interactive(), in: .circle)
+                .animation(Theme.smooth, value: isLast)
+        }
+        .buttonStyle(PressStyle())
+        .disabled(session.listening)
+        .accessibilityLabel(isLast ? "Done" : canSend ? "Send" : "Skip this question")
+    }
+
+    /// Mic in the middle; type on the left; the one action on the right.
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 16) {
             // Speaking ⇄ typing in one tap: mid-sentence, what you said so far becomes the text to edit; while
@@ -235,6 +312,7 @@ private struct ChatCapture: View {
             }
             .buttonStyle(PressStyle())
             .accessibilityLabel(typing ? "Speak instead" : "Type instead")
+
             if typing {
                 // Grows to a few lines: an answer switched over from speaking is often a sentence or two.
                 TextField("Type an answer", text: $typed, axis: .vertical)
@@ -249,15 +327,8 @@ private struct ChatCapture: View {
                 MicButton(session: session)
                 Spacer()
             }
-            Button { canSendTyped ? sendTyped() : session.sendPicked() } label: {
-                Image(systemName: "arrow.up").font(.title3.weight(.semibold)).frame(width: 48, height: 48)
-                    .foregroundStyle(canSend ? Color.black : Theme.secondaryText)
-                    .background(Circle().fill(canSend ? Color.white : Color.clear))
-                    .glassEffect(.regular.interactive(), in: .circle)
-            }
-            .buttonStyle(PressStyle())
-            .disabled(!canSend)
-            .accessibilityLabel(canSendTyped ? "Send" : "Send the picked answers")
+            primary
+
         }
         .padding(.horizontal, 20).padding(.top, 4).padding(.bottom, 34)
         // The thread above gives way, so the field can grow to its lines.

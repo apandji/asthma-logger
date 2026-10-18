@@ -234,6 +234,9 @@ final class CaptureSession: Identifiable {
         return Interview.replies(q).contains { if case .tag(let t) = $0 { chosen.contains(t) } else { false } }
     }
 
+    /// Nothing to say to this one: on to the next (it stays asked, so it won't come back).
+    func skip() { advance() }
+
     private func post(_ text: String) {
         answers.append(Answer(question: question, text: text, file: nil, at: .now))
         turns.append(.answer(UUID(), text))

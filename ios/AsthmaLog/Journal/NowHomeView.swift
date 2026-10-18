@@ -1373,6 +1373,10 @@ struct NowSky: View {
                     .frame(width: 64, height: size.height, alignment: railLeft ? .leading : .trailing)
                     .contentShape(Rectangle())
                     .gesture(scrub(size))
+                    // A sky too short for its stops (the keyboard up in onboarding) would stack them on top
+                    // of each other: the rail steps out instead.
+                    .opacity(size.height < CGFloat(rows.count) * 44 + 24 ? 0 : 1)
+                    .allowsHitTesting(size.height >= CGFloat(rows.count) * 44 + 24)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Weather, particles and gases, biologics" + (showsSelf ? ", your voice and your body" : ""))
                     .accessibilityAdjustableAction { dir in

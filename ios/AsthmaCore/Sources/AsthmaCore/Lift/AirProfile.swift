@@ -14,7 +14,7 @@ public struct AirProfile: Sendable, Equatable {
         public var title: String {
             switch self {
             case .weather: "Weather dynamics"
-            case .biologics: "Biologics"
+            case .biologics: "Allergens"
             case .particulates: "Pollutants"
             // Effort, stress and the like: about you, not the air (owner, Oct 17). Never on the map.
             case .exertion: "Self"
@@ -25,9 +25,9 @@ public struct AirProfile: Sendable, Equatable {
         public var covers: String {
             switch self {
             case .weather: "Heat, cold, humidity and sudden drops"
-            case .biologics: "Pollen, pets, mold, colds"
+            case .biologics: "Pollen, mold, pets"
             case .particulates: "Fine particles, ozone, smoke, fumes"
-            case .exertion: "Effort, exercise, stress, laughing or crying hard"
+            case .exertion: "Effort, exercise, stress, laughing or crying hard, colds"
             }
         }
 
@@ -36,10 +36,11 @@ public struct AirProfile: Sendable, Equatable {
         public static func of(bin: String) -> Category? {
             switch bin {
             case "temp", "humidity", "temp_drop", "heat_alert", "tag_coldAir": .weather
-            case "pollen_weed", "pollen_tree", "pollen_grass", "tag_pets", "tag_mold", "tag_coldOrFlu": .biologics
+            case "pollen_weed", "pollen_tree", "pollen_grass", "tag_pets", "tag_mold": .biologics
             case "pm25", "ozone", "smoke_at_point", "tag_smoke", "tag_dust", "tag_cleaningProducts", "tag_strongScents",
                  "tag_cooking": .particulates
-            case "tag_exercise", "tag_laughingOrCrying", "tag_stress": .exertion
+            // Colds are how you are, not the air (Allergens, owner Oct 18).
+            case "tag_exercise", "tag_laughingOrCrying", "tag_stress", "tag_coldOrFlu": .exertion
             default: nil
             }
         }

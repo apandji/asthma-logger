@@ -165,7 +165,7 @@ extension AirProfile.Category {
     var shortTitle: String {
         switch self {
         case .weather: "Weather"
-        case .biologics: "Biologics"
+        case .biologics: "Allergens"
         case .particulates: "Particles"
         case .exertion: "Self"
         }

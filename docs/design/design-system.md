@@ -101,7 +101,7 @@ The main picture. Weather-only colour field, the **map pinned** on top (never mo
 whole place. Count and size say how much; nothing says *where*.
 
 Reading it: **the rail** on the right edge (left in Settings › Rail for left hands). Folded, five stops in the
-language of Personal Insights: **Weather · Pollutants · Biologics · Voice · Body** (`Icons` is the one source
+language of Personal Insights: **Weather · Pollutants · Allergens · Voice · Body** (`Icons` is the one source
 for every symbol). Hold it and it opens once for the whole hold, each group with its items as dots underneath (PM2.5,
 PM10, ozone, NO₂; tree, grass, weed pollen), so nothing shifts under the thumb. Slide to read; every panel sits beside
 the thumb at its row and names itself:

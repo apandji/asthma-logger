@@ -2,79 +2,99 @@ import AsthmaCore
 import CoreMotion
 import SwiftUI
 
-/// Self, from the rail: the map slides away and this takes its place. What the sky can't show: your words
-/// and tags for the moment, how active you'd been, and (later) vitals from Apple Health. In words, never
-/// numbers (owner, Oct 17). Exertion lives here, not on the map.
-struct SelfView: View {
+/// Self, the last stop on the rail: the sky dims and this sits on top, with the rail still there, so reading
+/// the air and reading yourself are one slide up and down. What the sky can't show: your words and tags,
+/// how active you'd been, and Apple Health (sleep, heart, breathing), all in words, never numbers.
+/// Drawn without glass or a scroll view: it lives inside the sky's shader layer.
+struct SelfPanel: View {
     /// The moment this is about; nil for Now with nothing logged.
     let event: LogEvent?
     let date: Date
-    let close: () -> Void
+    /// Read-only while the finger is still on the rail; buttons work once it's let go.
+    let interactive: Bool
     let record: (LogEvent) -> Void
     @State private var activity: String?
+    @State private var health: HealthReader.Words?
+    @State private var askHealth = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Label("Self", systemImage: Icons.me).font(.headline)
-                    Spacer()
-                    Button(action: close) {
-                        Label("Back to the air", systemImage: "chevron.up").font(.subheadline.weight(.semibold))
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Self", systemImage: Icons.me).font(.headline)
+            words
+            card("Activity", "figure.walk") {
+                Text(activity ?? "Reading your activity…")
+                Text("In the two hours before, from your iPhone's motion sensor.").font(.caption).foregroundStyle(Theme.secondaryText)
+            }
+            card("Sleep, heart and breathing", "heart.text.square") {
+                if askHealth {
+                    Text("Apple Health can add how you slept, and your heart and breathing around this moment, in words.")
+                    Button {
+                        Task { await HealthReader.shared.ask(); await load() }
+                    } label: {
+                        Label("Connect Apple Health", systemImage: "heart.fill").font(.subheadline.weight(.semibold))
                     }
                     .buttonStyle(PressStyle())
-                }
-                words
-                card(title: "Activity", icon: "figure.walk") {
-                    Text(activity ?? "Reading your activity…").font(.body)
-                    Text("From your iPhone's motion sensor, in the two hours before.").font(.caption).foregroundStyle(Theme.secondaryText)
-                }
-                card(title: "Breathing and heart", icon: "heart.text.square") {
-                    Text("Not connected yet.").font(.body)
-                    Text("Apple Health could add how you slept, your heart and breathing, in words like these.")
-                        .font(.caption).foregroundStyle(Theme.secondaryText)
+                    .disabled(!interactive)
+                } else if let h = health, !h.isEmpty {
+                    if let s = h.sleep { line("Sleep", s) }
+                    if let s = h.heart { line("Heart", s) }
+                    if let s = h.breathing { line("Breathing", s) }
+                } else {
+                    Text(health == nil ? "Reading Apple Health…" : "Nothing from Apple Health around this time.")
                 }
             }
-            .padding(.horizontal, 20).padding(.vertical, 8)
+            Text(interactive ? "Hold the rail and slide up to read the air again." : "Let go to stay here.")
+                .font(.caption).foregroundStyle(Theme.secondaryText)
         }
-        .scrollIndicators(.hidden)
-        .task(id: date) { activity = await ActivityWords.before(date) }
+        .padding(.leading, 18).padding(.trailing, 64).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .task(id: date) { await load() }
+    }
+
+    private func load() async {
+        askHealth = await HealthReader.shared.shouldAsk()
+        async let a = ActivityWords.before(date)
+        activity = await a
+        health = askHealth ? nil : await HealthReader.shared.words(before: date)
     }
 
     @ViewBuilder private var words: some View {
-        card(title: "Your words", icon: "waveform") {
+        card("Your words", "waveform") {
             let text = (event?.voiceTranscript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if text.isEmpty {
-                Text(event == nil ? "Nothing logged right now." : "Nothing said yet.").font(.body).foregroundStyle(Theme.secondaryText)
+                Text(event == nil ? "Nothing logged right now." : "Nothing said yet.").foregroundStyle(Theme.secondaryText)
             } else {
-                Text("“\(text)”").font(.body).italic()
+                Text("“\(text)”").italic().lineLimit(4)
             }
             if let tags = event?.tags, !tags.isEmpty {
-                FlowLayout(spacing: 6) {
-                    ForEach(tags.sorted()) { t in
-                        Text(t.label).font(.caption.weight(.semibold))
-                            .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background(Capsule().fill(Color.primary.opacity(0.12)))
-                    }
-                }
+                Text(tags.sorted().map(\.label).joined(separator: " · ")).font(.subheadline.weight(.semibold))
             }
             if let event, event.moment != .okay {
                 Button { record(event) } label: {
                     Label(text.isEmpty ? "Say what was going on" : "Add more", systemImage: "mic.fill").font(.subheadline.weight(.semibold))
                 }
                 .buttonStyle(PressStyle())
+                .disabled(!interactive)
             }
         }
     }
 
-    private func card<Content: View>(title: String, icon: String, @ViewBuilder _ content: () -> Content) -> some View {
+    private func line(_ name: String, _ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(name).foregroundStyle(Theme.secondaryText).frame(width: 80, alignment: .leading)
+            Text(text)
+        }
+    }
+
+    private func card<Content: View>(_ title: String, _ icon: String, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(title, systemImage: icon).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.secondaryText)
-            content()
+            content().font(.body)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.white.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
     }
 }
 

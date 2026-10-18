@@ -51,8 +51,6 @@ struct NowHomeView: View {
     @State private var skyPress: CGFloat = 0
     /// The clock. Ticks so "now" creeps along the track while you watch.
     @State private var now = Date()
-    /// Self, from the rail: the map slides away for your words and activity.
-    @State private var selfOpen = false
     /// Active wildfires near here, while smoke is the event (Ambee, demo until the key arrives).
     @State private var fires: WildfiresNearby?
     @Namespace private var mapZoom
@@ -78,25 +76,13 @@ struct NowHomeView: View {
                         .transition(.opacity)
                 }
                 // One sky at a time; the next settles in with a breath, not a cut. Self slides the map away.
-                ZStack {
-                    if !selfOpen {
-                        sky.id(focusKey).transition(.asymmetric(insertion: .opacity, removal: .move(edge: .top).combined(with: .opacity)))
-                    }
-                }
+                ZStack { sky.id(focusKey).transition(.opacity) }
                     .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
                     // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
                     .distortionEffect(ShaderLibrary.dent(.float2(skyDrag?.point ?? .zero), .float(170), .float(skyPress)),
                                       maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: skyDrag != nil && !reduceMotion)
                     .gesture(skyScrub)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // Outside the sky's shader layer: a scroll view and glass can't be drawn inside one.
-                    .overlay {
-                        if selfOpen {
-                            SelfView(event: selfEvent, date: selfDate, close: { withAnimation(Theme.smooth) { selfOpen = false } },
-                                     record: { recording = $0 })
-                                .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-                    }
                     .padding(.top, 4)
                 NowTimeline(moments: moments, baselines: events.filter { $0.moment == .okay }.map(\.loggedAt),
                             tint: { airTint($0.weave) },
@@ -227,7 +213,6 @@ struct NowHomeView: View {
             .environment(\.skySettled, !scrubbing)
             .sensoryFeedback(.impact(weight: .medium, intensity: 0.9), trigger: inFuture)
             .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: inPast)
-            .onChange(of: focusKey) { _, _ in if selfOpen { withAnimation(Theme.smooth) { selfOpen = false } } }
             .onChange(of: events.last?.id) { _, _ in
                 withAnimation(.smooth(duration: 0.6)) { focusTime = nil }
                 announce(events.last)
@@ -533,7 +518,7 @@ struct NowHomeView: View {
                        mapID: j.latitude == nil ? "here" : j.id.uuidString,
                        coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
                        captureInk: j.moment == .rescue ? Theme.rescueSoft : Theme.standardSoft, onPin: { pinDetails = j },
-                       onSelf: openSelf)
+                       showsSelf: true, selfEvent: j, onRecord: { recording = $0 })
                     .id(j.id)
                     .onTapGesture { pinDetails = j }
             } else {
@@ -541,14 +526,14 @@ struct NowHomeView: View {
                 NowSky(conditions: air.conditions, weave: air.weave, date: now,
                        pollen: air.pollen, probing: $probing,
                        mapID: "here", coordinate: here.map { ($0.lat, $0.lon) }, onPin: { pinDetails = liveSnapshot() },
-                       event: liveEvent, onSelf: openSelf)
+                       event: liveEvent, showsSelf: true, onRecord: { recording = $0 })
                     .onTapGesture { openDay = Calendar.current.startOfDay(for: now) }
             }
         case .moment(let m):
             NowSky(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
                    pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason), probing: $probing,
                    mapID: m.id.uuidString, coordinate: m.latitude.flatMap { lat in m.longitude.map { (lat, $0) } },
-                   mapNamespace: mapZoom, onPin: { pinDetails = m }, onSelf: openSelf)
+                   mapNamespace: mapZoom, onPin: { pinDetails = m }, showsSelf: true, selfEvent: m, onRecord: { recording = $0 })
                 .onTapGesture { pinDetails = m }
         case .hour(let h):
             NowSky(conditions: h.conditions, weave: h.weave, date: h.date,
@@ -559,18 +544,7 @@ struct NowHomeView: View {
 
     private var mapID: String { chosen.map { "place-\($0.lat)-\($0.lon)" } ?? "here" }
 
-    private func openSelf() { withAnimation(Theme.smooth) { selfOpen = true } }
 
-    /// The moment Self is about: the one on the playhead, the one just logged, or none (Now).
-    private var selfEvent: LogEvent? {
-        switch focus {
-        case .moment(let m): m
-        case .now: justNow
-        case .hour: nil
-        }
-    }
-
-    private var selfDate: Date { selfEvent?.loggedAt ?? now }
 
     /// What stood out at a rescue moment, from the data model: the bins of its frame that are gated
     /// patterns (more common on flare days than baseline), named in plain words. Never a cause, never a
@@ -987,8 +961,13 @@ struct NowSky: View {
     /// An air event changes the whole field, never a spot: a storm darkens it and breaks the pollen apart,
     /// smoke lays a warm veil over the map, a temperature drop cools the top of the sky.
     var event: AirEvent? = nil
-    /// Self on the rail: your words and activity (not part of the sky). Nil where there's no "you" (forecast).
-    var onSelf: (() -> Void)? = nil
+    /// Self, the rail's last stop: false for a forecast (there's no "you" there yet).
+    var showsSelf = false
+    /// The moment Self is about (nil for Now with nothing logged), and how to record a note for it.
+    var selfEvent: LogEvent? = nil
+    var onRecord: ((LogEvent) -> Void)? = nil
+    /// Let go on Self and it stays, the rail still beside it.
+    @State private var selfPinned = false
     @State private var flash = 0.0
     @State private var pinPulse = false
     /// Past: a moment more than 20 minutes ago (not a forecast, not a fresh log).
@@ -1021,7 +1000,7 @@ struct NowSky: View {
         GeometryReader { geo in
             let size = geo.size
             let stack = SkyExplorer.stack(layers)
-            let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: onSelf != nil)
+            let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: showsSelf)
             let mids = RailRow.mids(rows).map { CGFloat($0) * size.height }
             ZStack {
                 AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
@@ -1102,17 +1081,33 @@ struct NowSky: View {
                         .accessibilityLabel("Air details")
                 }
             }
+            // Self: on the rail's last stop the sky dims and your words, activity and Health sit on top. The rail
+            // stays, so it's one surface you slide up and down.
+            .overlay {
+                if showsSelf && (row == .me || (selfPinned && row == nil)) {
+                    ZStack {
+                        // Soft-edged, like the sky itself: no hard box.
+                        Color.black.opacity(0.62)
+                            .mask(RadialGradient(colors: [.black, .black, .clear], center: .center, startRadius: 0,
+                                                 endRadius: max(size.width, size.height) * 0.75))
+                            .onTapGesture { withAnimation(Theme.smooth) { selfPinned = false } }
+                        SelfPanel(event: selfEvent, date: selfEvent?.loggedAt ?? date, interactive: !probing,
+                                  record: { onRecord?($0) })
+                    }
+                    .transition(.opacity)
+                }
+            }
             // The scale: the legend, and the only place you read the air. Slide up and down it.
             .overlay(alignment: .trailing) {
-                GroupRail(layers: layers, rows: rows, mids: mids, selected: row, weatherSymbol: SkyExplorer.weatherIcon(conditions))
+                GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? (selfPinned ? .me : nil), weatherSymbol: SkyExplorer.weatherIcon(conditions))
                     .padding(.trailing, 18)
                     .frame(width: 64, height: size.height, alignment: .trailing)
                     .contentShape(Rectangle())
                     .gesture(scrub(size))
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Weather, particles and gases, biologics" + (onSelf == nil ? "" : ", and self"))
+                    .accessibilityLabel("Weather, particles and gases, biologics" + (showsSelf ? ", and self" : ""))
                     .accessibilityAdjustableAction { dir in
-                        let all = RailRow.rows(expanded: true, layers: layers, includesSelf: onSelf != nil)
+                        let all = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
                         let i = row.flatMap { all.firstIndex(of: $0) } ?? -1
                         select(all[dir == .increment ? min(all.count - 1, i + 1) : max(0, i - 1)])
                     }
@@ -1163,7 +1158,7 @@ struct NowSky: View {
                     probing = true; touched = true; startPulse()
                     withAnimation(.snappy(duration: 0.25)) { expanded = true }
                 }
-                let rows = RailRow.rows(expanded: true, layers: layers, includesSelf: onSelf != nil)
+                let rows = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
                 let mids = RailRow.mids(rows).map { CGFloat($0) * size.height }
                 let nearest = mids.enumerated().min { abs($0.element - drag.location.y) < abs($1.element - drag.location.y) }?.offset ?? 0
                 if rows[nearest] != row { select(rows[nearest]) }
@@ -1171,9 +1166,8 @@ struct NowSky: View {
             .onEnded { _ in
                 stopPulse()
                 let landedOnSelf = row == .me
-                withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil; expanded = false }
+                withAnimation(.easeOut(duration: 0.25)) { probe = nil; row = nil; expanded = false; selfPinned = landedOnSelf }
                 probing = false
-                if landedOnSelf { onSelf?() }
             }
     }
 
@@ -1208,8 +1202,7 @@ struct NowSky: View {
         case .item(let n):
             p = SkyExplorer.layerProbe(n, layers: layers, conditions: conditions, pollen: pollen)
         case .me:
-            p = SkyProbe(name: "Self", kind: "Your words and activity", value: "", unit: "", level: nil,
-                         note: "Let go to open.", color: .white, intensity: 0, symbol: Icons.me)
+            p = nil   // Self shows itself: the panel, not a label.
         }
         if var probe = p, let h = history {
             switch probe.name {

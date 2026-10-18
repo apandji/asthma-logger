@@ -206,10 +206,12 @@ struct InsightsView: View {
     private var tiles: some View {
         VStack(spacing: 10) {
             NavigationLink(value: Page.history) {
-                row("clock.arrow.circlepath", "Your profile history", demoLearned ? "2 profiles" : history.isEmpty ? "Starts once it's learned" : "\(history.count) so far")
+                // Words, not counts (no numbers on screen, Oct 17).
+                row("clock.arrow.circlepath", "Your profile history",
+                    demoLearned || history.count > 1 ? "Has shifted" : history.isEmpty ? "Starts once it's learned" : "Learned")
             }
             NavigationLink(value: Page.moments) {
-                row("list.bullet", "Your moments", "\(events.filter { $0.moment != .okay }.count)")
+                row("list.bullet", "Your moments", events.contains { $0.moment != .okay } ? "" : "None yet")
             }
         }
         .buttonStyle(PressStyle())

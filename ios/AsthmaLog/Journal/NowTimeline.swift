@@ -31,9 +31,7 @@ struct NowTimeline: View {
     @State private var pastEndArmed = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settle = false
-    /// The chip's two parts, measured, for its one shape.
-    @State private var topSize: CGSize = .zero
-    @State private var bottomSize: CGSize = .zero
+
 
     @State private var position = ScrollPosition(edge: .trailing)
     @State private var centerX: CGFloat = 0
@@ -234,23 +232,22 @@ struct NowTimeline: View {
             Text(focusTime == nil ? Self.when(now, now: now) : relative(current))
             if behind { Image(systemName: "arrow.uturn.forward").font(.caption2.weight(.bold)) }
         }
-        return VStack(spacing: 4) {
+        return VStack(spacing: 1) {
             if let verdict {
-                Text(verdict)
-                    .font(.caption.weight(.semibold)).lineLimit(1)
-                    .padding(.horizontal, 12).padding(.vertical, 5)
-                    .onGeometryChange(for: CGSize.self) { $0.size } action: { topSize = $0 }
-                    .transition(.opacity.combined(with: .scale(scale: 0.85, anchor: .bottom)))
+                Text(verdict).font(.caption.weight(.semibold)).lineLimit(1)
+                    .transition(.opacity)
             }
             time
-                .font((verdict == nil ? Font.caption : .caption2).weight(.semibold).monospacedDigit())
-                .padding(.horizontal, verdict == nil ? 10 : 9).padding(.vertical, verdict == nil ? 4 : 3)
-                .onGeometryChange(for: CGSize.self) { $0.size } action: { bottomSize = $0 }
+                .font((verdict == nil ? Font.caption : .caption2).weight(verdict == nil ? .semibold : .medium).monospacedDigit())
+                .opacity(verdict == nil ? 1 : 0.75)
         }
-        // One shape: the verdict's capsule narrowing into the time's (a reversed trapezoid between them),
+        .padding(.horizontal, verdict == nil ? 10 : 12)
+        .padding(.top, verdict == nil ? 4 : 6)
+        .padding(.bottom, verdict == nil ? 4 : 6 + Callout.pointer)
+        // One callout: a rounded rectangle with a small pointer down into the playhead line (with a verdict),
         // or the time's capsule alone. Ahead it's a sketch, a dashed edge, so it never reads as a record.
         .background {
-            let shape = ChipShape(top: verdict == nil ? .zero : topSize, bottom: bottomSize)
+            let shape = Callout(pointed: verdict != nil)
             shape.fill(fill)
                 .overlay { if ahead { shape.stroke(Color.black.opacity(0.35), style: StrokeStyle(lineWidth: 1.2, dash: [3, 3])) } }
         }
@@ -402,28 +399,21 @@ struct NowTimeline: View {
     }
 }
 
-/// The playhead chip as one outline: a capsule on top (the verdict) narrowing with straight sides into a
-/// capsule beneath (the time), centred. With no top it's the bottom capsule alone.
-nonisolated private struct ChipShape: Shape {
-    var top: CGSize
-    var bottom: CGSize
+/// The playhead chip's outline. Pointed: a rounded rectangle with a small pointer at the bottom centre, aiming
+/// into the playhead line (the label belongs to that point in time). Not pointed: a capsule.
+nonisolated private struct Callout: Shape {
+    static let pointer: CGFloat = 5
+    var pointed: Bool
 
     func path(in rect: CGRect) -> Path {
-        let cx = rect.midX
-        let b = CGRect(x: cx - bottom.width / 2, y: rect.maxY - bottom.height, width: bottom.width, height: bottom.height)
-        let low = Path(roundedRect: b, cornerRadius: b.height / 2).cgPath
-        guard top.width > 0 else { return Path(low) }
-        let t = CGRect(x: cx - top.width / 2, y: rect.minY, width: top.width, height: top.height)
-        let high = Path(roundedRect: t, cornerRadius: t.height / 2).cgPath
-        // The neck: from just inside the top's rounded ends down to the bottom capsule's middle.
-        var neck = Path()
-        let inset = t.height * 0.35
-        neck.move(to: CGPoint(x: t.minX + inset, y: t.midY))
-        neck.addLine(to: CGPoint(x: t.maxX - inset, y: t.midY))
-        neck.addLine(to: CGPoint(x: b.maxX - b.height * 0.3, y: b.midY))
-        neck.addLine(to: CGPoint(x: b.minX + b.height * 0.3, y: b.midY))
-        neck.closeSubpath()
-        return Path(high.union(neck.cgPath).union(low))
+        guard pointed else { return Path(roundedRect: rect, cornerRadius: rect.height / 2) }
+        let body = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height - Self.pointer)
+        var p = Path(roundedRect: body, cornerRadius: 12, style: .continuous)
+        p.move(to: CGPoint(x: rect.midX - 6, y: body.maxY - 0.5))
+        p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.midX + 6, y: body.maxY - 0.5))
+        p.closeSubpath()
+        return Path(p.cgPath.union(Path(roundedRect: body, cornerRadius: 12, style: .continuous).cgPath))
     }
 }
 

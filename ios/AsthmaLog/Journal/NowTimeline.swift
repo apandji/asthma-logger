@@ -77,7 +77,8 @@ struct NowTimeline: View {
         .scrollTargetBehavior(StopSnap(stops: stops, now: x(now)))
         .scrollIndicators(.hidden)
         .scrollPosition($position)
-        .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.width } action: { _, w in viewport = w }
+        // Only for the first scroll to the current time: the track's own layout never reads it.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { viewport = $0 }
         // Pulled past the forecast's end (the bounce): open Insights, once per drag.
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x - ($0.contentSize.width - $0.containerSize.width) } action: { _, over in
             if over > 56, dragging, pastEndArmed { pastEndArmed = false; UIImpactFeedbackGenerator(style: .medium).impactOccurred(); onPastEnd() }
@@ -155,7 +156,8 @@ struct NowTimeline: View {
     /// The scrolling content: half a viewport of room, the drawn track with tap targets, half a viewport more.
     private var track: some View {
         HStack(spacing: 0) {
-            Color.clear.frame(width: viewport / 2)
+            // Half a viewport, sized by the container itself (not from state written during layout).
+            Color.clear.containerRelativeFrame(.horizontal) { w, _ in w / 2 }
             ZStack(alignment: .topLeading) {
                 // The forecast hasn't settled: its slots drift. The past is still. Runs while the forecast
                 // drifts, and for a moment after a log so the new dot can land.
@@ -175,7 +177,7 @@ struct NowTimeline: View {
             }
             .frame(width: contentWidth, height: height)
             // After the forecast: a hint that there's more this way.
-            Color.clear.frame(width: viewport / 2)
+            Color.clear.containerRelativeFrame(.horizontal) { w, _ in w / 2 }
                 .overlay(alignment: .leading) {
                     Image(systemName: "sparkles").font(.caption).foregroundStyle(ink.opacity(0.35))
                         .padding(.leading, 22).offset(y: axis - height / 2)

@@ -5,6 +5,7 @@ BUNDLE_ID_PREFIX = com.example
 DEVELOPMENT_TEAM =
 OPENAQ_API_KEY =
 AIRNOW_API_KEY =
+AMBEE_API_KEY =
 
 #include? "Secrets.xcconfig"
 

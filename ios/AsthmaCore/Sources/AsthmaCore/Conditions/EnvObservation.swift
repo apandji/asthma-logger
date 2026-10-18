@@ -1,7 +1,7 @@
 import Foundation
 
 public enum Signal: String, Codable, Sendable, CaseIterable {
-    case temperature, humidity, dewpoint, pm25, ozone, aqi, pollenWeed, uvIndex, windSpeed, pm10, no2
+    case temperature, humidity, dewpoint, pm25, ozone, aqi, pollenWeed, uvIndex, windSpeed, pm10, no2, pollenTree, pollenGrass
 }
 
 public enum SpatialScale: String, Codable, Sendable {
@@ -139,6 +139,8 @@ public enum ObservationCopy {
         case .ozone: "Ozone"
         case .aqi: "AQI"
         case .pollenWeed: "Weed pollen"
+        case .pollenTree: "Tree pollen"
+        case .pollenGrass: "Grass pollen"
         case .uvIndex: "UV index"
         case .windSpeed: "Wind"
         }

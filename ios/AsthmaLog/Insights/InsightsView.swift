@@ -2,76 +2,68 @@ import AsthmaCore
 import SwiftData
 import SwiftUI
 
-/// Patterns (what showed up more on inhaler days) and the look-ahead (days that resemble them).
+/// Personal Insights: who you are with the air (an archetype, provisional), the radar, what shows up on your
+/// flare days by category, when and where, then Profile History and every moment. Code finds every number
+/// (AsthmaCore: AirProfile, Archetype, Rhythm); this only lays them out.
 struct InsightsView: View {
-    @Environment(LogService.self) private var services
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @AppStorage(Prefs.narratorStyle) private var styleScore = NarratorStyle.defaultScore
     @AppStorage(Prefs.useOnDeviceModel) private var useModel = true
     @AppStorage(Prefs.useDemoData) private var demo = false
     @State private var model = InsightsModel()
     @AppStorage(Crit.InsightsState.key) private var forced = Crit.InsightsState.auto
-    @State private var month = Calendar.current.dateInterval(of: .month, for: .now)!.start
-    @State private var day: Date?
-    @State private var showDoctor = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @State private var path: [Page] = []
     @State private var picked: AirProfile.Category?
+    @State private var shown = false
 
-    /// The pages behind the tiles.
-    enum Page: Hashable { case pattern, profile, moments }
+    enum Page: Hashable { case history, moments }
 
     var body: some View {
         NavigationStack(path: $path) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    // The home's header, word for word in style: where you are (Insights), the serif sentence,
-                    // the status as a pill.
-                    VerdictHeader(place: AnyView(Label(["Insights"]
-                                                            .compactMap { $0 }.joined(separator: " · "), systemImage: "sparkles")
-                                                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)),
-                                  title: learned ? (demoLearned ? "Weed pollen shows up on your flare days." : (model.narration?.headline ?? "felt air knows your pattern."))
-                                                 : "Still learning your pattern.",
-                                  verdict: learned ? "See the evidence" : model.progress.map(needs),
-                                  tint: learned ? Verdict.green : nil,
-                                  onVerdict: learned ? { path.append(Page.pattern) } : nil)
-                        .padding(.horizontal, -20)
-                    hero
+                VStack(spacing: 24) {
+                    // SF for the page's name; the one Recursive line on the page is your archetype.
+                    Text("Personal Insights")
+                        .font(.title2.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                    if learned, let p = profile {
+                        archetypeBlock(Archetype(profile: p, learned: true))
+                        AirRadar(profile: p, selected: $picked, size: 216).frame(maxWidth: .infinity)
+                        categories(p)
+                    } else {
+                        LearningRing(progress: model.progress, forcedLearned: forced == .learned, size: 184)
+                            .frame(maxWidth: .infinity)
+                        Text("Your profile appears once there are enough rescue and baseline moments to compare. felt air adds baseline moments on its own.")
+                            .font(.subheadline).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
+                    }
+                    whenAndWhere
                     tiles
                     Text("Outdoor air only. Not medical advice, and not a prediction.")
                         .font(Theme.caption).foregroundStyle(Theme.secondaryText)
-                        .frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 12).padding(.bottom, 40)
+                .opacity(shown ? 1 : 0)
             }
             .scrollIndicators(.hidden)
             .background(paperBackground)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Page.self) { page in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        switch page {
-                        case .pattern: patternCard; lookAheadCard; evidenceCard
-                        case .profile: profileCard
-                        case .moments: calendarCard
-                        }
-                    }
-                    .padding(20)
+                switch page {
+                case .history: ProfileHistoryView(current: currentSnapshot, history: history, demo: demoLearned)
+                    .background(paperBackground)
+                case .moments: MomentsLogView(events: Array(events)).background(paperBackground)
                 }
-                .scrollIndicators(.hidden)
-                .background(paperBackground)
-                .navigationTitle(page == .pattern ? "Your pattern" : page == .profile ? "Your profile" : "Your moments")
-                .navigationBarTitleDisplayMode(.inline)
             }
             .environment(\.colorScheme, paper == .linen ? .light : .dark)
             .task(id: dataKey) {
                 model.rebuild(events: events, demo: demo)
                 await model.narrate(styleScore: styleScore, useModel: useModel)
+                recordSnapshot()
             }
-            .task(id: forecastKey) {
-                await loadForecast()
-            }
+            .onAppear { withAnimation(.easeOut(duration: 0.3)) { shown = true } }
         }
     }
 
@@ -108,85 +100,100 @@ struct InsightsView: View {
                               : Array(unique.prefix(3))
     }
 
-    // MARK: Hero
+    // MARK: Who you are
 
-    /// Learning: the ring and its two counts. Learned: your shape on the radar, and the families under it.
-    @ViewBuilder private var hero: some View {
-        if learned, let p = profile {
-            radar(p)
-        } else {
-            LearningRing(progress: model.progress, forcedLearned: forced == .learned, size: 184)
-                .frame(maxWidth: .infinity)
+    /// The archetype, big and centred: its name, one plain line, the evidence, and how much it rests on.
+    private func archetypeBlock(_ a: Archetype) -> some View {
+        // Three steps only: the name (Recursive), what it means (body), the evidence (one grey line).
+        VStack(spacing: 10) {
+            Text(a.name).font(Theme.serifTitleLarge).kerning(Theme.serifKerning).multilineTextAlignment(.center)
+            Text(a.line).font(.body).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            Text([a.evidence, "So far, \(basis.prefix(1).lowercased() + basis.dropFirst())"].compactMap { $0 }.joined(separator: " "))
+                .font(.subheadline).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity)
     }
 
-    /// The four families from the lift table (or the demo person's).
+    /// "From 10 rescue and 24 baseline moments."
+    private var basis: String {
+        if demoLearned { return "From 14 rescue and 40 baseline moments." }
+        let c = model.frameCount
+        return "From \(c.attacks) rescue and \(c.baselines) baseline moments."
+    }
+
+    /// The four categories from the lift table (or the demo person's).
     private var profile: AirProfile? {
         demoLearned ? .demoPerson : model.report.map(AirProfile.init(report:))
     }
 
-    /// The radar and its rows: patterns first, strongest first; the families with nothing to show last.
-    private func radar(_ p: AirProfile) -> some View {
+    private var report: LiftReport? {
+        if demoLearned {
+            let rows = AirProfile.demoPerson.axes.compactMap(\.lead)
+            return LiftReport(nAttacks: 14, nBaselines: 40, seasonHint: nil, rows: rows, gatedRows: rows.filter(\.gated))
+        }
+        return model.report
+    }
+
+    // MARK: What shows up
+
+    /// Each category with the things inside it and how strongly each shows up on flare days. Not called
+    /// "triggers" on screen: we compare what was in the air, we don't claim a cause.
+    private func categories(_ p: AirProfile) -> some View {
         let rank: [AirProfile.Status: Int] = [.pattern: 0, .early: 1, .nothing: 2, .notTracked: 3]
-        let rows = p.axes.sorted { (rank[$0.status]!, -$0.strength) < (rank[$1.status]!, -$1.strength) }
-        return VStack(spacing: 10) {
-            AirRadar(profile: p, selected: $picked, size: 216)
-                .frame(maxWidth: .infinity)
-            ForEach(rows) { a in
-                ProfileRow(axis: a, selected: picked == a.category) {
+        let axes = p.axes.sorted { (rank[$0.status]!, -$0.strength) < (rank[$1.status]!, -$1.strength) }
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("What shows up on your flare days").font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+            ForEach(axes) { a in
+                CategoryCard(axis: a, triggers: report.map { AirProfile.triggers(a.category, report: $0) } ?? [],
+                             selected: picked == a.category) {
                     withAnimation(Theme.snap) { picked = picked == a.category ? nil : a.category }
                 }
             }
-            // About you rather than the air: when and where (time of day, indoors or out), from the same table.
-            let personal = demoLearned ? ["You used your inhaler most in the afternoon: 8 of your 14 rescue moments."]
-                                       : TheRead.personal(model.report?.rows ?? [])
-            if !personal.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("When and where", systemImage: "clock").font(.body.weight(.medium))
-                    ForEach(personal, id: \.self) { Text($0).font(.subheadline).foregroundStyle(Theme.secondaryText) }
-                }
-                .padding(.horizontal, 16).padding(.vertical, 14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular, in: .rect(cornerRadius: 22))
-            }
-            Text("How much more often each family shows up on your flare moments than on baseline ones. The counts are the evidence.")
-                .font(.caption).foregroundStyle(Theme.secondaryText)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)
         }
     }
 
-    /// "Needs 1 more rescue and 14 more baseline moments."
-    private func needs(_ p: GateProgress) -> String {
-        let r = max(0, p.minAttacks - p.attacks), b = max(0, p.minBaselines - p.baselines)
-        var parts: [String] = []
-        if r > 0 { parts.append("\(r) rescue") }
-        if b > 0 { parts.append("\(b) baseline") }
-        let total = max(0, p.minAttacks - p.attacks) + max(0, p.minBaselines - p.baselines)
-        return parts.isEmpty ? "Almost there" : parts.joined(separator: " and ") + (total == 1 ? " moment to go" : " moments to go")
+    // MARK: When and where
+
+    private var rescues: [LogEvent] { events.filter { $0.moment == .rescue && !$0.isDemo } }
+
+    /// Two boxes on one line. Plain counts of your rescue moments, not a comparison (baseline moments aren't
+    /// spread across the day yet).
+    @ViewBuilder private var whenAndWhere: some View {
+        let when = demoLearned ? "In the afternoon: 8 of your 14 rescue moments." : Rhythm(dates: rescues.map(\.loggedAt)).map { "In the \($0.part): \($0.count) of your \($0.total) rescue moments." }
+        let place = demoLearned ? "At home: 9 of your 14 rescue moments." : wherePlace
+        if when != nil || place != nil {
+            HStack(alignment: .top, spacing: 10) {
+                SmallBox(title: "When", icon: "clock", text: when ?? "No clear time of day yet.")
+                SmallBox(title: "Where", icon: "mappin", text: place ?? "No one place yet.", pins: rescues.compactMap { e in
+                    e.latitude.flatMap { lat in e.longitude.map { (lat, $0) } } })
+            }
+        }
+    }
+
+    /// "At home: 6 of your 10 rescue moments." The most common place once it holds at least 40%.
+    private var wherePlace: String? {
+        let names = rescues.map { NowHomeView.knownPlace($0.latitude, $0.longitude)?.name ?? $0.placeName ?? "Somewhere else" }
+        guard names.count >= 3 else { return nil }
+        let counts = Dictionary(grouping: names, by: { $0 }).mapValues(\.count)
+        guard let top = counts.max(by: { $0.value < $1.value }), Double(top.value) / Double(names.count) >= 0.4 else { return nil }
+        let place = top.key == "Home" ? "At home" : top.key == "Work" ? "At work" : "Around \(top.key)"
+        return "\(place): \(top.value) of your \(names.count) rescue moments."
     }
 
     // MARK: Tiles
 
-    @State private var tilesShown = false
-
     private var tiles: some View {
         VStack(spacing: 10) {
-            NavigationLink(value: Page.profile) {
-                row("person.crop.circle", "Your profile", demoLearned ? "Pollen-led" : learned ? "Ready" : "Taking shape")
+            NavigationLink(value: Page.history) {
+                row("clock.arrow.circlepath", "Your profile history", demoLearned ? "2 profiles" : history.isEmpty ? "Starts once it's learned" : "\(history.count) so far")
             }
             NavigationLink(value: Page.moments) {
-                row("calendar", "Your moments", "\(monthCount) this month")
+                row("list.bullet", "Your moments", "\(events.filter { $0.moment != .okay }.count)")
             }
-            Button { showDoctor = true } label: { row("tablecells", "For your doctor", "Table to share") }
         }
         .buttonStyle(PressStyle())
-        .opacity(tilesShown ? 1 : 0)
-        .onAppear { withAnimation(.easeOut(duration: 0.3).delay(0.25)) { tilesShown = true } }
-        .sheet(isPresented: $showDoctor) { DoctorSheet(events: Array(events)) }
-    }
-
-    private var monthCount: Int {
-        events.filter { $0.moment != .okay && Calendar.current.isDate($0.loggedAt, equalTo: .now, toGranularity: .month) }.count
     }
 
     /// One row, on the same glass as the home's buttons: icon, name, value, chevron.
@@ -204,192 +211,36 @@ struct InsightsView: View {
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    // MARK: Cards
+    // MARK: Profile history
 
-    private var patternCard: some View {
-        InsightSection(title: "Your pattern", systemImage: "sparkles") {
-            if demoLearned {
-                Chip(text: "Demo", color: Theme.secondaryText)
-                Text("Weed pollen showed up on 9 of 14 flare days vs 6 of 40 baseline days.").font(Theme.headlineSerif)
-                Text("A made-up person, for the presentation. Not your data.").font(Theme.caption).foregroundStyle(Theme.secondaryText)
-            } else if let p = model.progress, !p.isMet {
-                learning(p)
-            } else if let n = model.narration {
-                Text(n.headline).font(Theme.headlineSerif)
-                Text(n.caveat).font(Theme.caption).foregroundStyle(Theme.secondaryText)
-                HStack {
-                    Chip(text: n.source == .onDevice ? "Apple Intelligence · \(NarratorStyle(score: styleScore).label)" : "Template",
-                         color: n.source == .onDevice ? Theme.accent : Theme.secondaryText)
-                    Spacer()
-                }
-                if let note = n.note {
-                    Text(note).font(.caption2).foregroundStyle(Theme.secondaryText)
-                }
-            } else {
-                ProgressView()
-            }
-        }
+    @AppStorage("profileHistory") private var historyData = Data()
+
+    private var history: [ProfileSnapshot] {
+        (try? JSONDecoder().decode([ProfileSnapshot].self, from: historyData)) ?? []
     }
 
-    private var lookAheadCard: some View {
-        InsightSection(title: "Looking ahead", systemImage: "calendar") {
-            if let p = model.progress, !p.isMet {
-                Text("Until felt air knows your pattern, this only shows general outdoor alerts.")
-                    .font(Theme.caption).foregroundStyle(Theme.secondaryText)
-            }
-            if model.isLoadingForecast && model.days.isEmpty {
-                ProgressView()
-            }
-            ForEach(model.days) { day in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(day.day.formatted(.dateTime.weekday(.abbreviated).month().day()))
-                            .font(Theme.body.weight(.semibold))
-                        Spacer()
-                        if day.isPersonal {
-                            Chip(text: day.band.rawValue.capitalized, color: color(day.band))
-                        } else if !day.genericHazards.isEmpty {
-                            Chip(text: "Heads-up", color: Theme.accent)
-                        }
-                    }
-                    ForEach(day.windows) { w in
-                        Text(OutlookCopy.headline(w, timeRange: timeRange(w))).font(Theme.caption)
-                        ForEach(OutlookCopy.evidence(w), id: \.self) {
-                            Text($0).font(.caption2).foregroundStyle(Theme.secondaryText)
-                        }
-                    }
-                    if let line = OutlookCopy.coldStart(day.genericHazards) {
-                        Text(line).font(Theme.caption)
-                    }
-                    if day.leadHours > 30 {
-                        Text("Further out — less certain.").font(.caption2).foregroundStyle(Theme.secondaryText)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            if let note = model.forecastNote {
-                Text(note).font(.caption2).foregroundStyle(Theme.secondaryText)
-            }
-        }
+    private var currentSnapshot: ProfileSnapshot? {
+        guard learned, let p = profile else { return nil }
+        return ProfileSnapshot(date: .now, profile: p, archetype: Archetype(profile: p, learned: true))
     }
 
-    /// Who you are with the air. Named archetypes wait for the research (docs/mvp-brief-2026-10.md).
-    private var profileCard: some View {
-        InsightSection(title: "Your profile", systemImage: "person.crop.circle") {
-            if demoLearned {
-                Chip(text: "Demo", color: Theme.secondaryText)
-                Text("Pollen-led").font(Theme.headlineSerif)
-                Text("Your flare days line up with pollen more than anything else, weed pollen most of all.")
-                    .font(Theme.caption).foregroundStyle(Theme.secondaryText)
-            } else if let p = model.progress, !p.isMet {
-                Text("Once felt air has learned, this shows what your flare days have in common: pollen, particles, ozone, or cold or humid days.")
-                    .font(Theme.caption).foregroundStyle(Theme.secondaryText)
-                // Taking shape: leanings show as hollow corners until there are enough moments to call them.
-                if let prof = profile { radar(prof) }
-            } else if let n = model.narration {
-                Text(n.headline).font(Theme.headline)
-                Text("Named profiles come next, from the research.").font(Theme.caption).foregroundStyle(Theme.secondaryText)
-            }
-        }
-    }
-
-    /// The month, moved here from the home: your moments as swatches, and the table for your doctor.
-    private var calendarCard: some View {
-        InsightSection(title: "Your moments", systemImage: "calendar") {
-            MonthCalendar(month: $month, events: Array(events), selected: $day)
-            Button { showDoctor = true } label: {
-                Label("Table for your doctor", systemImage: "tablecells")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity).padding(.vertical, 12)
-                    .glassEffect(.regular.interactive(), in: .capsule)
-            }
-            .buttonStyle(.plain)
-            .sheet(isPresented: $showDoctor) { DoctorSheet(events: Array(events)) }
-        }
-    }
-
-    /// Design crit › Insights state › learned, while the real gate isn't met: a labelled demo person.
-    private var demoLearned: Bool { forced == .learned && !(model.progress?.isMet ?? false) }
-
-    private var evidenceCard: some View {
-        InsightSection(title: "Evidence", systemImage: "tablecells") {
-            let c = model.frameCount
-            Text("\(c.attacks) rescue moments · \(c.baselines) baseline moments" + (c.skipped > 0 ? " · \(c.skipped) without conditions" : ""))
-                .font(Theme.caption).foregroundStyle(Theme.secondaryText)
-            if let rows = model.report?.rows.prefix(8), !rows.isEmpty {
-                ForEach(Array(rows)) { r in
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading) {
-                            Text("\(Bins.label(r.bin)) · \(r.level)")
-                            Text("\(r.attacksWith) of \(r.nAttacks) inhaler · \(r.baselinesWith) of \(r.nBaselines) baseline")
-                                .font(Theme.caption).foregroundStyle(Theme.secondaryText)
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing) {
-                            Text("\(Lift.format(r.lift))×").font(Theme.number)
-                            Text(r.gated ? "Pattern" : "Not enough yet")
-                                .font(.caption2)
-                                .foregroundStyle(r.gated ? Theme.accent : Theme.secondaryText)
-                        }
-                    }
-                }
-            } else {
-                Text("Log each time you use your inhaler. felt air adds baseline moments on its own.").font(Theme.caption)
-            }
-        }
-    }
-
-    /// Before the sample gate: no sentence to read yet. The ring above already shows the counts.
-    @ViewBuilder private func learning(_ p: GateProgress) -> some View {
-        Text("Your pattern shows here once there are \(p.minAttacks) rescue and \(p.minBaselines) baseline moments to compare.")
-            .font(Theme.headlineSerif)
-        Text("felt air saves a baseline moment on its own when you open the app. Outdoor air only, not a diagnosis.")
-            .font(Theme.caption).foregroundStyle(Theme.secondaryText)
-    }
-
-    private var learned: Bool { forced == .learned || (model.progress?.isMet ?? false) }
-
-    private func progressRow(_ label: String, _ n: Int, _ goal: Int) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(label)
-                Spacer()
-                Text("\(min(n, goal)) of \(goal)").font(Theme.number).foregroundStyle(Theme.secondaryText)
-            }
-            .font(Theme.caption)
-            ProgressView(value: Double(min(n, goal)), total: Double(goal)).tint(Theme.accent)
-        }
+    /// Keeps a snapshot when your profile changes (or monthly). Never for the demo person.
+    private func recordSnapshot() {
+        guard !demoLearned, let s = currentSnapshot else { return }
+        let next = ProfileSnapshot.record(s, into: history)
+        if next.count != history.count, let data = try? JSONEncoder().encode(next) { historyData = data }
     }
 
     // MARK: Helpers
 
+    /// Design crit › Insights state › learned, while the real gate isn't met: the demo person.
+    private var demoLearned: Bool { forced == .learned && !(model.progress?.isMet ?? false) }
+
+    private var learned: Bool { forced == .learned || (model.progress?.isMet ?? false) }
+
     private var dataKey: String {
         let ready = events.filter { $0.conditionsData != nil }.count
-        return "\(events.count)-\(ready)-\(demo)-\(styleScore)-\(useModel)"
-    }
-
-    private var forecastKey: String { "\(demo)-\(events.last?.id.uuidString ?? "none")" }
-
-    /// Home place isn't learned yet, so the look-ahead uses the most recent logged spot.
-    private func loadForecast() async {
-        if let e = events.last(where: { $0.latitude != nil }), let lat = e.latitude, let lon = e.longitude {
-            await model.loadForecast(latitude: lat, longitude: lon, placeLabel: "your last logged spot")
-        } else if let fix = try? await services.location.currentLocation() {
-            await model.loadForecast(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude,
-                                     placeLabel: "where you are now")
-        }
-    }
-
-    private func timeRange(_ w: RiskWindow) -> String {
-        "\(w.start.formatted(date: .omitted, time: .shortened))–\(w.end.formatted(date: .omitted, time: .shortened))"
-    }
-
-    private func color(_ band: RiskBand) -> Color {
-        switch band {
-        case .elevated: Theme.elevated
-        case .usual: Theme.usual
-        case .quiet: Theme.quiet
-        }
+        return "\(events.count)-\(ready)-\(demo)-\(styleScore)-\(useModel)-\(forced.rawValue)"
     }
 }
 

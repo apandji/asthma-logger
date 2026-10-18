@@ -32,7 +32,7 @@ struct DoctorSheet: View {
                     }
                 }
             }
-            .navigationTitle("For your doctor")
+            .navigationTitle("Moments table")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }

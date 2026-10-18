@@ -11,6 +11,8 @@ struct AirRadar: View {
     let profile: AirProfile
     @Binding var selected: AirProfile.Category?
     var size: CGFloat = 300
+    /// Corner labels and taps. Off for the small radars in Profile History.
+    var labels = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var grown = 0.0
 
@@ -33,13 +35,15 @@ struct AirRadar: View {
         ZStack {
             RadarDots(profile: profile, grown: grown, selected: selected)
                 .frame(width: size, height: size)
-            ForEach(Array(Self.order.enumerated()), id: \.element) { i, c in
-                corner(c, index: i)
+            if labels {
+                ForEach(Array(Self.order.enumerated()), id: \.element) { i, c in
+                    corner(c, index: i)
+                }
             }
         }
         // Only the height is claimed: the side labels sit in the page's margins, never widening it.
-        .frame(maxWidth: .infinity)
-        .frame(height: size + 64)
+        .frame(maxWidth: labels ? .infinity : size)
+        .frame(height: labels ? size + 64 : size)
         .onAppear {
             if reduceMotion { grown = 1 } else { withAnimation(.spring(duration: 1.4, bounce: 0.25).delay(0.15)) { grown = 1 } }
         }
@@ -153,60 +157,6 @@ private struct RadarDots: View {
             else { (2, 1, -up, x) }                       // bottom → right
         let sum = u + v
         return (a, b, sum > 0 ? v / sum : 0)
-    }
-}
-
-/// One family, under the radar: its ink, its name, and the counts behind it (or why there are none).
-struct ProfileRow: View {
-    let axis: AirProfile.Axis
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(alignment: .top, spacing: 12) {
-                Circle().fill(axis.status == .notTracked ? Theme.secondaryText.opacity(0.4) : AirRadar.ink(axis.category))
-                    .frame(width: 10, height: 10).padding(.top, 5)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(axis.category.title).font(.body.weight(.medium))
-                        Spacer(minLength: 8)
-                        Text(axis.status.word).font(.caption.weight(.semibold))
-                            .foregroundStyle(axis.status == .pattern ? Color.primary : Theme.secondaryText)
-                    }
-                    Text(detail).font(.subheadline).foregroundStyle(Theme.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.horizontal, 16).padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(selected ? .regular.tint(AirRadar.ink(axis.category).opacity(0.25)).interactive() : .regular.interactive(),
-                         in: .rect(cornerRadius: 22))
-        }
-        .buttonStyle(PressStyle())
-        .foregroundStyle(.primary)
-    }
-
-    private var detail: String {
-        switch axis.status {
-        case .pattern, .early:
-            guard let r = axis.lead else { return axis.category.covers }
-            let what = Self.name(r)
-            let counts = AirProfile.counts(r)
-            return axis.status == .pattern ? "\(what): \(counts)." : "\(what): \(counts). Not enough moments to call it yet."
-        case .nothing: return "\(axis.category.covers): none more often on your flare days."
-        case .notTracked:
-            return axis.category == .exertion ? "Comes from your voice notes: say if you were exercising." : "\(axis.category.covers): not read yet."
-        }
-    }
-
-    /// "Weed pollen high", "Humid", "Exercise".
-    static func name(_ r: LiftRow) -> String {
-        let label = Bins.label(r.bin)
-        if r.level == "yes" { return label }
-        // Weather levels are words already ("humid", "hot").
-        if r.bin == "temp" || r.bin == "humidity" { return r.level.prefix(1).uppercased() + r.level.dropFirst() }
-        return "\(label) \(r.level)"
     }
 }
 

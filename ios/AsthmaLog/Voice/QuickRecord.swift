@@ -389,30 +389,50 @@ struct TagGrid: View {
     }
 }
 
-/// Wraps chips onto as many lines as they need.
+/// Wraps chips (or words) onto as many lines as they need. Items on a line share a baseline, so a word
+/// that carries something taller (the sparkle) doesn't sit lower than its neighbours.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
     /// Between lines; the same as `spacing` unless set (text wants less than chips).
     var lineSpacing: CGFloat? = nil
 
+    private struct Item { let index: Int; let size: CGSize; let baseline: CGFloat }
+    private struct Row { var items: [Item] = []; var width: CGFloat = 0; var ascent: CGFloat = 0; var descent: CGFloat = 0 }
+
+    private func rows(_ subviews: Subviews, width: CGFloat) -> [Row] {
+        var rows: [Row] = [Row()]
+        for (i, v) in subviews.enumerated() {
+            let d = v.dimensions(in: .unspecified)
+            let baseline = d[.firstTextBaseline].isFinite ? d[.firstTextBaseline] : d.height
+            let item = Item(index: i, size: CGSize(width: d.width, height: d.height), baseline: baseline)
+            if rows[rows.count - 1].width + d.width > width, !rows[rows.count - 1].items.isEmpty { rows.append(Row()) }
+            var row = rows.removeLast()
+            row.items.append(item)
+            row.width += d.width + spacing
+            row.ascent = max(row.ascent, baseline)
+            row.descent = max(row.descent, d.height - baseline)
+            rows.append(row)
+        }
+        return rows
+    }
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(.unspecified)
-            if x + s.width > width, x > 0 { x = 0; y += row + (lineSpacing ?? spacing); row = 0 }
-            x += s.width + spacing; row = max(row, s.height)
-        }
-        return CGSize(width: width == .infinity ? x : width, height: y + row)
+        let rs = rows(subviews, width: width)
+        let height = rs.reduce(0) { $0 + $1.ascent + $1.descent } + CGFloat(max(0, rs.count - 1)) * (lineSpacing ?? spacing)
+        let widest = rs.map { max(0, $0.width - spacing) }.max() ?? 0
+        return CGSize(width: width == .infinity ? widest : width, height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(.unspecified)
-            if x + s.width > bounds.maxX, x > bounds.minX { x = bounds.minX; y += row + (lineSpacing ?? spacing); row = 0 }
-            v.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(s))
-            x += s.width + spacing; row = max(row, s.height)
+        var y = bounds.minY
+        for row in rows(subviews, width: bounds.width) {
+            var x = bounds.minX
+            for item in row.items {
+                subviews[item.index].place(at: CGPoint(x: x, y: y + row.ascent - item.baseline), proposal: ProposedViewSize(item.size))
+                x += item.size.width + spacing
+            }
+            y += row.ascent + row.descent + (lineSpacing ?? spacing)
         }
     }
 }

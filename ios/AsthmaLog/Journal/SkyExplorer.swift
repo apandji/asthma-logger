@@ -391,11 +391,26 @@ enum RailRow: Hashable {
     }
 
     /// Row centres (unit y), evenly spaced. Self is a stop like the others.
-    static func mids(_ rows: [RailRow]) -> [Double] {
-        let units = Double(max(1, rows.count - 1))
+    static func mids(_ rows: [RailRow]) -> [Double] { mids(count: rows.count) }
+
+    static func mids(count: Int) -> [Double] {
+        let units = Double(max(1, count - 1))
         let span = min(0.72, 0.075 * units)
         let start = 0.5 - span / 2
-        return rows.indices.map { start + span * Double($0) / units }
+        return (0..<count).map { start + span * Double($0) / units }
+    }
+
+    /// The column is laid out against the bottom of the sky, which never moves, over a fixed reference
+    /// height: the stops stay put as the header grows and shrinks above. Only when the sky is shorter than
+    /// the reference (cards open) does the column compress to fit.
+    static let reference: CGFloat = 520
+
+    /// Row centres in points, bottom-anchored.
+    static func ys(_ rows: [RailRow], in height: CGFloat) -> [CGFloat] { ys(count: rows.count, in: height) }
+
+    static func ys(count: Int, in height: CGFloat) -> [CGFloat] {
+        let base = min(height, reference)
+        return mids(count: count).map { height - (1 - CGFloat($0)) * base }
     }
 
     /// The name tag beside the thumb.

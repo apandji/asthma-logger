@@ -48,6 +48,8 @@ struct NowHomeView: View {
     @Namespace private var hero
     /// The rail is open (held or pinned): the pill above it steps aside.
     @State private var railOpen = false
+    /// The pill button being held, for its label.
+    @State private var held: String?
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @State private var showSettings = false
@@ -103,12 +105,17 @@ struct NowHomeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // Insights and Settings head the rail's column: one strip on the hand's side, top to bottom.
                     // They step aside while the rail is held open (it grows up into this space).
-                    .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
-                        learningButton
-                            .padding(.horizontal, NowHomeView.column - 22).padding(.top, 10)  // the 44pt pill on the column
-                            .opacity(probing || railOpen ? 0 : 1)
-                            .allowsHitTesting(!(probing || railOpen))
-                            .animation(Theme.smooth, value: probing || railOpen)
+                    .overlay {
+                        // Bottom-anchored with the rail (RailRow.ys), so it stays put as the header changes.
+                        GeometryReader { g in
+                            let top = RailRow.ys(count: 5, in: g.size.height).first ?? 0
+                            learningButton
+                                .position(x: railLeft ? NowHomeView.column : g.size.width - NowHomeView.column,
+                                          y: max(52, top - 78))
+                                .opacity(probing || railOpen ? 0 : 1)
+                                .allowsHitTesting(!(probing || railOpen))
+                                .animation(Theme.smooth, value: probing || railOpen)
+                        }
                     }
                     .padding(.top, 4)
                 // Baselines are the engine's, not the journal's: no ticks for them (owner, Oct 17).
@@ -409,11 +416,25 @@ struct NowHomeView: View {
             // No bubble: it would cover the sky. Learning breathes; learned bounces once.
             InsightsRingButton(open: { showInsights = true }, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false, glass: false, nod: noticed)
                 .matchedTransitionSource(id: "insights", in: hero)
+                .onLongPressGesture(minimumDuration: 0.25, perform: {}, onPressingChanged: { held = $0 ? "Insights" : nil })
             settingsButton
+                .onLongPressGesture(minimumDuration: 0.25, perform: {}, onPressingChanged: { held = $0 ? "Settings" : nil })
         }
         .padding(4)
         .glassEffect(.regular, in: .capsule)   // not .interactive(): on a container it takes the buttons' taps
-        .padding(.top, 1)
+        // Held: the button's name beside it, on the sky's side, like a reading beside the rail.
+        .overlay(alignment: railLeft ? .trailing : .leading) {
+            if let held {
+                Text(held).font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .glassEffect(.regular, in: .capsule)
+                    .fixedSize()
+                    .offset(x: railLeft ? 54 : -54, y: held == "Insights" ? -21 : 21)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(Theme.snap, value: held)
     }
 
     private var settingsButton: some View {
@@ -1152,7 +1173,7 @@ struct NowSky: View {
             let size = geo.size
             let stack = SkyExplorer.stack(layers)
             let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: showsSelf)
-            let mids = RailRow.mids(rows).map { CGFloat($0) * size.height + (expanded ? railShift : 0) }
+            let mids = RailRow.ys(rows, in: size.height).map { $0 + (expanded ? railShift : 0) }
             ZStack {
                 AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
                 if let (lat, lon) = coordinate {
@@ -1352,16 +1373,16 @@ struct NowSky: View {
                     if !expanded {
                         // Which stop is under the thumb now, and where it will be once the rail opens.
                         let closed = RailRow.rows(expanded: false, layers: layers, includesSelf: showsSelf)
-                        let cm = RailRow.mids(closed).map { CGFloat($0) * size.height }
+                        let cm = RailRow.ys(closed, in: size.height)
                         let i = cm.enumerated().min { abs($0.element - drag.location.y) < abs($1.element - drag.location.y) }?.offset ?? 0
                         let opened = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
-                        let om = RailRow.mids(opened).map { CGFloat($0) * size.height }
+                        let om = RailRow.ys(opened, in: size.height)
                         if let j = opened.firstIndex(of: closed[i]), let first = om.first, let last = om.last {
                             let wanted = cm[i] - om[j]
                             railShift = min(max(wanted, 44 - first), size.height - 44 - last)
                         }
                     }
-                    withAnimation(.snappy(duration: 0.25)) { expanded = true }
+                    withAnimation(.smooth(duration: 0.3)) { expanded = true }
                 }
                 railFinger = drag.location.y
                 // How far the thumb has slid off the rail toward the sky (the rail column is 64 pt wide).
@@ -1379,13 +1400,17 @@ struct NowSky: View {
                     }
                 }
                 let rows = RailRow.rows(expanded: true, layers: layers, includesSelf: showsSelf)
-                let mids = RailRow.mids(rows).map { CGFloat($0) * size.height + railShift }
+                let mids = RailRow.ys(rows, in: size.height).map { $0 + railShift }
                 // Slid off the bottom (past Body): nothing is read, and letting go puts the rail back as it was.
                 if let last = mids.last, drag.location.y > last + 40 {
                     if row != nil { row = nil; probe = nil; UISelectionFeedbackGenerator().selectionChanged() }
                     return
                 }
                 let nearest = mids.enumerated().min { abs($0.element - drag.location.y) < abs($1.element - drag.location.y) }?.offset ?? 0
+                // A little hysteresis: the next stop has to be clearly nearer before the reading switches, so
+                // a thumb resting between two stops doesn't flicker.
+                if let cur = row.flatMap({ rows.firstIndex(of: $0) }), cur != nearest,
+                   abs(mids[nearest] - drag.location.y) > abs(mids[cur] - drag.location.y) - 10 { return }
                 if rows[nearest] != row { select(rows[nearest]) }
             }
             .onEnded { _ in
@@ -1678,19 +1703,17 @@ struct VerdictHeader: View {
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
             // Never cut: the sentence takes the lines it needs and the sky gives up the room.
             // Blurs between readings instead of cutting (the same as ScaleHeader), once the playhead has landed.
-            // Three lines at most: a long sentence sets a step smaller (26 → 23 → 20) rather than running on.
-            // A step smaller again at accessibility sizes.
-            let plain = TheRead.spoken(title).count
-            let size: CGFloat = plain > 100 ? 20 : plain > 78 ? 23 : 26
-            let font = Theme.Typeface.sentence(size: typeSize.isAccessibilitySize ? size - 4 : size)
+            // One size, never scaled or cut. The sentence carries at most two sentences; anything after that
+            // is a quiet line beneath (the flow, not the type, keeps the header to about three lines).
+            let font = Theme.Typeface.sentence(size: typeSize.isAccessibilitySize ? 22 : 26)
+            let (head, tail) = Self.flow(title)
             ZStack(alignment: .topLeading) {
                 Group {
-                    if hasMark {
+                    if TheRead.Mark.allCases.contains(where: { head.contains($0.rawValue) }) {
                         // The sparkle is its own view, so the key's arrow points at it.
-                        MarkedSentence(text: title, font: font, showKey: $showKey)
+                        MarkedSentence(text: head, font: font, showKey: $showKey)
                     } else {
-                        Text(title).font(font).kerning(Theme.serifKerning)
-                            .lineLimit(3).minimumScaleFactor(0.85)
+                        Text(head).font(font).kerning(Theme.serifKerning)
                     }
                 }
                     .fixedSize(horizontal: false, vertical: true)
@@ -1698,14 +1721,29 @@ struct VerdictHeader: View {
                     .id(title)
                     .transition(reduceMotion || !settled ? AnyTransition.opacity : AnyTransition(.blurReplace))
             }
+                // Three lines' worth, always, so what's below (the sky, the rail) doesn't move as the sentence
+                // runs one line or three.
+                .frame(minHeight: typeSize.isAccessibilitySize ? 84 : 96, alignment: .topLeading)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(TheRead.spoken(title))
                 .animation(settled ? .easeInOut(duration: 0.26) : nil, value: title)
-            if let when {
-                Label(when, systemImage: "clock")
-                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-                    .lineLimit(1)
+            // One quiet line, reserved: the rest of the read, and a moment's date and time.
+            VStack(alignment: .leading, spacing: 4) {
+                if let tail {
+                    Self.marked(tail)
+                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(TheRead.spoken(tail))
+                        .id(tail)
+                        .transition(.opacity)
+                }
+                if let when {
+                    Label(when, systemImage: "clock")
+                        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                        .lineLimit(1)
+                }
             }
+            .frame(minHeight: 22, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
@@ -1727,11 +1765,12 @@ struct MarkedSentence: View {
         FlowLayout(spacing: 7, lineSpacing: -2) {
             ForEach(Array(tokens.enumerated()), id: \.offset) { _, tok in
                 if let (word, mark) = Self.split(tok) {
-                    HStack(spacing: 7) {
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
                         if !word.isEmpty { Text(word).font(font).kerning(Theme.serifKerning) }
                         Image(systemName: mark == .often ? "sparkles" : "sparkle")
                             .font(.title3).foregroundStyle(.secondary)
-                            .padding(6).contentShape(Rectangle())
+                            // A generous tap area that adds nothing to the layout.
+                            .contentShape(Rectangle().inset(by: -10))
                             .onTapGesture { SparkleTip().invalidate(reason: .actionPerformed); showKey = true }
                             .popover(isPresented: $showKey, arrowEdge: .top) { SparkleKey() }
                             .accessibilityLabel(mark.words)
@@ -1768,6 +1807,26 @@ struct SparkleKey: View {
 }
 
 extension VerdictHeader {
+    /// The first two sentences for the big type; the rest for the line beneath. A sentence ends at ". ",
+    /// "? " or "! ", or at a sparkle that follows one ("there.\u{00A0}✦ The…").
+    static func flow(_ s: String) -> (String, String?) {
+        var sentences: [String] = []
+        var current: [String] = []
+        for word in s.split(separator: " ", omittingEmptySubsequences: true).map(String.init) {
+            current.append(word)
+            let bare = word.replacingOccurrences(of: "\u{00A0}", with: "")
+            let last = bare.last.map(String.init) ?? ""
+            let endsWithMark = TheRead.Mark(rawValue: last) != nil
+            if endsWithMark || bare.hasSuffix(".") || bare.hasSuffix("?") || bare.hasSuffix("!") || bare.hasSuffix("…") {
+                sentences.append(current.joined(separator: " ")); current = []
+            }
+        }
+        if !current.isEmpty { sentences.append(current.joined(separator: " ")) }
+        let head = sentences.prefix(2).joined(separator: " ")
+        let tail = sentences.dropFirst(2).joined(separator: " ")
+        return (head, tail.isEmpty ? nil : tail)
+    }
+
     /// The sentence with felt air's marks drawn as sparkles: two for "often shows up on your flare days",
     /// one for "sometimes". Quieter than the words, so the fact leads.
     static func marked(_ s: String) -> Text {

@@ -20,8 +20,11 @@ struct CategoryCard: View {
         VStack(alignment: .leading, spacing: 10) {
             Button(action: toggle) {
                 HStack(spacing: 10) {
-                    Circle().fill(axis.status == .notTracked ? Theme.secondaryText.opacity(0.4) : AirRadar.ink(axis.category))
-                        .frame(width: 10, height: 10)
+                    // The same symbol as the rail's stop, in the category's ink.
+                    Image(systemName: Icons.category(axis.category))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(axis.status == .notTracked ? Theme.secondaryText.opacity(0.5) : AirRadar.ink(axis.category))
+                        .frame(width: 22)
                     Text(axis.category.title).font(.body.weight(.medium))
                     Spacer(minLength: 8)
                     Text(axis.status.word).font(.caption.weight(.semibold))

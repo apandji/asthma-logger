@@ -9,7 +9,7 @@ struct SkyProbe: Equatable {
     /// "NO₂"
     let name: String
     /// "Traffic exhaust" — what it is, in two or three words.
-    let kind: String
+    var kind: String
     /// "3.1"
     let value: String
     /// "ppb"
@@ -126,6 +126,17 @@ enum SkyExplorer {
         return (p, bands[i])
     }
 
+    /// One layer's reading, by name (the rail's items).
+    static func layerProbe(_ name: String, layers: AirLayers, conditions: Conditions?, pollen: PollenSample?) -> SkyProbe? {
+        guard let layer = layers.readable.first(where: { ($0.name == "Air" ? "PM2.5" : $0.name) == name }) else { return nil }
+        let (v, unit) = reading(name, conditions, pollen)
+        let position = (Double(layer.level.rawValue) + max(0, min(1, layer.fraction))) / 3
+        var p = SkyProbe(name: name, kind: kind(name, pollen), value: v, unit: unit,
+                         level: layer.level, note: note(name), color: layer.color, intensity: position)
+        p.before = lookBack(name, conditions)
+        return p
+    }
+
     /// The look-back rows for a layer (weather, PM2.5, ozone), from the 48 hours stored with the reading.
     /// A window shows only when at least half its hours were read; otherwise it's missing, not clean.
     static func lookBack(_ name: String, _ c: Conditions?) -> [LookBackRow] {
@@ -174,23 +185,11 @@ enum SkyExplorer {
 
     /// The Weather row's symbol: changes when the weather just did something worth reading.
     static func weatherIcon(_ conditions: Conditions?) -> String {
-        TempDrop.band(conditions?.tempFallF) == .sharp ? "thermometer.low" : icon("Weather")
+        TempDrop.band(conditions?.tempFallF) == .sharp ? Icons.tempDrop : Icons.weather
     }
 
-    /// One symbol per layer, shared by the scale and the label so they read as the same thing.
-    static func icon(_ name: String) -> String {
-        switch name {
-        case "Weather": "cloud.sun.fill"
-        case "PM2.5", "Air": "smoke.fill"
-        case "PM10": "wind"
-        case "NO₂": "car.fill"
-        case "Ozone": "sun.haze.fill"
-        case "Tree pollen": "tree.fill"
-        case "Grass pollen": "leaf.fill"
-        case "Weed pollen": "allergens"
-        default: "circle.fill"
-        }
-    }
+    /// One symbol per layer: `Icons` is the single source.
+    static func icon(_ name: String) -> String { Icons.layer(name) }
 
     private static func kind(_ name: String, _ pollen: PollenSample?) -> String {
         switch name {
@@ -328,6 +327,124 @@ struct SkyProbeOverlay: View {
         .padding(12)
         .glassEffect(.regular, in: .rect(cornerRadius: 16))
         .contentTransition(.numericText())
+    }
+}
+
+/// The rail's groups, in the language of Personal Insights: Weather, Particles & gases, Biologics, then Self
+/// (set apart: it isn't in the sky, and choosing it slides the map away to your words and activity).
+enum RailGroup: String, CaseIterable {
+    case weather, particles, biologics
+
+    var title: String {
+        switch self {
+        case .weather: "Weather"
+        case .particles: "Particles & gases"
+        case .biologics: "Biologics"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .weather: Icons.weather
+        case .particles: Icons.particles
+        case .biologics: Icons.biologics
+        }
+    }
+
+    /// The sky's layers inside the group, in a fixed order.
+    var items: [String] {
+        switch self {
+        case .weather: []
+        case .particles: ["PM2.5", "PM10", "Ozone", "NO₂"]
+        case .biologics: ["Tree pollen", "Grass pollen", "Weed pollen"]
+        }
+    }
+}
+
+enum RailRow: Hashable {
+    case header(RailGroup)
+    case item(String)
+    case me
+
+    /// Folded: four stops. Held: every group with its items' dots underneath, laid out once for the whole
+    /// hold so nothing shifts under the finger. Items only for layers this sky has.
+    static func rows(expanded: Bool, layers: AirLayers, includesSelf: Bool) -> [RailRow] {
+        let present = Set(layers.readable.map { $0.name == "Air" ? "PM2.5" : $0.name })
+        var out: [RailRow] = []
+        for g in RailGroup.allCases {
+            out.append(.header(g))
+            if expanded { out += g.items.filter(present.contains).map { .item($0) } }
+        }
+        if includesSelf { out.append(.me) }
+        return out
+    }
+
+    /// Row centres (unit y). Self sits a little apart from the air.
+    static func mids(_ rows: [RailRow]) -> [Double] {
+        let gap = rows.contains(.me) ? 0.6 : 0
+        let units = Double(rows.count - 1) + gap
+        let span = min(0.72, 0.075 * units)
+        let start = 0.5 - span / 2
+        var y = start
+        return rows.enumerated().map { i, r in
+            if i > 0 { y += span / max(1, units) * (r == .me ? 1 + gap : 1) }
+            return y
+        }
+    }
+}
+
+/// The rail on the right edge of the sky. Folded: one icon per group (size says how much, worst item), and
+/// Self below. Held: each group shows its items as dots beneath it; slide to read any of them.
+struct GroupRail: View {
+    let layers: AirLayers
+    let rows: [RailRow]
+    let mids: [CGFloat]
+    let selected: RailRow?
+    var weatherSymbol = Icons.weather
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            ForEach(Array(rows.enumerated()), id: \.element) { i, row in
+                mark(row).position(x: 0, y: mids[i])
+            }
+        }
+        .frame(width: 0)
+        .allowsHitTesting(false)
+    }
+
+    private func amount(_ name: String) -> Double {
+        guard let l = layers.readable.first(where: { ($0.name == "Air" ? "PM2.5" : $0.name) == name }), !l.empty else { return 0 }
+        return (Double(l.level.rawValue) + l.fraction) / 3
+    }
+
+    @ViewBuilder private func mark(_ row: RailRow) -> some View {
+        let on = selected == row
+        switch row {
+        case .header(let g):
+            let worst = g.items.map(amount).max() ?? 0.25
+            let size = 12 + 10 * CGFloat(g == .weather ? 0.25 : worst)
+            Image(systemName: g == .weather ? weatherSymbol : g.icon)
+                .font(.system(size: on ? size + 3 : size, weight: .semibold))
+                .foregroundStyle(on ? Color.primary : Color.primary.opacity(0.6))
+                .frame(width: 30, height: 30)
+                .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.5) } }
+                .accessibilityLabel(g.title)
+        case .item(let name):
+            // A dot: bigger when there's more of it.
+            let d = 5 + 7 * CGFloat(amount(name))
+            Circle().fill(Color.primary.opacity(on ? 0.95 : 0.5))
+                .frame(width: on ? d + 3 : d, height: on ? d + 3 : d)
+                .frame(width: 30, height: 18)
+                .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.2).frame(width: 20, height: 20) } }
+                .accessibilityLabel(name)
+        case .me:
+            Image(systemName: Icons.me)
+                .font(.system(size: on ? 17 : 14, weight: .semibold))
+                .foregroundStyle(on ? Color.primary : Color.primary.opacity(0.6))
+                .frame(width: 30, height: 30)
+                .background { Circle().strokeBorder(Color.primary.opacity(on ? 0.8 : 0.3), style: StrokeStyle(lineWidth: 1.2, dash: on ? [] : [2, 3])) }
+                .accessibilityLabel("Self")
+        }
     }
 }
 

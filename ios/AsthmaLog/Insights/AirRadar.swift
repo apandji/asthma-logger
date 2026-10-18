@@ -19,8 +19,8 @@ struct AirRadar: View {
     /// The flare-vs-baseline gap that reaches the edge. Rings sit at a third and two thirds of it.
     static let fullGap = 0.5
 
-    /// Top, right, bottom, left.
-    static let order: [AirProfile.Category] = [.weather, .particulates, .exertion, .biologics]
+    /// Top, right, bottom, left: clockwise in the rail's order (weather, particles & gases, biologics, self).
+    static let order: [AirProfile.Category] = [.weather, .particulates, .biologics, .exertion]
 
     static func ink(_ c: AirProfile.Category) -> Color {
         switch c {
@@ -166,8 +166,8 @@ extension AirProfile.Category {
         switch self {
         case .weather: "Weather"
         case .biologics: "Biologics"
-        case .particulates: "Particulates"
-        case .exertion: "Exertion"
+        case .particulates: "Particles"
+        case .exertion: "Self"
         }
     }
 }

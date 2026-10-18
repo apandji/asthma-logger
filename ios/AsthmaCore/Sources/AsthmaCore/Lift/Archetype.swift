@@ -89,8 +89,21 @@ public struct Archetype: Sendable, Equatable {
         case .weatherEffort: "Your flare days come with effort in certain weather."
         case .allergenEffort: "Your flare days come with effort while pollen or other allergens are around."
         case .outdoorEffort: "Your flare days come with effort while the air is poor."
-        case .mixed: "Several kinds of things show up on your flare days: \(categories.map { $0.title.lowercased() }.joined(separator: ", "))."
+        case .mixed: "Several kinds of things show up on your flare days: \(mixedList)."
         }
+    }
+
+    /// "the weather, particles and gases and effort".
+    private var mixedList: String {
+        let names = categories.map { c -> String in
+            switch c {
+            case .weather: "the weather"
+            case .particulates: "particles and gases"
+            case .biologics: "pollen and other living things"
+            case .exertion: "effort"
+            }
+        }
+        return names.count > 1 ? names.dropLast().joined(separator: ", ") + " and " + names.last! : names.joined()
     }
 
     /// "Most often: high ozone and heat." No counts.

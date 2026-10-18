@@ -15,8 +15,9 @@ public struct AirProfile: Sendable, Equatable {
             switch self {
             case .weather: "Weather dynamics"
             case .biologics: "Biologics"
-            case .particulates: "Particulates & gases"
-            case .exertion: "Physical exertion"
+            case .particulates: "Particles & gases"
+            // Effort, stress and the like: about you, not the air (owner, Oct 17). Never on the map.
+            case .exertion: "Self"
             }
         }
 
@@ -26,7 +27,7 @@ public struct AirProfile: Sendable, Equatable {
             case .weather: "Heat, cold, humidity and sudden drops"
             case .biologics: "Pollen, pets, mold, colds"
             case .particulates: "Fine particles, ozone, smoke, fumes"
-            case .exertion: "Exercise, laughing or crying hard"
+            case .exertion: "Effort, exercise, stress, laughing or crying hard"
             }
         }
 
@@ -38,7 +39,7 @@ public struct AirProfile: Sendable, Equatable {
             case "pollen_weed", "pollen_tree", "pollen_grass", "tag_pets", "tag_mold", "tag_coldOrFlu": .biologics
             case "pm25", "ozone", "smoke_at_point", "tag_smoke", "tag_dust", "tag_cleaningProducts", "tag_strongScents",
                  "tag_cooking": .particulates
-            case "tag_exercise", "tag_laughingOrCrying": .exertion
+            case "tag_exercise", "tag_laughingOrCrying", "tag_stress": .exertion
             default: nil
             }
         }

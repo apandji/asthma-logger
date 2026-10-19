@@ -105,9 +105,36 @@ struct MomentTag: View {
     var text: String? = nil
 
     var body: some View {
+        if Crit.AppLook.current == .health, text == nil, moment == .rescue || moment == .maintenance {
+            healthTag
+        } else {
+            feltAirTag
+        }
+    }
+
+    /// Apple Health look: a tinted capsule in the timeline's colour (the system's tag style, as in Reminders
+    /// and Health): a small pill like the moment's mark on the timeline, the word in the colour, the colour
+    /// faint behind. Standard's pale blue is too light for words, so its word takes the deeper blue.
+    private var healthTag: some View {
+        let mark = moment == .rescue ? Theme.rescue : Theme.standardSoft
+        let word = moment == .rescue ? Theme.rescue : Theme.standard
+        return HStack(spacing: 6) {
+            Capsule().fill(mark).frame(width: 6, height: 13)
+            Text(moment.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(word)
+                .lineLimit(1).fixedSize()
+        }
+        .padding(.leading, 9).padding(.trailing, 11)
+        .padding(.vertical, 5)
+        .background(Capsule().fill(mark.opacity(moment == .rescue ? 0.15 : 0.3)))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var feltAirTag: some View {
         // The word carries the kind; colour is kept for the air.
         let ink = moment == .rescue ? Color.primary : Theme.secondaryText
-        Text(text ?? moment.title)
+        return Text(text ?? moment.title)
             // The same size as the place beside it, so the top line reads as one line.
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(ink)

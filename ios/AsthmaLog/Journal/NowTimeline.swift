@@ -364,22 +364,28 @@ struct NowTimeline: View {
         if health { for e in moments { drawHealthCircle(&ctx, e, on: e.id == currentMoment?.id, frame: frame) } }
     }
 
-    /// Health's look: each moment a 17.5 pt circle, filled like Health's logged days. Rescue orange, standard
-    /// pale blue, a note small and grey. A rescue with nothing said yet is a ring until it's noted. The one
-    /// under the playhead gets an outer ring.
+    /// Health's look: each moment a pill, 12 × 26 pt (a capsule standing on the line, so it takes little of
+    /// the track's width), filled like Health's logged days. Rescue orange, standard pale blue, a note a small
+    /// grey one. A rescue with nothing said yet is an outline until it's noted. The one under the playhead gets
+    /// an outer ring.
     private func drawHealthCircle(_ ctx: inout GraphicsContext, _ e: LogEvent, on: Bool, frame: Date) {
-        var r: CGFloat = e.moment == .note ? 4 : 8.75
+        var w: CGFloat = e.moment == .note ? 7 : 12
+        var h: CGFloat = e.moment == .note ? 14 : 26
         let age = frame.timeIntervalSince(e.loggedAt)
-        if !reduceMotion, age >= 0, age < 0.6 { r *= 1 + 0.3 * CGFloat(pow(1 - age / 0.6, 2)) }
+        if !reduceMotion, age >= 0, age < 0.6 {
+            let grow = 1 + 0.3 * CGFloat(pow(1 - age / 0.6, 2))
+            w *= grow; h *= grow
+        }
         let fill: Color = e.moment == .rescue ? Theme.rescue : e.moment == .maintenance ? Theme.standardSoft : ink.opacity(0.15)
-        let rect = CGRect(x: x(e.loggedAt) - r, y: axis - r, width: 2 * r, height: 2 * r)
+        let rect = CGRect(x: x(e.loggedAt) - w / 2, y: axis - h / 2, width: w, height: h)
+        let pill = { (r: CGRect) in Path(roundedRect: r, cornerRadius: r.width / 2, style: .continuous) }
         if e.wantsNote {
-            ctx.stroke(Path(ellipseIn: rect.insetBy(dx: 1, dy: 1)), with: .color(fill), lineWidth: 2)
+            ctx.stroke(pill(rect.insetBy(dx: 1, dy: 1)), with: .color(fill), lineWidth: 2)
         } else {
-            ctx.fill(Path(ellipseIn: rect), with: .color(fill))
+            ctx.fill(pill(rect), with: .color(fill))
         }
         if on {
-            ctx.stroke(Path(ellipseIn: rect.insetBy(dx: -3, dy: -3)), with: .color(ink), lineWidth: 1.5)
+            ctx.stroke(pill(rect.insetBy(dx: -3, dy: -3)), with: .color(ink), lineWidth: 1.5)
         }
     }
 

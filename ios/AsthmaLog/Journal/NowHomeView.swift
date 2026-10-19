@@ -971,12 +971,12 @@ struct NowHomeView: View {
         case .now:
             if justNow != nil {
                 // The capture lives in the panel at the bottom now (LoggedPanel), not in the deck.
-                var deck: [HeaderCard] = []
+                var deck: [HeaderCard] = careCard.map { [$0] } ?? []
                 if let e = liveEvent { deck.append(.advice(AirAdvice.warning(e.advice, fallF: liveAir.conditions?.tempFallF), icon: e.icon, title: e.label, home: atHome, ahead: false)) }
                 return deck
             }
             let air = liveAir
-            return adviceDeck(event: liveEvent, fallF: air.conditions?.tempFallF,
+            return (careCard.map { [$0] } ?? []) + adviceDeck(event: liveEvent, fallF: air.conditions?.tempFallF,
                               notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false), home: atHome, ahead: false)
         case .moment:
             // No note card: Voice on the rail is where you say what was going on.
@@ -1001,8 +1001,27 @@ struct NowHomeView: View {
         return deck
     }
 
+    /// The guidelines' check on rescue use (real moments only), unless you've said "Got it" to this one.
+    private var careCard: HeaderCard? {
+        let rescues = events.filter { $0.moment == .rescue && !$0.isDemo }.map(\.loggedAt)
+        guard let check = RelieverUse.check(rescues: rescues, now: now) else { return nil }
+        // "Got it" holds until the next rescue (4 hours) or for three days (the week).
+        if let seen = UserDefaults.standard.object(forKey: "care.seen.\(check.title)") as? Date {
+            switch check {
+            case .againWithin4Hours: if let last = rescues.max(), last <= seen { return nil }
+            case .moreThanTwoDaysThisWeek: if now.timeIntervalSince(seen) < 3 * 86_400 { return nil }
+            }
+        }
+        return .care(check)
+    }
+
     @ViewBuilder private func card(_ c: HeaderCard) -> some View {
         switch c {
+        case .care(let check):
+            CareCard(check: check) {
+                UserDefaults.standard.set(Date(), forKey: "care.seen.\(check.title)")
+                now = Date()   // re-read the deck
+            }
         case .advice(let w, let icon, let title, let home, let ahead):
             AdviceCard(warning: w, icon: icon, title: title, home: home, ahead: ahead)
         case .capture(let e):
@@ -2354,9 +2373,12 @@ enum HeaderCard: Identifiable {
     case advice(AirAdvice.Warning, icon: String, title: String, home: Bool, ahead: Bool)
     /// Just logged: say what's going on.
     case capture(LogEvent)
+    /// Rescue use the guidelines say to act on (RelieverUse): first in the deck, ahead of the air.
+    case care(RelieverUse.Check)
 
     var id: String {
         switch self {
+        case .care(let c): "care-\(c.title)"
         case .advice(_, _, let title, _, _): "advice-\(title)"
         case .capture(let e): "capture-\(e.id)"
         }
@@ -2432,6 +2454,33 @@ struct CardStack<Content: View>: View {
 /// What to do about the air, for where you are: staying put at Home, going out anywhere else (tap to see the
 /// other). Ahead, it's for planning. The advice is a provocation for provider conversations
 /// (docs/air-advice.md); the "i" says it isn't medical advice.
+/// The guidelines' line on rescue use: what it is, what they say, the source. "Got it" puts it away.
+struct CareCard: View {
+    let check: RelieverUse.Check
+    let gotIt: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(check.title, systemImage: "stethoscope")
+                .font(.subheadline.weight(.semibold)).lineLimit(2)
+            Text(check.body).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Text(check.source).font(.caption2).foregroundStyle(Theme.secondaryText)
+                Spacer()
+                Button("Got it", action: gotIt)
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .buttonStyle(PressStyle())
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(14)
+        .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct AdviceCard: View {
     /// Ahead: "Plan for temperature drop". A headline-shaped title turns around: "Tree pollen is high" →
     /// "Plan for high tree pollen".
@@ -2451,30 +2500,34 @@ struct AdviceCard: View {
 
     var body: some View {
         let context = picked ?? .at(home: home)
-        VStack(alignment: .leading, spacing: 8) {
+        // Two rows, not three (owner, Oct 18: the cards squeezed the rail): the title with one toggle chip for
+        // staying put / going out, then the advice.
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Label(ahead ? Self.planFor(title) : title, systemImage: icon)
                     .font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer(minLength: 4)
+                Button {
+                    withAnimation(Theme.snap) { picked = context == .stayingPut ? .goingOut : .stayingPut }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(context.label)
+                        Image(systemName: "arrow.left.arrow.right").font(.caption2.weight(.bold))
+                    }
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(Capsule().fill(Color.primary.opacity(0.12)))
+                    .contentTransition(.opacity)
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityLabel("\(context.label). Tap for \(context == .stayingPut ? "going out" : "staying put")")
                 Button { withAnimation(Theme.snap) { showNote.toggle() } } label: {
                     Image(systemName: "info.circle").font(.subheadline).foregroundStyle(Theme.secondaryText)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("About this suggestion")
             }
-            HStack(spacing: 6) {
-                ForEach(AirAdvice.Context.allCases, id: \.self) { c in
-                    Button { withAnimation(Theme.snap) { picked = c } } label: {
-                        Text(c.label).font(.caption.weight(.semibold))
-                            .foregroundStyle(c == context ? Color.black : .primary)
-                            .padding(.horizontal, 10).padding(.vertical, 5)
-                            .background(Capsule().fill(c == context ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary.opacity(0.12))))
-                    }
-                    .buttonStyle(PressStyle())
-                    .accessibilityAddTraits(c == context ? .isSelected : [])
-                }
-            }
-            Text(warning.advice(context)).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+            Text(warning.advice(context)).font(.subheadline).lineLimit(3).fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
             if showNote {
                 Text(AirAdvice.disclaimer).font(.caption2).foregroundStyle(Theme.secondaryText).transition(.opacity)
@@ -2483,7 +2536,7 @@ struct AdviceCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // Fills the height it's given, so cards in a stack are all one height.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(14)
+        .padding(.horizontal, 14).padding(.vertical, 11)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 }

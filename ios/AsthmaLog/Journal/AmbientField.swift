@@ -259,7 +259,10 @@ enum WeatherColor {
     static let violet = Color(red: 0x9D / 255, green: 0x7A / 255, blue: 0xD2 / 255)
     /// Allergens' ink: bright Yellow (riso Yellow). Pollen is yellow, and it sits a third of the wheel from
     /// pink and aqua. The verdict's middle step is a gold-orange so the two never meet.
-    static let gold = Color(red: 0xFF / 255, green: 0xE8 / 255, blue: 0x00 / 255)
+    /// On linen the same ink prints deeper (an ochre yellow): bright yellow has no contrast on light paper.
+    static var gold: Color {
+        UserDefaults.standard.string(forKey: Crit.Paper.key) == Crit.Paper.linen.rawValue ? hex(0xE0A800) : hex(0xFFE800)
+    }
 
     static func hex(_ v: UInt32) -> Color {
         Color(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)

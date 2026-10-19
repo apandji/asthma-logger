@@ -80,6 +80,10 @@ struct InsightsView: View {
 
     private var paperBackground: some View {
         ZStack {
+            if Crit.AppLook.current == .health {
+                // Apple Health look: the system's grouped grey, no bloom, no grain.
+                Color(uiColor: .systemGroupedBackground)
+            } else {
             Theme.paper(paper)
             if paper == .linen {
                 // Light: the factors as a pale wash on the paper, settling into plain paper where the list
@@ -93,6 +97,7 @@ struct InsightsView: View {
                 LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.55), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
             }
             SkyGrain(responds: false).opacity(0.5)
+            }
         }
         .ignoresSafeArea()
     }
@@ -230,7 +235,13 @@ struct InsightsView: View {
         }
         .foregroundStyle(.primary)
         .padding(.horizontal, 16).padding(.vertical, 15)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
+        // Apple Health look: a plain grouped card (white on the grey), as Health's rows are; else glass.
+        .background {
+            if Crit.AppLook.current == .health {
+                RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground))
+            }
+        }
+        .glassEffect(Crit.AppLook.current == .health ? .identity : .regular.interactive(), in: .rect(cornerRadius: 22))
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
@@ -313,6 +324,17 @@ struct LearningRing: View {
                     let eased = reduceMotion ? 1 : 1 - pow(1 - min(1, elapsed / 1.4), 3)
                     let drawn = fill * eased
                     let c = CGPoint(x: size.width / 2, y: size.height / 2), radius = size.width / 2 - 6
+                    // Apple Health look: a solid ring, as Activity's, a grey track and the filled part in Health blue.
+                    if Crit.AppLook.current == .health {
+                        let track = Path(ellipseIn: CGRect(x: c.x - radius, y: c.y - radius, width: 2 * radius, height: 2 * radius))
+                        ctx.stroke(track, with: .color(Color.primary.opacity(0.08)), lineWidth: 10)
+                        if drawn > 0 {
+                            var arc = Path()
+                            arc.addArc(center: c, radius: radius, startAngle: .degrees(-90), endAngle: .degrees(-90 + 360 * drawn), clockwise: false)
+                            ctx.stroke(arc, with: .color(Theme.healthBlue), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                        }
+                        return
+                    }
                     for i in 0..<n {
                         let t = Double(i) / Double(n)
                         let ang = t * 2 * .pi - .pi / 2

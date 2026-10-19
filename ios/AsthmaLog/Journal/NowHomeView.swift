@@ -221,7 +221,9 @@ struct NowHomeView: View {
                 // before its own bloom comes through: the same page, turned.
                 InsightsView(skyColor: skyColorNow)
                     .navigationTransition(.zoom(sourceID: "insights", in: hero))
-                    .presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper)).presentationCornerRadius(32)
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(healthLook ? Color(uiColor: .systemGroupedBackground) : Theme.paper(paper))
+                    .presentationCornerRadius(32)
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .onChange(of: focusKey) { _, _ in if !scrubbing, hasMark { noticed += 1 } }

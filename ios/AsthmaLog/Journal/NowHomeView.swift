@@ -62,6 +62,8 @@ struct NowHomeView: View {
     @State private var toast: LogEvent?
     /// Just logged: the panel over the bottom (LoggedPanel), until it's swiped away, used or left alone.
     @State private var logged: LogEvent?
+    /// The sky's width, so its sideways scrub can leave the rail's column alone.
+    @State private var skyWidth: CGFloat = 0
     @State private var probing = false
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
     /// The timeline is moving: skies change without their ripple until it settles.
@@ -285,6 +287,8 @@ struct NowHomeView: View {
         DragGesture(minimumDistance: 14)
             .onChanged { v in
                 guard abs(v.translation.width) > abs(v.translation.height) || skyDrag != nil else { return }
+                // Not from the rail's column: that's the rail's touch.
+                if skyDrag == nil, skyWidth > 0, railLeft ? v.startLocation.x < 72 : v.startLocation.x > skyWidth - 72 { return }
                 if skyDrag == nil {
                     skyDrag = (focusTime ?? now, v.startLocation)
                     scrubbing = true
@@ -639,6 +643,7 @@ struct NowHomeView: View {
                       patterns: scrubbing ? [] : RailGroup.marked(in: headerRead),
                       onRailOpen: { railOpen = $0 })
             .onTapGesture { s.onTap() }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { skyWidth = $0 }
     }
 
     private struct SkyInputs {
@@ -1448,7 +1453,9 @@ struct NowSky: View {
                     .padding(railLeft ? .leading : .trailing, NowHomeView.column - 8)  // the sky sits 8pt in from the screen
                     .frame(width: 64, height: size.height, alignment: railLeft ? .leading : .trailing)
                     .contentShape(Rectangle())
-                    .gesture(scrub(size))
+                    // First claim on touches that start here: the sky's sideways scrub (and its dent) used to
+                    // take them, and the rail never heard the finger lift, stuck half open (owner, Oct 18).
+                    .highPriorityGesture(scrub(size))
                     // A sky too short for its stops (the keyboard up in onboarding) would stack them on top
                     // of each other: the rail steps out instead.
                     // Judged on the folded rail: held open, its items are small dots and the stops squeeze to fit
@@ -1875,10 +1882,17 @@ struct VerdictHeader: View {
                             .popover(isPresented: $showKey, arrowEdge: .top) {
                                 // One line per underlined part.
                                 let fs = TheRead.factors(in: head)
-                                VStack(alignment: .leading, spacing: 6) {
-                                    if fs.isEmpty { SparkleKey(mark: mark) }
-                                    ForEach(Array(fs.enumerated()), id: \.offset) { _, f in SparkleKey(mark: f.mark, factor: f.factor) }
+                                VStack(alignment: .leading, spacing: 8) {
+                                    if fs.isEmpty { SparkleTip.line(mark, factor: nil) }
+                                    ForEach(Array(fs.enumerated()), id: \.offset) { _, f in SparkleTip.line(f.mark, factor: f.factor) }
                                 }
+                                .font(.subheadline)
+                                .fixedSize(horizontal: false, vertical: true)
+                                // A set width, so the popover can measure the wrapped height (it clipped at the
+                                // one-line ideal width).
+                                .frame(width: 260, alignment: .leading)
+                                .padding(.horizontal, 16).padding(.vertical, 12)
+                                .fixedSize()
                                 .presentationCompactAdaptation(.popover)
                             }
                             .accessibilityAddTraits(.isButton)
@@ -2034,8 +2048,10 @@ extension VerdictHeader {
                 // The clause starts after the last sentence end, a "Thursday afternoon: " lead, or the "and"
                 // that joins it to the one before.
                 var cut = clean.firstIndex(where: { !$0.isWhitespace }) ?? clean.startIndex
+                // Not counting the space before the mark ("high. ✦" isn't a sentence end before this clause).
+                let end = clean.lastIndex(where: { !$0.isWhitespace }).map { clean.index(after: $0) } ?? clean.endIndex
                 for sep in [". ", ": ", " and "] {
-                    if let r = clean.range(of: sep, options: .backwards), r.upperBound > cut { cut = r.upperBound }
+                    if let r = clean.range(of: sep, options: .backwards, range: clean.startIndex..<end), r.upperBound > cut { cut = r.upperBound }
                 }
                 let clause = String(clean[cut...]).trimmingCharacters(in: .whitespaces)
                 out = Text("\(out)\(Text(verbatim: String(clean[..<cut])))\(Text(verbatim: clause).underline(true, pattern: .dot, color: ink))")

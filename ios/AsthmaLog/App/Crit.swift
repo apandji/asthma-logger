@@ -105,6 +105,14 @@ enum Crit {
         static let key = "crit.demoEvent"
     }
 
+    /// The palette: today's screen colours, or real RISO spot inks only (docs/design/color-review-riso.md).
+    enum Inks: String, CaseIterable, Identifiable {
+        case riso, current
+        var id: String { rawValue }
+        var title: String { self == .riso ? "RISO inks" : "Current" }
+        static let key = "crit.inks"
+    }
+
     /// The page: black (ink on night) or linen, a warm off-white paper that suits the riso grain.
     enum Paper: String, CaseIterable, Identifiable {
         case black, linen

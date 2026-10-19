@@ -18,6 +18,8 @@ enum Prefs {
     static let morningBrief = "morningBrief"
     /// The rail on the left edge of the sky (left-handed use).
     static let railLeft = "railLeft"
+    /// "system" (default), "light" (linen paper) or "dark" (black paper). Sets Crit.Paper underneath.
+    static let appearance = "appearance"
     static let sounds = "sounds"
     /// Big-statement typeface: `system` (New York), `recursive` (default), or `funnelSans`.
     /// UI chrome stays SF. Legacy bool `useFunnelSans` is still read once for migration.

@@ -42,9 +42,10 @@ struct SkyProbe: Equatable {
 
 /// The three verdict colors, shared by the outlook line and the sky highlight.
 enum Verdict {
-    static let green = Color(red: 0.36, green: 0.80, blue: 0.47)
-    static let yellow = Color(red: 0.98, green: 0.80, blue: 0.25)
-    static let red = Color(red: 1.0, green: 0.36, blue: 0.32)
+    // Riso: Green, Yellow, Bright Red.
+    static var green: Color { WeatherColor.riso ? WeatherColor.hex(0x00A95C) : Color(red: 0.36, green: 0.80, blue: 0.47) }
+    static var yellow: Color { WeatherColor.riso ? WeatherColor.hex(0xFFE800) : Color(red: 0.98, green: 0.80, blue: 0.25) }
+    static var red: Color { WeatherColor.riso ? WeatherColor.hex(0xF15060) : Color(red: 1.0, green: 0.36, blue: 0.32) }
 }
 
 enum SkyExplorer {

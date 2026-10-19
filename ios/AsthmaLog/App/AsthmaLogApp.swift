@@ -101,8 +101,25 @@ struct RootView: View {
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
     @AppStorage(Prefs.statementTypeface) private var statementTypeface = Theme.Typeface.recursive.rawValue
     @AppStorage(Crit.performanceHUD) private var perfHUD = false
+    @AppStorage(Prefs.appearance) private var appearance = "system"
+    @Environment(\.colorScheme) private var systemScheme
 
     var body: some View {
+        content
+            // Settings › Appearance: light is linen paper, dark is black paper; "system" follows the phone.
+            // Status bar and system sheets match the chosen paper ("system" leaves the phone in charge).
+            .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
+            .onAppear(perform: syncPaper)
+            .onChange(of: systemScheme) { _, _ in syncPaper() }
+            .onChange(of: appearance) { _, _ in syncPaper() }
+    }
+
+    private func syncPaper() {
+        let light = appearance == "light" || (appearance == "system" && systemScheme == .light)
+        UserDefaults.standard.set((light ? Crit.Paper.linen : .black).rawValue, forKey: Crit.Paper.key)
+    }
+
+    private var content: some View {
         Group {
             if verticalSize == .compact {
                 // Sideways: the Data view. Turn back upright for the Journal.

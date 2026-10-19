@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.lockScreenReady) private var lockScreenReady = true
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.morningBrief) private var morningBrief = true
+    @AppStorage(Prefs.appearance) private var appearance = "system"
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @AppStorage(Prefs.sounds) private var sounds = true
 
@@ -60,6 +61,11 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker("Appearance", selection: $appearance) {
+                        Text("Match iPhone").tag("system")
+                        Text("Light").tag("light")
+                        Text("Dark").tag("dark")
+                    }
                     Picker("Rail", selection: $railLeft) {
                         Text("Right").tag(false)
                         Text("Left").tag(true)
@@ -67,7 +73,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("Put the rail on the side of the hand you hold your phone with.")
+                    Text("Light prints the sky on warm paper; dark on black. Put the rail on the side of the hand you hold your phone with.")
                 }
 
                 Section {
@@ -121,6 +127,7 @@ struct DeveloperSettings: View {
     @AppStorage(Crit.DemoEvent.key) private var critEvent = Crit.DemoEvent.none
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
+    @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.riso
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false
@@ -190,6 +197,9 @@ struct DeveloperSettings: View {
                 .onChange(of: demoScenario) { _, s in s.choose() }
                 // A stand-in week for "what was on" and "what you'll be doing" (the real thing is your calendar).
                 Toggle("Demo calendar", isOn: $demoCalendar)
+                Picker("Inks", selection: $critInks) {
+                    ForEach(Crit.Inks.allCases) { Text($0.title).tag($0) }
+                }
                 Picker("Insights state", selection: $critInsightsState) {
                     ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
                 }

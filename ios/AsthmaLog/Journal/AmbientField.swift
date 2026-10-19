@@ -61,8 +61,10 @@ struct AmbientField: View {
         if humidity == "humid" { sky = sky.mix(with: .white, by: linen ? 0.08 : 0.16) }
         // Under the particles the weather is the paper, not a colour: a grey that leans warm or cool.
         if !tintsLayers { sky = sky.mix(with: Color(white: 0.42), by: 0.15) }
-        if linen { sky = sky.mix(with: Color(red: 0.16, green: 0.14, blue: 0.2), by: 0.14) }
-        let strength = linen ? 0.96 : (!tintsLayers ? 0.62 : (scheme == .dark ? 0.75 : 0.66))
+        // Linen: a light wash of the weather on the paper (owner, Oct 18), not a near-opaque fill; the
+        // particles carry the ink.
+        if linen { sky = sky.mix(with: base, by: 0.5) }
+        let strength = linen ? 0.7 : (!tintsLayers ? 0.62 : (scheme == .dark ? 0.75 : 0.66))
         let overprint = linen ? 1.5 : 1.0
 
         let layers = AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: strengthStyle == .smooth)
@@ -71,8 +73,8 @@ struct AmbientField: View {
             return c.mix(with: layer.color, by: min(0.9, layer.amount * overprint))
         }
         // On linen the sky holds its color further down the field instead of fading to the paper.
-        let mid = sky.mix(with: base, by: linen ? 0.12 : 0.3)
-        let low = sky.mix(with: base, by: linen ? 0.3 : 0.55)
+        let mid = sky.mix(with: base, by: linen ? 0.35 : 0.3)
+        let low = sky.mix(with: base, by: linen ? 0.65 : 0.55)
         // Rows: sky · pollutants · pollen · ground.
         let points: [SIMD2<Float>] = [
             [0, 0], [0.33, 0], [0.67, 0], [1, 0],
@@ -231,17 +233,32 @@ enum WeatherColor {
         }
     }
 
+    /// Riso inks (Design crit › Inks, docs/design/color-review-riso.md): the sky, layers and verdicts drawn
+    /// only from real RISO spot inks, so every colour on screen is one a press could print.
+    static var riso: Bool { UserDefaults.standard.string(forKey: Crit.Inks.key) != Crit.Inks.current.rawValue }
+
+    static func hex(_ v: UInt32) -> Color {
+        Color(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
+    }
+
     /// Blue (cold) → sky → sage (mild) → amber (warm) → red (hot), by °F.
     /// Spread so ordinary days differ: 45° sky blue, 55° teal, 63° green, 70° gold, 78° orange, 88° red.
-    static let stops: [(f: Double, color: Color)] = [
-        (30, Color(red: 0.22, green: 0.34, blue: 0.86)),
-        (45, Color(red: 0.30, green: 0.58, blue: 0.92)),
-        (55, Color(red: 0.20, green: 0.70, blue: 0.72)),
-        (63, Color(red: 0.42, green: 0.76, blue: 0.42)),
-        (70, Color(red: 0.93, green: 0.78, blue: 0.32)),
-        (78, Color(red: 0.97, green: 0.56, blue: 0.24)),
-        (88, Color(red: 0.90, green: 0.28, blue: 0.22)),
-    ]
+    static var stops: [(f: Double, color: Color)] {
+        if riso {
+            // Medium Blue · Aqua · Teal · Kelly Green · Sunflower · Orange · Bright Red
+            return [(30, hex(0x3255A4)), (45, hex(0x5EC8E5)), (55, hex(0x00838A)), (63, hex(0x67B346)),
+                    (70, hex(0xFFB511)), (78, hex(0xFF6C2F)), (88, hex(0xF15060))]
+        }
+        return [
+            (30, Color(red: 0.22, green: 0.34, blue: 0.86)),
+            (45, Color(red: 0.30, green: 0.58, blue: 0.92)),
+            (55, Color(red: 0.20, green: 0.70, blue: 0.72)),
+            (63, Color(red: 0.42, green: 0.76, blue: 0.42)),
+            (70, Color(red: 0.93, green: 0.78, blue: 0.32)),
+            (78, Color(red: 0.97, green: 0.56, blue: 0.24)),
+            (88, Color(red: 0.90, green: 0.28, blue: 0.22)),
+        ]
+    }
 
     static func isNight(_ date: Date?) -> Bool {
         guard let date else { return false }
@@ -264,15 +281,17 @@ enum WeatherColor {
     }
     static let smog = Color(red: 0.52, green: 0.50, blue: 0.46)
     /// Pollutant layers: fine particles slate, coarse dust sand, NO₂ rust (it's a brown gas), ozone icy cyan.
-    static let pm25 = Color(red: 0.42, green: 0.48, blue: 0.60)
-    static let pm10 = Color(red: 0.86, green: 0.72, blue: 0.50)
-    static let no2 = Color(red: 0.74, green: 0.38, blue: 0.24)
-    static let ozone = Color(red: 0.66, green: 0.92, blue: 1.0)
-    static let pollen: [Color] = [
-        Color(red: 0.36, green: 0.80, blue: 0.46),   // tree: green
-        Color(red: 0.98, green: 0.80, blue: 0.22),   // grass: gold
-        Color(red: 0.72, green: 0.42, blue: 0.95),   // weed: violet
-    ]
+    /// Riso: Slate, Flat Gold, Brick, Aqua; pollen Green, Sunflower, Violet.
+    static var pm25: Color { riso ? hex(0x5E695E) : Color(red: 0.42, green: 0.48, blue: 0.60) }
+    static var pm10: Color { riso ? hex(0xBB8B41) : Color(red: 0.86, green: 0.72, blue: 0.50) }
+    static var no2: Color { riso ? hex(0xA75154) : Color(red: 0.74, green: 0.38, blue: 0.24) }
+    static var ozone: Color { riso ? hex(0x5EC8E5) : Color(red: 0.66, green: 0.92, blue: 1.0) }
+    static var pollen: [Color] {
+        riso ? [hex(0x00A95C), hex(0xFFB511), hex(0x9D7AD2)]
+             : [Color(red: 0.36, green: 0.80, blue: 0.46),   // tree: green
+                Color(red: 0.98, green: 0.80, blue: 0.22),   // grass: gold
+                Color(red: 0.72, green: 0.42, blue: 0.95)]   // weed: violet
+    }
 
     static func temperature(_ f: Double) -> Color {
         guard let first = stops.first, let last = stops.last else { return .gray }

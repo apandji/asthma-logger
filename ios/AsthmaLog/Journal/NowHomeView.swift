@@ -142,8 +142,16 @@ struct NowHomeView: View {
                 // the hour (rose dawn, blue day, amber dusk, indigo night), deepening to black at the bottom.
                 // The forecast is the same, quieter. The grain runs over all of it.
                 ZStack {
-                    LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), pageBottom],
-                                   startPoint: .top, endPoint: .bottom)
+                    if paper == .linen {
+                        // Light: the weather's colour printed on warm paper, a pale wash that settles into the
+                        // paper at the bottom (riso on uncoated stock), never into black.
+                        LinearGradient(colors: [pageTop.mix(with: Theme.linen, by: 0.72), pageTop.mix(with: Theme.linen, by: 0.88),
+                                                pageBottom == .black ? Theme.linen : pageBottom.mix(with: Theme.linen, by: 0.75)],
+                                       startPoint: .top, endPoint: .bottom)
+                    } else {
+                        LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), pageBottom],
+                                       startPoint: .top, endPoint: .bottom)
+                    }
                     SkyGrain(responds: false).opacity(0.5)
                 }
                 .ignoresSafeArea()

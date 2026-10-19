@@ -442,7 +442,8 @@ struct NowHomeView: View {
                 .accessibilityLabel("Settings")
         }
         .padding(4)
-        .glassEffect(.regular, in: .capsule)
+        // No well (owner, Oct 18): two marks on the sky, a soft shadow so they hold on a bright one.
+        .shadow(color: .black.opacity(0.25), radius: 6, y: 1)
         .contentShape(Capsule())
         .gesture(pillSlide)
         // The name beside the one under the thumb, on the sky's side, like a reading beside the rail.
@@ -2565,34 +2566,30 @@ struct AdviceCard: View {
 
     var body: some View {
         let context = picked ?? .at(home: home)
-        // Two rows, not three (owner, Oct 18: the cards squeezed the rail): the title with one toggle chip for
-        // staying put / going out, then the advice.
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Label(ahead ? Self.planFor(title) : title, systemImage: icon)
                     .font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer(minLength: 4)
-                Button {
-                    withAnimation(Theme.snap) { picked = context == .stayingPut ? .goingOut : .stayingPut }
-                } label: {
-                    HStack(spacing: 3) {
-                        Text(context.label)
-                        Image(systemName: "arrow.left.arrow.right").font(.caption2.weight(.bold))
-                    }
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 9).padding(.vertical, 4)
-                    .background(Capsule().fill(Color.primary.opacity(0.12)))
-                    .contentTransition(.opacity)
-                }
-                .buttonStyle(PressStyle())
-                .accessibilityLabel("\(context.label). Tap for \(context == .stayingPut ? "going out" : "staying put")")
                 Button { withAnimation(Theme.snap) { showNote.toggle() } } label: {
                     Image(systemName: "info.circle").font(.subheadline).foregroundStyle(Theme.secondaryText)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("About this suggestion")
             }
-            Text(warning.advice(context)).font(.subheadline).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                ForEach(AirAdvice.Context.allCases, id: \.self) { c in
+                    Button { withAnimation(Theme.snap) { picked = c } } label: {
+                        Text(c.label).font(.caption.weight(.semibold))
+                            .foregroundStyle(c == context ? Color.black : .primary)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(Capsule().fill(c == context ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.primary.opacity(0.12))))
+                    }
+                    .buttonStyle(PressStyle())
+                    .accessibilityAddTraits(c == context ? .isSelected : [])
+                }
+            }
+            Text(warning.advice(context)).font(.subheadline).fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
             if showNote {
                 Text(AirAdvice.disclaimer).font(.caption2).foregroundStyle(Theme.secondaryText).transition(.opacity)
@@ -2601,7 +2598,7 @@ struct AdviceCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // Fills the height it's given, so cards in a stack are all one height.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, 14).padding(.vertical, 11)
+        .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 }

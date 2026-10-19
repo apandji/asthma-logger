@@ -617,6 +617,15 @@ struct NowHomeView: View {
 
     // MARK: Sky
 
+    /// The header's read for the playhead, marks and all (what VerdictHeader shows as its title).
+    private var headerRead: String {
+        switch focus {
+        case .now: return justNow != nil && here == nil ? "" : (here == nil ? "" : nowRead)
+        case .moment(let m): return backRead(m)
+        case .hour(let h): return aheadRead(h)
+        }
+    }
+
     /// One NowSky for every time, built from the playhead's focus, so its identity holds while you scrub and
     /// the colour flows from moment to moment instead of cutting (docs/design/polish-pass.md §2). Landed, it
     /// takes the moment's id again, so arriving somewhere new still crossfades.
@@ -627,6 +636,7 @@ struct NowHomeView: View {
                       onPin: s.onPin, sketch: s.sketch, event: s.event, showsSelf: s.showsSelf, selfEvent: s.selfEvent,
                       onRecord: { openCapture($0) }, makeNote: s.makeNote,
                       scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil,
+                      patterns: scrubbing ? [] : RailGroup.marked(in: headerRead),
                       onRailOpen: { railOpen = $0 })
             .onTapGesture { s.onTap() }
     }
@@ -1244,6 +1254,8 @@ struct NowSky: View {
     var makeNote: (() async -> LogEvent?)? = nil
     /// While scrubbing: the temperature between readings, for a hue that flows with the playhead.
     var scrubTemperature: Double? = nil
+    /// Families the header's read marks as patterns, badged on the rail.
+    var patterns: Set<RailGroup> = []
     /// Told when the rail opens or closes (held, or pinned on Voice / Body), so what sits above it can step aside.
     var onRailOpen: ((Bool) -> Void)? = nil
     @State private var voice = VoiceSession()
@@ -1414,7 +1426,7 @@ struct NowSky: View {
             // The scale: the legend, and the only place you read the air. Slide up and down it.
             .overlay(alignment: railLeft ? .leading : .trailing) {
                 GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions),
-                         voiceBadge: selfEvent?.wantsNote ?? false, fingerY: railFinger)
+                         voiceBadge: selfEvent?.wantsNote ?? false, patterns: patterns, fingerY: railFinger)
                     // The stops sit in one glass well, the same material as the controls above and the + below.
                     .background {
                         if let first = mids.first, let last = mids.last {
@@ -1847,9 +1859,13 @@ struct VerdictHeader: View {
             let (head, tail) = Self.flow(patternMark == "words" ? TheRead.spoken(title) : title)
             ZStack(alignment: .topLeading) {
                 Group {
-                    if TheRead.Mark.allCases.contains(where: { head.contains($0.rawValue) }) {
-                        // The sparkle is its own view, so the key's arrow points at it.
-                        MarkedSentence(text: head, font: font, showKey: $showKey)
+                    if let mark = Self.firstMark(head) {
+                        // A pattern is the words themselves, dotted underneath; a tap says what that means.
+                        Self.underlined(head).font(font).kerning(Theme.serifKerning)
+                            .contentShape(Rectangle())
+                            .onTapGesture { SparkleTip().invalidate(reason: .actionPerformed); showKey = true }
+                            .popover(isPresented: $showKey, arrowEdge: .top) { SparkleKey(mark: mark, factor: TheRead.factor(in: head)) }
+                            .accessibilityAddTraits(.isButton)
                     } else {
                         Text(head).font(font).kerning(Theme.serifKerning)
                     }
@@ -1866,7 +1882,7 @@ struct VerdictHeader: View {
             // then when, smallest and quietest, a step apart. They were one grey and competed (owner, Oct 18).
             VStack(alignment: .leading, spacing: 10) {
                 if let tail {
-                    Self.marked(tail)
+                    Self.underlined(tail)
                         .font(.body).foregroundStyle(Color.primary.opacity(0.82))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel(TheRead.spoken(tail))
@@ -1978,13 +1994,30 @@ extension VerdictHeader {
 
     /// The sentence with felt air's marks drawn as sparkles: two for "often shows up on your flare days",
     /// one for "sometimes". Quieter than the words, so the fact leads.
-    static func marked(_ s: String) -> Text {
+    static func firstMark(_ s: String) -> TheRead.Mark? {
+        TheRead.Mark.allCases.compactMap { m in s.range(of: m.rawValue).map { (m, $0.lowerBound) } }.min { $0.1 < $1.1 }?.0
+    }
+
+    /// The read with its patterns marked in the words: the sentence a mark follows ("High weed pollen was
+    /// there.") gets a dotted underline, and the mark itself is dropped. Any number of them, no glyphs
+    /// (owner, Oct 18: the sparkle read as a big thing). Plain words aren't patterns.
+    static func underlined(_ s: String) -> Text {
         var out = Text(verbatim: "")
         var run = ""
+        let ink = Color.primary.opacity(0.55)
         for ch in s {
-            if let mark = TheRead.Mark(rawValue: String(ch)) {
-                let icon = Text(Image(systemName: mark == .often ? "sparkles" : "sparkle")).font(.title3).foregroundStyle(.secondary)
-                out = Text("\(out)\(Text(verbatim: run))\(icon)")
+            if TheRead.Mark(rawValue: String(ch)) != nil {
+                let clean = run.replacingOccurrences(of: "\u{00A0}", with: " ")
+                // The clause is the last sentence in the run; anything before it stays plain.
+                var cut = clean.startIndex
+                let body = clean.trimmingCharacters(in: .whitespaces)
+                if let dot = body.range(of: ". ", options: .backwards), let r = clean.range(of: String(body[dot.upperBound...])) {
+                    cut = r.lowerBound
+                } else if let first = clean.firstIndex(where: { !$0.isWhitespace }) {
+                    cut = first
+                }
+                let clause = String(clean[cut...]).trimmingCharacters(in: .whitespaces)
+                out = Text("\(out)\(Text(verbatim: String(clean[..<cut])))\(Text(verbatim: clause).underline(true, pattern: .dot, color: ink))")
                 run = ""
             } else {
                 run.append(ch)

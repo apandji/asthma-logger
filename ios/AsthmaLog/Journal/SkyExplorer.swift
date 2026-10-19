@@ -342,6 +342,21 @@ struct SkyProbeOverlay: View {
 enum RailGroup: String, CaseIterable {
     case weather, particles, biologics
 
+    /// The families a read marks as patterns (each marked sentence, by its words), for the rail's badge.
+    static func marked(in read: String) -> Set<RailGroup> {
+        var out: Set<RailGroup> = []
+        var run = ""
+        for ch in read {
+            guard TheRead.Mark(rawValue: String(ch)) != nil else { run.append(ch); continue }
+            let clause = (run.components(separatedBy: ". ").last ?? run).lowercased()
+            if ["pollen", "mold", "mould"].contains(where: clause.contains) { out.insert(.biologics) }
+            if ["particle", "ozone", "smoke", "nitrogen", "pm2", "pm10", "air quality"].contains(where: clause.contains) { out.insert(.particles) }
+            if ["temperature", "humid", "cold", "heat", "hot", "dry", "rain", "storm", "wind"].contains(where: clause.contains) { out.insert(.weather) }
+            run = ""
+        }
+        return out
+    }
+
     var title: String {
         switch self {
         case .weather: "Weather"
@@ -442,6 +457,8 @@ struct GroupRail: View {
     var weatherSymbol = Icons.weather
     /// The moment wants a note: Voice wears a small dot.
     var voiceBadge = false
+    /// Families the read marks as patterns: their icon wears a small dot (the sentence's underline, here).
+    var patterns: Set<RailGroup> = []
     /// The thumb's height while the rail is held: a lens. The stop under it grows and the two beside it
     /// ease away, like the Dock, so the rail reads as a scale you slide along.
     var fingerY: CGFloat? = nil
@@ -478,7 +495,12 @@ struct GroupRail: View {
                 .foregroundStyle(on ? Color.primary : Color.primary.opacity(0.6))
                 .frame(width: 30, height: 30)
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.5) } }
-                .accessibilityLabel(g.title)
+                .overlay(alignment: .topTrailing) {
+                    if patterns.contains(g) && !on {
+                        Circle().fill(Color.primary.opacity(0.85)).frame(width: 6, height: 6).offset(x: -1, y: 3)
+                    }
+                }
+                .accessibilityLabel(patterns.contains(g) ? "\(g.title), often on your flare days" : g.title)
         case .item(let name):
             // A dot: bigger when there's more of it.
             let d = 5 + 7 * CGFloat(amount(name))

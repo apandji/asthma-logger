@@ -26,14 +26,14 @@ struct SparkleTip: Tip {
     var message: Text? { nil }
 
     /// One line, the same words as Insights, the word that matters emphasised:
-    /// "✦✦ High weed pollen shows up **often** on your flare days".
+    /// "High weed pollen shows up **often** on your flare days". No glyph: the pattern is the dotted
+    /// underline on the words themselves (owner, Oct 18).
     static func line(_ mark: TheRead.Mark, factor: String?) -> Text {
-        let icon = Image(systemName: mark == .often ? "sparkles" : "sparkle")
         let what = factor ?? "Shows"
         let verb = factor == nil ? "up" : "shows up"
         return mark == .often
-            ? Text("\(icon) \(what) \(verb) **often** on your flare days")
-            : Text("\(icon) \(what) \(verb) **sometimes** on your flare days")
+            ? Text("\(what) \(verb) **often** on your flare days")
+            : Text("\(what) \(verb) **sometimes** on your flare days")
     }
     var options: [any TipOption] { [Tips.MaxDisplayCount(1)] }
 }

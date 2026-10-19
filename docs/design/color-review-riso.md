@@ -102,3 +102,9 @@ Simple, RISO inks and Current remain under Demo › Inks.
 
 The same three inks print a step deeper on light paper, so they sit at one weight on the page: Weather
 #F03C9E, Pollutants #1FA7CE, Allergens #DBA300 (bright on black: #FF48B0, #5EC8E5, #FFE800).
+
+### Verdict, harmonised with the inks
+
+The callout's three colours print a step deeper on linen too (green #1E8E52, gold #E39A2A, red #D63B4C;
+on black #00A95C, #F2A93B, #F15060), and the text is **white on green and red, black on the gold**: black
+on coral failed both ways.

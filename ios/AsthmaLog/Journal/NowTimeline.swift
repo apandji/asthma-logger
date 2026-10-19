@@ -225,7 +225,7 @@ struct NowTimeline: View {
         let ahead = focusTime != nil && current > now
         let behind = focusTime != nil && current < now
         let fill: Color = verdictTint ?? ink
-        let text: Color = verdictTint != nil ? .black : (scheme == .light ? Theme.linen : .black)
+        let text: Color = verdictTint.map(Verdict.text(on:)) ?? (scheme == .light ? Theme.linen : .black)
         let verdict = (ahead || focusTime == nil) ? verdictText : nil
         let time = HStack(spacing: 5) {
             if ahead { Image(systemName: "arrow.uturn.backward").font(.caption2.weight(.bold)) }

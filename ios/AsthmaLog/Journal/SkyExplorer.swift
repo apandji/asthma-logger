@@ -42,11 +42,14 @@ struct SkyProbe: Equatable {
 
 /// The three verdict colors, shared by the outlook line and the sky highlight.
 enum Verdict {
-    // Riso: Green, Yellow, Bright Red.
-    static var green: Color { WeatherColor.riso ? WeatherColor.hex(0x00A95C) : Color(red: 0.36, green: 0.80, blue: 0.47) }
-    // Medium gold-orange, not yellow: yellow is pollen's (owner, Oct 18).
-    static var yellow: Color { WeatherColor.riso ? WeatherColor.hex(0xF2A93B) : Color(red: 0.98, green: 0.80, blue: 0.25) }
-    static var red: Color { WeatherColor.riso ? WeatherColor.hex(0xF15060) : Color(red: 1.0, green: 0.36, blue: 0.32) }
+    // Riso: Green, a gold-orange (not yellow: that's pollen's), Bright Red. On linen each prints a step deeper,
+    // like the three air inks, so the set holds at one weight on either paper (owner, Oct 18).
+    static var green: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0x1E8E52 : 0x00A95C) : Color(red: 0.36, green: 0.80, blue: 0.47) }
+    static var yellow: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xE39A2A : 0xF2A93B) : Color(red: 0.98, green: 0.80, blue: 0.25) }
+    static var red: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xD63B4C : 0xF15060) : Color(red: 1.0, green: 0.36, blue: 0.32) }
+
+    /// The ink to write on a verdict with: white on green and red (black fails on both), black on the gold.
+    static func text(on tint: Color) -> Color { tint == yellow ? .black : .white }
 }
 
 enum SkyExplorer {

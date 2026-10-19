@@ -49,6 +49,8 @@ struct NowHomeView: View {
     static let column: CGFloat = 36
     /// Counts up each time a sentence with a sparkle lands: the sparkle button nods in sympathy.
     @State private var noticed = 0
+    /// A tapped underline's tip, said by the Insights ring (owner, Oct 18: patterns live in Insights).
+    @State private var patternTip: PatternTip?
     @Namespace private var hero
     /// The rail is open (held or pinned): the pill above it steps aside.
     @State private var railOpen = false
@@ -451,6 +453,34 @@ struct NowHomeView: View {
         }
         .animation(Theme.snap, value: held)
         .sensoryFeedback(.selection, trigger: held)
+        // The ring says the tapped pattern, growing toward the sentence. A tap opens Insights.
+        .overlay(alignment: railLeft ? .trailing : .leading) {
+            if let tip = patternTip, held == nil {
+                Button {
+                    patternTip = nil
+                    showInsights = true
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        SparkleTip.line(tip.mark, factor: tip.factor).font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 4) { Text("See in Insights"); Image(systemName: "chevron.right").font(.caption2.weight(.bold)) }
+                            .font(.footnote.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+                    }
+                    .frame(width: 210, alignment: .leading)
+                    .padding(14)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 18))
+                }
+                .buttonStyle(PressStyle())
+                .offset(x: railLeft ? 248 : -248, y: -21)
+                .transition(.opacity.combined(with: .scale(scale: 0.6, anchor: railLeft ? .leading : .trailing)))
+            }
+        }
+        .task(id: patternTip) {
+            guard patternTip != nil else { return }
+            try? await Task.sleep(for: .seconds(6))
+            withAnimation(Theme.smooth) { patternTip = nil }
+        }
+        .onChange(of: focusKey) { _, _ in patternTip = nil }
         .accessibilityElement(children: .contain)
     }
 
@@ -503,6 +533,12 @@ struct NowHomeView: View {
         }
         .padding(.top, 2)
         .animation(scrubbing ? nil : .easeInOut(duration: 0.22), value: focusKey)
+        // Tapping an underlined part makes the Insights ring say it; the part stays lit while it does.
+        .environment(\.onPatternTap, { factor, mark in
+            withAnimation(Theme.lift) { patternTip = PatternTip(factor: factor, mark: mark) }
+            noticed += 1
+        })
+        .environment(\.activePattern, patternTip?.factor)
     }
 
     /// The place as words: Home or Work (with their icon) when it's within 150 m of the saved one, else the
@@ -1923,23 +1959,38 @@ struct VerdictHeader: View {
 /// A read with its patterns underlined, each underlined part its own tap target: tapping one shows a tip
 /// for that part only ("Heat shows up often on your flare days"), pointing where you tapped. Plain parts do
 /// nothing. The parts are links inside one Text, so the sentence still wraps as a paragraph.
+struct PatternTip: Equatable {
+    let factor: String
+    let mark: TheRead.Mark
+}
+
+extension EnvironmentValues {
+    /// Set by Now: a tapped underline goes to the Insights ring instead of a tip under the sentence.
+    @Entry var onPatternTap: ((String, TheRead.Mark) -> Void)? = nil
+    /// The pattern the ring is saying, so its words stay lit.
+    @Entry var activePattern: String? = nil
+}
+
 struct MarkedText: View {
     let text: String
     let font: Font
     var kerning: CGFloat = 0
     var ink: Color = .primary
     @State private var shown: Int?
+    @Environment(\.onPatternTap) private var onPatternTap
+    @Environment(\.activePattern) private var activePattern
 
     var body: some View {
         let factors = TheRead.factors(in: text)
-        Text(Self.attributed(text, ink: ink))
+        let active = activePattern.flatMap { a in factors.firstIndex { $0.factor == a } }
+        Text(Self.attributed(text, ink: ink, active: active))
             .font(font).kerning(kerning)
             .foregroundStyle(ink).tint(ink)
             .fixedSize(horizontal: false, vertical: true)
             .environment(\.openURL, OpenURLAction { url in
                 guard url.scheme == "feltair-mark", let i = Int(url.host() ?? "") else { return .discarded }
                 SparkleTip().invalidate(reason: .actionPerformed)
-                shown = i
+                if let onPatternTap, i < factors.count { onPatternTap(factors[i].factor, factors[i].mark) } else { shown = i }
                 return .handled
             })
             // Anchored under the sentence, so the tip never covers the words it explains (the link takes the
@@ -1963,7 +2014,7 @@ struct MarkedText: View {
     }
 
     /// The read as one attributed paragraph: each marked clause dotted underneath and a link to its tip.
-    static func attributed(_ s: String, ink: Color) -> AttributedString {
+    static func attributed(_ s: String, ink: Color, active: Int? = nil) -> AttributedString {
         var out = AttributedString()
         var run = ""
         var index = 0
@@ -1977,7 +2028,9 @@ struct MarkedText: View {
             }
             out += AttributedString(String(clean[..<cut]))
             var clause = AttributedString(String(clean[cut...]).trimmingCharacters(in: .whitespaces))
-            clause.underlineStyle = Text.LineStyle(pattern: .dot, color: ink.opacity(0.6))
+            // The one the ring is saying goes solid, so you can see which part it's about.
+            clause.underlineStyle = index == active ? Text.LineStyle(pattern: .solid, color: ink)
+                                                    : Text.LineStyle(pattern: .dot, color: ink.opacity(0.6))
             clause.link = URL(string: "feltair-mark://\(index)")
             out += clause
             index += 1

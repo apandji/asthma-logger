@@ -1425,9 +1425,17 @@ struct NowSky: View {
                     Color.black.opacity(0.28).allowsHitTesting(false)
                     Color.white.opacity(flash).allowsHitTesting(false)
                 }
+                // Weather held on the rail: its ink comes up over the whole sky and the particles step back, so
+                // the colour you're reading is the colour that's named (owner, Oct 18).
+                if row == .header(.weather) || (pinned == .header(.weather) && row == nil) {
+                    WeatherColor.light(WeatherColor.temperature(temperature ?? WeatherColor.fallbackTemp(weave)), at: date)
+                        .opacity(0.45)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
                 ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
                               fragments: stack.map { event == .storm && $0.name.hasSuffix("pollen") },
-                              selected: selectedLayer(stack),
+                              selected: row == .header(.weather) ? -1 : selectedLayer(stack),
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
                               rippleInk: rippleInk, scan: true, hollow: sketch,

@@ -14,6 +14,11 @@ enum Theme {
     static let tint = Color.primary
 
     // Moment kinds, matching the watch buttons and the SmartButton caps.
+    // Apple Health look (Design crit › App look): Health's category colours, picked from its icon set.
+    static let healthBlue = Color(light: 0x2F7CF6, dark: 0x4A90FF)     // the ear
+    static let healthPurple = Color(light: 0xA55BE3, dark: 0xBF7CF2)   // the figure
+    static let healthYellow = Color(light: 0xF5A93A, dark: 0xFFBC4F)   // the arrows
+
     static let rescue = Color(light: 0xE8701F, dark: 0xFF8A3D)    // orange
     static let standard = Color(light: 0x2B8FD6, dark: 0x4FB0F5)  // blue
     /// The same two, softened: for the scan ripple, so they don't compete with the particles' inks.

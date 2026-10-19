@@ -18,7 +18,6 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
                     Toggle("After a press, ask what was going on", isOn: $quickRecord)
                         .onChange(of: quickRecord) { _, on in
                             if on { Task { _ = await QuickRecordCenter.shared.requestPermission() } }
@@ -35,13 +34,16 @@ struct SettingsView: View {
                 } header: {
                     Text("Logging")
                 } footer: {
-                    Text("After a press, the Lock Screen asks what was going on, so you can say it without unlocking. The morning look-ahead is a notification at 8 with the day's air. Sounds: a quiet tick when a moment is logged, silent with the ringer off.")
+                    Text("The Lock Screen asks right after a press, so you can answer without unlocking. The morning look-ahead is a notification at 8 with the day's air.")
                 }
 
                 Section {
                     NavigationLink("Devices") { DevicesView() }
+                    Toggle("Save inhaler uses to Apple Health", isOn: $writeToHealth)
+                } header: {
+                    Text("Inhalers and Health")
                 } footer: {
-                    Text("Your inhalers, the felt button on each cap, and Apple Watch.")
+                    Text("Your inhalers, the felt button on each cap, Apple Watch, and whether each use goes into Health.")
                 }
 
                 Section {
@@ -57,7 +59,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Baseline moments")
                 } footer: {
-                    Text("What your inhaler moments are compared against. felt air fills them in a day later, a few hours across each day, with that hour's air. With “Use where you've been” they're placed where you actually were. Otherwise, at home. Places stay on this iPhone.")
+                    Text("Ordinary hours, filled in a day later with that hour's air, for your inhaler moments to be compared against. “Use where you've been” places them where you were. Otherwise, at home. Places stay on this iPhone.")
                 }
 
                 Section {
@@ -73,19 +75,15 @@ struct SettingsView: View {
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("Light prints the sky on warm paper; dark on black. Put the rail on the side of the hand you hold your phone with.")
+                    Text("Light prints the sky on warm paper, dark on black. The rail goes on the side of the hand you hold the phone with.")
                 }
 
                 Section {
                     NavigationLink("Where your data comes from") { SourcesView() }
+                } header: {
+                    Text("About")
                 } footer: {
-                    Text("Apple Weather, OpenAQ, AirNow and Ambee for the air, and what comes from you.")
-                }
-
-                Section {
-                    Text("felt air is a diary, not a medical device. It compares outdoor conditions when you used your inhaler with your baseline moments. It can't see indoor air, doesn't diagnose, and never says a flare will happen.")
-                        .font(Theme.caption)
-                        .foregroundStyle(Theme.secondaryText)
+                    Text("felt air is a diary, not a medical device. It compares the outdoor air when you used your inhaler with your baseline moments. It can't see indoor air, doesn't diagnose, and never says a flare will happen.")
                 }
 
                 // Everything for demos, design reviews and testing: one row, at the very bottom.

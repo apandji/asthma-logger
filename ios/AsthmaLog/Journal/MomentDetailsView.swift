@@ -14,8 +14,8 @@ struct MomentDetailsView: View {
     @State private var pull: CGFloat = 0
     @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
     @State private var around: HourlyHistory?
-    @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
-    private var pollen: PollenSample? { DemoPollen.sample(at: event.loggedAt, season: pollenSeason) }
+    /// The moment's own pollen readings (Ambee, live or sample), not a demo season.
+    private var pollen: PollenSample? { DemoPollen.from(event.conditions) }
 
     var body: some View {
         if airOnly { airPage } else if let mapNamespace { inPlace(mapNamespace) } else { page }
@@ -131,7 +131,7 @@ struct MomentDetailsView: View {
                 VoiceNoteButton(event: event).frame(maxWidth: .infinity)
                 if let c = event.conditions, !c.observations.isEmpty { sources(c) }
                 NavigationLink(value: event) {
-                    Text("Edit, retry or delete").frame(maxWidth: .infinity)
+                    Text("Edit this moment").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered).buttonBorderShape(.capsule)
     }
@@ -171,8 +171,8 @@ struct MomentDetailsView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(event.loggedAt.formatted(.dateTime.weekday(.wide).month().day().hour().minute()))
                 .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-            Text(event.placeName ?? "Outdoors near you")
-                .font(.system(.title, design: .serif, weight: .medium))
+            Text(event.placeName ?? "Near you")
+                .font(Theme.Typeface.sentence(size: 26)).kerning(Theme.serifKerning)
         }
     }
 
@@ -261,7 +261,7 @@ struct MomentDetailsView: View {
                     LevelIndicator(level: nil, ink: WeaveSwatch.ink(.pollen), style: style).frame(minWidth: 30)
                     Text("Pollen")
                     Spacer()
-                    Text("Not included yet").foregroundStyle(Theme.secondaryText)
+                    Text("No reading").foregroundStyle(Theme.secondaryText)
                 }
                 .font(.subheadline).padding(.vertical, 8)
             }
@@ -321,9 +321,10 @@ struct MomentDetailsView: View {
     @ViewBuilder private var aroundChart: some View {
         if let h = around, h.temperature.count > 1 || h.pm25.count > 1 {
             VStack(alignment: .leading, spacing: 10) {
-                Text("6 hours either side").font(.headline)
-                if h.temperature.count > 1 { mini("Temperature °F", h.temperature, WeaveSwatch.ink(.temperature)) }
-                if h.pm25.count > 1 { mini("PM2.5 µg/m³", h.pm25, WeaveSwatch.ink(.air)) }
+                Text("The hours around it").font(.headline)
+                // The family inks, the same as the sky and the rail.
+                if h.temperature.count > 1 { mini("Temperature °F", h.temperature, WeatherColor.amber) }
+                if h.pm25.count > 1 { mini("PM2.5 µg/m³", h.pm25, WeatherColor.aqua) }
             }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
         }

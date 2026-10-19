@@ -132,7 +132,7 @@ import Testing
 
     @Test func notesLeadWithTheirWords() {
         #expect(TheRead.note("Tight chest after the bus") == "You noted: “Tight chest after the bus”")
-        #expect(TheRead.note(nil) == "A note, nothing said.")
+        #expect(TheRead.note(nil) == "A note.")
         #expect(TheRead.note(nil, tags: [.coldAir, .pets]) == "A note: cold air, pets.")
         #expect(TheRead.note(String(repeating: "a", count: 120)).hasSuffix("…”"))
     }

@@ -71,7 +71,7 @@ public enum Bins {
         case "pollen_weed": return "Weed pollen"
         case "temp": return "Temperature"
         case "humidity": return "Humidity"
-        case "smoke_at_point": return "Smoke-like air"
+        case "smoke_at_point": return "Smoky air"
         case "heat_alert": return "Heat alert"
         case "hour": return "Time of day"
         case "place": return "Place"

@@ -1018,9 +1018,7 @@ struct NowHomeView: View {
         if let event { deck.append(.advice(AirAdvice.warning(event.advice, fallF: fallF), icon: event.icon, title: event.label, home: home, ahead: ahead)) }
         for n in notable.prefix(3) {
             let w = AirAdvice.warning(n.factor)
-            deck.append(.advice(w, icon: Icons.factor(n.factor),
-                                title: w.headline.replacingOccurrences(of: " today.", with: "").replacingOccurrences(of: ".", with: ""),
-                                home: home, ahead: ahead))
+            deck.append(.advice(w, icon: Icons.factor(n.factor), title: n.factor.name, home: home, ahead: ahead))
         }
         return deck
     }
@@ -2570,13 +2568,8 @@ struct CareCard: View {
 }
 
 struct AdviceCard: View {
-    /// Ahead: "Plan for temperature drop". A headline-shaped title turns around: "Tree pollen is high" →
-    /// "Plan for high tree pollen".
-    static func planFor(_ title: String) -> String {
-        let parts = title.components(separatedBy: " is ")
-        if parts.count == 2 { return "Plan for \(parts[1].lowercased()) \(parts[0].lowercased())" }
-        return "Plan for \(title.prefix(1).lowercased() + title.dropFirst())"
-    }
+    /// Ahead: "Plan for: tree pollen". Titles are things, so the colon keeps it from reading as a sentence.
+    static func planFor(_ title: String) -> String { "Plan for: \(title.prefix(1).lowercased() + title.dropFirst())" }
 
     let warning: AirAdvice.Warning
     let icon: String

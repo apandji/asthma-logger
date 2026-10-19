@@ -183,17 +183,6 @@ struct InsightEdgeTab: View {
     }
 }
 
-/// Sideways: temperature, humidity and air across the full width, a day at a glance.
-struct LandscapeDataView: View {
-    var body: some View {
-        AirChartsView(wide: true)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Theme.stage.ignoresSafeArea())
-    }
-}
-
 /// Insights as a round button next to the +. While felt air is still learning, a ring fills toward the
 /// first pattern. Once there's a pattern, a speech bubble offers it; tap to open Insights.
 struct InsightsRingButton: View {

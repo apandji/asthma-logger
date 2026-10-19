@@ -38,7 +38,7 @@ public enum TheRead {
         case ("temp", "mild"): "Mild weather"
         case ("humidity", "humid"): "Humid air"
         case ("humidity", "dry"): "Dry air"
-        case ("smoke_at_point", "yes"): "Smoke-like air"
+        case ("smoke_at_point", "yes"): "Smoky air"
         case ("heat_alert", "yes"): "A heat alert"
         case ("temp_drop", "yes"): "A sharp temperature drop"
         case ("exertion", "yes"): "Being active"
@@ -312,7 +312,7 @@ public enum TheRead {
     public static func noReading(_ time: Time, checking: Bool = false, reason: String? = nil) -> String {
         if checking { return time == .now ? "Checking the air near you…" : "Checking the air for this moment…" }
         switch time {
-        case .now: return "Couldn't read the air here just now. Logging still works."
+        case .now: return "Couldn't read the air just now. Logging still works."
         case .back: return reason ?? "No air reading for this moment."
         case .ahead(let when): return "\(when): no forecast for here yet."
         }
@@ -322,7 +322,7 @@ public enum TheRead {
     public static func note(_ words: String?, tags: [JournalTag] = []) -> String {
         let w = (words ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !w.isEmpty else {
-            return tags.isEmpty ? "A note, nothing said." : "A note: " + tags.map { $0.label.lowercased() }.joined(separator: ", ") + "."
+            return tags.isEmpty ? "A note." : "A note: " + tags.map { $0.label.lowercased() }.joined(separator: ", ") + "."
         }
         let short = w.count > 90 ? String(w.prefix(87)) + "…" : w
         return "You noted: “\(short)”"

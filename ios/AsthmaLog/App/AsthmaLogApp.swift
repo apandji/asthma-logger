@@ -95,7 +95,6 @@ struct AsthmaLogApp: App {
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var context
-    @Environment(\.verticalSizeClass) private var verticalSize
     @Environment(LogService.self) private var services
     @AppStorage(Prefs.autoBaseline) private var autoBaseline = true
     @AppStorage(Prefs.didOnboard) private var didOnboard = false
@@ -120,14 +119,8 @@ struct RootView: View {
     }
 
     private var content: some View {
-        Group {
-            if verticalSize == .compact {
-                // Sideways: the Data view. Turn back upright for the Journal.
-                LandscapeDataView()
-            } else {
-                NowHomeView()
-            }
-        }
+        // The sideways Data view is retired (owner, Oct 18): Now is the one surface, upright.
+        Group { NowHomeView() }
         #if DEBUG
         .overlay(alignment: .top) {
             // Tap it to reset the dropped-frame count.

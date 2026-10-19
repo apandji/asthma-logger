@@ -28,6 +28,19 @@ public enum AirAdvice {
     public enum Factor: String, Sendable, CaseIterable {
         case pm25, pm10, no2, ozone, treePollen, grassPollen, weedPollen
 
+        /// The card's title: a thing, not a sentence ("Fine particles", so "Plan for fine particles" reads).
+        public var name: String {
+            switch self {
+            case .pm25: "Fine particles"
+            case .pm10: "Dust"
+            case .no2: "Traffic pollution"
+            case .ozone: "Ozone"
+            case .treePollen: "Tree pollen"
+            case .grassPollen: "Grass pollen"
+            case .weedPollen: "Weed pollen"
+            }
+        }
+
         /// What it is, in a few words.
         public var whatItIs: String {
             switch self {

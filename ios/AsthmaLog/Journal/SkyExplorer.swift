@@ -417,14 +417,17 @@ enum RailRow: Hashable {
 
     /// The column is laid out against the bottom of the sky, which never moves, over a fixed reference
     /// height: the stops stay put as the header grows and shrinks above. Only when the sky is shorter than
-    /// the reference (cards open) does the column compress to fit.
+    /// the reference, the rail keeps its size and draws over what's above (no longer compressed).
     static let reference: CGFloat = 520
 
     /// Row centres in points, bottom-anchored.
     static func ys(_ rows: [RailRow], in height: CGFloat) -> [CGFloat] { ys(count: rows.count, in: height) }
 
     static func ys(count: Int, in height: CGFloat) -> [CGFloat] {
-        let base = min(height, reference)
+        // Never compressed (owner, Oct 18: "it should stay consistent and on top of everything"): the column is
+        // the same size, the same distance from the bottom, whatever the sky's height. A short sky (a long
+        // sentence, a card) lets the top of the rail rise over the header instead of squeezing it.
+        let base = reference
         return mids(count: count).map { height - (1 - CGFloat($0)) * base }
     }
 

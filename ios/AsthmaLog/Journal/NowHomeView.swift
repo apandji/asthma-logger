@@ -104,6 +104,8 @@ struct NowHomeView: View {
                     CardStack(cards: deck) { card($0) }
                         .id(focusKey)
                         .padding(.top, 10)
+                        // The rail's column is fixed and drawn on top: the cards leave it free.
+                        .padding(railLeft ? .leading : .trailing, 48)
                         .opacity(probing ? 0.4 : 1)
                         .transition(.opacity)
                 }
@@ -124,7 +126,7 @@ struct NowHomeView: View {
                             let top = RailRow.ys(count: 5, in: g.size.height).first ?? 0
                             learningButton
                                 .position(x: railLeft ? NowHomeView.column : g.size.width - NowHomeView.column,
-                                          y: max(52, top - 78))
+                                          y: top - 78)
                                 .opacity(probing || railOpen ? 0 : 1)
                                 .allowsHitTesting(!(probing || railOpen))
                                 .animation(Theme.smooth, value: probing || railOpen)
@@ -1512,7 +1514,9 @@ struct NowSky: View {
                     }
                     .padding(railLeft ? .leading : .trailing, NowHomeView.column - 8)  // the sky sits 8pt in from the screen
                     .frame(width: 64, height: size.height, alignment: railLeft ? .leading : .trailing)
-                    .contentShape(Rectangle())
+                    // Touchable where it's drawn, even above the sky's top.
+                    .contentShape(Path(CGRect(x: 0, y: min(0, (mids.first ?? 0) - 40), width: 64,
+                                              height: size.height - min(0, (mids.first ?? 0) - 40))))
                     // First claim on touches that start here: the sky's sideways scrub (and its dent) used to
                     // take them, and the rail never heard the finger lift, stuck half open (owner, Oct 18).
                     .highPriorityGesture(scrub(size))
@@ -1576,9 +1580,8 @@ struct NowSky: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotionEnv
 
-    private func railFits(_ size: CGSize) -> Bool {
-        size.height >= CGFloat(RailRow.rows(expanded: false, layers: layers, includesSelf: showsSelf).count) * 44 + 24
-    }
+    /// Only a tiny sky (the keyboard up in onboarding) hides it; otherwise it keeps its place and size.
+    private func railFits(_ size: CGSize) -> Bool { size.height >= 200 }
 
     /// Hold the rail: it opens (every group with its items' dots) and stays put while you slide; let go and it
     /// folds. Letting go on Self opens your words and activity.
@@ -1596,7 +1599,7 @@ struct NowSky: View {
                         let om = RailRow.ys(opened, in: size.height)
                         if let j = opened.firstIndex(of: closed[i]), let first = om.first, let last = om.last {
                             let wanted = cm[i] - om[j]
-                            railShift = min(max(wanted, 44 - first), size.height - 44 - last)
+                            railShift = min(max(wanted, min(44, cm.first ?? 44) - first), size.height - 44 - last)
                         }
                     }
                     withAnimation(.smooth(duration: 0.3)) { expanded = true }

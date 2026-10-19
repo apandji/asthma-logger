@@ -21,6 +21,8 @@ struct NowHomeView: View {
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @AppStorage(Crit.DemoEvent.key) private var demoEvent = Crit.DemoEvent.none
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off.rawValue
+    /// Settings › Demo triggers: read here so Now redraws when it changes.
+    @AppStorage("demo.care") private var demoCare = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The full air details, opened from the pin.
     @State private var pinDetails: LogEvent?
@@ -1006,6 +1008,12 @@ struct NowHomeView: View {
 
     /// The guidelines' check on rescue use (real moments only), unless you've said "Got it" to this one.
     private var careCard: HeaderCard? {
+        // Settings › Demo › Demo triggers: show either card on cue.
+        switch demoCare {
+        case "again": return .care(.againWithin4Hours)
+        case "week": return .care(.moreThanTwoDaysThisWeek)
+        default: break
+        }
         let rescues = events.filter { $0.moment == .rescue && !$0.isDemo }.map(\.loggedAt)
         guard let check = RelieverUse.check(rescues: rescues, now: now) else { return nil }
         // "Got it" holds until the next rescue (4 hours) or for three days (the week).

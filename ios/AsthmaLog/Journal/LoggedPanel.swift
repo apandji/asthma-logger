@@ -21,7 +21,9 @@ struct LoggedPanel: View {
     @State private var tookThem = false
     /// Three or more presses inside ten seconds: probably test sprays (priming), not puffs.
     private var looksLikePriming: Bool {
-        guard !tookThem, let u = event.uses.last else { return false }
+        guard !tookThem else { return false }
+        if UserDefaults.standard.bool(forKey: "demo.priming") { return true }   // Settings › Demo triggers
+        guard let u = event.uses.last else { return false }
         return Priming.looksLike(puffs: u.puffs, span: u.lastPressAt.timeIntervalSince(u.at))
     }
     private var ink: Color { event.moment == .rescue ? Theme.rescue : Theme.standard }

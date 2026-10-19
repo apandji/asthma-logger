@@ -122,6 +122,9 @@ struct DeveloperSettings: View {
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
+    @AppStorage("demo.care") private var demoCare = ""
+    @AppStorage("demo.priming") private var demoPriming = false
+    @AppStorage("demo.active") private var demoActive = false
 
     var body: some View {
         Form {
@@ -194,6 +197,23 @@ struct DeveloperSettings: View {
                 Text("Demo")
             } footer: {
                 Text("\(demoScenario.shows) Made up, on Now and on moments logged while it's on, never used for patterns. Insights state forces the ring.")
+            }
+            #endif
+
+            #if DEBUG
+            // Things that only happen under conditions, on cue for a demo.
+            Section {
+                Picker("Rescue-use check", selection: $demoCare) {
+                    Text("Off (real moments)").tag("")
+                    Text("Again within 4 hours").tag("again")
+                    Text("More than 2 days this week").tag("week")
+                }
+                Toggle("Presses look like test sprays", isOn: $demoPriming)
+                Toggle("New moments count as active", isOn: $demoActive)
+            } header: {
+                Text("Demo triggers")
+            } footer: {
+                Text("Rescue-use check: the card on Now. Test sprays: the logged panel asks \"Were those test sprays?\" on any press. Active: new moments are stamped active (the exertion pattern). Also staged elsewhere: Demo scenario (smoke, storm, cold snap, pollen day: the header, air chips, advice card and the journal's exposure question), Demo calendar (what's on, beside the air), data sets (underlined patterns and the Insights ring's bubble).")
             }
             #endif
 

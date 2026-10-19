@@ -170,7 +170,8 @@ final class LogService {
             let at = event.loggedAt
             let v = await motion.vigorousMinutes(before: at)
             let h = await HealthReader.shared.activity(before: at)
-            event.exerted = Exertion.active(workout: h.workout, vigorousMinutes: v, steps: h.steps)
+            event.exerted = UserDefaults.standard.bool(forKey: "demo.active") ? true   // Settings › Demo triggers
+                : Exertion.active(workout: h.workout, vigorousMinutes: v, steps: h.steps)
             event.apply(IndoorOutdoorGuesser.guess(IndoorSignals(
                 horizontalAccuracyM: fix.horizontalAccuracy, atPlace: nil, motion: state, floorLevel: fix.floor?.level
             )))

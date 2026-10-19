@@ -209,8 +209,11 @@ struct InsightsView: View {
                 row("clock.arrow.circlepath", "Your profile history",
                     demoLearned || history.count > 1 ? "Has shifted" : history.isEmpty ? "Starts once it's learned" : "Learned")
             }
-            NavigationLink(value: Page.moments) {
-                row("list.bullet", "Your moments", events.contains { $0.moment != .okay } ? "" : "None yet")
+            // Apple Health look: Your moments is its own tab, not a row here.
+            if Crit.AppLook.current != .health {
+                NavigationLink(value: Page.moments) {
+                    row("list.bullet", "Your moments", events.contains { $0.moment != .okay } ? "" : "None yet")
+                }
             }
         }
         .buttonStyle(PressStyle())

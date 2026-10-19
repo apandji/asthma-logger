@@ -1504,6 +1504,11 @@ struct NowSky: View {
             .saturation(isPast ? 0.82 : 1)
             .blur(radius: sketch && !reduceMotionEnv ? 2.5 * farness : 0)
             .drawingGroup()
+            // Apple Health look: each new sky arrives with a water ripple from its middle; a fresh log's runs
+            // from the + (bottom corner). The particles' own ripple is off in this look, with the particles.
+            .modifier(SkyRipple(trigger: rippleAt,
+                                origin: captureInk != nil ? CGPoint(x: railLeft ? 0 : size.width, y: size.height) : CGPoint(x: size.width / 2, y: size.height * 0.55),
+                                enabled: Crit.AppLook.current == .health && !reduceMotionEnv))
             // Swiping the sky sideways dents the surface under the finger (set by NowHomeView).
             .distortionEffect(ShaderLibrary.dent(.float2(dent?.point ?? .zero), .float(170), .float(dent?.press ?? 0)),
                               maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: dent != nil)
@@ -2747,3 +2752,25 @@ struct CaptureCard: View {
     }
 }
 
+
+/// Apple Health look: the WWDC24-style water ripple (Shaders/Ripple.metal), run once each time `trigger`
+/// changes, over three seconds.
+struct SkyRipple<T: Equatable>: ViewModifier {
+    let trigger: T
+    let origin: CGPoint
+    let enabled: Bool
+    private let duration: TimeInterval = 3
+
+    func body(content: Content) -> some View {
+        content.keyframeAnimator(initialValue: 0.0, trigger: trigger) { view, elapsed in
+            view.visualEffect { v, _ in
+                v.layerEffect(ShaderLibrary.ripple(.float2(origin), .float(elapsed), .float(12), .float(15), .float(8), .float(1200)),
+                              maxSampleOffset: CGSize(width: 12, height: 12),
+                              isEnabled: enabled && elapsed > 0 && elapsed < duration)
+            }
+        } keyframes: { _ in
+            MoveKeyframe(0)
+            LinearKeyframe(duration, duration: duration)
+        }
+    }
+}

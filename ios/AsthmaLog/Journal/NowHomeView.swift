@@ -518,11 +518,14 @@ struct NowHomeView: View {
             case .moment(let m):
                 VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
                               title: backRead(m), verdict: nil, tint: nil,
-                              when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()))
+                              when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()),
+                              around: CalendarReader.shared.around(m.loggedAt)?.line)
             case .hour(let h):
                 // No "Forecast" tag and no verdict pill: the dashed chip on the timeline says it's ahead, and
                 // carries the verdict (playheadVerdict).
-                VerdictHeader(place: AnyView(placeField), title: aheadRead(h), verdict: nil, tint: nil)
+                // What you'll be doing then, beside the air for it (EventKit; the demo calendar in demos).
+                VerdictHeader(place: AnyView(placeField), title: aheadRead(h), verdict: nil, tint: nil,
+                              around: CalendarReader.shared.event(at: h.date)?.line)
             }
         }
         .padding(.top, 2)
@@ -1888,6 +1891,8 @@ struct VerdictHeader: View {
     var onVerdict: (() -> Void)? = nil
     /// A moment's date and time, on the line where the verdict would be: "Monday, Oct 12, 8:15 AM".
     var when: String? = nil
+    /// What was (or will be) on your calendar then: "Soccer practice, 6:00–7:30 PM" (EventKit, on this iPhone).
+    var around: String? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skySettled) private var settled
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -1949,11 +1954,19 @@ struct VerdictHeader: View {
                         .transition(.opacity)
                         .padding(.top, -2)
                 }
-                if let when {
-                    Label(when, systemImage: "clock")
-                        .font(.footnote.weight(.medium)).foregroundStyle(Theme.secondaryText)
-                        .labelStyle(.titleAndIcon)
-                        .lineLimit(1)
+                if when != nil || around != nil {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let when {
+                            Label(when, systemImage: "clock")
+                                .font(.footnote.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                                .labelStyle(.titleAndIcon).lineLimit(1)
+                        }
+                        if let around {
+                            Label(around, systemImage: "calendar")
+                                .font(.footnote.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                                .labelStyle(.titleAndIcon).lineLimit(1)
+                        }
+                    }
                 }
             }
             // Not reserved: the header is its natural height and the sky takes the slack (its column is

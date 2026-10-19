@@ -77,7 +77,7 @@ struct OnboardingView: View {
         if let f = first {
             VerdictHeader(place: AnyView(HStack(spacing: 8) { MomentTag(moment: .okay, text: OnboardingCopy.firstTag); placeLine }),
                           title: AirWords.sentence(tense: .present, weave: f.weave, conditions: f.conditions),
-                          verdict: nil, tint: nil)
+                          verdict: nil, tint: nil, around: CalendarReader.shared.around(f.loggedAt)?.line)
             AirReadings(conditions: f.conditions ?? here?.conditions, weave: f.weave,
                         pollen: DemoPollen.sample(at: f.loggedAt, season: pollenSeason))
         } else if step >= .here, here != nil || locating || noLocation {

@@ -28,7 +28,7 @@ final class CalendarReader {
         }
     }
 
-    var isAllowed: Bool { EKEventStore.authorizationStatus(for: .event) == .fullAccess }
+    var isAllowed: Bool { DemoCalendar.isOn || EKEventStore.authorizationStatus(for: .event) == .fullAccess }
     var wasAsked: Bool { EKEventStore.authorizationStatus(for: .event) != .notDetermined }
 
     @discardableResult
@@ -38,6 +38,8 @@ final class CalendarReader {
 
     /// Events overlapping `from…to`, timed ones first, then all-day ones.
     func events(from: Date, to: Date) -> [Event] {
+        // Demo calendar (Settings › Demo): a stand-in week, for demos and the simulator.
+        if DemoCalendar.isOn { return DemoCalendar.events(from: from, to: to) }
         guard isAllowed else { return [] }
         let predicate = store.predicateForEvents(withStart: from, end: to, calendars: nil)
         return store.events(matching: predicate)
@@ -45,6 +47,11 @@ final class CalendarReader {
             .sorted { ($0.isAllDay ? 1 : 0, $0.startDate) < ($1.isAllDay ? 1 : 0, $1.startDate) }
             .map { Event(id: $0.eventIdentifier ?? UUID().uuidString, title: $0.title ?? "Event", start: $0.startDate,
                          end: $0.endDate, location: $0.location?.isEmpty == false ? $0.location : nil, isAllDay: $0.isAllDay) }
+    }
+
+    /// What was on around a moment (from an hour before to a quarter after), for its header.
+    func around(_ t: Date) -> Event? {
+        events(from: t.addingTimeInterval(-3600), to: t.addingTimeInterval(900)).first { !$0.isAllDay }
     }
 
     /// What's on at an hour (a timed event covering it), for the look-ahead.

@@ -1507,6 +1507,7 @@ struct NowSky: View {
             // The scale: the legend, and the only place you read the air. Slide up and down it.
             .overlay(alignment: railLeft ? .leading : .trailing) {
                 GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions),
+                         weatherInk: WeatherColor.temperature(temperature ?? WeatherColor.fallbackTemp(weave)),
                          voiceBadge: selfEvent?.wantsNote ?? false, patterns: patterns, fingerY: railFinger)
                     // The stops sit in one glass well, the same material as the controls above and the + below.
                     .background {

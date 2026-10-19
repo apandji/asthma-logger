@@ -1,5 +1,6 @@
 import AsthmaCore
 import SwiftUI
+import UIKit
 
 /// A moment's outdoor conditions as a soft color field, like a sky.
 ///
@@ -281,6 +282,34 @@ enum WeatherColor {
         }
     }
 
+    /// Multiply, like a second drum over the first: each channel of the first ink darkened by the second, at
+    /// `amount` coverage. A hot night stays red under the blue (not the same lavender-grey as a cold one).
+    static func overprint(_ base: Color, _ ink: Color, _ amount: Double) -> Color {
+        var (r1, g1, b1, a1): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+        var (r2, g2, b2, a2): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+        UIColor(base).getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        UIColor(ink).getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        let k = CGFloat(max(0, min(1, amount)))
+        func m(_ x: CGFloat, _ y: CGFloat) -> Double { Double(x * (1 - k + k * y)) }
+        return Color(red: m(r1, r2), green: m(g1, g2), blue: m(b1, b2))
+    }
+
+    /// The hour as a second ink over the temperature's: Federal Blue at night, Fluorescent Pink at dawn and
+    /// dusk, nothing by day.
+    static func overprintHour(_ c: Color, at date: Date) -> Color {
+        let cal = Calendar.current
+        let h = Double(cal.component(.hour, from: date)) + Double(cal.component(.minute, from: date)) / 60
+        let night = hex(0x3D5588), pink = hex(0xFF48B0)
+        switch h {
+        case ..<5, 21...: return overprint(c, night, 0.7)
+        case 5..<8: return overprint(c, pink, 0.4 * (1 - abs(h - 6.5) / 1.5) + 0.1)
+        case 17..<21:
+            let dusk = overprint(c, pink, 0.15 + 0.3 * (h - 17) / 4)
+            return overprint(dusk, night, max(0, (h - 19.5) / 1.5) * 0.6)
+        default: return c
+        }
+    }
+
     static func isNight(_ date: Date?) -> Bool {
         guard let date else { return false }
         let h = Calendar.current.component(.hour, from: date)
@@ -290,6 +319,7 @@ enum WeatherColor {
     /// The light of the hour over the temperature hue: deep indigo at night, rose at dawn and dusk.
     static func light(_ c: Color, at date: Date?) -> Color {
         guard let date else { return c }
+        if riso { return overprintHour(c, at: date) }
         let h = Double(Calendar.current.component(.hour, from: date)) + Double(Calendar.current.component(.minute, from: date)) / 60
         let night = Color(red: 0.22, green: 0.20, blue: 0.62)
         let rose = Color(red: 0.92, green: 0.48, blue: 0.56)

@@ -459,6 +459,8 @@ struct GroupRail: View {
     let mids: [CGFloat]
     let selected: RailRow?
     var weatherSymbol = Icons.weather
+    /// The sky's base ink (the temperature), so the Weather stop wears the colour it paints.
+    var weatherInk: Color? = nil
     /// The moment wants a note: Voice wears a small dot.
     var voiceBadge = false
     /// Families the read marks as patterns: their icon wears a small dot (the sentence's underline, here).
@@ -467,6 +469,7 @@ struct GroupRail: View {
     /// ease away, like the Dock, so the rail reads as a scale you slide along.
     var fingerY: CGFloat? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -488,15 +491,26 @@ struct GroupRail: View {
         return (Double(l.level.rawValue) + l.fraction) / 3
     }
 
+    private func groupInk(_ g: RailGroup) -> Color? {
+        if g == .weather { return weatherInk.map(legible) }
+        guard let top = g.items.max(by: { amount($0) < amount($1) }), amount(top) > 0 else { return nil }
+        return legible(WeatherColor.ink(for: top))
+    }
+
+    /// A dark ink (Slate, Brick) lifted a little on black glass so it still reads; untouched on paper.
+    private func legible(_ c: Color) -> Color { scheme == .dark ? c.mix(with: .white, by: 0.25) : c }
+
     @ViewBuilder private func mark(_ row: RailRow) -> some View {
         let on = selected == row
         switch row {
         case .header(let g):
             let worst = g.items.map(amount).max() ?? 0.25
             let size = 12 + 10 * CGFloat(g == .weather ? 0.25 : worst)
+            // The rail is the sky's legend: each stop wears the ink it paints the sky with (owner, Oct 18), the
+            // weather its temperature, a group its strongest layer's. Nothing in the air: plain.
             Image(systemName: g == .weather ? weatherSymbol : g.icon)
                 .font(.system(size: on ? size + 3 : size, weight: .semibold))
-                .foregroundStyle(on ? Color.primary : Color.primary.opacity(0.6))
+                .foregroundStyle(groupInk(g).map { AnyShapeStyle($0) } ?? AnyShapeStyle(Color.primary.opacity(on ? 1 : 0.6)))
                 .frame(width: 30, height: 30)
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.5) } }
                 .overlay(alignment: .topTrailing) {
@@ -508,7 +522,7 @@ struct GroupRail: View {
         case .item(let name):
             // A dot: bigger when there's more of it.
             let d = 5 + 7 * CGFloat(amount(name))
-            Circle().fill(Color.primary.opacity(on ? 0.95 : 0.5))
+            Circle().fill(amount(name) > 0 ? legible(WeatherColor.ink(for: name)) : Color.primary.opacity(on ? 0.95 : 0.4))
                 .frame(width: on ? d + 3 : d, height: on ? d + 3 : d)
                 .frame(width: 30, height: 18)
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.2).frame(width: 20, height: 20) } }

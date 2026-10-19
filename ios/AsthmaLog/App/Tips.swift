@@ -53,6 +53,6 @@ enum AppTips {
 
 struct SkyTip: Tip {
     var title: Text { Text("Read the air") }
-    var message: Text? { Text("Slide along the icons on the right to see each layer and how much is in the air.") }
+    var message: Text? { Text("Each colour in the sky is an icon on the right, in the same colour. Hold and slide along them to name each one and see how much is in the air.") }
     var image: Image? { Image(systemName: "hand.point.up.left") }
 }

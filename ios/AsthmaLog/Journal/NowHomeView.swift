@@ -360,6 +360,17 @@ struct NowHomeView: View {
     /// slate for a storm, ochre for smoke, ice for a temperature drop.
     private var pageTop: Color {
         if case .now = focus, let e = liveEvent {
+            // Print: an event takes its family's ink (owner, Oct 18). Storm, a sharp drop and mold weather are
+            // weather, so magenta; smoke is fine particles, so aqua. No colour of its own for any event.
+            if WeatherColor.print {
+                let paper = WeatherColor.paperTone.mix(with: .black, by: 0.22)
+                switch e {
+                case .storm: return paper.mix(with: WeatherColor.amber, by: 0.5).mix(with: .black, by: 0.35)
+                case .tempDrop: return paper.mix(with: WeatherColor.amber, by: 0.6)
+                case .mold: return paper.mix(with: WeatherColor.amber, by: 0.35)
+                case .smoke: return paper.mix(with: WeatherColor.aqua, by: 0.55)
+                }
+            }
             switch e {
             case .storm: return Color(red: 0.2, green: 0.25, blue: 0.33)
             case .smoke: return Color(red: 0.55, green: 0.37, blue: 0.18)
@@ -1415,10 +1426,10 @@ struct NowSky: View {
                     }
                 }
                 if event == .smoke {
-                    Color(red: 0.62, green: 0.46, blue: 0.32).opacity(0.32).allowsHitTesting(false)
+                    (WeatherColor.print ? WeatherColor.aqua : Color(red: 0.62, green: 0.46, blue: 0.32)).opacity(WeatherColor.print ? 0.22 : 0.32).allowsHitTesting(false)
                 }
                 if event == .tempDrop {
-                    LinearGradient(colors: [Color(red: 0.55, green: 0.75, blue: 1).opacity(0.38), .clear], startPoint: .top, endPoint: .center)
+                    LinearGradient(colors: [(WeatherColor.print ? WeatherColor.amber : Color(red: 0.55, green: 0.75, blue: 1)).opacity(0.38), .clear], startPoint: .top, endPoint: .center)
                         .allowsHitTesting(false)
                 }
                 if event == .storm {

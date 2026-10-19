@@ -108,3 +108,10 @@ The same three inks print a step deeper on light paper, so they sit at one weigh
 The callout's three colours print a step deeper on linen too (green #1E8E52, gold #E39A2A, red #D63B4C;
 on black #00A95C, #F2A93B, #F15060), and the text is **white on green and red, black on the gold**: black
 on coral failed both ways.
+
+### Air events take their family's ink
+
+No event gets a colour of its own. A thunderstorm, a sharp temperature drop and mold weather are weather,
+so the page goes magenta (the storm darker, with its flash); the storm's pollen stays yellow on it, the first
+place two inks overprint by design. Wildfire smoke is fine particles, so the page goes aqua. The old
+slate / ochre / ice-blue / moss pages are gone with the Print inks.

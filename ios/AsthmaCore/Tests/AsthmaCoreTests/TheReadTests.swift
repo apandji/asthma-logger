@@ -76,6 +76,48 @@ import Testing
     }
 }
 
+@Suite struct JoinedReadTests {
+    let hot = LiftRow(bin: "temp", level: "hot", attacksWith: 9, baselinesWith: 6, nAttacks: 14, nBaselines: 40,
+                      attackRate: 9.0 / 14, baselineRate: 6.0 / 40, lift: 4.3, gated: true)
+
+    /// Owner, Oct 18: two facts in one sentence, each underlined only if it's yours.
+    @Test func aPatternAndAPlainFact() {
+        let s = TheRead.joined(TheRead.clauses([hot], notable: ["ozone was high"], time: .back))
+        #expect(s == "It was hot\u{00A0}\u{E000} and ozone was high.")
+        #expect(TheRead.factors(in: s).map(\.factor) == ["Heat"])
+        #expect(TheRead.spoken(s) == "It was hot (often on your flare days) and ozone was high.")
+    }
+
+    @Test func twoPatternsEachMarked() {
+        let ozone = LiftRow(bin: "ozone", level: "high", attacksWith: 5, baselinesWith: 6, nAttacks: 14, nBaselines: 40,
+                            attackRate: 5.0 / 14, baselineRate: 6.0 / 40, lift: 2.4, gated: true)
+        let s = TheRead.joined(TheRead.clauses([hot, ozone], notable: [], time: .back))
+        #expect(TheRead.factors(in: s).map(\.factor) == ["Heat", "High ozone"])
+        #expect(s.hasPrefix("It was hot\u{00A0}"))
+        #expect(s.contains(" and ozone was high."))
+    }
+
+    @Test func everythingHighNamesTwoThenToo() {
+        let all = TheRead.allClauses([hot], notable: ["ozone was high", "fine particles were high", "tree pollen was high"], time: .back)
+        #expect(TheRead.joined(Array(all.prefix(2))) == "It was hot\u{00A0}\u{E000} and ozone was high.")
+        #expect(TheRead.tooLine(all, time: .back) == "Fine particles and tree pollen were high too.")
+    }
+
+    @Test func anEventLeadsAndOnlyOneJoinsIt() {
+        let s = TheRead.sentence(time: .now, learned: true, event: .smoke, fallF: nil, shared: [hot], notable: ["ozone is high"])
+        #expect(s.hasPrefix("Heavy smoke is drifting into your area."))
+        #expect(s.contains("It's hot") && s.hasSuffix("Ozone is high too."))
+    }
+
+    @Test func oneSubjectOnce() {
+        // A notable reading about the same thing as a pattern isn't said twice.
+        let weed = LiftRow(bin: "pollen_weed", level: "high", attacksWith: 9, baselinesWith: 6, nAttacks: 14, nBaselines: 40,
+                           attackRate: 9.0 / 14, baselineRate: 6.0 / 40, lift: 4.3, gated: true)
+        let cs = TheRead.clauses([weed], notable: ["weed pollen is high", "ozone is high"], time: .now)
+        #expect(cs.count == 2 && cs[1].text == "Ozone is high." && cs[1].mark == nil)
+    }
+}
+
 @Suite struct NoReadingTests {
     @Test func neverImpliesCleanAir() {
         for t: TheRead.Time in [.now, .back, .ahead("Friday morning")] {

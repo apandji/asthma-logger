@@ -865,7 +865,7 @@ struct NowHomeView: View {
     }
 
     /// What's at a high level, most first, as a clause: "weed pollen is high" (or "looks high", ahead).
-    private func notable(_ c: Conditions?, weave: WeaveSpec, pollen: PollenSample?, ahead: Bool) -> [(factor: AirAdvice.Factor, clause: String)] {
+    private func notable(_ c: Conditions?, weave: WeaveSpec, pollen: PollenSample?, ahead: Bool, past: Bool = false) -> [(factor: AirAdvice.Factor, clause: String)] {
         let names: [String: (AirAdvice.Factor, String)] = [
             "PM2.5": (.pm25, "fine particles"), "PM10": (.pm10, "coarse dust"), "NO₂": (.no2, "traffic pollution"),
             "Ozone": (.ozone, "ozone"), "Tree pollen": (.treePollen, "tree pollen"), "Grass pollen": (.grassPollen, "grass pollen"),
@@ -874,7 +874,11 @@ struct NowHomeView: View {
         return AirLayers(conditions: c, weave: weave, pollen: pollen).all
             .filter { $0.level == .high }
             .sorted { $0.fraction > $1.fraction }
-            .compactMap { l in names[l.name].map { ($0.0, "\($0.1) \(ahead ? "looks" : "is") high") } }
+            .compactMap { l in names[l.name].map { n in
+                let plural = n.1.hasSuffix("particles")
+                let verb = ahead ? (plural ? "look" : "looks") : past ? (plural ? "were" : "was") : (plural ? "are" : "is")
+                return (n.0, "\(n.1) \(verb) high")
+            } }
     }
 
     /// Now: the event, then what you share with your flare days (counts), or what's high, never the weather.
@@ -1011,8 +1015,12 @@ struct NowHomeView: View {
         .sorted { $0.1 > $1.1 }
         guard !hits.isEmpty else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         // Raw counts, not "as on most of your flare days".
-        let top = TheRead.shared(frame, rows: rows).first.map { TheRead.pattern($0, past: true) }
-        return [top, before].compactMap { $0 }.joined(separator: " ")
+        // Up to two facts, each underlined only if it's yours; the rest "too" (owner, Oct 18).
+        let notes = notable(m.conditions, weave: m.weave, pollen: DemoPollen.from(m.conditions), ahead: false, past: true).map(\.clause)
+        let all = TheRead.clauses(TheRead.shared(frame, rows: rows), notable: notes, time: .back)
+        let top = all.isEmpty ? nil : TheRead.joined(all)
+        let too = TheRead.tooLine(TheRead.allClauses(TheRead.shared(frame, rows: rows), notable: notes, time: .back), time: .back)
+        return [top, before, too].compactMap { $0 }.joined(separator: " ")
     }
 
     static let dayBeforeDrop = "The temperature dropped fast the day before."
@@ -1864,7 +1872,15 @@ struct VerdictHeader: View {
                         Self.underlined(head).font(font).kerning(Theme.serifKerning)
                             .contentShape(Rectangle())
                             .onTapGesture { SparkleTip().invalidate(reason: .actionPerformed); showKey = true }
-                            .popover(isPresented: $showKey, arrowEdge: .top) { SparkleKey(mark: mark, factor: TheRead.factor(in: head)) }
+                            .popover(isPresented: $showKey, arrowEdge: .top) {
+                                // One line per underlined part.
+                                let fs = TheRead.factors(in: head)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    if fs.isEmpty { SparkleKey(mark: mark) }
+                                    ForEach(Array(fs.enumerated()), id: \.offset) { _, f in SparkleKey(mark: f.mark, factor: f.factor) }
+                                }
+                                .presentationCompactAdaptation(.popover)
+                            }
                             .accessibilityAddTraits(.isButton)
                     } else {
                         Text(head).font(font).kerning(Theme.serifKerning)
@@ -1981,14 +1997,20 @@ extension VerdictHeader {
             current.append(word)
             let bare = word.replacingOccurrences(of: "\u{00A0}", with: "")
             let last = bare.last.map(String.init) ?? ""
-            let endsWithMark = TheRead.Mark(rawValue: last) != nil
+            // A mark ends a sentence only after a full stop: mid-sentence ("It was hot ✦ and…") it's a clause's.
+            let endsWithMark = TheRead.Mark(rawValue: last) != nil && bare.dropLast().hasSuffix(".")
             if endsWithMark || bare.hasSuffix(".") || bare.hasSuffix("?") || bare.hasSuffix("!") || bare.hasSuffix("…") {
                 sentences.append(current.joined(separator: " ")); current = []
             }
         }
         if !current.isEmpty { sentences.append(current.joined(separator: " ")) }
-        let head = sentences.prefix(2).joined(separator: " ")
-        let tail = sentences.dropFirst(2).joined(separator: " ")
+        // "…were high too." always goes to the quiet line: it's what the sentence had no room for.
+        let isToo = { (x: String) in x.hasSuffix(" too.") }
+        let headParts = Array(sentences.filter { !isToo($0) }.prefix(2))
+        var rest = sentences
+        for h in headParts { if let i = rest.firstIndex(of: h) { rest.remove(at: i) } }
+        let head = headParts.joined(separator: " ")
+        let tail = rest.joined(separator: " ")
         return (head, tail.isEmpty ? nil : tail)
     }
 
@@ -2009,12 +2031,11 @@ extension VerdictHeader {
             if TheRead.Mark(rawValue: String(ch)) != nil {
                 let clean = run.replacingOccurrences(of: "\u{00A0}", with: " ")
                 // The clause is the last sentence in the run; anything before it stays plain.
-                var cut = clean.startIndex
-                let body = clean.trimmingCharacters(in: .whitespaces)
-                if let dot = body.range(of: ". ", options: .backwards), let r = clean.range(of: String(body[dot.upperBound...])) {
-                    cut = r.lowerBound
-                } else if let first = clean.firstIndex(where: { !$0.isWhitespace }) {
-                    cut = first
+                // The clause starts after the last sentence end, a "Thursday afternoon: " lead, or the "and"
+                // that joins it to the one before.
+                var cut = clean.firstIndex(where: { !$0.isWhitespace }) ?? clean.startIndex
+                for sep in [". ", ": ", " and "] {
+                    if let r = clean.range(of: sep, options: .backwards), r.upperBound > cut { cut = r.upperBound }
                 }
                 let clause = String(clean[cut...]).trimmingCharacters(in: .whitespaces)
                 out = Text("\(out)\(Text(verbatim: String(clean[..<cut])))\(Text(verbatim: clause).underline(true, pattern: .dot, color: ink))")

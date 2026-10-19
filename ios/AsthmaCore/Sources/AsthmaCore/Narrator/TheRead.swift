@@ -129,24 +129,104 @@ public enum TheRead {
         return out
     }
 
-    /// The thing the mark is about, read back out of a marked sentence ("Weed pollen was high. ✦" →
-    /// "High weed pollen"), so the key can say "High weed pollen shows up often on your flare days", the
-    /// same words as Insights. Nil when the sentence isn't one of ours.
-    public static func factor(in sentence: String) -> String? {
-        let marks = Mark.allCases.map(\.rawValue)
-        guard let range = marks.lazy.compactMap({ sentence.range(of: $0) }).min(by: { $0.lowerBound < $1.lowerBound }) else { return nil }
-        let s = String(sentence[..<range.lowerBound]).replacingOccurrences(of: "\u{00A0}", with: "").trimmingCharacters(in: .whitespaces)
-        if s.contains("temperature had fallen") || s.contains("temperature has fallen") { return noun("temp_drop", "yes") }
-        for (b, l) in markable {
-            let p = phrasing(b, l)
-            if s.hasSuffix(p.back) || s.hasSuffix(p.now) || s.hasSuffix(p.ahead + ".") { return noun(b, l) }
+    /// Every marked thing in a sentence, in order, with its mark ("It was hot ✦✦ and ozone was high." →
+    /// [("Heat", .often)]), so the key can say "Heat shows up often on your flare days", the same words as
+    /// Insights.
+    public static func factors(in sentence: String) -> [(factor: String, mark: Mark)] {
+        var out: [(String, Mark)] = []
+        var run = ""
+        for ch in sentence {
+            guard let m = Mark(rawValue: String(ch)) else { run.append(ch); continue }
+            var s = run.replacingOccurrences(of: "\u{00A0}", with: "").trimmingCharacters(in: .whitespaces)
+            for sep in [". ", ": "] { if let r = s.range(of: sep, options: .backwards) { s = String(s[r.upperBound...]) } }
+            if s.hasPrefix("and ") { s = String(s.dropFirst(4)) }
+            let bare = s.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
+            if bare.contains("temperature had fallen") || bare.contains("temperature has fallen") {
+                out.append((noun("temp_drop", "yes"), m))
+            } else if let hit = markable.first(where: { b, l in
+                let p = phrasing(b, l)
+                return [p.back, p.now, p.ahead].contains { $0.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased() == bare }
+            }) {
+                out.append((noun(hit.0, hit.1), m))
+            }
+            run = ""
         }
-        return nil
+        return out
+    }
+
+    /// The first marked thing in a sentence. Nil when the sentence isn't one of ours.
+    public static func factor(in sentence: String) -> String? { factors(in: sentence).first?.factor }
+
+    /// One fact for the read: its sentence ("It was hot.") and, when it's one of your patterns, its mark.
+    public struct Clause: Sendable, Equatable {
+        public var text: String
+        public var mark: Mark?
+        public init(_ text: String, mark: Mark? = nil) { self.text = text; self.mark = mark }
+    }
+
+    /// What the sentence had no room for, plainly: "Fine particles and tree pollen were high too." Nil when
+    /// there's nothing more. Never marked: a third pattern still has its dot on the rail and its row in Insights.
+    public static func tooLine(_ clauses: [Clause], time: Time) -> String? {
+        let rest = clauses.dropFirst(2).map { subject(of: $0.text) }
+        guard !rest.isEmpty else { return nil }
+        let list = rest.count == 1 ? rest[0] : rest.dropLast().joined(separator: ", ") + " and " + rest.last!
+        let plural = rest.count > 1 || list.hasSuffix("particles")
+        let verb: String = switch time {
+        case .back: plural ? "were" : "was"
+        case .now: plural ? "are" : "is"
+        case .ahead: plural ? "look" : "looks"
+        }
+        return list.prefix(1).uppercased() + list.dropFirst() + " \(verb) high too."
+    }
+
+    /// "Fine particles were high." → "fine particles"; "It was hot." → "heat".
+    static func subject(of text: String) -> String {
+        let t = text.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ". "))
+        for (p, n) in [("it was hot", "heat"), ("it's hot", "heat"), ("it looks hot", "heat"), ("it was cold", "cold"), ("it's cold", "cold"),
+                       ("it looks cold", "cold"), ("it was humid", "humidity"), ("it's humid", "humidity"), ("it looks humid", "humidity")]
+            where t == p { return n }
+        for v in [" were ", " was ", " are ", " is ", " looks ", " look ", " had ", " has "] {
+            if let r = t.range(of: v) { return String(t[..<r.lowerBound]).replacingOccurrences(of: "the ", with: "") }
+        }
+        return t
+    }
+
+    /// Up to two facts as one sentence, each underlined (marked) on its own only if it's a pattern
+    /// (owner, Oct 18): "It was hot✦ and ozone was high." A fact that isn't yours stays plain.
+    public static func joined(_ clauses: [Clause]) -> String {
+        let cs = Array(clauses.prefix(2))
+        func tag(_ c: Clause) -> String { c.mark.map { "\u{00A0}" + $0.rawValue } ?? "" }
+        guard let first = cs.first else { return "" }
+        guard cs.count == 2 else { return first.text + tag(first) }
+        let a = first.text.hasSuffix(".") ? String(first.text.dropLast()) : first.text
+        var b = cs[1].text
+        b = b.prefix(1).lowercased() + b.dropFirst()   // "It's humid" → "…and it's humid"
+        return a + tag(first) + " and " + b + tag(cs[1])
+    }
+
+    /// Patterns first (strongest first), then what's notable but isn't yours, two at most, one per subject.
+    public static func clauses(_ shared: [LiftRow], notable: [String], time: Time) -> [Clause] {
+        Array(allClauses(shared, notable: notable, time: time).prefix(2))
+    }
+
+    /// Everything notable, patterns first, one per subject (the sentence takes two; `tooLine` the rest).
+    public static func allClauses(_ shared: [LiftRow], notable: [String], time: Time) -> [Clause] {
+        var cs = shared.map { Clause(fact($0.bin, $0.level, time: time), mark: .of($0)) }
+        for n in notable {
+            let subject = n.components(separatedBy: [" is ", " are ", " was ", " were ", " looks ", " look "].first { n.contains($0) } ?? " ").first ?? n
+            if cs.contains(where: { $0.text.lowercased().contains(subject.lowercased()) }) { continue }
+            let t = n.hasSuffix(".") ? n : n + "."
+            cs.append(Clause(time == .back || time == .now ? t.prefix(1).uppercased() + t.dropFirst() : t))
+        }
+        return cs
     }
 
     /// The sentence with each mark said in words: for VoiceOver, notifications and anything without the sparkle.
     public static func spoken(_ s: String) -> String {
-        Mark.allCases.reduce(s) { $0.replacingOccurrences(of: "\u{00A0}" + $1.rawValue, with: " " + $1.words) }
+        Mark.allCases.reduce(s) { out, m in
+            out.replacingOccurrences(of: ".\u{00A0}" + m.rawValue, with: ". " + m.words)
+                .replacingOccurrences(of: "\u{00A0}" + m.rawValue, with: m == .often ? " (often on your flare days)" : " (sometimes on your flare days)")
+        }
     }
 
     /// The event as a fact, in the time's tense, without the temperature lead.
@@ -180,8 +260,12 @@ public enum TheRead {
         case .back:
             break
         case .now:
-            if learned, let top = shared.first {
-                parts.append(pattern(top))
+            if learned, !shared.isEmpty {
+                // A natural disaster or air event leads, and only one fact joins it; the rest say "too".
+                let all = allClauses(shared, notable: notable, time: time)
+                let room = event == nil ? 2 : 1
+                parts.append(joined(Array(all.prefix(room))))
+                if let too = tooLine(Array(all.prefix(2)) + all.dropFirst(room), time: time) { parts.append(too) }
             } else if parts.isEmpty, let n = notable.first {
                 parts.append(n.prefix(1).uppercased() + n.dropFirst() + ".")
             } else if parts.isEmpty {
@@ -191,10 +275,12 @@ public enum TheRead {
         case .ahead(let when):
             // What's in the forecast, never the verdict: the pill alone says how it compares (owner, Oct 17), so
             // the two can't disagree. A factor that shows up on your flare days carries the sparkle.
-            if learned, let top = shared.first {
-                let clause = fact(top.bin, top.level, time: time)
-                parts.append(event == nil ? "\(when): \(clause)\u{00A0}\(Mark.of(top).rawValue)"
-                                          : (clause.prefix(1).uppercased() + clause.dropFirst()) + "\u{00A0}" + Mark.of(top).rawValue)
+            if learned, !shared.isEmpty {
+                let all = allClauses(shared, notable: notable, time: time)
+                let room = event == nil ? 2 : 1
+                let line = joined(Array(all.prefix(room)))
+                parts.append(event == nil ? "\(when): \(line)" : line.prefix(1).uppercased() + line.dropFirst())
+                if let too = tooLine(Array(all.prefix(2)) + all.dropFirst(room), time: time) { parts.append(too) }
             } else if event == nil, let n = notable.first {
                 parts.append("\(when): \(n).")
             } else if event == nil {

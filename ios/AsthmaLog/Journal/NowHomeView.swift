@@ -106,8 +106,8 @@ struct NowHomeView: View {
                     CardStack(cards: deck) { card($0) }
                         .id(focusKey)
                         .padding(.top, 10)
-                        // The rail's column is fixed and drawn on top: the cards leave it free.
-                        .padding(railLeft ? .leading : .trailing, 48)
+                        // Full width again (owner, Oct 18): with the smaller lead line the cards end above the
+                        // rail, and the rail is drawn on top if a long one reaches it.
                         .opacity(probing ? 0.4 : 1)
                         .transition(.opacity)
                 }

@@ -453,26 +453,20 @@ struct NowHomeView: View {
         }
         .animation(Theme.snap, value: held)
         .sensoryFeedback(.selection, trigger: held)
-        // The ring says the tapped pattern, growing toward the sentence. A tap opens Insights.
-        .overlay(alignment: railLeft ? .trailing : .leading) {
+        // The ring says the tapped pattern, growing toward the sentence. A tap opens Insights. The bubble's
+        // bottom (its tail) sits at the ring, however tall the bubble grows.
+        .overlay(alignment: railLeft ? .topTrailing : .topLeading) {
             if let tip = patternTip, held == nil {
-                Button {
+                RingSays(tip: tip, towardLeading: !railLeft) {
                     patternTip = nil
                     showInsights = true
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        SparkleTip.line(tip.mark, factor: tip.factor).font(.subheadline)
-                            .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 4) { Text("See in Insights"); Image(systemName: "chevron.right").font(.caption2.weight(.bold)) }
-                            .font(.footnote.weight(.semibold)).foregroundStyle(Theme.secondaryText)
-                    }
-                    .frame(width: 210, alignment: .leading)
-                    .padding(14)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 18))
                 }
-                .buttonStyle(PressStyle())
-                .offset(x: railLeft ? 248 : -248, y: -21)
-                .transition(.opacity.combined(with: .scale(scale: 0.6, anchor: railLeft ? .leading : .trailing)))
+                .id(tip)
+                // A fixed, bottom-aligned box: the tail stays at the ring as the bubble opens upward.
+                .frame(width: 252, height: 220, alignment: railLeft ? .bottomLeading : .bottomTrailing)
+                .offset(x: railLeft ? 256 : -256, y: -(220 - 34))
+                .transition(.opacity.combined(with: .scale(scale: 0.2, anchor: railLeft ? .bottomLeading : .bottomTrailing)))
+                .animation(.spring(response: 0.38, dampingFraction: 0.72), value: tip)
             }
         }
         .task(id: patternTip) {
@@ -1959,7 +1953,64 @@ struct VerdictHeader: View {
 /// A read with its patterns underlined, each underlined part its own tap target: tapping one shows a tip
 /// for that part only ("Heat shows up often on your flare days"), pointing where you tapped. Plain parts do
 /// nothing. The parts are links inside one Text, so the sentence still wraps as a paragraph.
-struct PatternTip: Equatable {
+/// The Insights ring saying a pattern, like a message: the bubble grows out of the ring (a spring from its
+/// tail), with a tail on the ring's side to say who's talking. Tap: Insights.
+struct RingSays: View {
+    let tip: PatternTip
+    /// The bubble sits on the ring's leading side (the ring on the right) and its tail points trailing.
+    let towardLeading: Bool
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            VStack(alignment: .leading, spacing: 6) {
+                SparkleTip.line(tip.mark, factor: tip.factor).font(.subheadline)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 4) { Text("See in Insights"); Image(systemName: "chevron.right").font(.caption2.weight(.bold)) }
+                    .font(.footnote.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+            }
+            .frame(width: 206, alignment: .leading)
+            .padding(.vertical, 12)
+            .padding(.leading, towardLeading ? 14 : 22)
+            .padding(.trailing, towardLeading ? 22 : 14)
+            .glassEffect(.regular, in: SpeechBubble(tailTrailing: towardLeading))
+        }
+        .buttonStyle(PressStyle())
+        .accessibilityLabel(SparkleTip.line(tip.mark, factor: tip.factor))
+        .accessibilityHint("Opens Insights")
+        .onAppear { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6) }
+    }
+}
+
+/// A rounded bubble with a Messages-style tail at the bottom of one side.
+nonisolated struct SpeechBubble: Shape {
+    var tailTrailing: Bool
+
+    func path(in rect: CGRect) -> Path {
+        let tail: CGFloat = 8
+        let body = CGRect(x: rect.minX + (tailTrailing ? 0 : tail), y: rect.minY,
+                          width: rect.width - tail, height: rect.height)
+        var p = Path(roundedRect: body, cornerRadius: min(18, body.height / 2), style: .continuous)
+        // The tail: a small curl off the bottom corner, toward the ring.
+        let y = body.maxY
+        if tailTrailing {
+            let x = body.maxX
+            p.move(to: CGPoint(x: x - 14, y: y))
+            p.addQuadCurve(to: CGPoint(x: x + tail, y: y), control: CGPoint(x: x - 2, y: y - 2))
+            p.addQuadCurve(to: CGPoint(x: x - 2, y: y - 12), control: CGPoint(x: x - 1, y: y - 3))
+            p.closeSubpath()
+        } else {
+            let x = body.minX
+            p.move(to: CGPoint(x: x + 14, y: y))
+            p.addQuadCurve(to: CGPoint(x: x - tail, y: y), control: CGPoint(x: x + 2, y: y - 2))
+            p.addQuadCurve(to: CGPoint(x: x + 2, y: y - 12), control: CGPoint(x: x + 1, y: y - 3))
+            p.closeSubpath()
+        }
+        return p
+    }
+}
+
+struct PatternTip: Equatable, Hashable {
     let factor: String
     let mark: TheRead.Mark
 }

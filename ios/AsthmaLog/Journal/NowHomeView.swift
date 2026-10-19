@@ -129,8 +129,9 @@ struct NowHomeView: View {
             // Maps keep theirs: always there, never in the sky's way.
             .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
                 learningButton
-                    .padding(railLeft ? .leading : .trailing, 16)
-                    .offset(y: -6)
+                    // On the header's 20 pt margin, centred on the place line.
+                    .padding(railLeft ? .leading : .trailing, 20)
+                    .offset(y: 3)
             }
             .background {
                 // The page takes the weather's colour, as in Apple Weather: hue from the temperature, light from
@@ -472,7 +473,7 @@ struct NowHomeView: View {
                 // Hangs below the pill, its tail up at the ring.
                 .frame(width: 252, alignment: railLeft ? .leading : .trailing)
                 // Its top 8 pt under the 40 pt pill.
-                .offset(y: 48)
+                .offset(y: 44)
                 .transition(.opacity.combined(with: .scale(scale: 0.2, anchor: railLeft ? .topLeading : .topTrailing)))
                 .animation(.spring(response: 0.38, dampingFraction: 0.72), value: tip)
             }
@@ -1938,7 +1939,8 @@ struct VerdictHeader: View {
             // Blurs between readings instead of cutting (the same as ScaleHeader), once the playhead has landed.
             // One size, never scaled or cut. The sentence carries at most two sentences; anything after that
             // is a quiet line beneath (the flow, not the type, keeps the header to about three lines).
-            let font = Theme.Typeface.sentence(size: typeSize.isAccessibilitySize ? 22 : 26)
+            // 22, down from 26 (owner, Oct 18): a three-sentence event read left the sky too little room.
+            let font = Theme.Typeface.sentence(size: typeSize.isAccessibilitySize ? 20 : 22)
             // A/B test A4: the sparkle, or the words it stands for.
             let (head, tail) = Self.flow(patternMark == "words" ? TheRead.spoken(title) : title)
             ZStack(alignment: .topLeading) {
@@ -2020,15 +2022,40 @@ struct RingSays: View {
             }
             .frame(width: 206, alignment: .leading)
             .padding(.vertical, 12)
-            .padding(.leading, towardLeading ? 14 : 22)
-            .padding(.trailing, towardLeading ? 22 : 14)
-            .padding(.top, below ? 8 : 0).padding(.bottom, below ? 0 : 0)
-            .glassEffect(.regular, in: SpeechBubble(tailTrailing: towardLeading, tailTop: below))
+            .padding(.horizontal, 16)
+            .padding(.top, below ? Tooltip.arrow : 0)
+            // A plain tooltip triangle pointing at the ring (it sits 54 pt in from the pill's outer edge).
+            .glassEffect(.regular, in: Tooltip(arrowFromEdge: 54, fromTrailing: towardLeading, up: below))
         }
         .buttonStyle(PressStyle())
         .accessibilityLabel(SparkleTip.line(tip.mark, factor: tip.factor))
         .accessibilityHint("Opens Insights")
         .onAppear { UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6) }
+    }
+}
+
+/// A rounded rectangle with a small triangle on its top (or bottom) edge, `arrowFromEdge` in from one side.
+nonisolated struct Tooltip: Shape {
+    static let arrow: CGFloat = 8
+    var arrowFromEdge: CGFloat
+    var fromTrailing: Bool
+    var up = true
+
+    func path(in rect: CGRect) -> Path {
+        let a = Self.arrow
+        let body = up ? CGRect(x: rect.minX, y: rect.minY + a, width: rect.width, height: rect.height - a)
+                      : CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height - a)
+        var p = Path(roundedRect: body, cornerRadius: 16, style: .continuous)
+        let x = fromTrailing ? rect.maxX - arrowFromEdge : rect.minX + arrowFromEdge
+        var t = Path()
+        if up {
+            t.move(to: CGPoint(x: x - 9, y: body.minY + 0.5)); t.addLine(to: CGPoint(x: x, y: rect.minY)); t.addLine(to: CGPoint(x: x + 9, y: body.minY + 0.5))
+        } else {
+            t.move(to: CGPoint(x: x - 9, y: body.maxY - 0.5)); t.addLine(to: CGPoint(x: x, y: rect.maxY)); t.addLine(to: CGPoint(x: x + 9, y: body.maxY - 0.5))
+        }
+        t.closeSubpath()
+        p = Path(p.cgPath.union(t.cgPath))
+        return p
     }
 }
 

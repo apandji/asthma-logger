@@ -62,3 +62,19 @@ Rules that come with it:
 
 Try it: Settings › Display › Appearance › Light, then Demo › Inks › RISO inks vs Current, on the
 "Allergen-led" or "Hot, hazy days" data set.
+
+## Oct 18, later: Simple (now the default)
+
+The eleven inks were still too many to read on first look. **Simple** keeps one ink per thing you can name:
+
+| What | Ink |
+|---|---|
+| Weather | Medium Blue when cool (below ~50°F), plain paper when mild, Orange when hot (high 70s and up) |
+| Pollutants (PM2.5, PM10, NO₂, ozone, smoke) | Aqua, all of them. How much is the dots' size and density |
+| Allergens (tree, grass, weed pollen) | Violet, all of them |
+| The hour | No colour. Night prints darker, nothing else |
+| Verdict (timeline callout only) | Green / Yellow / Bright Red |
+| Moments | Orange (Rescue), Blue (Standard) |
+
+The rail wears the same inks, so it reads as the key. RISO inks and Current stay one switch away
+(Demo › Inks).

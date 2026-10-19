@@ -237,6 +237,14 @@ enum WeatherColor {
     /// Riso inks (Design crit › Inks, docs/design/color-review-riso.md): the sky, layers and verdicts drawn
     /// only from real RISO spot inks, so every colour on screen is one a press could print.
     static var riso: Bool { UserDefaults.standard.string(forKey: Crit.Inks.key) != Crit.Inks.current.rawValue }
+    /// Simple (the default, owner Oct 18): one ink per family. Weather is cool / mild / hot, pollutants all Aqua,
+    /// allergens all Violet; amount is size and density, never a different hue. The hour has no colour.
+    static var simple: Bool {
+        let v = UserDefaults.standard.string(forKey: Crit.Inks.key)
+        return v == nil || v == Crit.Inks.simple.rawValue
+    }
+    static let aqua = Color(red: 0x5E / 255, green: 0xC8 / 255, blue: 0xE5 / 255)
+    static let violet = Color(red: 0x9D / 255, green: 0x7A / 255, blue: 0xD2 / 255)
 
     static func hex(_ v: UInt32) -> Color {
         Color(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
@@ -245,6 +253,11 @@ enum WeatherColor {
     /// Blue (cold) → sky → sage (mild) → amber (warm) → red (hot), by °F.
     /// Spread so ordinary days differ: 45° sky blue, 55° teal, 63° green, 70° gold, 78° orange, 88° red.
     static var stops: [(f: Double, color: Color)] {
+        if simple {
+            // Medium Blue below 50°F, plain (a quiet paper grey) through the 60s, Orange from the high 70s.
+            let plain = hex(0x8C8A86)
+            return [(40, hex(0x3255A4)), (52, plain), (72, plain), (84, hex(0xFF6C2F))]
+        }
         if riso {
             // Medium Blue · Aqua · Teal · Kelly Green · Sunflower · Orange · Bright Red
             return [(30, hex(0x3255A4)), (45, hex(0x5EC8E5)), (55, hex(0x00838A)), (63, hex(0x67B346)),
@@ -274,7 +287,7 @@ enum WeatherColor {
         case "pm10": pm10
         case "no2": no2
         case "ozone": ozone
-        case "smoke_at_point": Color(red: 0.6, green: 0.42, blue: 0.25)
+        case "smoke_at_point": simple ? aqua : Color(red: 0.6, green: 0.42, blue: 0.25)
         case "pollen_tree": pollen[0]
         case "pollen_grass": pollen[1]
         case "pollen_weed": pollen[2]
@@ -319,6 +332,11 @@ enum WeatherColor {
     /// The light of the hour over the temperature hue: deep indigo at night, rose at dawn and dusk.
     static func light(_ c: Color, at date: Date?) -> Color {
         guard let date else { return c }
+        if simple {
+            // No hue for the hour: night only prints darker.
+            let h = Calendar.current.component(.hour, from: date)
+            return h < 5 || h >= 21 ? overprint(c, Color(white: 0.55), 1) : c
+        }
         if riso { return overprintHour(c, at: date) }
         let h = Double(Calendar.current.component(.hour, from: date)) + Double(Calendar.current.component(.minute, from: date)) / 60
         let night = Color(red: 0.22, green: 0.20, blue: 0.62)
@@ -333,12 +351,12 @@ enum WeatherColor {
     static let smog = Color(red: 0.52, green: 0.50, blue: 0.46)
     /// Pollutant layers: fine particles slate, coarse dust sand, NO₂ rust (it's a brown gas), ozone icy cyan.
     /// Riso: Slate, Flat Gold, Brick, Aqua; pollen Green, Sunflower, Violet.
-    static var pm25: Color { riso ? hex(0x5E695E) : Color(red: 0.42, green: 0.48, blue: 0.60) }
-    static var pm10: Color { riso ? hex(0xBB8B41) : Color(red: 0.86, green: 0.72, blue: 0.50) }
-    static var no2: Color { riso ? hex(0xA75154) : Color(red: 0.74, green: 0.38, blue: 0.24) }
-    static var ozone: Color { riso ? hex(0x5EC8E5) : Color(red: 0.66, green: 0.92, blue: 1.0) }
+    static var pm25: Color { simple ? aqua : riso ? hex(0x5E695E) : Color(red: 0.42, green: 0.48, blue: 0.60) }
+    static var pm10: Color { simple ? aqua : riso ? hex(0xBB8B41) : Color(red: 0.86, green: 0.72, blue: 0.50) }
+    static var no2: Color { simple ? aqua : riso ? hex(0xA75154) : Color(red: 0.74, green: 0.38, blue: 0.24) }
+    static var ozone: Color { simple ? aqua : riso ? hex(0x5EC8E5) : Color(red: 0.66, green: 0.92, blue: 1.0) }
     static var pollen: [Color] {
-        riso ? [hex(0x00A95C), hex(0xFFB511), hex(0x9D7AD2)]
+        simple ? [violet, violet, violet] : riso ? [hex(0x00A95C), hex(0xFFB511), hex(0x9D7AD2)]
              : [Color(red: 0.36, green: 0.80, blue: 0.46),   // tree: green
                 Color(red: 0.98, green: 0.80, blue: 0.22),   // grass: gold
                 Color(red: 0.72, green: 0.42, blue: 0.95)]   // weed: violet

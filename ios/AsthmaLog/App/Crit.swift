@@ -107,9 +107,15 @@ enum Crit {
 
     /// The palette: today's screen colours, or real RISO spot inks only (docs/design/color-review-riso.md).
     enum Inks: String, CaseIterable, Identifiable {
-        case riso, current
+        case simple, riso, current
         var id: String { rawValue }
-        var title: String { self == .riso ? "RISO inks" : "Current" }
+        var title: String {
+            switch self {
+            case .simple: "Simple (one ink per family)"
+            case .riso: "RISO inks"
+            case .current: "Current"
+            }
+        }
         static let key = "crit.inks"
     }
 

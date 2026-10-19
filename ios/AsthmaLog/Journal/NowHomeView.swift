@@ -1421,11 +1421,26 @@ struct NowSky: View {
                     // Apple Health look: the air is the gradient alone (the details page's field), with every
                     // pollutant and pollen colour in it: hue from the temperature, light from the hour, softness from
                     // the humidity, each layer's tint stronger as it rises. No particles.
+                    // The place sits underneath, grey, and the air lies over it as a wash: the colour is the air
+                    // above this place, not a spot in it.
+                    Color(uiColor: .systemGroupedBackground)
+                    if let (lat, lon) = coordinate {
+                        PlaceMap(id: mapID + "-light", latitude: lat, longitude: lon, dark: false)
+                            .frame(width: size.width, height: size.height)
+                            .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
+                            .saturation(0)
+                            .opacity(sketch ? 0.5 : 0.9)
+                            .frame(width: size.width, height: size.height)
+                            .clipped()
+                            .allowsHitTesting(false)
+                    }
                     AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: true)
+                        .opacity(0.62)
+                        .allowsHitTesting(false)
                 } else {
                     AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
                 }
-                // Apple Health look: the map leaves the sky for its own thumbnail (below), so the dots are the air alone.
+                // Apple Health look: the map is drawn above, under the air's wash.
                 if Crit.AppLook.current != .health, let (lat, lon) = coordinate {
                     // Pinned: the map never moves; the air is one regional reading, not a spot on a street.
                     PlaceMap(id: light ? mapID + "-light" : mapID, latitude: lat, longitude: lon, dark: !light)
@@ -1501,25 +1516,6 @@ struct NowSky: View {
                     .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.26),
                                                  .init(color: .black, location: 0.78), .init(color: .clear, location: 1)],
                                          startPoint: .top, endPoint: .bottom))
-            }
-            // Apple Health look: the place as a small map thumbnail in the corner away from the rail, apart
-            // from the air. A tap opens the details, as the sky does.
-            .overlay(alignment: railLeft ? .bottomTrailing : .bottomLeading) {
-                if Crit.AppLook.current == .health, let (lat, lon) = coordinate {
-                    Button { onPin?() } label: {
-                        PlaceMap(id: mapID + "-light", latitude: lat, longitude: lon, dark: false)
-                            .frame(width: 200, height: 200)
-                            .frame(width: 96, height: 96)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .overlay { Circle().fill(Theme.healthBlue).frame(width: 10, height: 10)
-                                .overlay(Circle().strokeBorder(.white, lineWidth: 2)) }
-                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.black.opacity(0.08), lineWidth: 0.5))
-                            .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-                    }
-                    .buttonStyle(PressStyle())
-                    .padding(16)
-                    .accessibilityLabel("Map of where this was")
-                }
             }
             // The label sits beside the icon being read, never at a spot on the map.
             .overlay {

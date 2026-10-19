@@ -2,10 +2,11 @@ import Foundation
 
 /// Bin edges version. v1 = the web prototype's bins; v2 adds place, indoor/outdoor and journal tags;
 /// v3 reads journal tags as missing (not "no") on frames without a reviewed note;
-/// v4 adds `temp_drop` (a fall of 10°F or more in the 3 hours before, `TempDrop`).
+/// v4 adds `temp_drop` (a fall of 10°F or more in the 3 hours before, `TempDrop`);
+/// v5 adds `exertion` (active in the hour before: a workout, running or cycling, or a burst of steps; `Exertion`).
 /// Bump when any edge changes and regenerate `fixtures/` (fixtures cover the v1 bins only).
 public enum BinSpec {
-    public static let version = 4
+    public static let version = 5
 }
 
 public enum FrameKind: String, Codable, Sendable, CaseIterable {
@@ -70,6 +71,9 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
     /// The user reviewed this moment's note and its tag chips (`TagReview.isReviewed`), so a tag not in
     /// `tags` reads "no". Without a review the tag bins are missing for this frame, not "no".
     public var tagsReviewed: Bool
+    /// v5 (iOS only): active in the hour before (Health workouts, Motion, steps). Nil when neither Health nor
+    /// Motion could say: missing, not "no".
+    public var exerted: Bool?
 
     /// Whether the journal-tag bins have data for this frame. A confirmed tag implies a review.
     public var tagsSampled: Bool { tagsReviewed || !tags.isEmpty }
@@ -90,7 +94,8 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         place: PlaceKind? = nil,
         indoorOutdoor: IndoorOutdoor? = nil,
         tags: Set<JournalTag> = [],
-        tagsReviewed: Bool = false
+        tagsReviewed: Bool = false,
+        exerted: Bool? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -108,11 +113,12 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         self.indoorOutdoor = indoorOutdoor
         self.tags = tags
         self.tagsReviewed = tagsReviewed
+        self.exerted = exerted
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, hourOfDay, season, tempBand, humidityBand, pm25Band, ozoneBand, pollenWeed
-        case smokeAtPoint, heatAlert, tempDrop, place, indoorOutdoor, tags, tagsReviewed
+        case smokeAtPoint, heatAlert, tempDrop, place, indoorOutdoor, tags, tagsReviewed, exerted
     }
 
     public init(from decoder: Decoder) throws {
@@ -133,5 +139,6 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         indoorOutdoor = try c.decodeIfPresent(IndoorOutdoor.self, forKey: .indoorOutdoor)
         tags = try c.decodeIfPresent(Set<JournalTag>.self, forKey: .tags) ?? []
         tagsReviewed = try c.decodeIfPresent(Bool.self, forKey: .tagsReviewed) ?? false
+        exerted = try c.decodeIfPresent(Bool.self, forKey: .exerted)
     }
 }

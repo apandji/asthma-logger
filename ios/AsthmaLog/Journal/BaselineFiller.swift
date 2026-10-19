@@ -55,6 +55,10 @@ final class BaselineFiller {
                     e.longitude = slot.longitude
                     e.placeName = slot.name
                     e.isBackfilled = true
+                    // Active or not in the hour before, from Motion and Health history (missing when they can't say).
+                    let v = await MotionService().vigorousMinutes(before: slot.date)
+                    let h = await HealthReader.shared.activity(before: slot.date)
+                    e.exerted = Exertion.active(workout: h.workout, vigorousMinutes: v, steps: h.steps)
                     context.insert(e)
                     baselines.append(slot.date)
                 }

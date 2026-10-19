@@ -77,6 +77,24 @@ final class MotionService {
         }
     }
 
+    /// Running or cycling minutes in the `window` before `date`, for the exertion bin. Nil when Motion isn't
+    /// available or allowed (missing, not "still").
+    func vigorousMinutes(before date: Date, window: TimeInterval = 30 * 60) async -> Double? {
+        guard CMMotionActivityManager.isActivityAvailable(), CMMotionActivityManager.authorizationStatus() == .authorized else { return nil }
+        let start = date.addingTimeInterval(-window)
+        return await withCheckedContinuation { continuation in
+            manager.queryActivityStarting(from: start, to: date, to: .main) { activities, error in
+                guard error == nil, let a = activities else { continuation.resume(returning: nil); return }
+                var minutes = 0.0
+                for (i, x) in a.enumerated() where x.running || x.cycling {
+                    let end = i + 1 < a.count ? a[i + 1].startDate : date
+                    minutes += max(0, end.timeIntervalSince(max(x.startDate, start))) / 60
+                }
+                continuation.resume(returning: minutes)
+            }
+        }
+    }
+
     private nonisolated static func state(_ a: CMMotionActivity?) -> MotionState {
         guard let a else { return .unknown }
         if a.automotive { return .automotive }

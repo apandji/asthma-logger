@@ -40,7 +40,7 @@ public struct AirProfile: Sendable, Equatable {
             case "pm25", "ozone", "smoke_at_point", "tag_smoke", "tag_dust", "tag_cleaningProducts", "tag_strongScents",
                  "tag_cooking": .particulates
             // Colds are how you are, not the air (Allergens, owner Oct 18).
-            case "tag_exercise", "tag_laughingOrCrying", "tag_stress", "tag_coldOrFlu": .exertion
+            case "tag_exercise", "tag_laughingOrCrying", "tag_stress", "tag_coldOrFlu", "exertion": .exertion
             default: nil
             }
         }

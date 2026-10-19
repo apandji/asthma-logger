@@ -43,6 +43,8 @@ final class LogEvent {
     /// The person looked at this moment's tags (confirmed some, or confirmed none). Until then the tag bins
     /// treat the moment as missing, not as "no" (docs/on-device-insights.md).
     var tagsReviewed: Bool = false
+    /// Active in the hour before (Health workouts, Motion, steps; `Exertion`). Nil: Health and Motion couldn't say.
+    var exerted: Bool?
     /// File name of this moment's voice note in Documents/VoiceNotes (audio stays on the phone).
     var voiceNoteFile: String?
     /// "University City, MO", looked up once from the coordinates.
@@ -114,7 +116,7 @@ final class LogEvent {
         guard !isDemo, moment.frameKind != nil, let c = conditions, c.input.hasAnyValue else { return nil }
         return FrameBuilder.frame(
             id: id.uuidString, kind: kind, date: loggedAt, calendar: calendar, conditions: c.input,
-            place: nil, indoorOutdoor: indoorOutdoor, tags: tags, tagsReviewed: tagsReviewed
+            place: nil, indoorOutdoor: indoorOutdoor, tags: tags, tagsReviewed: tagsReviewed, exerted: exerted
         )
     }
 }

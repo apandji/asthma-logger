@@ -166,6 +166,11 @@ final class LogService {
             event.floorLevel = fix.floor?.level
 
             let state = await motion.recent()
+            // Active in the hour before (a pattern of its own, in the profile's Self family).
+            let at = event.loggedAt
+            let v = await motion.vigorousMinutes(before: at)
+            let h = await HealthReader.shared.activity(before: at)
+            event.exerted = Exertion.active(workout: h.workout, vigorousMinutes: v, steps: h.steps)
             event.apply(IndoorOutdoorGuesser.guess(IndoorSignals(
                 horizontalAccuracyM: fix.horizontalAccuracy, atPlace: nil, motion: state, floorLevel: fix.floor?.level
             )))

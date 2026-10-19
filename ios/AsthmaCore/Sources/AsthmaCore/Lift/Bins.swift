@@ -54,6 +54,8 @@ public enum Bins {
         },
         // v4
         BinDef(bin: "temp_drop", isBoolean: true) { $0.tempDrop == .unknown ? nil : yesNo($0.tempDrop == .sharp) },
+        // v5: only frames Health or Motion could speak for; the rest are missing, not "no".
+        BinDef(bin: "exertion", isBoolean: true, sampled: { $0.exerted != nil }) { f in f.exerted.map(yesNo) },
     ] + JournalTag.triggers.map { tag in
         // Triggers only (symptoms and outcomes are recorded, never bins). Only frames with a reviewed note:
         // an unreviewed moment is missing, not "no".
@@ -75,6 +77,7 @@ public enum Bins {
         case "place": return "Place"
         case "indoor_outdoor": return "Indoors / outdoors"
         case "temp_drop": return "Sharp temperature drop"
+        case "exertion": return "Being active"
         default:
             if bin.hasPrefix("tag_"), let tag = JournalTag(rawValue: String(bin.dropFirst(4))) {
                 return tag.label

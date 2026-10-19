@@ -62,6 +62,26 @@ final class HealthReader {
                      exerted: workout != nil, stressed: mind.stressed)
     }
 
+    /// For the exertion bin (Exertion): a workout overlapping the hour before, and steps in the 30 minutes
+    /// before. iOS never says whether reads were allowed, so "no data at all in the six hours before" reads
+    /// as unknown (nil), not "not active".
+    func activity(before date: Date) async -> (workout: Bool?, steps: Int?) {
+        guard isAvailable, !(await shouldAsk()) else { return (nil, nil) }
+        let hour = HKQuery.predicateForSamples(withStart: date.addingTimeInterval(-3600), end: date)
+        let w = HKSampleQueryDescriptor(predicates: [.workout(hour)], sortDescriptors: [], limit: 1)
+        let workout = ((try? await w.result(for: store)) ?? []).isEmpty == false
+        let six = HKQuery.predicateForSamples(withStart: date.addingTimeInterval(-6 * 3600), end: date)
+        let any = HKSampleQueryDescriptor(predicates: [.quantitySample(type: HKQuantityType(.stepCount), predicate: six)],
+                                          sortDescriptors: [], limit: 1)
+        let hasSteps = ((try? await any.result(for: store)) ?? []).isEmpty == false
+        guard hasSteps || workout else { return (nil, nil) }
+        let half = HKQuery.predicateForSamples(withStart: date.addingTimeInterval(-1800), end: date)
+        let sum = HKStatisticsQueryDescriptor(predicate: .quantitySample(type: HKQuantityType(.stepCount), predicate: half),
+                                              options: .cumulativeSum)
+        let steps = (try? await sum.result(for: store))?.sumQuantity()?.doubleValue(for: .count()) ?? 0
+        return (workout, Int(steps))
+    }
+
     /// A workout that ended in the two hours before, by kind and length, in words.
     private func workout(before date: Date) async -> String? {
         let query = HKSampleQueryDescriptor(

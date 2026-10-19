@@ -41,6 +41,7 @@ public enum TheRead {
         case ("smoke_at_point", "yes"): "Smoke-like air"
         case ("heat_alert", "yes"): "A heat alert"
         case ("temp_drop", "yes"): "A sharp temperature drop"
+        case ("exertion", "yes"): "Being active"
         case ("hour", let part): "The \(part)"
         case ("indoor_outdoor", let io): io == "indoor" ? "Being indoors" : "Being outdoors"
         case (let b, _) where b.hasPrefix("tag_"): Bins.label(b)
@@ -110,6 +111,7 @@ public enum TheRead {
         case ("heat_alert", "yes"): return ("A heat alert was on.", "A heat alert is on.", "a heat alert is out")
         case ("temp_drop", "yes"):
             return ("The temperature had dropped fast.", "The temperature is dropping fast.", "a sharp temperature drop is on the way")
+        case ("exertion", "yes"): return ("You'd been active.", "You've been active.", "you plan to be active")
         case (let b, _) where b.hasPrefix("tag_"):
             let l = Bins.label(b).lowercased()
             return ("You mentioned \(l).", "You mentioned \(l).", l)
@@ -124,7 +126,7 @@ public enum TheRead {
         var out: [(String, String)] = []
         for b in ["pm25", "ozone", "pollen_weed", "pollen_tree", "pollen_grass"] { out += [(b, "high"), (b, "moderate")] }
         out += [("temp", "hot"), ("temp", "cold"), ("temp", "mild"), ("humidity", "humid"), ("humidity", "dry"),
-                ("smoke_at_point", "yes"), ("heat_alert", "yes"), ("temp_drop", "yes")]
+                ("smoke_at_point", "yes"), ("heat_alert", "yes"), ("temp_drop", "yes"), ("exertion", "yes")]
         out += JournalTag.allCases.map { ("tag_\($0.rawValue)", "yes") }
         return out
     }

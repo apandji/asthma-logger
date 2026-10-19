@@ -133,7 +133,7 @@ enum Crit {
     }
 
     /// The timeline's look: the original track (small dots, a pill for the time), or Apple Health's
-    /// (the day as a title, a pointer, day labels above, each moment a 35 pt circle, twice as wide a day).
+    /// (the day as a title, a pointer, day labels above, each moment a 17.5 pt circle, twice as wide a day).
     enum TimelineLook: String, CaseIterable, Identifiable {
         case track, health
         var id: String { rawValue }

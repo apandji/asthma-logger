@@ -97,3 +97,8 @@ Four variables had been sharing hue (family, temperature, verdict, moment kind) 
 The rail is the key and never changes hue: every family in its ink, full when it's in the air, faint when it
 isn't. Insights uses the same three inks for the wash, the radar, the card icons, the star and the dots.
 Simple, RISO inks and Current remain under Demo › Inks.
+
+### The set on linen (light mode)
+
+The same three inks print a step deeper on light paper, so they sit at one weight on the page: Weather
+#F03C9E, Pollutants #1FA7CE, Allergens #DBA300 (bright on black: #FF48B0, #5EC8E5, #FFE800).

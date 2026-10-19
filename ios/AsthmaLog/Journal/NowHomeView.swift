@@ -1418,8 +1418,10 @@ struct NowSky: View {
             let mids = RailRow.ys(rows, in: size.height).map { $0 + (expanded ? railShift : 0) }
             ZStack {
                 if Crit.AppLook.current == .health {
-                    // Apple Health look: no weather wash under the map, the page's grey, so the map reads grey too.
-                    Color(uiColor: .systemGroupedBackground)
+                    // Apple Health look: the air is the gradient alone (the details page's field), with every
+                    // pollutant and pollen colour in it: hue from the temperature, light from the hour, softness from
+                    // the humidity, each layer's tint stronger as it rises. No particles.
+                    AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: true)
                 } else {
                     AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
                 }
@@ -1469,6 +1471,7 @@ struct NowSky: View {
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
+                if Crit.AppLook.current != .health {
                 ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
                               fragments: stack.map { event == .storm && $0.name.hasSuffix("pollen") },
                               selected: row == .header(.weather) ? -1 : selectedLayer(stack),
@@ -1477,6 +1480,7 @@ struct NowSky: View {
                               rippleInk: rippleInk, scan: true, hollow: sketch,
                               breathes: !isPast, drift: sketch ? 1 + 2 * farness : 0,
                               reveal: sketch ? .soft : isPast ? .inward : .outward)
+                }
             }
             .frame(width: size.width, height: size.height)
             // The past is a print, a touch faded. The future softens the further out it is.

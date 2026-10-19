@@ -1862,19 +1862,22 @@ struct VerdictHeader: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(TheRead.spoken(title))
                 .animation(settled ? .easeInOut(duration: 0.26) : nil, value: title)
-            // One quiet line, reserved: the rest of the read, and a moment's date and time.
-            VStack(alignment: .leading, spacing: 4) {
+            // Three levels: the sentence; then what it adds (the rest of the read, near-white, tight under it);
+            // then when, smallest and quietest, a step apart. They were one grey and competed (owner, Oct 18).
+            VStack(alignment: .leading, spacing: 10) {
                 if let tail {
                     Self.marked(tail)
-                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                        .font(.body).foregroundStyle(Color.primary.opacity(0.82))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel(TheRead.spoken(tail))
                         .id(tail)
                         .transition(.opacity)
+                        .padding(.top, -2)
                 }
                 if let when {
                     Label(when, systemImage: "clock")
-                        .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                        .font(.footnote.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                        .labelStyle(.titleAndIcon)
                         .lineLimit(1)
                 }
             }

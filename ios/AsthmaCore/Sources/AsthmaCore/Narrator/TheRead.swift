@@ -66,40 +66,80 @@ public enum TheRead {
         }
     }
 
-    /// "High weed pollen is here. ✦✦" In words, never counts: you're not a number (owner, Oct 17). The only
-    /// numbers on screen are readings, when you hold the sky. Past: "Raised fine particles were there. ✦"
+    /// A pattern as a plain fact in the time's tense, then the mark: "Weed pollen was high." Words, never
+    /// counts (owner, Oct 17). Each factor has its own natural sentence (copy pass, Oct 18): the old
+    /// "<Thing> was there." made "Heat was there." and "High ozone was there."
     public static func pattern(_ r: LiftRow, past: Bool = false) -> String {
-        marked(noun(r.bin, r.level), time: past ? .back : .now, mark: .of(r))
+        marked(bin: r.bin, level: r.level, time: past ? .back : .now, mark: .of(r))
     }
 
-    /// A thing in the air, as a fact in the time's tense, then the mark.
-    public static func marked(_ thing: String, time: Time, mark: Mark) -> String {
-        let plural = thing.hasSuffix("particles")
-        let fact = switch time {
-        case .back: "\(thing) \(plural ? "were" : "was") there."
-        case .now: "\(thing) \(plural ? "are" : "is") here."
-        case .ahead: "\(thing) \(plural ? "are" : "is") in the forecast."
+    public static func marked(bin: String, level: String, time: Time, mark: Mark) -> String {
+        fact(bin, level, time: time) + "\u{00A0}" + mark.rawValue   // non-breaking: the mark never wraps alone
+    }
+
+    /// "Weed pollen was high." / "Weed pollen is high." / ahead, the clause after "Thursday afternoon: ",
+    /// "weed pollen looks high." Ahead is a forecast, so it "looks": never "will".
+    public static func fact(_ bin: String, _ level: String, time: Time) -> String {
+        let p = phrasing(bin, level)
+        switch time {
+        case .back: return p.back
+        case .now: return p.now
+        case .ahead: return p.ahead + "."
         }
-        return fact + "\u{00A0}" + mark.rawValue   // non-breaking: the sparkle never wraps onto a line alone
     }
 
-    /// The thing the sparkle is about, read back out of a marked sentence ("High weed pollen was there. ✦" →
+    private static func phrasing(_ bin: String, _ level: String) -> (back: String, now: String, ahead: String) {
+        // Things measured in amounts: "X was high", "X was up a little".
+        func amount(_ name: String, plural: Bool = false) -> (String, String, String)? {
+            let (was, iz, look) = plural ? ("were", "are", "look") : ("was", "is", "looks")
+            let cap = name.prefix(1).uppercased() + name.dropFirst()
+            switch level {
+            case "high": return ("\(cap) \(was) high.", "\(cap) \(iz) high.", "\(name) \(look) high")
+            case "moderate": return ("\(cap) \(was) up a little.", "\(cap) \(iz) up a little.", "\(name) \(look) a little high")
+            default: return nil
+            }
+        }
+        if bin == "pm25", let a = amount("fine particles", plural: true) { return a }
+        if bin == "ozone", let a = amount("ozone") { return a }
+        if bin.hasPrefix("pollen_"), let a = amount("\(bin.dropFirst("pollen_".count)) pollen") { return a }
+        switch (bin, level) {
+        case ("temp", let t) where ["hot", "cold", "mild"].contains(t): return ("It was \(t).", "It's \(t).", "it looks \(t)")
+        case ("humidity", "humid"): return ("It was humid.", "It's humid.", "it looks humid")
+        case ("humidity", "dry"): return ("The air was dry.", "The air is dry.", "the air looks dry")
+        case ("smoke_at_point", "yes"): return ("The air was smoky.", "The air is smoky.", "the air looks smoky")
+        case ("heat_alert", "yes"): return ("A heat alert was on.", "A heat alert is on.", "a heat alert is out")
+        case ("temp_drop", "yes"):
+            return ("The temperature had dropped fast.", "The temperature is dropping fast.", "a sharp temperature drop is on the way")
+        case (let b, _) where b.hasPrefix("tag_"):
+            let l = Bins.label(b).lowercased()
+            return ("You mentioned \(l).", "You mentioned \(l).", l)
+        default:
+            let l = Bins.label(bin)
+            return ("\(l) was \(level).", "\(l) is \(level).", "\(l.lowercased()) looks \(level)")
+        }
+    }
+
+    /// Every (bin, level) the read can mark, for reading a factor back out of a sentence.
+    private static var markable: [(String, String)] {
+        var out: [(String, String)] = []
+        for b in ["pm25", "ozone", "pollen_weed", "pollen_tree", "pollen_grass"] { out += [(b, "high"), (b, "moderate")] }
+        out += [("temp", "hot"), ("temp", "cold"), ("temp", "mild"), ("humidity", "humid"), ("humidity", "dry"),
+                ("smoke_at_point", "yes"), ("heat_alert", "yes"), ("temp_drop", "yes")]
+        out += JournalTag.allCases.map { ("tag_\($0.rawValue)", "yes") }
+        return out
+    }
+
+    /// The thing the mark is about, read back out of a marked sentence ("Weed pollen was high. ✦" →
     /// "High weed pollen"), so the key can say "High weed pollen shows up often on your flare days", the
     /// same words as Insights. Nil when the sentence isn't one of ours.
     public static func factor(in sentence: String) -> String? {
-        // The sentence that carries the mark, without the mark.
         let marks = Mark.allCases.map(\.rawValue)
         guard let range = marks.lazy.compactMap({ sentence.range(of: $0) }).min(by: { $0.lowerBound < $1.lowerBound }) else { return nil }
-        var s = String(sentence[..<range.lowerBound]).replacingOccurrences(of: "\u{00A0}", with: "").trimmingCharacters(in: .whitespaces)
-        if let dot = s.range(of: ". ", options: .backwards) { s = String(s[dot.upperBound...]) }   // the last sentence
+        let s = String(sentence[..<range.lowerBound]).replacingOccurrences(of: "\u{00A0}", with: "").trimmingCharacters(in: .whitespaces)
         if s.contains("temperature had fallen") || s.contains("temperature has fallen") { return noun("temp_drop", "yes") }
-        for tail in [" was there.", " were there.", " is here.", " are here.", " is in the forecast.", " are in the forecast."] where s.hasSuffix(tail) {
-            return String(s.dropLast(tail.count))
-        }
-        // Ahead: "Thursday afternoon: high weed pollen." → "High weed pollen".
-        if let colon = s.range(of: ": ") {
-            let n = s[colon.upperBound...].trimmingCharacters(in: CharacterSet(charactersIn: ". "))
-            return n.prefix(1).uppercased() + n.dropFirst()
+        for (b, l) in markable {
+            let p = phrasing(b, l)
+            if s.hasSuffix(p.back) || s.hasSuffix(p.now) || s.hasSuffix(p.ahead + ".") { return noun(b, l) }
         }
         return nil
     }
@@ -152,8 +192,9 @@ public enum TheRead {
             // What's in the forecast, never the verdict: the pill alone says how it compares (owner, Oct 17), so
             // the two can't disagree. A factor that shows up on your flare days carries the sparkle.
             if learned, let top = shared.first {
-                parts.append(event == nil ? "\(when): \(noun(top.bin, top.level).lowercased()).\u{00A0}\(Mark.of(top).rawValue)"
-                                          : marked(noun(top.bin, top.level), time: time, mark: .of(top)))
+                let clause = fact(top.bin, top.level, time: time)
+                parts.append(event == nil ? "\(when): \(clause)\u{00A0}\(Mark.of(top).rawValue)"
+                                          : (clause.prefix(1).uppercased() + clause.dropFirst()) + "\u{00A0}" + Mark.of(top).rawValue)
             } else if event == nil, let n = notable.first {
                 parts.append("\(when): \(n).")
             } else if event == nil {

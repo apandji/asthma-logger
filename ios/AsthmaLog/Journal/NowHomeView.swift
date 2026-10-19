@@ -824,7 +824,7 @@ struct NowHomeView: View {
             .replacingOccurrences(of: dayBefore ? Self.dayBeforeDrop : "\u{0}", with: "")
         // The event already says the drop: when the pattern is the drop too, its sparkle joins the fact
         // instead of saying it again ("…fallen 19° in three hours. ✦").
-        let dropPattern = TheRead.noun("temp_drop", "yes") + " was there."
+        let dropPattern = TheRead.fact("temp_drop", "yes", time: .back)
         if e == .tempDrop, let r = rest.range(of: dropPattern) {
             let after = rest[r.upperBound...]
             if let mark = after.first(where: { TheRead.Mark(rawValue: String($0)) != nil }) {
@@ -998,7 +998,7 @@ struct NowHomeView: View {
         guard learned else { return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ") }
         if forced == .learned, !(model.progress?.isMet ?? false) {
             // The demo person's story, for moments without a real pattern behind them.
-            return [TheRead.marked("High weed pollen", time: .back, mark: .often), before].compactMap { $0 }.joined(separator: " ")
+            return [TheRead.marked(bin: "pollen_weed", level: "high", time: .back, mark: .often), before].compactMap { $0 }.joined(separator: " ")
         }
         guard let frame = m.frame(), let rows = model.report?.gatedRows, !rows.isEmpty else {
             return [weather, before ?? nothing].compactMap { $0 }.joined(separator: " ")

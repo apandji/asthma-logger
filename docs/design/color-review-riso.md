@@ -88,9 +88,9 @@ Four variables had been sharing hue (family, temperature, verdict, moment kind) 
 |---|---|---|
 | Weather | **Fluorescent Pink** #FF48B0 (not amber: amber still said "hot", and weather's ink must not code hot or cold) | Distance from mild, hot or cold alike (0 at 57–73°F, full by 32°F or 98°F), as the lift table bins it. Hot vs cold is in the words and the probe. |
 | Pollutants | **Aqua** #5EC8E5 | Dot size and density |
-| Allergens | **Sunflower** #FFB511 (pollen is yellow; a third of the wheel from pink and aqua, like a printer's magenta / cyan / yellow) | Dot size and density |
+| Allergens | **Yellow** #FFE800 (pollen is yellow; a third of the wheel from pink and aqua, like a printer's magenta / cyan / yellow) | Dot size and density |
 | The page | Paper, untinted (night prints darker) | |
-| Verdict | traffic light, timeline callout only | |
+| Verdict | Green / **gold-orange** #F2A93B / Bright Red, timeline callout only (the middle step isn't yellow, which is pollen's) | |
 | Moments | size and the tag; orange / teal only where they mean the physical caps | |
 | Yours | underline, rail dot, star: never a hue | |
 

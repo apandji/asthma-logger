@@ -1874,28 +1874,9 @@ struct VerdictHeader: View {
             let (head, tail) = Self.flow(patternMark == "words" ? TheRead.spoken(title) : title)
             ZStack(alignment: .topLeading) {
                 Group {
-                    if let mark = Self.firstMark(head) {
-                        // A pattern is the words themselves, dotted underneath; a tap says what that means.
-                        Self.underlined(head).font(font).kerning(Theme.serifKerning)
-                            .contentShape(Rectangle())
-                            .onTapGesture { SparkleTip().invalidate(reason: .actionPerformed); showKey = true }
-                            .popover(isPresented: $showKey, arrowEdge: .top) {
-                                // One line per underlined part.
-                                let fs = TheRead.factors(in: head)
-                                VStack(alignment: .leading, spacing: 8) {
-                                    if fs.isEmpty { SparkleTip.line(mark, factor: nil) }
-                                    ForEach(Array(fs.enumerated()), id: \.offset) { _, f in SparkleTip.line(f.mark, factor: f.factor) }
-                                }
-                                .font(.subheadline)
-                                .fixedSize(horizontal: false, vertical: true)
-                                // A set width, so the popover can measure the wrapped height (it clipped at the
-                                // one-line ideal width).
-                                .frame(width: 260, alignment: .leading)
-                                .padding(.horizontal, 16).padding(.vertical, 12)
-                                .fixedSize()
-                                .presentationCompactAdaptation(.popover)
-                            }
-                            .accessibilityAddTraits(.isButton)
+                    if Self.firstMark(head) != nil {
+                        // Each underlined part is its own tap, with its own tip (owner, Oct 18).
+                        MarkedText(text: head, font: font, kerning: Theme.serifKerning, ink: .primary)
                     } else {
                         Text(head).font(font).kerning(Theme.serifKerning)
                     }
@@ -1912,8 +1893,7 @@ struct VerdictHeader: View {
             // then when, smallest and quietest, a step apart. They were one grey and competed (owner, Oct 18).
             VStack(alignment: .leading, spacing: 10) {
                 if let tail {
-                    Self.underlined(tail)
-                        .font(.body).foregroundStyle(Color.primary.opacity(0.82))
+                    MarkedText(text: tail, font: .body, ink: Color.primary.opacity(0.82))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel(TheRead.spoken(tail))
                         .id(tail)
@@ -1940,6 +1920,74 @@ struct VerdictHeader: View {
 /// A sentence that ends in felt air's sparkle, laid out word by word so the sparkle is a view of its own:
 /// tap it for the key, and the popover's arrow points at it. A word joined to the mark by a non-breaking
 /// space stays on the mark's line.
+/// A read with its patterns underlined, each underlined part its own tap target: tapping one shows a tip
+/// for that part only ("Heat shows up often on your flare days"), pointing where you tapped. Plain parts do
+/// nothing. The parts are links inside one Text, so the sentence still wraps as a paragraph.
+struct MarkedText: View {
+    let text: String
+    let font: Font
+    var kerning: CGFloat = 0
+    var ink: Color = .primary
+    @State private var shown: Int?
+
+    var body: some View {
+        let factors = TheRead.factors(in: text)
+        Text(Self.attributed(text, ink: ink))
+            .font(font).kerning(kerning)
+            .foregroundStyle(ink).tint(ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .environment(\.openURL, OpenURLAction { url in
+                guard url.scheme == "feltair-mark", let i = Int(url.host() ?? "") else { return .discarded }
+                SparkleTip().invalidate(reason: .actionPerformed)
+                shown = i
+                return .handled
+            })
+            // Anchored under the sentence, so the tip never covers the words it explains (the link takes the
+            // tap, so there's no tap point to aim at).
+            .overlay(alignment: .bottom) {
+                Color.clear.frame(height: 1).frame(maxWidth: .infinity)
+                    .offset(y: 4)
+                    .popover(isPresented: Binding(get: { shown != nil }, set: { if !$0 { shown = nil } }), arrowEdge: .top) {
+                        if let i = shown, i < factors.count {
+                            SparkleTip.line(factors[i].mark, factor: factors[i].factor)
+                                .font(.subheadline)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(width: 240, alignment: .leading)
+                                .padding(.horizontal, 16).padding(.vertical, 12)
+                                .fixedSize()
+                                .presentationCompactAdaptation(.popover)
+                        }
+                    }
+            }
+            .accessibilityLabel(TheRead.spoken(text))
+    }
+
+    /// The read as one attributed paragraph: each marked clause dotted underneath and a link to its tip.
+    static func attributed(_ s: String, ink: Color) -> AttributedString {
+        var out = AttributedString()
+        var run = ""
+        var index = 0
+        for ch in s {
+            guard TheRead.Mark(rawValue: String(ch)) != nil else { run.append(ch); continue }
+            let clean = run.replacingOccurrences(of: "\u{00A0}", with: " ")
+            var cut = clean.firstIndex(where: { !$0.isWhitespace }) ?? clean.startIndex
+            let end = clean.lastIndex(where: { !$0.isWhitespace }).map { clean.index(after: $0) } ?? clean.endIndex
+            for sep in [". ", ": ", " and "] {
+                if let r = clean.range(of: sep, options: .backwards, range: clean.startIndex..<end), r.upperBound > cut { cut = r.upperBound }
+            }
+            out += AttributedString(String(clean[..<cut]))
+            var clause = AttributedString(String(clean[cut...]).trimmingCharacters(in: .whitespaces))
+            clause.underlineStyle = Text.LineStyle(pattern: .dot, color: ink.opacity(0.6))
+            clause.link = URL(string: "feltair-mark://\(index)")
+            out += clause
+            index += 1
+            run = ""
+        }
+        out += AttributedString(run)
+        return out
+    }
+}
+
 struct MarkedSentence: View {
     let text: String
     let font: Font

@@ -249,7 +249,9 @@ enum WeatherColor {
     }
     /// One ink per family in Print and Simple.
     static var flat: Bool { print || simple }
-    static let amber = Color(red: 0xF2 / 255, green: 0xA9 / 255, blue: 0x3B / 255)
+    /// Weather's ink: Fluorescent Pink, a hue with no hot-or-cold meaning (amber said "hot"; blue said "cold"),
+    /// and the one free region of the wheel next to aqua, violet and the verdict's green / yellow / red.
+    static let amber = Color(red: 0xFF / 255, green: 0x48 / 255, blue: 0xB0 / 255)
     static let paperTone = Color(red: 0x8C / 255, green: 0x8A / 255, blue: 0x86 / 255)
     /// 0 at mild (57–73°F), 1 by 32°F or 98°F.
     static func weatherAmount(_ f: Double) -> Double { max(0, min(1, (abs(f - 65) - 8) / 25)) }
@@ -376,7 +378,7 @@ enum WeatherColor {
 
     static func temperature(_ f: Double) -> Color {
         // Print: paper, with Amber laid on as the temperature leaves mild, in either direction.
-        if print { return paperTone.mix(with: amber, by: 0.85 * weatherAmount(f)) }
+        if print { return paperTone.mix(with: amber, by: 0.7 * weatherAmount(f)) }
         guard let first = stops.first, let last = stops.last else { return .gray }
         if f <= first.f { return first.color }
         if f >= last.f { return last.color }

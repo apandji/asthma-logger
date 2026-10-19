@@ -86,7 +86,7 @@ Four variables had been sharing hue (family, temperature, verdict, moment kind) 
 
 | What | Ink | How much |
 |---|---|---|
-| Weather | **Amber** #F2A93B | Distance from mild, hot or cold alike (0 at 57–73°F, full by 32°F or 98°F), as the lift table bins it. Hot vs cold is in the words and the probe. |
+| Weather | **Fluorescent Pink** #FF48B0 (not amber: amber still said "hot", and weather's ink must not code hot or cold) | Distance from mild, hot or cold alike (0 at 57–73°F, full by 32°F or 98°F), as the lift table bins it. Hot vs cold is in the words and the probe. |
 | Pollutants | **Aqua** #5EC8E5 | Dot size and density |
 | Allergens | **Violet** #9D7AD2 | Dot size and density |
 | The page | Paper, untinted (night prints darker) | |

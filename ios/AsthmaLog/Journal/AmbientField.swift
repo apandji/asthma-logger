@@ -257,6 +257,8 @@ enum WeatherColor {
     static func weatherAmount(_ f: Double) -> Double { max(0, min(1, (abs(f - 65) - 8) / 25)) }
     static let aqua = Color(red: 0x5E / 255, green: 0xC8 / 255, blue: 0xE5 / 255)
     static let violet = Color(red: 0x9D / 255, green: 0x7A / 255, blue: 0xD2 / 255)
+    /// Allergens' ink: Sunflower. Pollen is yellow, and gold sits a third of the wheel from pink and aqua.
+    static let gold = Color(red: 0xFF / 255, green: 0xB5 / 255, blue: 0x11 / 255)
 
     static func hex(_ v: UInt32) -> Color {
         Color(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
@@ -370,7 +372,7 @@ enum WeatherColor {
     static var no2: Color { flat ? aqua : riso ? hex(0xA75154) : Color(red: 0.74, green: 0.38, blue: 0.24) }
     static var ozone: Color { flat ? aqua : riso ? hex(0x5EC8E5) : Color(red: 0.66, green: 0.92, blue: 1.0) }
     static var pollen: [Color] {
-        flat ? [violet, violet, violet] : riso ? [hex(0x00A95C), hex(0xFFB511), hex(0x9D7AD2)]
+        flat ? [gold, gold, gold] : riso ? [hex(0x00A95C), hex(0xFFB511), hex(0x9D7AD2)]
              : [Color(red: 0.36, green: 0.80, blue: 0.46),   // tree: green
                 Color(red: 0.98, green: 0.80, blue: 0.22),   // grass: gold
                 Color(red: 0.72, green: 0.42, blue: 0.95)]   // weed: violet

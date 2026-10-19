@@ -501,7 +501,7 @@ struct GroupRail: View {
             case .weather: has = weatherAmount
             default: has = g.items.map(amount).max() ?? 0
             }
-            let ink: Color = g == .weather ? WeatherColor.amber : g == .particles ? WeatherColor.aqua : WeatherColor.violet
+            let ink: Color = g == .weather ? WeatherColor.amber : g == .particles ? WeatherColor.aqua : WeatherColor.gold
             return ink.opacity(has > 0 ? 1 : 0.38)
         }
         if g == .weather { return weatherInk.map(legible) }

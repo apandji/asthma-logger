@@ -81,9 +81,17 @@ struct InsightsView: View {
     private var paperBackground: some View {
         ZStack {
             Theme.paper(paper)
-            FactorBloom(colors: factorColors, from: skyColor, since: openedAt).opacity(0.85)
-            // A dark wash keeps the text readable over the colour.
-            LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.55), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
+            if paper == .linen {
+                // Light: the factors as a pale wash on the paper, settling into plain paper where the list
+                // sits, so dark type reads everywhere (the dark wash was laid over light paper before).
+                FactorBloom(colors: factorColors, from: skyColor, since: openedAt).opacity(0.4)
+                LinearGradient(colors: [Theme.linen.opacity(0.1), Theme.linen.opacity(0.45), Theme.linen.opacity(0.9)],
+                               startPoint: .top, endPoint: .bottom)
+            } else {
+                FactorBloom(colors: factorColors, from: skyColor, since: openedAt).opacity(0.85)
+                // A dark wash keeps the text readable over the colour.
+                LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.55), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
+            }
             SkyGrain(responds: false).opacity(0.5)
         }
         .ignoresSafeArea()

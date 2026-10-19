@@ -80,6 +80,9 @@ struct AirRadar: View {
 /// The dots: a hex grid inside the diamond. Rings at a third, two thirds and the edge print a little brighter;
 /// inside your shape the dots swell and take the nearest family's ink.
 private struct RadarDots: View {
+    @Environment(\.colorScheme) private var scheme
+    /// The grid and outline: white on black paper, near-black on linen.
+    private var ink: Color { scheme == .light ? Color(red: 0.12, green: 0.1, blue: 0.09) : .white }
     let profile: AirProfile
     let grown: Double
     let selected: AirProfile.Category?
@@ -111,9 +114,9 @@ private struct RadarDots: View {
                     let edge = 1 / ((1 - t) / max(ra, 0.0001) + t / max(rb, 0.0001))
                     let inside = d <= edge && (ra > 0 || rb > 0)
                     var r: CGFloat = 0.7
-                    var color = Color.white.opacity(0.13)
+                    var color = ink.opacity(0.13)
                     // Rings at a third, two thirds and the edge.
-                    for ring in [1.0 / 3, 2.0 / 3, 1.0] where abs(d - ring) < 0.02 { color = .white.opacity(0.45); r = 1 }
+                    for ring in [1.0 / 3, 2.0 / 3, 1.0] where abs(d - ring) < 0.02 { color = ink.opacity(0.45); r = 1 }
                     if inside {
                         let ink = t < 0.5 ? inks[a] : inks[b]
                         let near = edge > 0 ? d / edge : 0
@@ -133,14 +136,14 @@ private struct RadarDots: View {
                 return CGPoint(x: c.x + dir.x * R * reach[k], y: c.y + dir.y * R * reach[k])
             }
             outline.addLines(pts); outline.closeSubpath()
-            ctx.stroke(outline, with: .color(.white.opacity(0.7)), lineWidth: 1)
+            ctx.stroke(outline, with: .color(ink.opacity(0.7)), lineWidth: 1)
             for (k, cat) in AirRadar.order.enumerated() {
                 let status = profile.axis(cat).status
                 guard status == .pattern || status == .early else { continue }
                 let p = pts[k], rr: CGFloat = 4.5
                 let dot = Path(ellipseIn: CGRect(x: p.x - rr, y: p.y - rr, width: 2 * rr, height: 2 * rr))
-                if status == .pattern { ctx.fill(dot, with: .color(.white)) }
-                else { ctx.stroke(dot, with: .color(.white), lineWidth: 1.2) }
+                if status == .pattern { ctx.fill(dot, with: .color(ink)) }
+                else { ctx.stroke(dot, with: .color(ink), lineWidth: 1.2) }
             }
         }
         .accessibilityHidden(true)

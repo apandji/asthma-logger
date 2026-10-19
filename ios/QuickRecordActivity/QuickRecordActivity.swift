@@ -43,6 +43,8 @@ nonisolated struct QuickRecordAttributes: ActivityAttributes {
 /// What the Lock Screen buttons ask the app to do.
 nonisolated enum QuickRecordCommand: Sendable {
     case start(momentID: String?)
+    /// Log a rescue now (Control Center, the Action button, Lock Screen): one tap, the same as the felt button.
+    case logRescue
     case stop
     case toggle(tag: String)
     case save
@@ -68,6 +70,19 @@ struct QuickRecordStartIntent: AudioRecordingIntent, LiveActivityIntent {
 
     @MainActor func perform() async throws -> some IntentResult {
         await QuickRecordBridge.handle?(.start(momentID: momentID))
+        return .result()
+    }
+}
+
+/// One tap logs a rescue, from Control Center, the Lock Screen or the Action button: the same moment a felt
+/// button press makes (air stamped, Health written when that's on, puffs merged within two minutes).
+struct LogRescueIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Log a rescue"
+    static let description = IntentDescription("Logs a rescue inhaler use now, with the air around you.")
+    static let openAppWhenRun = false
+
+    @MainActor func perform() async throws -> some IntentResult {
+        await QuickRecordBridge.handle?(.logRescue)
         return .result()
     }
 }

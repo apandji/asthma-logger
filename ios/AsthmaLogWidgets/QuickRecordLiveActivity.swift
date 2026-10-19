@@ -10,6 +10,7 @@ struct AsthmaLogWidgets: WidgetBundle {
     var body: some Widget {
         QuickRecordLiveActivity()
         QuickRecordControl()
+        LogRescueControl()
     }
 }
 
@@ -285,6 +286,19 @@ struct QuickRecordControl: ControlWidget {
         }
         .displayName("felt air voice note")
         .description("Say what was going on at your latest moment.")
+    }
+}
+
+/// Control Center / Lock Screen / Action button: log a rescue in one tap.
+struct LogRescueControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: "felt-air.log-rescue") {
+            ControlWidgetButton(action: LogRescueIntent()) {
+                Label("Log rescue", systemImage: "plus.circle.fill")
+            }
+        }
+        .displayName("Log a rescue")
+        .description("Logs a rescue inhaler use now, with the air around you.")
     }
 }
 

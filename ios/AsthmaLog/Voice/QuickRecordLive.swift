@@ -91,6 +91,15 @@ final class QuickRecordLive {
         log.info("handle \(String(describing: command), privacy: .public)")
         switch command {
         case .start(let id): await start(id)
+        case .logRescue:
+            // Same as a felt button press: a rescue (merging puffs), then the card asks what's going on.
+            guard let logRescue else { log.error("logRescue: no logger"); return }
+            let id = UUID()
+            logRescue(id)
+            for _ in 0..<40 {
+                if let e = event(id.uuidString) ?? latestMoment(within: 30) { _ = begin(for: e); return }
+                try? await Task.sleep(for: .milliseconds(25))
+            }
         case .stop: await stop()
         case .toggle(let tag): await toggle(tag)
         case .save: await save()

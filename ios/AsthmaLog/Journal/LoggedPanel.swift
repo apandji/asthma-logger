@@ -17,6 +17,13 @@ struct LoggedPanel: View {
     @State private var touched = 0
 
     private var puffs: Int { event.uses.reduce(0) { $0 + $1.puffs } }
+    /// Answered "No, I took them": don't ask again for this moment.
+    @State private var tookThem = false
+    /// Three or more presses inside ten seconds: probably test sprays (priming), not puffs.
+    private var looksLikePriming: Bool {
+        guard !tookThem, let u = event.uses.last else { return false }
+        return Priming.looksLike(puffs: u.puffs, span: u.lastPressAt.timeIntervalSince(u.at))
+    }
     private var ink: Color { event.moment == .rescue ? Theme.rescue : Theme.standard }
 
     var body: some View {
@@ -27,6 +34,7 @@ struct LoggedPanel: View {
                 Spacer()
                 Text(event.loggedAt, style: .time).font(.subheadline).foregroundStyle(Theme.secondaryText)
             }
+            if looksLikePriming { primingQuestion.transition(.opacity.combined(with: .move(edge: .bottom))) }
             HStack(alignment: .center, spacing: 12) {
                 stepper
                 Spacer(minLength: 0)
@@ -48,6 +56,7 @@ struct LoggedPanel: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(Theme.smooth, value: looksLikePriming)
         .glassEffect(.regular, in: .rect(cornerRadius: 32))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
@@ -66,6 +75,33 @@ struct LoggedPanel: View {
             guard !Task.isCancelled else { return }
             close()
         }
+    }
+
+    /// "Were those test sprays?" Inhaler leaflets say "prime"; people say "spray it into the air". Both are here.
+    private var primingQuestion: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Were those test sprays?").font(.subheadline.weight(.semibold))
+                Text("Like priming a new inhaler.").font(.footnote).foregroundStyle(Theme.secondaryText)
+            }
+            HStack(spacing: 8) {
+                Button("Yes, don't count them") {
+                    close()
+                    Task { await services.delete(event, in: context) }
+                }
+                .font(.subheadline.weight(.semibold)).foregroundStyle(.black)
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .background(Capsule().fill(.white))
+                Button("No, I took them") { withAnimation(Theme.smooth) { tookThem = true }; touched += 1 }
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 14).padding(.vertical, 9)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+            }
+            .buttonStyle(PressStyle())
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.primary.opacity(0.08)))
     }
 
     /// − puffs +, the count rolling as it changes. A dose, so the number stays (it's what the inhaler says).

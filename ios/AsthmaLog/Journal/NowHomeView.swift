@@ -46,6 +46,8 @@ struct NowHomeView: View {
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
     @AppStorage(Crit.TimelineLook.key) private var timelineLook = Crit.TimelineLook.track
+    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.feltAir
+    private var healthLook: Bool { appLook == .health }
     @State private var showInsights = false
     /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
     /// top, the rail's icons, the + at the bottom, all on the same line.
@@ -124,22 +126,39 @@ struct NowHomeView: View {
                     .padding(.top, 4)
                 // Baselines are the engine's, not the journal's: no ticks for them (owner, Oct 17).
                 timeline
+                    // Apple Health look: the tab bar has its own row, so the timeline sits above it.
+                    .padding(.bottom, healthLook ? 74 : 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             // Insights and Settings in the top corner, on the place line (owner, Oct 18), the way Weather and
             // Maps keep theirs: always there, never in the sky's way.
             .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
+                if healthLook {
+                    // Apple Health look: Insights lives in the tab bar, so the corner keeps Settings only.
+                    Button { showSettings = true } label: {
+                        Image(systemName: "slider.horizontal.3").font(.subheadline.weight(.semibold))
+                            .frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .padding(railLeft ? .leading : .trailing, 20)
+                    .accessibilityLabel("Settings")
+                } else {
                 learningButton
                     // On the header's 20 pt margin, centred on the place line.
                     .padding(railLeft ? .leading : .trailing, 20)
                     .offset(y: 3)
+                }
             }
             .background {
                 // The page takes the weather's colour, as in Apple Weather: hue from the temperature, light from
                 // the hour (rose dawn, blue day, amber dusk, indigo night), deepening to black at the bottom.
                 // The forecast is the same, quieter. The grain runs over all of it.
                 ZStack {
-                    if paper == .linen {
+                    if healthLook {
+                        // Apple Health look: the system's grouped grey, no weather wash, no grain.
+                        Color(uiColor: .systemGroupedBackground)
+                    } else if paper == .linen {
                         // Light: the weather's colour printed on warm paper, a pale wash that settles into the
                         // paper at the bottom (riso on uncoated stock), never into black.
                         LinearGradient(colors: [pageTop.mix(with: Theme.linen, by: 0.72), pageTop.mix(with: Theme.linen, by: 0.88),
@@ -149,14 +168,14 @@ struct NowHomeView: View {
                         LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), pageBottom],
                                        startPoint: .top, endPoint: .bottom)
                     }
-                    SkyGrain(responds: false).opacity(0.5)
+                    SkyGrain(responds: false).opacity(healthLook ? 0 : 0.5)
                 }
                 .ignoresSafeArea()
                 .animation(scrubbing ? nil : .easeInOut(duration: 0.5), value: focusKey)
             }
             // Linen is a light page whatever the system says; black is a dark one.
             // Black paper, or linen when chosen; the forecast shifts the paper to warm graphite (above).
-            .environment(\.colorScheme, paper == .linen ? .light : .dark)
+            .environment(\.colorScheme, healthLook || paper == .linen ? .light : .dark)
             .fullScreenCover(item: $recording) { e in QuickRecordView(event: e) }
             // The capture card, grown (Crit.CaptureStyle chat / journal).
             .overlay { captureOverlay }
@@ -759,7 +778,7 @@ struct NowHomeView: View {
                            tint: { airTint($0.weave) },
                            forecastTints: tints, verdictTint: playheadTint, verdictText: playheadVerdict,
                            hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
-            .frame(height: timelineLook == .health ? 122 : 104)
+            .frame(height: timelineLook == .health || healthLook ? 122 : 104)
             // Full width; the + floats over its end, which fades out beneath it. The other end just softens.
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: fadeIn),
                                          .init(color: .black, location: fadeOut), .init(color: .clear, location: 1)],
@@ -1398,7 +1417,12 @@ struct NowSky: View {
             let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: showsSelf)
             let mids = RailRow.ys(rows, in: size.height).map { $0 + (expanded ? railShift : 0) }
             ZStack {
-                AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
+                if Crit.AppLook.current == .health {
+                    // Apple Health look: no weather wash under the map, the page's grey, so the map reads grey too.
+                    Color(uiColor: .systemGroupedBackground)
+                } else {
+                    AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
+                }
                 if let (lat, lon) = coordinate {
                     // Pinned: the map never moves; the air is one regional reading, not a spot on a street.
                     PlaceMap(id: light ? mapID + "-light" : mapID, latitude: lat, longitude: lon, dark: !light)

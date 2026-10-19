@@ -121,6 +121,17 @@ enum Crit {
     }
 
     /// The page: black (ink on night) or linen, a warm off-white paper that suits the riso grain.
+    /// The whole app dressed as an Apple Health feature: grouped grey background, SF type (bold sentence),
+    /// a Health-style tab bar at the bottom (Insights, and a slot still to be decided) beside the +, and the
+    /// timeline's Health look. felt air is today's look.
+    enum AppLook: String, CaseIterable, Identifiable {
+        case feltAir, health
+        var id: String { rawValue }
+        var title: String { self == .feltAir ? "felt air" : "Apple Health" }
+        static let key = "crit.appLook"
+        static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? .feltAir }
+    }
+
     /// The timeline's look: the original track (small dots, a pill for the time), or Apple Health's
     /// (the day as a title, a pointer, day labels above, each moment a 35 pt circle, twice as wide a day).
     enum TimelineLook: String, CaseIterable, Identifiable {

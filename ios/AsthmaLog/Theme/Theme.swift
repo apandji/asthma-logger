@@ -120,6 +120,8 @@ enum Theme {
         }
 
         static func sentence(size: CGFloat, slanted: Bool = false, voice: NarratorStyle = .current) -> Font {
+            // Apple Health look: SF, bold, as Health sets its summaries.
+            if Crit.AppLook.current == .health { return .system(size: size, weight: .bold) }
             switch current {
             case .system:
                 let base = Font.system(size: size, weight: .regular, design: .serif)
@@ -134,6 +136,7 @@ enum Theme {
         }
 
         static func figures(size: CGFloat) -> Font {
+            if Crit.AppLook.current == .health { return .system(size: size, weight: .semibold).monospacedDigit() }
             switch current {
             case .system:
                 return .system(size: size, weight: .regular, design: .serif).monospacedDigit()

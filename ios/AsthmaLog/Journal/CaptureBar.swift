@@ -19,8 +19,24 @@ struct CaptureBar: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     /// The + follows the rail to the hand's side.
     @AppStorage(Prefs.railLeft) private var railLeft = false
+    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.feltAir
 
     var body: some View {
+        if appLook == .health {
+            // Apple Health look: the tab bar on the left, the + on the right, on one baseline.
+            HStack(alignment: .center) {
+                HealthTabBar(insights: { showInsights = true })
+                Spacer()
+                logControl
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
+        } else {
+            feltAirBar
+        }
+    }
+
+    private var feltAirBar: some View {
         HStack(alignment: .bottom, spacing: 12) {
             if railLeft { logControl; Spacer() }
             switch insightsEntry {
@@ -338,5 +354,33 @@ struct LoggedToast: View {
         .glassEffect(.regular, in: .capsule)
         .padding(.horizontal, 16)
         .transition(.move(edge: .top).combined(with: .opacity))
+    }
+}
+
+/// The Apple Health look's tab bar: a glass capsule with Insights (sparkle) and a second slot still to be
+/// decided, left empty for now (Design crit › App look).
+struct HealthTabBar: View {
+    let insights: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: insights) { item("sparkles", "Insights") }
+                .buttonStyle(PressStyle())
+            // The second slot: blank until it's decided.
+            Color.clear.frame(width: 96, height: 56)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 6)
+        .glassEffect(.regular, in: .capsule)
+    }
+
+    private func item(_ symbol: String, _ label: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 22, weight: .semibold))
+            Text(label).font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(.primary)
+        .frame(width: 96, height: 56)
+        .contentShape(Rectangle())
     }
 }

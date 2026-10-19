@@ -127,6 +127,7 @@ struct DeveloperSettings: View {
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
     @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.print
     @AppStorage(Crit.TimelineLook.key) private var critTimeline = Crit.TimelineLook.track
+    @AppStorage(Crit.AppLook.key) private var critAppLook = Crit.AppLook.feltAir
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false
@@ -198,6 +199,9 @@ struct DeveloperSettings: View {
                 Toggle("Demo calendar", isOn: $demoCalendar)
                 Picker("Inks", selection: $critInks) {
                     ForEach(Crit.Inks.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("App look", selection: $critAppLook) {
+                    ForEach(Crit.AppLook.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("Timeline", selection: $critTimeline) {
                     ForEach(Crit.TimelineLook.allCases) { Text($0.title).tag($0) }

@@ -89,6 +89,8 @@ struct NowHomeView: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 0) {
                 header
+                    // The top line leaves the corner to Insights and Settings.
+                    .environment(\.cornerInset, (railLeft ? .leading : .trailing, 108))
                     .opacity(probing ? 0.4 : 1)
                     .animation(Theme.smooth, value: probing)
                 // Once, the first time a sentence carries the sparkle: what it means.
@@ -118,25 +120,18 @@ struct NowHomeView: View {
                     .environment(\.skyDent, skyDrag != nil && !reduceMotion ? SkyDent(point: skyDrag!.point, press: skyPress) : nil)
                     .gesture(skyScrub)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // Insights and Settings head the rail's column: one strip on the hand's side, top to bottom.
-                    // They step aside while the rail is held open (it grows up into this space).
-                    .overlay {
-                        // Bottom-anchored with the rail (RailRow.ys), so it stays put as the header changes.
-                        GeometryReader { g in
-                            let top = RailRow.ys(count: 5, in: g.size.height).first ?? 0
-                            learningButton
-                                .position(x: railLeft ? NowHomeView.column : g.size.width - NowHomeView.column,
-                                          y: top - 78)
-                                .opacity(probing || railOpen ? 0 : 1)
-                                .allowsHitTesting(!(probing || railOpen))
-                                .animation(Theme.smooth, value: probing || railOpen)
-                        }
-                    }
                     .padding(.top, 4)
                 // Baselines are the engine's, not the journal's: no ticks for them (owner, Oct 17).
                 timeline
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Insights and Settings in the top corner, on the place line (owner, Oct 18), the way Weather and
+            // Maps keep theirs: always there, never in the sky's way.
+            .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
+                learningButton
+                    .padding(railLeft ? .leading : .trailing, 16)
+                    .offset(y: -6)
+            }
             .background {
                 // The page takes the weather's colour, as in Apple Weather: hue from the temperature, light from
                 // the hour (rose dawn, blue day, amber dusk, indigo night), deepening to black at the bottom.
@@ -433,15 +428,15 @@ struct NowHomeView: View {
     /// Insights and Settings, worked like the rail: touch, and the one under the thumb grows and names itself;
     /// slide between them; let go to open it (slide off the pill to let go of nothing). A plain tap opens too.
     private var learningButton: some View {
-        VStack(spacing: 2) {
+        HStack(spacing: 2) {
             // No bubble: it would cover the sky. Learning breathes; learned bounces once.
-            InsightsRingButton(open: {}, size: 36, bubbleBelow: true, leading: railLeft, showsBubble: false, glass: false, nod: noticed)
+            InsightsRingButton(open: {}, size: 32, bubbleBelow: true, leading: railLeft, showsBubble: false, glass: false, nod: noticed)
                 .matchedTransitionSource(id: "insights", in: hero)
                 .scaleEffect(held == "Insights" ? 1.2 : 1)
                 .allowsHitTesting(false)
             // A different weight of mark from the sparkle: a slider glyph reads as "settings" and never as a ring.
             Image(systemName: "slider.horizontal.3").font(.body.weight(.semibold))
-                .frame(width: 36, height: 36)
+                .frame(width: 32, height: 32)
                 .scaleEffect(held == "Settings" ? 1.2 : 1)
                 .accessibilityLabel("Settings")
         }
@@ -450,7 +445,7 @@ struct NowHomeView: View {
         .contentShape(Capsule())
         .gesture(pillSlide)
         // The name beside the one under the thumb, on the sky's side, like a reading beside the rail.
-        .overlay(alignment: railLeft ? .trailing : .leading) {
+        .overlay(alignment: .bottom) {
             if let held {
                 Text(held).font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 12).padding(.vertical, 7)
@@ -458,7 +453,7 @@ struct NowHomeView: View {
                     .fixedSize()
                     // Wholly beside the pill, whatever its width: its near edge 10 pt off the pill's edge.
                     .background { GeometryReader { g in Color.clear.onAppear { labelWidth = g.size.width } } }
-                    .offset(x: railLeft ? labelWidth + 10 : -(labelWidth + 10), y: held == "Insights" ? -21 : 21)
+                    .offset(x: held == "Insights" ? -18 : 18, y: 46)
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                     .allowsHitTesting(false)
             }
@@ -467,17 +462,18 @@ struct NowHomeView: View {
         .sensoryFeedback(.selection, trigger: held)
         // The ring says the tapped pattern, growing toward the sentence. A tap opens Insights. The bubble's
         // bottom (its tail) sits at the ring, however tall the bubble grows.
-        .overlay(alignment: railLeft ? .topTrailing : .topLeading) {
+        .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
             if let tip = patternTip, held == nil {
-                RingSays(tip: tip, towardLeading: !railLeft) {
+                RingSays(tip: tip, towardLeading: !railLeft, below: true) {
                     patternTip = nil
                     showInsights = true
                 }
                 .id(tip)
-                // A fixed, bottom-aligned box: the tail stays at the ring as the bubble opens upward.
-                .frame(width: 252, height: 220, alignment: railLeft ? .bottomLeading : .bottomTrailing)
-                .offset(x: railLeft ? 256 : -256, y: -(220 - 34))
-                .transition(.opacity.combined(with: .scale(scale: 0.2, anchor: railLeft ? .bottomLeading : .bottomTrailing)))
+                // Hangs below the pill, its tail up at the ring.
+                .frame(width: 252, alignment: railLeft ? .leading : .trailing)
+                // Its top 8 pt under the 40 pt pill.
+                .offset(y: 48)
+                .transition(.opacity.combined(with: .scale(scale: 0.2, anchor: railLeft ? .topLeading : .topTrailing)))
                 .animation(.spring(response: 0.38, dampingFraction: 0.72), value: tip)
             }
         }
@@ -495,8 +491,8 @@ struct NowHomeView: View {
     private var pillSlide: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { v in
-                let inside = v.location.x > -40 && v.location.x < 84
-                let next: String? = !inside ? nil : v.location.y < 44 ? "Insights" : "Settings"
+                let inside = v.location.y > -40 && v.location.y < 80 && v.location.x > -40 && v.location.x < 116
+                let next: String? = !inside ? nil : v.location.x < 38 ? "Insights" : "Settings"
                 if next != held { held = next }
             }
             .onEnded { _ in
@@ -2010,6 +2006,8 @@ struct RingSays: View {
     let tip: PatternTip
     /// The bubble sits on the ring's leading side (the ring on the right) and its tail points trailing.
     let towardLeading: Bool
+    /// Below the ring (it's in the top corner): the tail points up.
+    var below = false
     let open: () -> Void
 
     var body: some View {
@@ -2024,7 +2022,8 @@ struct RingSays: View {
             .padding(.vertical, 12)
             .padding(.leading, towardLeading ? 14 : 22)
             .padding(.trailing, towardLeading ? 22 : 14)
-            .glassEffect(.regular, in: SpeechBubble(tailTrailing: towardLeading))
+            .padding(.top, below ? 8 : 0).padding(.bottom, below ? 0 : 0)
+            .glassEffect(.regular, in: SpeechBubble(tailTrailing: towardLeading, tailTop: below))
         }
         .buttonStyle(PressStyle())
         .accessibilityLabel(SparkleTip.line(tip.mark, factor: tip.factor))
@@ -2036,8 +2035,15 @@ struct RingSays: View {
 /// A rounded bubble with a Messages-style tail at the bottom of one side.
 nonisolated struct SpeechBubble: Shape {
     var tailTrailing: Bool
+    /// The tail at the top corner instead (a bubble hanging below what's speaking).
+    var tailTop = false
 
     func path(in rect: CGRect) -> Path {
+        if tailTop {
+            // The same bubble, mirrored top to bottom.
+            let flipped = SpeechBubble(tailTrailing: tailTrailing).path(in: CGRect(origin: .zero, size: rect.size))
+            return flipped.applying(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: rect.minX, ty: rect.maxY))
+        }
         let tail: CGFloat = 8
         let body = CGRect(x: rect.minX + (tailTrailing ? 0 : tail), y: rect.minY,
                           width: rect.width - tail, height: rect.height)

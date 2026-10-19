@@ -461,6 +461,8 @@ struct GroupRail: View {
     var weatherSymbol = Icons.weather
     /// The sky's base ink (the temperature), so the Weather stop wears the colour it paints.
     var weatherInk: Color? = nil
+    /// Print: how far the weather is from mild (0…1), for the Weather stop's fill.
+    var weatherAmount: Double = 0
     /// The moment wants a note: Voice wears a small dot.
     var voiceBadge = false
     /// Families the read marks as patterns: their icon wears a small dot (the sentence's underline, here).
@@ -491,7 +493,17 @@ struct GroupRail: View {
         return (Double(l.level.rawValue) + l.fraction) / 3
     }
 
+    /// Print: the key never changes hue. Each family's ink, full when something's in the air, faint when not.
     private func groupInk(_ g: RailGroup) -> Color? {
+        if WeatherColor.print {
+            let has: Double
+            switch g {
+            case .weather: has = weatherAmount
+            default: has = g.items.map(amount).max() ?? 0
+            }
+            let ink: Color = g == .weather ? WeatherColor.amber : g == .particles ? WeatherColor.aqua : WeatherColor.violet
+            return ink.opacity(has > 0 ? 1 : 0.38)
+        }
         if g == .weather { return weatherInk.map(legible) }
         guard let top = g.items.max(by: { amount($0) < amount($1) }), amount(top) > 0 else { return nil }
         return legible(WeatherColor.ink(for: top))

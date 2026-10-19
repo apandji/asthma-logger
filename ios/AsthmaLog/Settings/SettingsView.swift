@@ -127,7 +127,7 @@ struct DeveloperSettings: View {
     @AppStorage(Crit.DemoEvent.key) private var critEvent = Crit.DemoEvent.none
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
-    @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.simple
+    @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.print
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false

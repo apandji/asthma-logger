@@ -32,7 +32,7 @@ struct AirRadar: View {
 
     static func ink(_ c: AirProfile.Category) -> Color {
         switch c {
-        case .weather: WeatherColor.temperature(38)
+        case .weather: WeatherColor.print ? WeatherColor.amber : WeatherColor.temperature(38)
         case .biologics: WeatherColor.pollen[2]
         case .particulates: WeatherColor.no2
         case .exertion: Theme.rescueSoft

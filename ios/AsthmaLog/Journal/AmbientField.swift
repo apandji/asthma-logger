@@ -239,10 +239,20 @@ enum WeatherColor {
     static var riso: Bool { UserDefaults.standard.string(forKey: Crit.Inks.key) != Crit.Inks.current.rawValue }
     /// Simple (the default, owner Oct 18): one ink per family. Weather is cool / mild / hot, pollutants all Aqua,
     /// allergens all Violet; amount is size and density, never a different hue. The hour has no colour.
-    static var simple: Bool {
+    static var simple: Bool { UserDefaults.standard.string(forKey: Crit.Inks.key) == Crit.Inks.simple.rawValue }
+    /// Print (the default, owner Oct 18, docs/design/color-review-riso.md): paper and three inks, one per
+    /// family, and hue says only *which*. Weather is one ink too (Amber): its amount is how far the temperature
+    /// is from mild, hot or cold alike, the way the lift table bins it. Hot vs cold is in the words.
+    static var print: Bool {
         let v = UserDefaults.standard.string(forKey: Crit.Inks.key)
-        return v == nil || v == Crit.Inks.simple.rawValue
+        return v == nil || v == Crit.Inks.print.rawValue
     }
+    /// One ink per family in Print and Simple.
+    static var flat: Bool { print || simple }
+    static let amber = Color(red: 0xF2 / 255, green: 0xA9 / 255, blue: 0x3B / 255)
+    static let paperTone = Color(red: 0x8C / 255, green: 0x8A / 255, blue: 0x86 / 255)
+    /// 0 at mild (57–73°F), 1 by 32°F or 98°F.
+    static func weatherAmount(_ f: Double) -> Double { max(0, min(1, (abs(f - 65) - 8) / 25)) }
     static let aqua = Color(red: 0x5E / 255, green: 0xC8 / 255, blue: 0xE5 / 255)
     static let violet = Color(red: 0x9D / 255, green: 0x7A / 255, blue: 0xD2 / 255)
 
@@ -278,7 +288,8 @@ enum WeatherColor {
     /// Heat is the hot end of the temperature scale, cold the cold end; pollutants and pollen their layer inks.
     /// Nil for what isn't the air (journal tags, time, place): the family's own ink stands in.
     static func ink(bin: String, level: String) -> Color? {
-        switch bin {
+        if print, ["temp", "temp_drop", "heat_alert", "humidity"].contains(bin) { return amber }
+        let c: Color? = switch bin {
         case "temp": temperature(level == "hot" ? 88 : level == "cold" ? 30 : 62)
         case "temp_drop": temperature(32)
         case "heat_alert": temperature(92)
@@ -287,12 +298,13 @@ enum WeatherColor {
         case "pm10": pm10
         case "no2": no2
         case "ozone": ozone
-        case "smoke_at_point": simple ? aqua : Color(red: 0.6, green: 0.42, blue: 0.25)
+        case "smoke_at_point": flat ? aqua : Color(red: 0.6, green: 0.42, blue: 0.25)
         case "pollen_tree": pollen[0]
         case "pollen_grass": pollen[1]
         case "pollen_weed": pollen[2]
         default: nil
         }
+        return c
     }
 
     /// Multiply, like a second drum over the first: each channel of the first ink darkened by the second, at
@@ -332,7 +344,7 @@ enum WeatherColor {
     /// The light of the hour over the temperature hue: deep indigo at night, rose at dawn and dusk.
     static func light(_ c: Color, at date: Date?) -> Color {
         guard let date else { return c }
-        if simple {
+        if flat {
             // No hue for the hour: night only prints darker.
             let h = Calendar.current.component(.hour, from: date)
             return h < 5 || h >= 21 ? overprint(c, Color(white: 0.55), 1) : c
@@ -351,18 +363,20 @@ enum WeatherColor {
     static let smog = Color(red: 0.52, green: 0.50, blue: 0.46)
     /// Pollutant layers: fine particles slate, coarse dust sand, NO₂ rust (it's a brown gas), ozone icy cyan.
     /// Riso: Slate, Flat Gold, Brick, Aqua; pollen Green, Sunflower, Violet.
-    static var pm25: Color { simple ? aqua : riso ? hex(0x5E695E) : Color(red: 0.42, green: 0.48, blue: 0.60) }
-    static var pm10: Color { simple ? aqua : riso ? hex(0xBB8B41) : Color(red: 0.86, green: 0.72, blue: 0.50) }
-    static var no2: Color { simple ? aqua : riso ? hex(0xA75154) : Color(red: 0.74, green: 0.38, blue: 0.24) }
-    static var ozone: Color { simple ? aqua : riso ? hex(0x5EC8E5) : Color(red: 0.66, green: 0.92, blue: 1.0) }
+    static var pm25: Color { flat ? aqua : riso ? hex(0x5E695E) : Color(red: 0.42, green: 0.48, blue: 0.60) }
+    static var pm10: Color { flat ? aqua : riso ? hex(0xBB8B41) : Color(red: 0.86, green: 0.72, blue: 0.50) }
+    static var no2: Color { flat ? aqua : riso ? hex(0xA75154) : Color(red: 0.74, green: 0.38, blue: 0.24) }
+    static var ozone: Color { flat ? aqua : riso ? hex(0x5EC8E5) : Color(red: 0.66, green: 0.92, blue: 1.0) }
     static var pollen: [Color] {
-        simple ? [violet, violet, violet] : riso ? [hex(0x00A95C), hex(0xFFB511), hex(0x9D7AD2)]
+        flat ? [violet, violet, violet] : riso ? [hex(0x00A95C), hex(0xFFB511), hex(0x9D7AD2)]
              : [Color(red: 0.36, green: 0.80, blue: 0.46),   // tree: green
                 Color(red: 0.98, green: 0.80, blue: 0.22),   // grass: gold
                 Color(red: 0.72, green: 0.42, blue: 0.95)]   // weed: violet
     }
 
     static func temperature(_ f: Double) -> Color {
+        // Print: paper, with Amber laid on as the temperature leaves mild, in either direction.
+        if print { return paperTone.mix(with: amber, by: 0.85 * weatherAmount(f)) }
         guard let first = stops.first, let last = stops.last else { return .gray }
         if f <= first.f { return first.color }
         if f >= last.f { return last.color }

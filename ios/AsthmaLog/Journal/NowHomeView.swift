@@ -1428,8 +1428,9 @@ struct NowSky: View {
                 // Weather held on the rail: its ink comes up over the whole sky and the particles step back, so
                 // the colour you're reading is the colour that's named (owner, Oct 18).
                 if row == .header(.weather) || (pinned == .header(.weather) && row == nil) {
-                    WeatherColor.light(WeatherColor.temperature(temperature ?? WeatherColor.fallbackTemp(weave)), at: date)
-                        .opacity(0.45)
+                    let t = temperature ?? WeatherColor.fallbackTemp(weave)
+                    (WeatherColor.print ? WeatherColor.amber : WeatherColor.light(WeatherColor.temperature(t), at: date))
+                        .opacity(WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
@@ -1516,6 +1517,7 @@ struct NowSky: View {
             .overlay(alignment: railLeft ? .leading : .trailing) {
                 GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions),
                          weatherInk: WeatherColor.temperature(temperature ?? WeatherColor.fallbackTemp(weave)),
+                         weatherAmount: WeatherColor.weatherAmount(temperature ?? WeatherColor.fallbackTemp(weave)),
                          voiceBadge: selfEvent?.wantsNote ?? false, patterns: patterns, fingerY: railFinger)
                     // The stops sit in one glass well, the same material as the controls above and the + below.
                     .background {

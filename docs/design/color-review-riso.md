@@ -78,3 +78,22 @@ The eleven inks were still too many to read on first look. **Simple** keeps one 
 
 The rail wears the same inks, so it reads as the key. RISO inks and Current stay one switch away
 (Demo › Inks).
+
+## Oct 18, latest: Print (the default)
+
+The data-viz rule that settles it: **hue says *which*, ink coverage says *how much*, nothing else gets hue.**
+Four variables had been sharing hue (family, temperature, verdict, moment kind) and collided.
+
+| What | Ink | How much |
+|---|---|---|
+| Weather | **Amber** #F2A93B | Distance from mild, hot or cold alike (0 at 57–73°F, full by 32°F or 98°F), as the lift table bins it. Hot vs cold is in the words and the probe. |
+| Pollutants | **Aqua** #5EC8E5 | Dot size and density |
+| Allergens | **Violet** #9D7AD2 | Dot size and density |
+| The page | Paper, untinted (night prints darker) | |
+| Verdict | traffic light, timeline callout only | |
+| Moments | size and the tag; orange / teal only where they mean the physical caps | |
+| Yours | underline, rail dot, star: never a hue | |
+
+The rail is the key and never changes hue: every family in its ink, full when it's in the air, faint when it
+isn't. Insights uses the same three inks for the wash, the radar, the card icons, the star and the dots.
+Simple, RISO inks and Current remain under Demo › Inks.

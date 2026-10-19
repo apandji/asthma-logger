@@ -121,6 +121,15 @@ enum Crit {
     }
 
     /// The page: black (ink on night) or linen, a warm off-white paper that suits the riso grain.
+    /// The timeline's look: the original track (small dots, a pill for the time), or Apple Health's
+    /// (the day as a title, a pointer, day labels above, each moment a 35 pt circle, twice as wide a day).
+    enum TimelineLook: String, CaseIterable, Identifiable {
+        case track, health
+        var id: String { rawValue }
+        var title: String { self == .track ? "Track" : "Health (big circles)" }
+        static let key = "crit.timelineLook"
+    }
+
     enum Paper: String, CaseIterable, Identifiable {
         case black, linen
         var id: String { rawValue }

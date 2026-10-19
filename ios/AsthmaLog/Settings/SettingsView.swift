@@ -126,6 +126,7 @@ struct DeveloperSettings: View {
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
     @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.print
+    @AppStorage(Crit.TimelineLook.key) private var critTimeline = Crit.TimelineLook.track
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false
@@ -197,6 +198,9 @@ struct DeveloperSettings: View {
                 Toggle("Demo calendar", isOn: $demoCalendar)
                 Picker("Inks", selection: $critInks) {
                     ForEach(Crit.Inks.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Timeline", selection: $critTimeline) {
+                    ForEach(Crit.TimelineLook.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("Insights state", selection: $critInsightsState) {
                     ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }

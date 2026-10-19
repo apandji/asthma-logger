@@ -45,6 +45,7 @@ struct NowHomeView: View {
     @State private var model = InsightsModel()
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
+    @AppStorage(Crit.TimelineLook.key) private var timelineLook = Crit.TimelineLook.track
     @State private var showInsights = false
     /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
     /// top, the rail's icons, the + at the bottom, all on the same line.
@@ -758,7 +759,7 @@ struct NowHomeView: View {
                            tint: { airTint($0.weave) },
                            forecastTints: tints, verdictTint: playheadTint, verdictText: playheadVerdict,
                            hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
-            .frame(height: 104)
+            .frame(height: timelineLook == .health ? 122 : 104)
             // Full width; the + floats over its end, which fades out beneath it. The other end just softens.
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: fadeIn),
                                          .init(color: .black, location: fadeOut), .init(color: .clear, location: 1)],

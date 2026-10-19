@@ -43,11 +43,16 @@ struct NowTimeline: View {
     @Environment(\.colorScheme) private var scheme
     private var ink: Color { scheme == .light ? Color(red: 0.12, green: 0.1, blue: 0.09) : .white }
 
-    private let dayWidth: CGFloat = 64
+    /// Design crit › Timeline: the original track, or Apple Health's look (big circles, a day as a title).
+    @AppStorage(Crit.TimelineLook.key) private var look = Crit.TimelineLook.track
+    private var health: Bool { look == .health }
+    /// Health's look is twice as wide a day, so its 35 pt circles crowd less.
+    private var dayWidth: CGFloat { health ? 128 : 64 }
     /// Ahead of now the track is this many times wider (16 pt an hour): the forecast is read hour by hour,
     /// and at the past's scale an hour was under 3 pt, too fine to land on (owner, Oct 18).
     private let aheadScale: CGFloat = 6
-    private let axis: CGFloat = 46
+    /// Health's look stacks the title, the day labels and then the circles, so the axis sits lower.
+    private var axis: CGFloat { health ? 96 : 46 }
     private let hourTick = UISelectionFeedbackGenerator()
     private let momentTap = UIImpactFeedbackGenerator(style: .medium)
     private let nowThud = UIImpactFeedbackGenerator(style: .heavy)
@@ -61,7 +66,7 @@ struct NowTimeline: View {
         while h <= end { s.append(x(h)); h = h.addingTimeInterval(3600) }
         return s.sorted()
     }
-    private let height: CGFloat = 86
+    private var height: CGFloat { health ? 118 : 86 }
     private let cal = Calendar.current
 
     private var start: Date {
@@ -103,9 +108,9 @@ struct NowTimeline: View {
         }
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.x } action: { _, cx in scrolled(to: cx) }
         .onScrollPhaseChange { old, phase in phaseChanged(from: old, to: phase) }
-        .overlay(alignment: .top) { playhead }
+        .overlay(alignment: .top) { if health { healthPlayhead } else { playhead } }
         .animation(Theme.snap, value: focusTime == nil)
-        .padding(.top, 24)
+        .padding(.top, health ? 0 : 24)
         .sensoryFeedback(.selection, trigger: currentMoment?.id)
         // Ahead, a tick per hour: the forecast's grain under the thumb. A generator kept warm for the whole
         // drag, and fired directly: `.sensoryFeedback` drops ticks that come fast, and the thumb crosses hours fast.
@@ -187,7 +192,7 @@ struct NowTimeline: View {
                 }
                 // Tap targets for the dots (the marks themselves are drawn above).
                 ForEach(moments) { e in
-                    Color.clear.frame(width: 22, height: 36).contentShape(Rectangle())
+                    Color.clear.frame(width: health ? 36 : 22, height: 36).contentShape(Rectangle())
                         .position(x: x(e.loggedAt), y: axis)
                         .onTapGesture { go(to: e.loggedAt) }
                 }
@@ -303,6 +308,7 @@ struct NowTimeline: View {
         // A rescue with nothing said yet is hollow; it fills once you've noted it.
         for e in moments {
             let on = e.id == currentMoment?.id
+            if health { continue }   // drawn last, over the ticks
             var r: CGFloat = e.moment == .rescue ? 5 : e.moment == .note ? 2.2 : 3.6
             // Just logged: the dot lands, big then settling, over half a second.
             let age = frame.timeIntervalSince(e.loggedAt)
@@ -345,11 +351,73 @@ struct NowTimeline: View {
             if isDay {
                 let label = cal.isDateInToday(t) ? "Today" : cal.isDateInTomorrow(t) ? "Tomorrow"
                     : t.formatted(.dateTime.weekday(.abbreviated).day())
-                ctx.draw(Text(label).font(.caption2.weight(.medium)).tracking(0.3).foregroundStyle(ink.opacity(t > now ? 0.3 : 0.45)),
-                         at: CGPoint(x: (x(t) + x(t.addingTimeInterval(86_400))) / 2, y: axis + 26))
+                let text = health
+                    ? Text(label).font(.footnote.weight(.semibold)).foregroundStyle(ink.opacity(t > now ? 0.3 : 0.55))
+                    : Text(label).font(.caption2.weight(.medium)).tracking(0.3).foregroundStyle(ink.opacity(t > now ? 0.3 : 0.45))
+                // Health's look: the labels sit above the circles, as Health's letters do.
+                ctx.draw(text, at: CGPoint(x: (x(t) + x(t.addingTimeInterval(86_400))) / 2, y: health ? axis - 32 : axis + 26))
             }
             t = cal.date(byAdding: .hour, value: 6, to: t)!
         }
+        // Health's circles sit over the ticks.
+        if health { for e in moments { drawHealthCircle(&ctx, e, on: e.id == currentMoment?.id, frame: frame) } }
+    }
+
+    /// Health's look: each moment a 35 pt circle, filled like Health's logged days. Rescue orange, standard
+    /// pale blue, a note small and grey. A rescue with nothing said yet is a ring until it's noted. The one
+    /// under the playhead gets an outer ring.
+    private func drawHealthCircle(_ ctx: inout GraphicsContext, _ e: LogEvent, on: Bool, frame: Date) {
+        var r: CGFloat = e.moment == .note ? 8 : 17.5
+        let age = frame.timeIntervalSince(e.loggedAt)
+        if !reduceMotion, age >= 0, age < 0.6 { r *= 1 + 0.3 * CGFloat(pow(1 - age / 0.6, 2)) }
+        let fill: Color = e.moment == .rescue ? Theme.rescue : e.moment == .maintenance ? Theme.standardSoft : ink.opacity(0.15)
+        let rect = CGRect(x: x(e.loggedAt) - r, y: axis - r, width: 2 * r, height: 2 * r)
+        if e.wantsNote {
+            ctx.stroke(Path(ellipseIn: rect.insetBy(dx: 1.5, dy: 1.5)), with: .color(fill), lineWidth: 3)
+        } else {
+            ctx.fill(Path(ellipseIn: rect), with: .color(fill))
+        }
+        if on {
+            ctx.stroke(Path(ellipseIn: rect.insetBy(dx: -4, dy: -4)), with: .color(ink), lineWidth: 2)
+        }
+    }
+
+    /// Health's look: the day as a title ("Today, October 19"), the time and the verdict under it, and a
+    /// small pointer down to the line. Away from now, a return arrow; tapping the title goes back to now.
+    private var healthPlayhead: some View {
+        let ahead = focusTime != nil && current > now
+        let day = cal.isDateInToday(current) ? "Today" : cal.isDateInYesterday(current) ? "Yesterday"
+            : cal.isDateInTomorrow(current) ? "Tomorrow" : current.formatted(.dateTime.weekday(.wide))
+        let time = focusTime == nil ? "Now" : current.formatted(.dateTime.hour().minute())
+        let verdict = (ahead || focusTime == nil) ? verdictText : nil
+        // No playhead line: as in Health, the pointer marks the spot.
+        return ZStack(alignment: .top) {
+            VStack(spacing: 3) {
+                Button(action: { go(to: nil) }) {
+                    VStack(spacing: 1) {
+                        HStack(spacing: 6) {
+                            Text("\(day), \(current.formatted(.dateTime.month(.wide).day()))")
+                                .font(.title3.weight(.semibold))
+                            if focusTime != nil {
+                                Image(systemName: ahead ? "arrow.uturn.backward" : "arrow.uturn.forward")
+                                    .font(.footnote.weight(.bold)).opacity(0.5)
+                            }
+                        }
+                        Text([time, verdict].compactMap { $0 }.joined(separator: " · "))
+                            .font(.subheadline).opacity(0.6).lineLimit(1)
+                    }
+                    .foregroundStyle(ink)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .transaction { if dragging { $0.animation = nil } }
+                }
+                .buttonStyle(PressStyle())
+                .disabled(focusTime == nil)
+                .accessibilityLabel(focusTime == nil ? "Now" : "Back to now")
+                Pointer().fill(verdictTint ?? ink).frame(width: 11, height: 6)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     /// Green baseline, yellow a bit like, red matches your flare days; the ink while still learning.
@@ -368,7 +436,7 @@ struct NowTimeline: View {
             if ft > now, abs(x(ft) - x(now)) > 14, [6, 18].contains(cal.component(.hour, from: ft)) {
                 let label = Text(ft.formatted(.dateTime.hour())).font(.caption2.weight(.medium)).foregroundStyle(ink.opacity(0.4))
                 // Just above the strip (the day names are beneath it, and the chip sits higher still).
-                ctx.draw(label, at: CGPoint(x: x(ft), y: axis - 16))
+                ctx.draw(label, at: CGPoint(x: x(ft), y: health ? axis - 32 : axis - 16))
             }
             ft = cal.date(byAdding: .hour, value: 1, to: ft)!
         }
@@ -414,6 +482,18 @@ nonisolated private struct Callout: Shape {
         p.addLine(to: CGPoint(x: rect.midX + 6, y: body.maxY - 0.5))
         p.closeSubpath()
         return Path(p.cgPath.union(Path(roundedRect: body, cornerRadius: 12, style: .continuous).cgPath))
+    }
+}
+
+/// Health's pointer: a small downward triangle over the chosen day.
+nonisolated private struct Pointer: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        p.closeSubpath()
+        return p
     }
 }
 

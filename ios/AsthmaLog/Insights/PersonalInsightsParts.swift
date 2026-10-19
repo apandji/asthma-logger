@@ -26,7 +26,7 @@ struct CategoryCard: View {
                     // The same symbol as the rail's stop, in the category's ink.
                     Image(systemName: Icons.category(axis.category))
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(axis.status == .notTracked ? Theme.secondaryText.opacity(0.5) : AirRadar.ink(axis.category))
+                        .foregroundStyle(axis.status == .notTracked ? Theme.secondaryText.opacity(0.5) : AirRadar.ink(axis))
                         .frame(width: 22)
                     Text(axis.category.title).font(.body.weight(.medium))
                     Spacer(minLength: 8)
@@ -45,7 +45,7 @@ struct CategoryCard: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(selected ? .regular.tint(AirRadar.ink(axis.category).opacity(0.25)) : .regular, in: .rect(cornerRadius: 22))
+        .glassEffect(selected ? .regular.tint(AirRadar.ink(axis).opacity(0.25)) : .regular, in: .rect(cornerRadius: 22))
     }
 
     /// What's inside, in words. No counts on screen (owner, Oct 17); the numbers you see are readings,
@@ -57,8 +57,13 @@ struct CategoryCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
                     if let r = t.row, starred.contains(r.id) {
-                        Image(systemName: "star.fill").font(.caption2).foregroundStyle(AirRadar.ink(axis.category))
+                        Image(systemName: "star.fill").font(.caption2)
+                            .foregroundStyle(WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
                             .accessibilityLabel("Leads your profile")
+                    } else if let r = t.row, t.strength == .strong || t.strength == .some {
+                        // Your pattern, in the same ink as the page's wash and the radar.
+                        Circle().fill(WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
+                            .frame(width: 8, height: 8).accessibilityHidden(true)
                     }
                     Text(t.name).font(.subheadline)
                         .foregroundStyle(t.strength == .notTracked || t.strength == .none ? Theme.secondaryText : .primary)

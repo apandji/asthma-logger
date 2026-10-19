@@ -102,17 +102,8 @@ struct InsightsView: View {
     private var factorColors: [Color] {
         if demoLearned { return [WeatherColor.pollen[2], WeatherColor.pollen[1], WeatherColor.ozone] }
         let rows = (model.report?.gatedRows ?? []).sorted { $0.lift > $1.lift }
-        let inks = rows.compactMap { r -> Color? in
-            switch r.bin {
-            case "pm25": WeatherColor.pm25
-            case "ozone": WeatherColor.ozone
-            case "pollen_weed": WeatherColor.pollen[2]
-            case "temp": WeatherColor.temperature(r.level == "hot" ? 88 : r.level == "cold" ? 30 : 62)
-            case "humidity": Color(red: 0.45, green: 0.6, blue: 0.95)
-            case "smoke_at_point": Color(red: 0.6, green: 0.42, blue: 0.25)
-            default: nil
-            }
-        }
+        // The same inks as the radar and the cards (WeatherColor.ink(bin:level:)).
+        let inks = rows.compactMap { WeatherColor.ink(bin: $0.bin, level: $0.level) }
         var unique: [Color] = []
         for c in inks where !unique.contains(c) { unique.append(c) }
         return unique.isEmpty ? [Color(red: 0.25, green: 0.35, blue: 0.6), Color(red: 0.2, green: 0.45, blue: 0.55), Color(red: 0.35, green: 0.3, blue: 0.55)]

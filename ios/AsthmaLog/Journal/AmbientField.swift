@@ -260,6 +260,27 @@ enum WeatherColor {
         ]
     }
 
+    /// One ink per factor, used everywhere a pattern shows: the Insights wash, the radar, the card dots.
+    /// Heat is the hot end of the temperature scale, cold the cold end; pollutants and pollen their layer inks.
+    /// Nil for what isn't the air (journal tags, time, place): the family's own ink stands in.
+    static func ink(bin: String, level: String) -> Color? {
+        switch bin {
+        case "temp": temperature(level == "hot" ? 88 : level == "cold" ? 30 : 62)
+        case "temp_drop": temperature(32)
+        case "heat_alert": temperature(92)
+        case "humidity": level == "dry" ? temperature(70) : temperature(48)
+        case "pm25": pm25
+        case "pm10": pm10
+        case "no2": no2
+        case "ozone": ozone
+        case "smoke_at_point": Color(red: 0.6, green: 0.42, blue: 0.25)
+        case "pollen_tree": pollen[0]
+        case "pollen_grass": pollen[1]
+        case "pollen_weed": pollen[2]
+        default: nil
+        }
+    }
+
     static func isNight(_ date: Date?) -> Bool {
         guard let date else { return false }
         let h = Calendar.current.component(.hour, from: date)

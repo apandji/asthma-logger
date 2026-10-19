@@ -22,6 +22,14 @@ struct AirRadar: View {
     /// Top, right, bottom, left: clockwise in the rail's order (weather, particles & gases, biologics, self).
     static let order: [AirProfile.Category] = [.weather, .particulates, .biologics, .exertion]
 
+    /// A family's ink for this person: the ink of its strongest pattern (heat → Bright Red, cold air → Medium
+    /// Blue), so the radar, the card and the page's wash agree. No pattern: neutral grey.
+    static func ink(_ a: AirProfile.Axis) -> Color {
+        guard a.status == .pattern || a.status == .early else { return Color(white: 0.55) }
+        if let r = a.lead, let c = WeatherColor.ink(bin: r.bin, level: r.level) { return c }
+        return ink(a.category)
+    }
+
     static func ink(_ c: AirProfile.Category) -> Color {
         switch c {
         case .weather: WeatherColor.temperature(38)
@@ -64,7 +72,7 @@ struct AirRadar: View {
             VStack(spacing: 2) {
                 Text(c.shortTitle).font(.caption.weight(.semibold)).lineLimit(1).fixedSize()
                     .foregroundStyle(axis.status == .notTracked ? Theme.secondaryText : .primary)
-                Circle().fill(on ? Self.ink(c) : .clear).frame(width: 5, height: 5)
+                Circle().fill(on ? Self.ink(axis) : .clear).frame(width: 5, height: 5)
             }
             .padding(.horizontal, 6).padding(.vertical, 4)
             .contentShape(Rectangle())
@@ -97,7 +105,7 @@ private struct RadarDots: View {
                 // A gap of half the moments (say 9 of 14 flare vs 6 of 40 baseline) is already a lot: it reaches the edge.
                 return a.status == .notTracked ? 0 : CGFloat((0.12 + 0.88 * min(1, a.strength / AirRadar.fullGap)) * grown)
             }
-            let inks = AirRadar.order.map(AirRadar.ink)
+            let inks = AirRadar.order.map { AirRadar.ink(profile.axis($0)) }
             let spacing: CGFloat = 7
             let n = Int(R / spacing) + 2
             for j in -n...n {

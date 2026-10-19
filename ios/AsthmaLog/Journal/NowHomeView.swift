@@ -546,7 +546,7 @@ struct NowHomeView: View {
                     // No verdict while it's happening.
                     VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place)),
                                   title: here == nil ? AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions) : nowRead,
-                                  verdict: nil, tint: nil)
+                                  verdict: nil, tint: nil, isNow: true)
                     // The air arriving for this moment: shimmering while it's fetched, then each reading lands.
                     AirReadings(conditions: j.conditions, weave: j.weave, pollen: nil, pending: j.envStatus == .pending)
                         .padding(.top, 6)
@@ -554,19 +554,19 @@ struct NowHomeView: View {
                     // The verdict is on the timeline's chip now (playheadVerdict), not a pill up here.
                     VerdictHeader(place: AnyView(placeLabel(here?.lat, here?.lon, here?.place, current: true)),
                                   title: here == nil ? "Checking the air near you…" : nowRead,
-                                  verdict: nil, tint: nil)
+                                  verdict: nil, tint: nil, isNow: true)
                 }
             case .moment(let m):
                 VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
                               title: backRead(m), verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()),
-                              around: CalendarReader.shared.around(m.loggedAt)?.line)
+                              around: CalendarReader.shared.around(m.loggedAt)?.line, whenDate: m.loggedAt)
             case .hour(let h):
                 // No "Forecast" tag and no verdict pill: the dashed chip on the timeline says it's ahead, and
                 // carries the verdict (playheadVerdict).
                 // What you'll be doing then, beside the air for it (EventKit; the demo calendar in demos).
                 VerdictHeader(place: AnyView(placeField), title: aheadRead(h), verdict: nil, tint: nil,
-                              around: CalendarReader.shared.event(at: h.date)?.line)
+                              around: CalendarReader.shared.event(at: h.date)?.line, whenDate: h.date)
             }
         }
         .padding(.top, 2)
@@ -1975,6 +1975,9 @@ struct VerdictHeader: View {
     var when: String? = nil
     /// What was (or will be) on your calendar then: "Soccer practice, 6:00–7:30 PM" (EventKit, on this iPhone).
     var around: String? = nil
+    /// Apple Health look: the time for the context line under the sentence ("2:40 AM · Work"), or Now.
+    var whenDate: Date? = nil
+    var isNow = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skySettled) private var settled
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -1986,12 +1989,17 @@ struct VerdictHeader: View {
     @State private var breath = false
     private var hasMark: Bool { TheRead.Mark.allCases.contains { title.contains($0.rawValue) } }
 
+    /// Apple Health look: what (the tag) on top, the sentence, then when and where together in one grey line.
+    private var health: Bool { Crit.AppLook.current == .health }
+    private var hasTag: Bool { tag != nil || tagText != nil }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // The context line: tag, place, and the verdict (the place gives way first).
+            if !health || hasTag {
             HStack(spacing: 8) {
                 if let tag { MomentTag(moment: tag) } else if let tagText { MomentTag(moment: .okay, text: tagText) }
-                place.layoutPriority(0)
+                if !health { place.layoutPriority(0) }
                 // With a tag on the line too there's no room for both; the verdict (also in the chip and
                 // the sky's colour) gives way to the place.
                 if verdict != nil { verdictPill.layoutPriority(tagText == nil ? 1 : -1) }
@@ -2000,6 +2008,7 @@ struct VerdictHeader: View {
             .clipped()
             .frame(minHeight: 30, alignment: .leading)
             .padding(Edge.Set(corner.0), max(0, corner.1 - 20))
+            }
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
             // Never cut: the sentence takes the lines it needs and the sky gives up the room.
             // Blurs between readings instead of cutting (the same as ScaleHeader), once the playhead has landed.
@@ -2026,6 +2035,8 @@ struct VerdictHeader: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(TheRead.spoken(title))
                 .animation(settled ? .easeInOut(duration: 0.26) : nil, value: title)
+                // Health look on Now: no tag line, so the sentence starts at the top and keeps clear of Settings.
+                .padding(Edge.Set(corner.0), health && !hasTag ? max(0, corner.1 - 56) : 0)
             // Three levels: the sentence; then what it adds (the rest of the read, near-white, tight under it);
             // then when, smallest and quietest, a step apart. They were one grey and competed (owner, Oct 18).
             VStack(alignment: .leading, spacing: 10) {
@@ -2037,9 +2048,21 @@ struct VerdictHeader: View {
                         .transition(.opacity)
                         .padding(.top, -2)
                 }
-                if when != nil || around != nil {
+                if health {
+                    // When and where, together: "2:40 AM · Work", "Now · Work".
+                    HStack(spacing: 6) {
+                        if let t = isNow ? "Now" : whenDate?.formatted(.dateTime.hour().minute()) {
+                            Text(t)
+                            Text("·")
+                        }
+                        place
+                    }
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+                }
+                if (when != nil && !health) || around != nil {
                     VStack(alignment: .leading, spacing: 4) {
-                        if let when {
+                        if let when, !health {
                             Label(when, systemImage: "clock")
                                 .font(.footnote.weight(.medium)).foregroundStyle(Theme.secondaryText)
                                 .labelStyle(.titleAndIcon).lineLimit(1)

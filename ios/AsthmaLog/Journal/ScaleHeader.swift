@@ -113,13 +113,12 @@ struct MomentTag: View {
     }
 
     /// Apple Health look: a tinted capsule in the timeline's colour (the system's tag style, as in Reminders
-    /// and Health): a small pill like the moment's mark on the timeline, the word in the colour, the colour
-    /// faint behind. Standard's pale blue is too light for words, so its word takes the deeper blue.
+    /// and Health): the SF Symbols inhaler and the word in the colour, the colour faint behind. Standard's pale blue is too light for words, so its word takes the deeper blue.
     private var healthTag: some View {
         let mark = moment == .rescue ? Theme.rescue : Theme.standardSoft
         let word = moment == .rescue ? Theme.rescue : Theme.standard
         return HStack(spacing: 6) {
-            Capsule().fill(mark).frame(width: 6, height: 13)
+            Image(systemName: "inhaler.fill").font(.footnote.weight(.semibold)).foregroundStyle(word)
             Text(moment.title)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(word)

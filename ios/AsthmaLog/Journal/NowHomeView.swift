@@ -1175,9 +1175,8 @@ struct NowHomeView: View {
         // The map first: it's the slowest part and the first thing you see.
         Task { _ = await MapSnapshots.image(id: "here", latitude: lat, longitude: lon, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale) }
         async let c = services.conditions.conditions(latitude: lat, longitude: lon)
-        async let marks = try? CLGeocoder().reverseGeocodeLocation(fix)
-        let place = await marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
-        here = NowReading(lat: lat, lon: lon, place: place, conditions: await c)
+        async let place = PlaceNames.label(for: fix)
+        here = NowReading(lat: lat, lon: lon, place: await place, conditions: await c)
         await loadForecastPlace()
     }
 

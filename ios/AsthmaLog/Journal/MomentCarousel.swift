@@ -289,10 +289,10 @@ enum MapSnapshots {
         options.size = size
         options.pointOfInterestFilter = .excludingAll
         options.preferredConfiguration = MKStandardMapConfiguration(emphasisStyle: .muted)
-        options.traitCollection = UITraitCollection(traitsFrom: [
-            UITraitCollection(userInterfaceStyle: dark ? .dark : .light),
-            UITraitCollection(displayScale: scale),
-        ])
+        options.traitCollection = UITraitCollection { traits in
+            traits.userInterfaceStyle = dark ? .dark : .light
+            traits.displayScale = scale
+        }
         let task = Task { await queue.run(options) }
         inFlight[key] = task
         let image = await task.value
@@ -392,13 +392,27 @@ struct VoiceNoteButton: View {
     }
 }
 
-/// Reverse-geocodes a moment's coordinates once ("University City, MO") and keeps the result on it.
+/// Reverse-geocodes coordinates once ("University City, MO") via MapKit (CLGeocoder is deprecated in iOS 26).
 enum PlaceNames {
+    /// City with short region context — same shape we used to build from CLPlacemark locality + state.
+    static func label(for location: CLLocation) async -> String? {
+        guard let request = MKReverseGeocodingRequest(location: location) else { return nil }
+        guard let item = try? await request.mapItems.first else { return nil }
+        if let city = item.addressRepresentations?.cityWithContext(.short), !city.isEmpty {
+            return city
+        }
+        if let short = item.address?.shortAddress, !short.isEmpty {
+            return short
+        }
+        return item.name
+    }
+
+    static func label(latitude: Double, longitude: Double) async -> String? {
+        await label(for: CLLocation(latitude: latitude, longitude: longitude))
+    }
+
     static func lookUp(_ event: LogEvent) async {
         guard event.placeName == nil, let lat = event.latitude, let lon = event.longitude else { return }
-        let marks = try? await CLGeocoder().reverseGeocodeLocation(CLLocation(latitude: lat, longitude: lon))
-        guard let m = marks?.first else { return }
-        let city = m.locality ?? m.subAdministrativeArea
-        event.placeName = [city, m.administrativeArea].compactMap { $0 }.joined(separator: ", ")
+        event.placeName = await label(latitude: lat, longitude: lon)
     }
 }

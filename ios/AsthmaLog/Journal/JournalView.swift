@@ -504,8 +504,7 @@ struct JournalView: View {
     private func loadNow() async {
         guard now == nil, let fix = try? await services.location.currentLocation(timeout: .seconds(6)) else { return }
         let c = await services.conditions.conditions(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude)
-        let marks = try? await CLGeocoder().reverseGeocodeLocation(fix)
-        let place = marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
+        let place = await PlaceNames.label(for: fix)
         now = (WeaveSpec(c.input), c.best(.temperature)?.value, place)
     }
 

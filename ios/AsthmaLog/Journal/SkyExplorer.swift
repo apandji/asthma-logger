@@ -158,7 +158,7 @@ enum SkyExplorer {
             (temperatureF.map { "\(Int($0.rounded()))" } ?? "–", "°F", humidity)
         }
         var p = SkyProbe(name: facet.title, kind: word, value: value, unit: unit, level: nil, note: note ?? "",
-                         color: WeatherColor.amber, intensity: amount,
+                         color: WeatherColor.weatherInk, intensity: amount,
                          symbol: facet == .change ? Icons.tempDrop : facet == .coldDry ? "thermometer.snowflake" : "thermometer.sun")
         p.before = facet == .change ? lookBack("Weather", conditions) : []
         return p
@@ -532,7 +532,7 @@ struct GroupRail: View {
             case .weather: has = max(weatherAmount, weatherFacets.values.max() ?? 0)
             default: has = g.items.map(amount).max() ?? 0
             }
-            let ink: Color = g == .weather ? WeatherColor.amber : g == .particles ? WeatherColor.aqua : WeatherColor.gold
+            let ink: Color = g == .weather ? WeatherColor.weatherInk : g == .particles ? WeatherColor.aqua : WeatherColor.gold
             return ink.opacity(has > 0 ? 1 : 0.38)
         }
         if g == .weather { return weatherInk.map(legible) }
@@ -565,7 +565,7 @@ struct GroupRail: View {
         case .item(let name):
             // A dot: bigger when there's more of it.
             let d = 5 + 7 * CGFloat(amount(name))
-            let ink = weatherFacets[name] != nil ? WeatherColor.amber : legible(WeatherColor.ink(for: name))
+            let ink = weatherFacets[name] != nil ? WeatherColor.weatherInk : legible(WeatherColor.ink(for: name))
             Circle().fill(amount(name) > 0 ? ink : Color.primary.opacity(on ? 0.95 : 0.4))
                 .frame(width: on ? d + 3 : d, height: on ? d + 3 : d)
                 .frame(width: 30, height: 18)

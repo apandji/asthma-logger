@@ -251,7 +251,7 @@ enum WeatherColor {
     static var flat: Bool { print || simple }
     /// Weather's ink: Fluorescent Pink, a hue with no hot-or-cold meaning (amber said "hot"; blue said "cold"),
     /// and the one free region of the wheel next to aqua, violet and the verdict's green / yellow / red.
-    static var amber: Color { onLinen ? hex(0xF03C9E) : hex(0xFF48B0) }
+    static var weatherInk: Color { onLinen ? hex(0xF03C9E) : hex(0xFF48B0) }
     static let paperTone = Color(red: 0x8C / 255, green: 0x8A / 255, blue: 0x86 / 255)
     /// 0 at mild (57–73°F), 1 by 32°F or 98°F.
     static func weatherAmount(_ f: Double) -> Double { max(0, min(1, (abs(f - 65) - 8) / 25)) }
@@ -296,7 +296,7 @@ enum WeatherColor {
     /// Heat is the hot end of the temperature scale, cold the cold end; pollutants and pollen their layer inks.
     /// Nil for what isn't the air (journal tags, time, place): the family's own ink stands in.
     static func ink(bin: String, level: String) -> Color? {
-        if print, ["temp", "temp_drop", "heat_alert", "humidity"].contains(bin) { return amber }
+        if print, ["temp", "temp_drop", "heat_alert", "humidity"].contains(bin) { return weatherInk }
         let c: Color? = switch bin {
         case "temp": temperature(level == "hot" ? 88 : level == "cold" ? 30 : 62)
         case "temp_drop": temperature(32)
@@ -384,7 +384,7 @@ enum WeatherColor {
 
     static func temperature(_ f: Double) -> Color {
         // Print: paper, with Amber laid on as the temperature leaves mild, in either direction.
-        if print { return paperTone.mix(with: amber, by: 0.7 * weatherAmount(f)) }
+        if print { return paperTone.mix(with: weatherInk, by: 0.7 * weatherAmount(f)) }
         guard let first = stops.first, let last = stops.last else { return .gray }
         if f <= first.f { return first.color }
         if f >= last.f { return last.color }

@@ -377,9 +377,9 @@ struct NowHomeView: View {
             if WeatherColor.print {
                 let paper = WeatherColor.paperTone.mix(with: .black, by: 0.22)
                 switch e {
-                case .storm: return paper.mix(with: WeatherColor.amber, by: 0.5).mix(with: .black, by: 0.35)
-                case .tempDrop: return paper.mix(with: WeatherColor.amber, by: 0.6)
-                case .mold: return paper.mix(with: WeatherColor.amber, by: 0.35)
+                case .storm: return paper.mix(with: WeatherColor.weatherInk, by: 0.5).mix(with: .black, by: 0.35)
+                case .tempDrop: return paper.mix(with: WeatherColor.weatherInk, by: 0.6)
+                case .mold: return paper.mix(with: WeatherColor.weatherInk, by: 0.35)
                 case .smoke: return paper.mix(with: WeatherColor.aqua, by: 0.55)
                 }
             }
@@ -1458,7 +1458,7 @@ struct NowSky: View {
                     (WeatherColor.print ? WeatherColor.aqua : Color(red: 0.62, green: 0.46, blue: 0.32)).opacity(WeatherColor.print ? 0.22 : 0.32).allowsHitTesting(false)
                 }
                 if event == .tempDrop {
-                    LinearGradient(colors: [(WeatherColor.print ? WeatherColor.amber : Color(red: 0.55, green: 0.75, blue: 1)).opacity(0.38), .clear], startPoint: .top, endPoint: .center)
+                    LinearGradient(colors: [(WeatherColor.print ? WeatherColor.weatherInk : Color(red: 0.55, green: 0.75, blue: 1)).opacity(0.38), .clear], startPoint: .top, endPoint: .center)
                         .allowsHitTesting(false)
                 }
                 if event == .storm {
@@ -1469,7 +1469,7 @@ struct NowSky: View {
                 // the colour you're reading is the colour that's named (owner, Oct 18).
                 if row == .header(.weather) || (pinned == .header(.weather) && row == nil) || onWeatherItem {
                     let t = temperature ?? WeatherColor.fallbackTemp(weave)
-                    (WeatherColor.print ? WeatherColor.amber : WeatherColor.light(WeatherColor.temperature(t), at: date))
+                    (WeatherColor.print ? WeatherColor.weatherInk : WeatherColor.light(WeatherColor.temperature(t), at: date))
                         .opacity(WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
                         .allowsHitTesting(false)
                         .transition(.opacity)

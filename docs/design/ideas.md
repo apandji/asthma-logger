@@ -67,3 +67,6 @@ Things noticed while building, not yet decided. Add as you go; move an item out 
   API points; raw readings need the EPA correction (humidity) before they match monitors; indoor sensors must be
   filtered out. A new data source, so: owner's OK, the location card updated (another place the position goes),
   and it counts toward the "hyperlocal" story for the study.
+- **Weather by what it does** (Oct 21): see weather-grouping.md. Three items under Weather (Cold, dry air /
+  Heat and humidity / Sudden change) instead of instruments; pressure joins Sudden change as one bin later
+  (`pressure_change`, from WeatherKit history). Crit switch: Design crit › Weather on the rail.

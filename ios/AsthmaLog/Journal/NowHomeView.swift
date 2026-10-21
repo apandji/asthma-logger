@@ -1393,6 +1393,19 @@ struct NowSky: View {
 
     private var temperature: Double? { scrubTemperature ?? conditions?.best(.temperature)?.value }
     private var layers: AirLayers { AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: true) }
+    /// Design crit › Weather on the rail: Weather's three items and their amounts (empty when the switch is off).
+    private var weatherFacets: [String: Double] {
+        guard Crit.WeatherRail.byFacet else { return [:] }
+        let h = conditions?.best(.humidity)?.value, fall = conditions?.tempFallF
+        return Dictionary(uniqueKeysWithValues: WeatherFacet.allCases.map {
+            ($0.title, $0.amount(temperatureF: temperature, humidityPct: h, tempFallF: fall))
+        })
+    }
+    /// One of Weather's items is being read (or left open): the sky shows Weather's ink, as for the stop.
+    private var onWeatherItem: Bool {
+        guard case .item(let n)? = row ?? pinned else { return false }
+        return RailGroup.weather.items.contains(n)
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -1440,7 +1453,7 @@ struct NowSky: View {
                 }
                 // Weather held on the rail: its ink comes up over the whole sky and the particles step back, so
                 // the colour you're reading is the colour that's named (owner, Oct 18).
-                if row == .header(.weather) || (pinned == .header(.weather) && row == nil) {
+                if row == .header(.weather) || (pinned == .header(.weather) && row == nil) || onWeatherItem {
                     let t = temperature ?? WeatherColor.fallbackTemp(weave)
                     (WeatherColor.print ? WeatherColor.amber : WeatherColor.light(WeatherColor.temperature(t), at: date))
                         .opacity(WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
@@ -1449,7 +1462,7 @@ struct NowSky: View {
                 }
                 ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
                               fragments: stack.map { event == .storm && $0.name.hasSuffix("pollen") },
-                              selected: row == .header(.weather) ? -1 : selectedLayer(stack),
+                              selected: row == .header(.weather) || onWeatherItem ? -1 : selectedLayer(stack),
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
                               rippleInk: rippleInk, scan: true, hollow: sketch,
@@ -1492,7 +1505,7 @@ struct NowSky: View {
                 if let shown = row ?? pinned, let i = rows.firstIndex(of: shown) {
                     let x = railLeft ? 64 + 130 : size.width - 64 - 130, y = min(max(mids[i], 110), size.height - 110)
                     switch shown {
-                    case .header(let g) where !g.items.isEmpty:
+                    case .header(let g) where !g.items.isEmpty && g != .weather:
                         GroupSummary(group: g, layers: layers)
                             .frame(width: 224)
                             .position(x: railLeft ? 64 + 118 : size.width - 64 - 118, y: min(max(mids[i], 90), size.height - 90))
@@ -1531,6 +1544,7 @@ struct NowSky: View {
                 GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions),
                          weatherInk: WeatherColor.temperature(temperature ?? WeatherColor.fallbackTemp(weave)),
                          weatherAmount: WeatherColor.weatherAmount(temperature ?? WeatherColor.fallbackTemp(weave)),
+                         weatherFacets: weatherFacets,
                          voiceBadge: selfEvent?.wantsNote ?? false, patterns: patterns, fingerY: railFinger)
                     // The stops sit in one glass well, the same material as the controls above and the + below.
                     .background {
@@ -1704,7 +1718,8 @@ struct NowSky: View {
                 p = q
             }
         case .item(let n):
-            p = SkyExplorer.layerProbe(n, layers: layers, conditions: conditions, pollen: pollen)
+            p = SkyExplorer.facetProbe(n, conditions: conditions, temperatureF: temperature)
+                ?? SkyExplorer.layerProbe(n, layers: layers, conditions: conditions, pollen: pollen)
         case .voice, .body:
             p = nil   // Self's panels read themselves.
         }

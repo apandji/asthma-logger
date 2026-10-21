@@ -120,6 +120,16 @@ enum Crit {
         static let key = "crit.inks"
     }
 
+    /// Weather on the rail (docs/design/weather-grouping.md): one stop, or three items by what the weather does
+    /// (cold, dry air; heat and humidity; sudden change), all in Weather's ink.
+    enum WeatherRail: String, CaseIterable, Identifiable {
+        case oneStop, facets
+        var id: String { rawValue }
+        var title: String { self == .oneStop ? "One stop (current)" : "By what it does (three items)" }
+        static let key = "crit.weatherRail"
+        static var byFacet: Bool { UserDefaults.standard.string(forKey: key) == WeatherRail.facets.rawValue }
+    }
+
     /// The page: black (ink on night) or linen, a warm off-white paper that suits the riso grain.
     enum Paper: String, CaseIterable, Identifiable {
         case black, linen

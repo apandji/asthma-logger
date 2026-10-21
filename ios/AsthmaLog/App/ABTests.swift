@@ -42,13 +42,13 @@ struct ABTest: Identifiable {
 
     static let all: [ABTest] = [
         .crit("C1", "Colour", "How should risk be coloured?",
-              note: "Risk is how much an hour looks like your flare days: the forecast strip, the verdict pill, the sky's highlight. docs/design/risk-color.md",
+              note: "Risk is how much an hour looks like your flare days: the forecast strip, the verdict pill, the sky's highlight.",
               key: Crit.RiskColor.key, arms: Crit.RiskColor.allCases.map { ($0.rawValue, $0.title) }, default: Crit.RiskColor.today.rawValue),
         .crit("C2", "Colour", "Which inks for the air families?",
-              note: "Print is three inks, one per family (current). The others are earlier rounds.",
+              note: "Print is three inks, one per family. The others are earlier rounds.",
               key: Crit.Inks.key, arms: Crit.Inks.allCases.map { ($0.rawValue, $0.title) }, default: Crit.Inks.print.rawValue),
         .crit("C3", "Now", "Weather on the rail: one stop or three?",
-              note: "Three is by what the weather does: cold and dry, heat and humidity, sudden change. docs/design/weather-grouping.md",
+              note: "Three is by what the weather does: cold and dry, heat and humidity, sudden change.",
               key: Crit.WeatherRail.key, arms: Crit.WeatherRail.allCases.map { ($0.rawValue, $0.title) }, default: Crit.WeatherRail.oneStop.rawValue),
         .crit("C4", "Insights", "How do we say where cold starts for you?",
               note: "Under the Weather card, when your moments show it. Load the data set “Cold, below about 40°F” to see it.",
@@ -139,7 +139,7 @@ struct ABTestsView: View {
                                 Text(t.question).font(.subheadline.weight(.semibold))
                             }
                             Picker(t.question, selection: Binding(get: { _ = version; return t.get() }, set: { t.set($0); version += 1 })) {
-                                ForEach(t.arms, id: \.value) { Text($0.label + ($0.value == t.defaultArm ? " (current)" : "")).tag($0.value) }
+                                ForEach(t.arms, id: \.value) { Text($0.label + ($0.value == t.defaultArm ? " (default)" : "")).tag($0.value) }
                             }
                             .labelsHidden()
                             .pickerStyle(.menu)

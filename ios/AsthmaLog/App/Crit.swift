@@ -125,7 +125,7 @@ enum Crit {
     enum WeatherRail: String, CaseIterable, Identifiable {
         case oneStop, facets
         var id: String { rawValue }
-        var title: String { self == .oneStop ? "One stop (current)" : "By what it does (three items)" }
+        var title: String { self == .oneStop ? "One stop" : "By what it does (three items)" }
         static let key = "crit.weatherRail"
         static var byFacet: Bool { UserDefaults.standard.string(forKey: key) == WeatherRail.facets.rawValue }
     }

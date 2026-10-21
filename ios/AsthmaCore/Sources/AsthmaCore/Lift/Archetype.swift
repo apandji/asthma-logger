@@ -1,14 +1,27 @@
 import Foundation
 
-/// Who you are with the air, in plain words (Personal Insights, Oct 17, 2026). Derived from the profile's
-/// categories with a pattern; provisional by design ("So far…"), and it can change with the seasons, which is
-/// what Profile History records. Names are a first pass for testing, not research-backed types.
+/// Who you are with your triggers, in plain words (Personal Insights, Oct 17; trigger lens, Oct 21, 2026).
+/// Provisional by design ("So far…"), and it can change with the seasons, which is what Profile History records.
+///
+/// Built, not looked up (docs/design/archetypes.md):
+/// 1. Not learned yet → "Still getting to know you". Learned, no family with a gated pattern → "Nothing stands out".
+/// 2. The families with a pattern at least `predominance` of the strongest one's are predominant.
+/// 3. One → its own name; Weather is named by its group (cold, dry air · heat and humidity · sudden change).
+/// 4. Two → a known pair has its own name (`pairs`); any other pair is "<lead>, with <companion>".
+/// 5. Three or more → "Mixed".
+/// Names are a first pass for testing, not research-backed types, and never diagnostic.
 public struct Archetype: Sendable, Equatable {
     public enum Kind: String, Codable, Sendable, CaseIterable {
         case forming, noClearTrigger
-        case weather, biologics, particulates, exertion
-        case hotHazy, weatherAir, seasonal, airborne, weatherEffort, allergenEffort, outdoorEffort
+        // One family leads. Weather by its group; `weather` when its lead row has no group.
+        case weather, coldAir, heatHumid, suddenChange, biologics, particulates, exertion, infections
+        // Known pairs.
+        case hotHazy, coldEffort, stormSeason, seasonal, coldSeason
+        /// Any other pair: named from its lead and companion (`name` on the archetype, kept in the snapshot).
+        case paired
         case mixed
+        // Retired Oct 21 (the four-family profile). Still read from Profile History, never produced.
+        case weatherAir, airborne, weatherEffort, allergenEffort, outdoorEffort
     }
 
     public let kind: Kind
@@ -27,21 +40,11 @@ public struct Archetype: Sendable, Equatable {
         let main = patterns.filter { $0.strength >= top.strength * Self.predominance }
         let cats = main.map(\.category)
         let leads = main.compactMap(\.lead)
-        let kind: Kind
-        switch Set(cats) {
-        case [.weather]: kind = .weather
-        case [.biologics]: kind = .biologics
-        case [.particulates]: kind = .particulates
-        case [.exertion]: kind = .exertion
-        case [.weather, .particulates]:
-            let hot = main.first { $0.category == .weather }?.lead.map { ($0.bin == "temp" && $0.level == "hot") || $0.bin == "heat_alert" } ?? false
-            kind = hot ? .hotHazy : .weatherAir
-        case [.weather, .biologics]: kind = .seasonal
-        case [.biologics, .particulates]: kind = .airborne
-        case [.weather, .exertion]: kind = .weatherEffort
-        case [.biologics, .exertion]: kind = .allergenEffort
-        case [.particulates, .exertion]: kind = .outdoorEffort
-        default: kind = .mixed
+        let facet = main.first { $0.category == .weather }?.lead.flatMap { WeatherFacet.of(bin: $0.bin, level: $0.level) }
+        let kind: Kind = switch cats.count {
+        case 1: Self.single(cats[0], facet: facet)
+        case 2: Self.pair(Set(cats), facet: facet) ?? .paired
+        default: .mixed
         }
         self.init(kind: kind, categories: cats, leads: leads)
     }
@@ -52,24 +55,87 @@ public struct Archetype: Sendable, Equatable {
         self.leads = leads
     }
 
-    public var name: String { Self.name(kind) }
+    static func single(_ c: AirProfile.Category, facet: WeatherFacet?) -> Kind {
+        switch c {
+        case .weather:
+            switch facet {
+            case .coldDry: .coldAir
+            case .heatHumid: .heatHumid
+            case .change: .suddenChange
+            case nil: .weather
+            }
+        case .biologics: .biologics
+        case .particulates: .particulates
+        case .exertion: .exertion
+        case .infections: .infections
+        }
+    }
+
+    /// The pairs with a name of their own: combinations the research describes as a kind of person, not every
+    /// pair. The weather group decides which one.
+    static func pair(_ cats: Set<AirProfile.Category>, facet: WeatherFacet?) -> Kind? {
+        switch (cats, facet) {
+        case ([.weather, .particulates], .heatHumid): .hotHazy
+        case ([.weather, .exertion], .coldDry): .coldEffort
+        case ([.weather, .biologics], .change): .stormSeason
+        case ([.weather, .biologics], _): .seasonal
+        case ([.weather, .infections], .coldDry), ([.weather, .infections], .change): .coldSeason
+        default: nil
+        }
+    }
+
+    public var name: String {
+        guard kind == .paired, categories.count == 2 else { return Self.name(kind) }
+        return "\(Self.name(Self.single(categories[0], facet: facet))), with \(companion(categories[1]))"
+    }
+
+    /// The weather group behind this archetype, if weather is in it.
+    public var facet: WeatherFacet? {
+        guard categories.contains(.weather) else { return nil }
+        return leads.lazy.compactMap { WeatherFacet.of(bin: $0.bin, level: $0.level) }.first
+    }
 
     public static func name(_ k: Kind) -> String {
         switch k {
         case .forming: "Still getting to know you"
         case .noClearTrigger: "Nothing stands out yet"
         case .weather: "Weather-sensitive"
+        case .coldAir: "Cold-air sensitive"
+        case .heatHumid: "Heat-sensitive"
+        case .suddenChange: "Sensitive to sudden changes"
         case .biologics: "Allergen-led"
         case .particulates: "Air-quality-led"
         case .exertion: "Effort-led"
+        case .infections: "Comes with colds"
         case .hotHazy: "Hot, hazy days"
-        case .weatherAir: "Weather and air quality"
+        case .coldEffort: "Cold air and effort"
+        case .stormSeason: "Storm season"
         case .seasonal: "Seasonal"
+        case .coldSeason: "Cold season"
+        case .paired: "Two things together"
+        case .mixed: "Mixed"
+        case .weatherAir: "Weather and air quality"
         case .airborne: "Airborne"
         case .weatherEffort: "Weather and effort"
         case .allergenEffort: "Allergens and effort"
         case .outdoorEffort: "Outdoor effort"
-        case .mixed: "Mixed"
+        }
+    }
+
+    /// "with poor air", "with colds going around".
+    private func companion(_ c: AirProfile.Category) -> String {
+        switch c {
+        case .weather:
+            switch facet {
+            case .coldDry: "cold air"
+            case .heatHumid: "heat"
+            case .change: "sudden changes"
+            case nil: "the weather"
+            }
+        case .biologics: "allergens"
+        case .particulates: "poor air"
+        case .exertion: "effort"
+        case .infections: "colds going around"
         }
     }
 
@@ -77,32 +143,33 @@ public struct Archetype: Sendable, Equatable {
     public var line: String {
         switch kind {
         case .forming: "Your profile appears once there are enough rescue and baseline moments to compare."
-        case .noClearTrigger: "Nothing in the air shows up much more on your flare days than on others. That's worth knowing too."
-        case .weather: "Your flare days follow the weather: heat, cold snaps or humid air."
+        case .noClearTrigger: "Nothing we track shows up much more on your flare days than on others. That's worth knowing too."
+        case .weather: "Your flare days follow the weather."
+        case .coldAir: "Your flare days tend to come with cold or dry air."
+        case .heatHumid: "Your flare days tend to be hot, or heavy and humid."
+        case .suddenChange: "Your flare days tend to follow a sharp drop in temperature or a change in the weather."
         case .biologics: "Your flare days line up with living things in the air: pollen, pets or mold."
         case .particulates: "Your flare days line up with what's floating in the air: ozone, fine particles or smoke."
         case .exertion: "Your flare days come with effort: exercise, or laughing or crying hard."
+        case .infections: "Your flare days tend to come when colds and flu are going around."
         case .hotHazy: "Your flare days tend to be hot, with ozone or fine particles up."
-        case .weatherAir: "Your flare days follow both the weather and what's in the air."
+        case .coldEffort: "Your flare days come with effort in cold or dry air."
+        case .stormSeason: "Your flare days come when the weather turns while pollen is up."
         case .seasonal: "Your flare days follow the seasons: the weather and what's growing."
-        case .airborne: "Your flare days line up with what's in the air, living or not: pollen, particles, smoke."
-        case .weatherEffort: "Your flare days come with effort in certain weather."
-        case .allergenEffort: "Your flare days come with effort while pollen or other allergens are around."
-        case .outdoorEffort: "Your flare days come with effort while the air is poor."
+        case .coldSeason: "Your flare days come in the cold season: cold air, and colds going around."
+        case .paired: "Your flare days come with \(companion(categories[0])), and often \(companion(categories[1])) too."
         case .mixed: "Several kinds of things show up on your flare days: \(mixedList)."
+        case .weatherAir: "Your flare days followed both the weather and what's in the air."
+        case .airborne: "Your flare days lined up with what's in the air, living or not."
+        case .weatherEffort: "Your flare days came with effort in certain weather."
+        case .allergenEffort: "Your flare days came with effort while allergens were around."
+        case .outdoorEffort: "Your flare days came with effort while the air was poor."
         }
     }
 
-    /// "the weather, particles and gases and effort".
+    /// "the weather, poor air and effort".
     private var mixedList: String {
-        let names = categories.map { c -> String in
-            switch c {
-            case .weather: "the weather"
-            case .particulates: "particles and gases"
-            case .biologics: "pollen and other living things"
-            case .exertion: "effort"
-            }
-        }
+        let names = categories.map(companion)
         return names.count > 1 ? names.dropLast().joined(separator: ", ") + " and " + names.last! : names.joined()
     }
 
@@ -160,6 +227,7 @@ public extension AirProfile {
         .biologics: ["Tree pollen", "Grass pollen", "Mould spores"],
         .particulates: ["Coarse dust (PM10)", "Traffic fumes (NO₂)"],
         .exertion: [],
+        .infections: ["Coming down with something"],
     ]
 
     /// Every trigger in a category: the biggest flare-vs-baseline gap first (that's the one that leads the
@@ -221,17 +289,21 @@ public struct Rhythm: Sendable, Equatable {
 public struct ProfileSnapshot: Codable, Sendable, Equatable, Identifiable {
     public let date: Date
     public let kind: Archetype.Kind
+    /// The archetype's name when it was kept: a `paired` name is built from its families, so it's stored.
+    public let name: String?
     /// Strength per category, in `AirProfile.Category.allCases` order.
     public let strengths: [Double]
     public var id: Date { date }
 
-    public init(date: Date, kind: Archetype.Kind, strengths: [Double]) {
-        self.date = date; self.kind = kind; self.strengths = strengths
+    public init(date: Date, kind: Archetype.Kind, name: String? = nil, strengths: [Double]) {
+        self.date = date; self.kind = kind; self.name = name; self.strengths = strengths
     }
 
     public init(date: Date, profile: AirProfile, archetype: Archetype) {
-        self.init(date: date, kind: archetype.kind, strengths: AirProfile.Category.allCases.map { profile.axis($0).strength })
+        self.init(date: date, kind: archetype.kind, name: archetype.name, strengths: AirProfile.Category.allCases.map { profile.axis($0).strength })
     }
+
+    public var title: String { name ?? Archetype.name(kind) }
 
     /// The history with this snapshot added when the archetype changed or a month has passed.
     /// "Still getting to know you" is never recorded.
@@ -239,6 +311,6 @@ public struct ProfileSnapshot: Codable, Sendable, Equatable, Identifiable {
         guard s.kind != .forming else { return history }
         guard let last = history.last else { return [s] }
         let monthOld = s.date.timeIntervalSince(last.date) >= 30 * 86_400
-        return last.kind != s.kind || monthOld ? history + [s] : history
+        return last.kind != s.kind || last.title != s.title || monthOld ? history + [s] : history
     }
 }

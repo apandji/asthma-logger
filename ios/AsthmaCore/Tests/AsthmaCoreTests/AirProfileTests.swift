@@ -3,7 +3,8 @@ import Testing
 
 @Suite struct AirProfileTests {
     @Test func everyBinHasAFamilyOrIsKnowinglyLeftOut() {
-        let outside: Set<String> = ["hour", "season", "place", "indoor_outdoor"]
+        // Stress is a tag only, never sampled on baselines: off the radar until it has a signal (trigger lens).
+        let outside: Set<String> = ["hour", "season", "place", "indoor_outdoor", "tag_stress"]
         for def in Bins.all where !outside.contains(def.bin) {
             #expect(AirProfile.Category.of(bin: def.bin) != nil, "\(def.bin) has no family")
         }
@@ -17,7 +18,8 @@ import Testing
 
     @Test func demoFramesGiveABoundedShapeWithCounts() {
         let p = AirProfile(report: Lift.compute(DemoData.frames(), gate: .demo))
-        #expect(p.axes.count == 4)
+        #expect(p.axes.count == 5)
+        #expect(p.axis(.infections).status == .notTracked)
         #expect(p.axes.allSatisfy { (0...1).contains($0.strength) })
         // No reviewed notes in the demo frames: exertion can't be read yet.
         #expect(p.axis(.exertion).status == .notTracked)

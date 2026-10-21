@@ -1,46 +1,55 @@
 import Foundation
 
-/// The Insights radar (FigJam "On Insights", Oct 17, 2026): the lift table folded into four families of things
+/// The Insights radar (FigJam "On Insights", Oct 17, 2026): the lift table folded into five trigger families of things
 /// that show up on flare days. Code finds the shape; nothing here is a model or a prediction.
 ///
 /// Each axis's strength is the biggest gap, among its rows, between how often a level shows up on flare
 /// moments and how often on baseline ones (`attackRate - baselineRate`, 0…1). A gap is a share of moments,
 /// so it's bounded and honest where lift can run to infinity on small counts. Raw counts travel with it.
 public struct AirProfile: Sendable, Equatable {
+    /// The guideline trigger families (GINA, NAEPP; docs/research/trigger-lens.md), five on the radar: the air's
+    /// three, then the two about you. Stress and strong feelings are tags only, never sampled on baselines, so
+    /// they stay off the radar until they have a signal that can be compared. Raw values are stored in Profile
+    /// History: keep them (`exertion` reads "Exercise").
     public enum Category: String, Sendable, CaseIterable, Identifiable {
-        case weather, biologics, particulates, exertion
+        case weather, biologics, particulates, exertion, infections
         public var id: String { rawValue }
 
         public var title: String {
             switch self {
-            case .weather: "Weather dynamics"
+            case .weather: "Weather"
             case .biologics: "Allergens"
-            case .particulates: "Pollutants"
-            // Effort, stress and the like: about you, not the air (owner, Oct 17). Never on the map.
-            case .exertion: "Self"
+            case .particulates: "Irritants and pollution"
+            case .exertion: "Exercise"
+            // Colds going around and colds you mention. Never "infection" about you.
+            case .infections: "Colds and flu"
             }
         }
 
         /// What goes in it, in plain words.
         public var covers: String {
             switch self {
-            case .weather: "Heat, cold, humidity and sudden drops"
+            case .weather: "Cold, dry air, heat and humidity, sudden changes"
             case .biologics: "Pollen, mold, pets"
-            case .particulates: "Fine particles, ozone, smoke, fumes"
-            case .exertion: "Effort, exercise, stress, laughing or crying hard, colds"
+            case .particulates: "Fine particles, ozone, smoke, fumes, strong scents"
+            case .exertion: "Being active, laughing or crying hard"
+            case .infections: "Flu-like illness around, colds you mention"
             }
         }
 
+        /// About you, not the air: printed in the text colour, never on the map.
+        public var isBody: Bool { self == .exertion || self == .infections }
+
         /// Which lift-table bins belong here. Time and place (hour, season, place, indoor/outdoor) and stress
-        /// sit outside the four families.
+        /// sit outside the families.
         public static func of(bin: String) -> Category? {
             switch bin {
-            case "temp", "humidity", "temp_drop", "heat_alert", "tag_coldAir": .weather
+            case "temp", "humidity", "temp_drop", "heat_alert", "tag_coldAir", "pressure_change", "storm": .weather
             case "pollen_weed", "pollen_tree", "pollen_grass", "tag_pets", "tag_mold": .biologics
             case "pm25", "ozone", "smoke_at_point", "tag_smoke", "tag_dust", "tag_cleaningProducts", "tag_strongScents",
                  "tag_cooking": .particulates
-            // Colds are how you are, not the air (Allergens, owner Oct 18).
-            case "tag_exercise", "tag_laughingOrCrying", "tag_stress", "tag_coldOrFlu", "exertion": .exertion
+            case "tag_exercise", "tag_laughingOrCrying", "exertion": .exertion
+            case "ili", "tag_coldOrFlu": .infections
             default: nil
             }
         }
@@ -120,6 +129,7 @@ public struct AirProfile: Sendable, Equatable {
             Axis(category: .biologics, strength: gap(weed), status: .pattern, lead: weed),
             Axis(category: .particulates, strength: gap(ozone), status: .pattern, lead: ozone),
             Axis(category: .exertion, strength: gap(exercise), status: .early, lead: exercise),
+            Axis(category: .infections, strength: 0, status: .notTracked, lead: nil),
         ])
     }()
 }

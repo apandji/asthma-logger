@@ -89,7 +89,7 @@ struct AirReadings: View {
         case .weather: Icons.weather
         case .particulates: Icons.particles
         case .biologics: Icons.biologics
-        case .exertion: Icons.me
+        case .exertion, .infections: Icons.category(f)
         }
     }
 

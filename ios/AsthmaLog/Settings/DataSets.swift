@@ -148,6 +148,7 @@ enum DataSets {
             e.envStatus = .ready
             e.tags = m.tags
             e.tagsReviewed = m.tagsReviewed
+            e.infection = m.infection
             let place = DemoRoute.place(at: m.at)
             (e.latitude, e.longitude) = DemoRoute.coordinate(for: place, at: m.at)
             e.horizontalAccuracy = 15

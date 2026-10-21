@@ -175,7 +175,7 @@ struct ProfileHistoryView: View {
                 .frame(width: 72, height: 72)
             VStack(alignment: .leading, spacing: 3) {
                 Text(label).font(.caption).foregroundStyle(Theme.secondaryText)
-                Text(Archetype.name(s.kind)).font(.body.weight(.medium))
+                Text(s.title).font(.body.weight(.medium))
             }
             Spacer(minLength: 0)
         }

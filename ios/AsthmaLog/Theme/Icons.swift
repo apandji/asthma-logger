@@ -8,6 +8,8 @@ enum Icons {
     static let particles = "aqi.medium"
     static let biologics = "allergens"
     static let me = "person.fill"
+    static let exercise = "figure.run"
+    static let colds = "facemask.fill"
     /// Your voice and your body: their own stops on the rail.
     static let voice = "waveform"
     static let body = "figure.walk"
@@ -32,7 +34,8 @@ enum Icons {
         case .weather: weather
         case .particulates: particles
         case .biologics: biologics
-        case .exertion: me
+        case .exertion: exercise
+        case .infections: colds
         }
     }
 

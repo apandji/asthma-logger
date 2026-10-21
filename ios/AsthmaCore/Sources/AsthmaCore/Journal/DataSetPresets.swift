@@ -5,48 +5,59 @@ import Foundation
 /// often on rescue moments. They go through the real pipeline (frames → lift → profile → archetype), so
 /// "Allergen-led" is computed, not forced. `DataSetPresetTests` checks each lands where it says.
 public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
-    case stillLearning, allergenLed, airQualityLed, weatherSensitive, hotHazy, effortLed, mixed, nothingStandsOut
+    case stillLearning, nothingStandsOut
+    // One family leads.
+    case allergenLed, airQualityLed, coldAir, heatSensitive, suddenChange, effortLed, comesWithColds
+    // Known pairs.
+    case hotHazy, coldEffort, stormSeason, seasonal, coldSeason
+    // Any other pair, then three or more.
+    case allergenEffort, mixed
 
     public var id: String { rawValue }
 
-    public var title: String {
-        switch self {
-        case .stillLearning: "Still learning"
-        case .allergenLed: "Allergen-led"
-        case .airQualityLed: "Air-quality-led"
-        case .weatherSensitive: "Weather-sensitive"
-        case .hotHazy: "Hot, hazy days"
-        case .effortLed: "Effort-led"
-        case .mixed: "Mixed"
-        case .nothingStandsOut: "Nothing stands out"
-        }
-    }
+    public var title: String { expected == .paired ? "Effort-led, with allergens" : Archetype.name(expected) }
 
     /// The archetype the preset should produce.
     public var expected: Archetype.Kind {
         switch self {
         case .stillLearning: .forming
+        case .nothingStandsOut: .noClearTrigger
         case .allergenLed: .biologics
         case .airQualityLed: .particulates
-        case .weatherSensitive: .weather
-        case .hotHazy: .hotHazy
+        case .coldAir: .coldAir
+        case .heatSensitive: .heatHumid
+        case .suddenChange: .suddenChange
         case .effortLed: .exertion
+        case .comesWithColds: .infections
+        case .hotHazy: .hotHazy
+        case .coldEffort: .coldEffort
+        case .stormSeason: .stormSeason
+        case .seasonal: .seasonal
+        case .coldSeason: .coldSeason
+        case .allergenEffort: .paired
         case .mixed: .mixed
-        case .nothingStandsOut: .noClearTrigger
         }
     }
 
-    enum Raise: CaseIterable { case weed, ozone, pm25, humid, hot, drop, exercise }
+    enum Raise: CaseIterable { case weed, ozone, pm25, humid, hot, cold, dry, drop, exercise, ili }
 
     var raised: Set<Raise> {
         switch self {
         case .stillLearning, .allergenLed: [.weed]
-        case .airQualityLed: [.ozone, .pm25]
-        case .weatherSensitive: [.humid, .drop]
-        case .hotHazy: [.hot, .ozone]
-        case .effortLed: [.exercise]
-        case .mixed: [.weed, .ozone, .humid]
         case .nothingStandsOut: []
+        case .airQualityLed: [.ozone, .pm25]
+        case .coldAir: [.cold, .dry]
+        case .heatSensitive: [.hot, .humid]
+        case .suddenChange: [.drop]
+        case .effortLed: [.exercise]
+        case .comesWithColds: [.ili]
+        case .hotHazy: [.hot, .ozone]
+        case .coldEffort: [.cold, .dry, .exercise]
+        case .stormSeason: [.drop, .weed]
+        case .seasonal: [.humid, .weed]
+        case .coldSeason: [.cold, .ili]
+        case .allergenEffort: [.weed, .exercise]
+        case .mixed: [.weed, .ozone, .humid]
         }
     }
 
@@ -58,6 +69,8 @@ public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
         public let conditions: Conditions
         public let tags: Set<JournalTag>
         public let tagsReviewed: Bool
+        /// Flu-like illness around that day, only in presets about it. Real moments aren't stamped (`Infection`).
+        public let infection: InfectionLevel?
     }
 
     /// The preset's moments, oldest first, ending at `end`. Same seed, same Journal.
@@ -83,6 +96,10 @@ public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
             if on(.humid) { rh = rng.normal(82, 5) }
             if on(.hot) { t = rng.normal(94, 2) }
             if on(.drop) { fall = rng.normal(19, 2) }
+            if on(.cold) { t = rng.normal(24, 4) }
+            if on(.dry) { rh = rng.normal(24, 4) }
+            var ili: InfectionLevel?
+            if raised.contains(.ili) { ili = on(.ili) ? .high : (rng.chance(0.7) ? .low : .moderate) }
             let tags: Set<JournalTag> = on(.exercise) ? [.exercise] : []
             let src = "Data set"
             var c = Conditions(observations: [
@@ -94,7 +111,7 @@ public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
                                spatialScale: .modelGrid, category: weed),
             ], fetchedAt: at)
             c.tempFallF = fall
-            out.append(Moment(kind: rescue ? .rescue : .okay, at: at, conditions: c, tags: tags, tagsReviewed: reviewed))
+            out.append(Moment(kind: rescue ? .rescue : .okay, at: at, conditions: c, tags: tags, tagsReviewed: reviewed, infection: ili))
         }
         return out.sorted { $0.at < $1.at }
     }

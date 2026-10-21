@@ -9,7 +9,8 @@ import Testing
         let frames = p.moments(endingAt: end).compactMap { m -> FeatureFrame? in
             guard let kind = m.kind.frameKind else { return nil }
             return FrameBuilder.frame(id: UUID().uuidString, kind: kind, date: m.at, conditions: m.conditions.input,
-                                      tags: m.tags, tagsReviewed: m.tagsReviewed)
+                                      tags: m.tags, tagsReviewed: m.tagsReviewed,
+                                      infection: m.infection)
         }
         let report = Lift.compute(frames, gate: .default)
         let learned = report.nAttacks >= LiftGate.default.minAttacks && report.nBaselines >= LiftGate.default.minBaselines
@@ -19,7 +20,7 @@ import Testing
     @Test(arguments: DataSetPreset.allCases)
     func eachPresetLandsOnItsArchetype(_ p: DataSetPreset) {
         let (a, report) = Self.archetype(p)
-        #expect(a.kind == p.expected, "\(p.title) came out \(a.name). Gated: \(report.gatedRows.map { "\($0.bin):\($0.level) \($0.attacksWith)/\($0.nAttacks) vs \($0.baselinesWith)/\($0.nBaselines)" })")
+        #expect(a.kind == p.expected && a.name == p.title, "\(p.title) came out \(a.name). Gated: \(report.gatedRows.map { "\($0.bin):\($0.level) \($0.attacksWith)/\($0.nAttacks) vs \($0.baselinesWith)/\($0.nBaselines)" })")
     }
 
     @Test func sameSeedSameJournal() {

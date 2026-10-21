@@ -4,9 +4,10 @@ import Foundation
 /// v3 reads journal tags as missing (not "no") on frames without a reviewed note;
 /// v4 adds `temp_drop` (a fall of 10°F or more in the 3 hours before, `TempDrop`);
 /// v5 adds `exertion` (active in the hour before: a workout, running or cycling, or a burst of steps; `Exertion`).
+/// v6 adds `ili` (flu-like illness around that day, `Infection`; missing until stamped).
 /// Bump when any edge changes and regenerate `fixtures/` (fixtures cover the v1 bins only).
 public enum BinSpec {
-    public static let version = 5
+    public static let version = 6
 }
 
 public enum FrameKind: String, Codable, Sendable, CaseIterable {
@@ -74,8 +75,8 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
     /// v5 (iOS only): active in the hour before (Health workouts, Motion, steps). Nil when neither Health nor
     /// Motion could say: missing, not "no".
     public var exerted: Bool?
-    /// Later (not MVP, `Infection`): flu-like illness around that day. Nil = not stamped: missing, not "low".
-    /// No bin reads it until `Infection.isEnabled`.
+    /// v6 (`Infection`): flu-like illness around that day. Nil = not stamped: missing, not "low". Real moments
+    /// aren't stamped until `Infection.isEnabled` (later, not MVP); data sets carry it.
     public var infection: InfectionLevel?
 
     /// Whether the journal-tag bins have data for this frame. A confirmed tag implies a review.

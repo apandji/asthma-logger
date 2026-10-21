@@ -5,8 +5,9 @@ import Testing
 @Suite struct InfectionTests {
     @Test func offForTheMVP() {
         #expect(Infection.isEnabled == false)
-        #expect(!Bins.all.contains { $0.bin == Infection.bin })
-        #expect(Bins.later.contains { $0.bin == Infection.bin })
+        // Counted (v6), so data sets can show it; real moments carry nothing until it's on.
+        #expect(Bins.all.contains { $0.bin == Infection.bin })
+        #expect(AirProfile.Category.of(bin: Infection.bin) == .infections)
     }
 
     @Test func providerWordsBecomeLevels() {
@@ -18,7 +19,7 @@ import Testing
     }
 
     @Test func unstampedIsMissingNotLow() {
-        let def = Bins.later.first { $0.bin == Infection.bin }!
+        let def = Bins.all.first { $0.bin == Infection.bin }!
         var f = FeatureFrame(id: "a", kind: .attack, hourOfDay: 9, season: .winter)
         #expect(def.levelOf(f) == nil)
         #expect(def.population([f]).isEmpty)

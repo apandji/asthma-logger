@@ -56,6 +56,12 @@ public enum Bins {
         BinDef(bin: "temp_drop", isBoolean: true) { $0.tempDrop == .unknown ? nil : yesNo($0.tempDrop == .sharp) },
         // v5: only frames Health or Motion could speak for; the rest are missing, not "no".
         BinDef(bin: "exertion", isBoolean: true, sampled: { $0.exerted != nil }) { f in f.exerted.map(yesNo) },
+        // v6: flu-like illness around (`Infection`), only days the area level was stamped; the rest are
+        // missing, not "low". Nothing real is stamped until `Infection.isEnabled`; data sets carry it.
+        BinDef(bin: Infection.bin, isBoolean: false, sampled: { $0.infection.map { $0 != .unknown } ?? false }) { f in
+            guard let l = f.infection, l != .unknown else { return nil }
+            return l.rawValue
+        },
     ] + JournalTag.triggers.map { tag in
         // Triggers only (symptoms and outcomes are recorded, never bins). Only frames with a reviewed note:
         // an unreviewed moment is missing, not "no".
@@ -63,15 +69,6 @@ public enum Bins {
             f.tagsSampled ? yesNo(f.tags.contains(tag)) : nil
         }
     }
-
-    /// Built but not counted: later bins (not MVP). Turning one on = append it to `all` and bump `BinSpec`.
-    public static let later: [BinDef] = [
-        // Infections (`Infection`): only days the area level was stamped; the rest are missing, not "low".
-        BinDef(bin: Infection.bin, isBoolean: false, sampled: { $0.infection.map { $0 != .unknown } ?? false }) { f in
-            guard let l = f.infection, l != .unknown else { return nil }
-            return l.rawValue
-        },
-    ]
 
     public static func label(_ bin: String) -> String {
         switch bin {

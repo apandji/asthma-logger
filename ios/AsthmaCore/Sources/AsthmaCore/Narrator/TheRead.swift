@@ -42,6 +42,8 @@ public enum TheRead {
         case ("heat_alert", "yes"): "A heat alert"
         case ("temp_drop", "yes"): "A sharp temperature drop"
         case ("exertion", "yes"): "Being active"
+        case ("ili", "high"): "Flu-like illness going around"
+        case ("ili", "moderate"): "Some flu-like illness around"
         case ("hour", let part): "The \(part)"
         case ("indoor_outdoor", let io): io == "indoor" ? "Being indoors" : "Being outdoors"
         case (let b, _) where b.hasPrefix("tag_"): Bins.label(b)

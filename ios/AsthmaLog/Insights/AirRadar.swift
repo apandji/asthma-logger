@@ -1,8 +1,9 @@
 import AsthmaCore
 import SwiftUI
 
-/// The Insights radar, in the app's print language: a diamond of riso dots on the page, four families on its
-/// corners (weather on top, particulates right, exertion below, biologics left, as on the FigJam board).
+/// The Insights radar, in the app's print language: a pentagon of riso dots on the page, the five trigger
+/// families on its corners. The air's three across the top (weather at the top, irritants right, allergens
+/// left), the two about you below (exercise right, colds and flu left).
 /// Your shape is the dots that swell and take each family's ink, out to how much more often that family shows
 /// up on your flare days than on baseline ones. A family with a pattern gets a solid corner; one that's only
 /// leaning gets a hollow one; one not tracked yet stays at the centre. It draws itself in once; tap a corner
@@ -19,8 +20,14 @@ struct AirRadar: View {
     /// The flare-vs-baseline gap that reaches the edge. Rings sit at a third and two thirds of it.
     static let fullGap = 0.5
 
-    /// Top, right, bottom, left: clockwise in the rail's order (weather, particles & gases, biologics, self).
-    static let order: [AirProfile.Category] = [.weather, .particulates, .biologics, .exertion]
+    /// Clockwise from the top.
+    static let order: [AirProfile.Category] = [.weather, .particulates, .exertion, .infections, .biologics]
+
+    /// Corner k's direction (unit vector, screen coordinates), the first one straight up.
+    static func direction(_ k: Int) -> CGPoint {
+        let a = -Double.pi / 2 + 2 * Double.pi * Double(k) / Double(order.count)
+        return CGPoint(x: cos(a), y: sin(a))
+    }
 
     /// A family's ink for this person: the ink of its strongest pattern (heat → Bright Red, cold air → Medium
     /// Blue), so the radar, the card and the page's wash agree. No pattern: neutral grey.
@@ -35,8 +42,8 @@ struct AirRadar: View {
         case .weather: WeatherColor.print ? WeatherColor.weatherInk : WeatherColor.temperature(38)
         case .biologics: WeatherColor.pollen[2]
         case .particulates: WeatherColor.no2
-        // Self isn't air: it prints in the key ink, like the text (Print, owner Oct 21), not a fourth hue.
-        case .exertion: WeatherColor.flat ? Color.primary : Theme.rescueSoft
+        // About you, not the air: the key ink, like the text (Print, owner Oct 21), never a new hue.
+        case .exertion, .infections: WeatherColor.flat ? Color.primary : Theme.rescueSoft
         }
     }
 
@@ -63,9 +70,11 @@ struct AirRadar: View {
     /// A corner's label, placed just outside the diamond. Tap to read it.
     private func corner(_ c: AirProfile.Category, index i: Int) -> some View {
         let axis = profile.axis(c)
-        let r = size / 2 + 10, side: CGFloat = 84
-        let offset: CGSize = [CGSize(width: 0, height: -r - 6), CGSize(width: r + side / 2, height: 0),
-                              CGSize(width: 0, height: r + 6), CGSize(width: -r - side / 2, height: 0)][i]
+        let r = size / 2 + 14, side: CGFloat = 96
+        let d = Self.direction(i)
+        // Side corners hang their label outward; the top one sits above.
+        let edge: CGFloat = abs(d.x) < 0.1 ? 0 : (d.x > 0 ? side / 2 : -side / 2)
+        let offset = CGSize(width: d.x * r + edge, height: d.y * r + (abs(d.x) < 0.1 ? -6 : 0))
         let on = selected == c
         return Button {
             withAnimation(Theme.snap) { selected = on ? nil : c }
@@ -80,7 +89,7 @@ struct AirRadar: View {
         }
         .buttonStyle(PressStyle())
         .sensoryFeedback(.selection, trigger: on)
-        .frame(width: i % 2 == 0 ? 160 : side, alignment: i == 1 ? .leading : i == 3 ? .trailing : .center)
+        .frame(width: abs(d.x) < 0.1 ? 160 : side, alignment: d.x > 0.1 ? .leading : d.x < -0.1 ? .trailing : .center)
         .offset(offset)
         .accessibilityLabel("\(c.title): \(axis.status.spoken)")
     }
@@ -100,50 +109,50 @@ private struct RadarDots: View {
         Canvas { ctx, size in
             let c = CGPoint(x: size.width / 2, y: size.height / 2)
             let R = min(size.width, size.height) / 2
-            // Corner reach, top/right/bottom/left. A minimum so a quiet family still has a corner to point at.
+            let n = AirRadar.order.count
+            // Corner reach. A minimum so a quiet family still has a corner to point at.
             let reach = AirRadar.order.map { cat -> CGFloat in
                 let a = profile.axis(cat)
                 // A gap of half the moments (say 9 of 14 flare vs 6 of 40 baseline) is already a lot: it reaches the edge.
                 return a.status == .notTracked ? 0 : CGFloat((0.12 + 0.88 * min(1, a.strength / AirRadar.fullGap)) * grown)
             }
             let inks = AirRadar.order.map { AirRadar.ink(profile.axis($0)) }
+            let dirs = (0..<n).map(AirRadar.direction)
             let spacing: CGFloat = 7
-            let n = Int(R / spacing) + 2
-            for j in -n...n {
-                for i in -n...n {
+            let m = Int(R / spacing) + 2
+            for j in -m...m {
+                for i in -m...m {
                     let x = CGFloat(i) * spacing + (j % 2 == 0 ? 0 : spacing / 2)
                     let y = CGFloat(j) * spacing * 0.866
-                    // Diamond "radius" (L1 norm): 1 at the edge.
-                    let d = (abs(x) + abs(y)) / R
+                    let p = CGPoint(x: x, y: y)
+                    // Which two corners bound this dot, and how far it sits from the first toward the second.
+                    let (a, b, t) = Self.between(p, dirs)
+                    // Polygon "radius": 1 on the outline, along this direction.
+                    let d = Self.radius(p, dirs[a], dirs[b], 1, 1).map { hypot(x, y) / (R * $0) } ?? 0
                     guard d <= 1.02 else { continue }
-                    // Which quadrant's corners bound this dot, and how far along between them.
-                    let (a, b, t) = Self.between(x: x, y: y)
-                    // The shape's edge in this direction: a straight line between the two corners' reaches.
-                    let ra = reach[a], rb = reach[b]
-                    let edge = 1 / ((1 - t) / max(ra, 0.0001) + t / max(rb, 0.0001))
-                    let inside = d <= edge && (ra > 0 || rb > 0)
+                    // The shape's edge in this direction: the straight line between the two corners' reaches.
+                    let edge = Self.radius(p, dirs[a], dirs[b], reach[a], reach[b]) ?? 0
+                    let inside = (reach[a] > 0 || reach[b] > 0) && hypot(x, y) <= R * edge
                     var r: CGFloat = 0.7
                     var color = ink.opacity(0.13)
                     // Rings at a third, two thirds and the edge.
                     for ring in [1.0 / 3, 2.0 / 3, 1.0] where abs(d - ring) < 0.02 { color = ink.opacity(0.45); r = 1 }
                     if inside {
                         let ink = t < 0.5 ? inks[a] : inks[b]
-                        let near = edge > 0 ? d / edge : 0
+                        let outer = Self.radius(p, dirs[a], dirs[b], 1, 1) ?? 1
+                        let near = edge > 0 ? d / (edge / outer) : 0
                         // Denser toward the shape's edge, like ink pooling at a print's border.
                         r = 1.1 + 1.6 * near
                         let dim = selected.map { s -> Double in (AirRadar.order[t < 0.5 ? a : b] == s) ? 1 : 0.35 } ?? 1
                         color = ink.opacity((0.35 + 0.6 * near) * dim)
                     }
-                    let p = CGPoint(x: c.x + x, y: c.y + y)
-                    ctx.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)), with: .color(color))
+                    let q = CGPoint(x: c.x + x, y: c.y + y)
+                    ctx.fill(Path(ellipseIn: CGRect(x: q.x - r, y: q.y - r, width: 2 * r, height: 2 * r)), with: .color(color))
                 }
             }
             // The shape's outline and corners.
             var outline = Path()
-            let pts = (0..<4).map { k -> CGPoint in
-                let dir = [CGPoint(x: 0, y: -1), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: -1, y: 0)][k]
-                return CGPoint(x: c.x + dir.x * R * reach[k], y: c.y + dir.y * R * reach[k])
-            }
+            let pts = (0..<n).map { k in CGPoint(x: c.x + dirs[k].x * R * reach[k], y: c.y + dirs[k].y * R * reach[k]) }
             outline.addLines(pts); outline.closeSubpath()
             ctx.stroke(outline, with: .color(ink.opacity(0.7)), lineWidth: 1)
             for (k, cat) in AirRadar.order.enumerated() {
@@ -158,17 +167,28 @@ private struct RadarDots: View {
         .accessibilityHidden(true)
     }
 
-    /// For a point, the two corners (indices into top/right/bottom/left) of its quadrant and how far it sits
-    /// from the first toward the second, measured along the diamond (so the shape's edges are straight).
-    static func between(x: CGFloat, y: CGFloat) -> (Int, Int, CGFloat) {
-        let up = -y   // screen y grows downward
-        let (a, b, u, v): (Int, Int, CGFloat, CGFloat) =
-            if x >= 0 && up >= 0 { (1, 0, x, up) }        // right → top
-            else if x < 0 && up >= 0 { (0, 3, up, -x) }   // top → left
-            else if x < 0 { (3, 2, -x, -up) }             // left → bottom
-            else { (2, 1, -up, x) }                       // bottom → right
-        let sum = u + v
-        return (a, b, sum > 0 ? v / sum : 0)
+    /// For a point, the two neighbouring corners whose wedge holds it, and how far it sits from the first toward
+    /// the second (by angle).
+    static func between(_ p: CGPoint, _ dirs: [CGPoint]) -> (Int, Int, CGFloat) {
+        let n = dirs.count
+        let step = 2 * Double.pi / Double(n)
+        var ang = atan2(Double(p.y), Double(p.x)) + Double.pi / 2   // 0 at the top corner, clockwise
+        if ang < 0 { ang += 2 * Double.pi }
+        let a = Int(ang / step) % n
+        return (a, (a + 1) % n, CGFloat((ang - Double(a) * step) / step))
+    }
+
+    /// How far along `p`'s direction the line from corner A (reach `ra`) to corner B (reach `rb`) lies, in units of
+    /// the radius. Nil when both reaches are zero.
+    static func radius(_ p: CGPoint, _ ua: CGPoint, _ ub: CGPoint, _ ra: CGFloat, _ rb: CGFloat) -> CGFloat? {
+        let len = hypot(p.x, p.y)
+        guard len > 0 else { return max(ra, rb) }
+        let u = CGPoint(x: p.x / len, y: p.y / len)
+        let A = CGPoint(x: ua.x * ra, y: ua.y * ra), B = CGPoint(x: ub.x * rb, y: ub.y * rb)
+        let e = CGPoint(x: B.x - A.x, y: B.y - A.y)
+        let den = u.x * e.y - u.y * e.x
+        guard abs(den) > 1e-9 else { return ra == 0 && rb == 0 ? nil : max(ra, rb) }
+        return (A.x * B.y - A.y * B.x) / den
     }
 }
 
@@ -178,8 +198,9 @@ extension AirProfile.Category {
         switch self {
         case .weather: "Weather"
         case .biologics: "Allergens"
-        case .particulates: "Particles"
-        case .exertion: "Self"
+        case .particulates: "Irritants"
+        case .exertion: "Exercise"
+        case .infections: "Colds and flu"
         }
     }
 }

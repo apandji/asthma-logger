@@ -1,17 +1,18 @@
 import Foundation
 
 /// Flu-like illness going around: the hook-up for the Infections trigger (docs/research/trigger-lens.md).
-/// **Later, not MVP** (owner, Oct 21): nothing is fetched, nothing is stamped, and the `ili` bin stays out of
-/// `Bins.all`. What's here is the slot, so turning it on is a source and a switch, not a migration:
+/// **Later, not MVP** (owner, Oct 21): nothing real is fetched or stamped. The `ili` bin is counted (v6) and
+/// the Colds and flu axis is on the radar, so data sets can show it; on real moments it reads "Not tracked yet".
+/// Turning it on is a source and a switch, not a migration:
 ///
 /// 1. A live `InfectionSource` (Ambee ILI: `GET /ili/forecast/by-lat-lng`, weekly, US by metro area).
-/// 2. `Infection.isEnabled = true`, and move `Bins.later` into `Bins.all` with a `BinSpec` bump.
+/// 2. `Infection.isEnabled = true`.
 ///
 /// It's a day-level reading for the area, never about the person: "flu-like illness was often high around
 /// here on your flare days", never "you were sick". Ambee has no history, so a level is only known for days
 /// it was stamped as they happened; older moments stay missing, not "low".
 public enum Infection {
-    /// Off for the MVP. While false the app stamps nothing and no pattern reads the bin.
+    /// Off for the MVP. While false the app stamps nothing on real moments, so the bin has no rows.
     public static let isEnabled = false
     public static let bin = "ili"
 

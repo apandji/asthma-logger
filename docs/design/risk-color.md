@@ -33,6 +33,23 @@ D texture for family, ink for risk · E two separate palettes (fails: families �
   risk mark.
 - **Five-second test, yes.** Below.
 
+## Extremes, as a highlight (owner, Oct 21)
+
+Orange also marks extremes, but only as a **highlight**: a translucent highlighter swipe laid *behind* the
+stretch of a sparkline, or the word, that is one of yours. The line and the text stay white ink.
+
+- **Tier one, for everyone:** past a bin edge (hot ≥ 90°F, cold ≤ 32°F, humid > 65%, dry < 35%, a drop of
+  10°F or more in 3 h) the line goes heavier, against a dashed edge line. Extreme, not yet yours. No orange.
+- **Tier two, yours:** past an edge whose level is one of your gated patterns, the same stretch is highlighted.
+  A swing gets a bracket, highlighted when sharp drops are yours.
+- Before the profile has learned, only tier one shows. The edges are the bins, so a sparkline and Insights never
+  disagree about what counts as extreme.
+- Pressure has no edge until the `pressure_change` bin exists (WeatherKit pressure history isn't read yet); its
+  swing shows dashed and unscored until then.
+
+So orange has one meaning across the app: *this looks like your flare days*. On the forecast it fills an hour,
+on a reading or a sparkline it highlights the part that's yours.
+
 Not yet decided: whether the forecast strip carries the driving family's texture or only the risk ink (A vs
 A + D), and whether diverging (B) is worth a test for "quieter than your usual".
 

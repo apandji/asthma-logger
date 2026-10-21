@@ -130,6 +130,30 @@ enum Crit {
         static var byFacet: Bool { UserDefaults.standard.string(forKey: key) == WeatherRail.facets.rawValue }
     }
 
+    /// How risk ("looks like your flare days") is coloured (docs/design/risk-color.md): today's green, gold and
+    /// red; A one warm ink (graphite → orange → bright orange) and nothing else warm; A + D the warm ink with the
+    /// driving family's mark shape on the forecast; C no hue, a grey-to-white ramp and more marks per hour; E cool
+    /// hues for the families and a warm status scale for risk.
+    enum RiskColor: String, CaseIterable, Identifiable {
+        case today, warmInk, warmTexture, coverage, twoPalettes
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .today: "Today: green, gold, red"
+            case .warmInk: "A · One warm ink"
+            case .warmTexture: "A + D · Warm ink + texture"
+            case .coverage: "C · Coverage, no hue"
+            case .twoPalettes: "E · Two palettes"
+            }
+        }
+        static let key = "crit.riskColor"
+        static var current: RiskColor { UserDefaults.standard.string(forKey: key).flatMap(RiskColor.init) ?? .today }
+        /// A or A + D: orange is risk and nothing else is warm.
+        static var warm: Bool { current == .warmInk || current == .warmTexture }
+        /// Air levels (good / OK / not good) lose their colour and read in white: A, A + D and C.
+        static var levelsInWhite: Bool { warm || current == .coverage }
+    }
+
     /// How Insights says where cold (or heat) starts for you (docs/design/risk-color.md): a sentence with the number, words
     /// only, or the dots it came from. A crit for the "no numbers on screen" rule.
     enum PersonalEdgeStyle: String, CaseIterable, Identifiable {

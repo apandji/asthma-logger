@@ -43,7 +43,8 @@ struct AirRadar: View {
         case .biologics: WeatherColor.pollen[2]
         case .particulates: WeatherColor.no2
         // About you, not the air: the key ink, like the text (Print, owner Oct 21), never a new hue.
-        case .exertion, .infections: WeatherColor.flat ? Color.primary : Theme.rescueSoft
+        case .exertion: WeatherColor.coolFamilies ? WeatherColor.hex(0x9470CD) : WeatherColor.flat ? Color.primary : Theme.rescueSoft
+        case .infections: WeatherColor.coolFamilies ? WeatherColor.hex(0x5F75C1) : WeatherColor.flat ? Color.primary : Theme.rescueSoft
         }
     }
 

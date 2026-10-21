@@ -134,7 +134,7 @@ struct InsightsView: View {
             // Learned, not a score. It can move: felt air keeps learning, and seasons change what's in the air.
             Button { path.append(Page.history) } label: {
                 HStack(spacing: 6) {
-                    Circle().fill(Verdict.green).frame(width: 7, height: 7)
+                    Circle().fill(Verdict.connected).frame(width: 7, height: 7)
                     Text("Learned · may shift with the seasons").lineLimit(1)
                     Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6)
                 }

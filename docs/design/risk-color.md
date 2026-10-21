@@ -76,6 +76,22 @@ same way, and the edge as a level in the rate table so the forecast uses it.
 Not yet decided: whether the forecast strip carries the driving family's texture or only the risk ink (A vs
 A + D), and whether diverging (B) is worth a test for "quieter than your usual".
 
+## On the phone (Oct 21)
+
+Settings › Demo and development › What we're testing › C1 "How should risk be coloured?":
+
+- **Today:** green, gold, red.
+- **A · One warm ink:** graphite → orange → bright orange. Air levels (good / OK / not good) go white.
+- **A + D · Warm ink + texture:** A, and each forecast hour's marks take the driving family's shape: bars
+  weather, dots pollutants, crosses allergens, slashes exercise, rings colds.
+- **C · Coverage, no hue:** a grey ramp to paper white, and one, two or four marks an hour by how much it looks
+  like your flare days. Air levels go white.
+- **E · Two palettes:** families move to cool hues (blue weather, teal pollutants, green allergens, violet
+  exercise, indigo colds), risk is a warm status scale (grey, amber, red).
+
+To see the warm hours: load the data set "Still learning", then set "Insights ring" (Staged for a demo) to
+Learned and drag the timeline to tomorrow afternoon.
+
 ## Five-second test
 
 - Five people from the TestFlight group; one with red-green colour blindness if we can find them.

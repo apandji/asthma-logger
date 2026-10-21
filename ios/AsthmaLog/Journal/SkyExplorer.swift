@@ -31,7 +31,9 @@ struct SkyProbe: Equatable {
     /// What the highlight is tinted with: the level, in the same three colors as the verdict line
     /// (good green, OK yellow, not good red). The layer's own ink stays in the sky; its name is in the label.
     var levelInk: Color {
-        switch level {
+        // With the warm risk ink, amounts are white: orange means "like your flare days" and nothing else.
+        if Crit.RiskColor.levelsInWhite { return .white }
+        return switch level {
         case .low?: Verdict.green
         case .medium?: Verdict.yellow
         case .high?: Verdict.red
@@ -44,12 +46,49 @@ struct SkyProbe: Equatable {
 enum Verdict {
     // Riso: Green, a gold-orange (not yellow: that's pollen's), Bright Red. On linen each prints a step deeper,
     // like the three air inks, so the set holds at one weight on either paper (owner, Oct 18).
-    static var green: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0x1E8E52 : 0x00A95C) : Color(red: 0.36, green: 0.80, blue: 0.47) }
-    static var yellow: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xE39A2A : 0xF2A93B) : Color(red: 0.98, green: 0.80, blue: 0.25) }
-    static var red: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xD63B4C : 0xF15060) : Color(red: 1.0, green: 0.36, blue: 0.32) }
+    // Risk colour crit: one warm ink. Baseline-like is graphite (no ink), then orange, then bright orange
+    // (validated ordinal ramp, docs/design/risk-color.md).
+    // C: no hue, a grey ramp to paper white. E: a warm status scale (grey, amber, red) beside cool family hues.
+    static var green: Color {
+        switch Crit.RiskColor.current {
+        case .warmInk, .warmTexture: WeatherColor.hex(WeatherColor.onLinen ? 0xD8CFC2 : 0x3A332C)
+        case .coverage: WeatherColor.hex(WeatherColor.onLinen ? 0xCFCAC2 : 0x3A3833)
+        case .twoPalettes: WeatherColor.hex(0x5E5A54)
+        case .today: todayGreen
+        }
+    }
+    static var yellow: Color {
+        switch Crit.RiskColor.current {
+        case .warmInk, .warmTexture: WeatherColor.hex(0xC46016)
+        case .coverage: WeatherColor.hex(0x8E8A82)
+        case .twoPalettes: WeatherColor.hex(0xE39A2A)
+        case .today: todayYellow
+        }
+    }
+    static var red: Color {
+        switch Crit.RiskColor.current {
+        case .warmInk, .warmTexture: WeatherColor.hex(WeatherColor.onLinen ? 0xE0791F : 0xFF9D36)
+        case .coverage: WeatherColor.hex(WeatherColor.onLinen ? 0x1E1A16 : 0xF5F2EC)
+        case .twoPalettes: WeatherColor.hex(0xD63B4C)
+        case .today: todayRed
+        }
+    }
+    /// A connection or "learned" dot: a status, not risk, so it never follows the risk ink.
+    static var connected: Color { todayGreen }
+
+    private static var todayGreen: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0x1E8E52 : 0x00A95C) : Color(red: 0.36, green: 0.80, blue: 0.47) }
+    private static var todayYellow: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xE39A2A : 0xF2A93B) : Color(red: 0.98, green: 0.80, blue: 0.25) }
+    private static var todayRed: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xD63B4C : 0xF15060) : Color(red: 1.0, green: 0.36, blue: 0.32) }
 
     /// The ink to write on a verdict with: white on green and red (black fails on both), black on the gold.
-    static func text(on tint: Color) -> Color { tint == yellow ? .black : .white }
+    /// With the warm ink: black on bright orange, white on orange; graphite takes white (linen's pale one, black).
+    static func text(on tint: Color) -> Color {
+        switch Crit.RiskColor.current {
+        case .warmInk, .warmTexture: return tint == red || (tint == green && WeatherColor.onLinen) ? .black : .white
+        case .coverage: return WeatherColor.onLinen ? (tint == red ? .white : .black) : (tint == red ? .black : .white)
+        case .twoPalettes, .today: return tint == yellow ? .black : .white
+        }
+    }
 }
 
 enum SkyExplorer {

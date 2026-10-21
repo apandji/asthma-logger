@@ -2,9 +2,15 @@
 
 Oct 19, 2026. Some design questions won't be settled in a crit; they need people with asthma using the app.
 Each test below is one setting with two or three arms, set before a session on the phone
-(Settings › Demo and development › **A/B tests**, in every build including TestFlight). The page shows the arms
-in force as one line (`A1=chat A2=ticked …`) to paste into the session notes. Nothing is logged or sent: the
-measure is what the facilitator watches and asks.
+(Settings › Demo and development › **What we're testing**, in every build including TestFlight). The page shows
+the arms in force as one line (`C1=today … A1=chat A2=ticked …`) to paste into the session notes. Nothing is
+logged or sent: the measure is what the facilitator watches and asks.
+
+Since Oct 21 the page holds every open question, grouped by screen (Colour, Now, Insights, Logging and notes,
+Words and type). **A-numbers** are tested with people (below). **C-numbers** are design crits decided in review:
+C1 risk colour (docs/design/risk-color.md), C2 family inks, C3 weather on the rail, C4 how we say where cold
+starts for you. "All back to the current design" resets every one. The rest of Demo and development is "Staged
+for a demo" (made-up moments and situations) and "Tools" (onboarding, tutorial, exertion check, prototypes).
 
 Debug builds can also set arms at launch: `-ab "A1=journal,A2=suggested"`.
 

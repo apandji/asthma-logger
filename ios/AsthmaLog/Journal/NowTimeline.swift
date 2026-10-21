@@ -14,6 +14,9 @@ struct NowTimeline: View {
     var tint: (LogEvent) -> Double? = { _ in nil }
     /// The forecast ahead of now, hour by hour, in the verdict's colours (nil while still learning).
     var forecastTints: [(Date, Double?)] = []
+    /// The family driving each forecast hour (Risk colour crit, warm ink + texture): its marks take that family's
+    /// shape (bars weather, dots pollutants, crosses allergens, slashes exercise, rings colds).
+    var forecastDrivers: [Date: AirProfile.Category] = [:]
     /// The verdict's colour for the time under the playhead (Now and ahead), for the chip and the line.
     var verdictTint: Color? = nil
     /// The verdict in words for a forecast hour ("A bit like your flare days"): the chip grows to say it.
@@ -289,13 +292,16 @@ struct NowTimeline: View {
             let far = min(1, date.timeIntervalSince(now) / (48 * 3600))
             let tint: Color = Self.verdictColor(v, ink: ink)
             let base: Double = v == nil ? 0.1 : 0.7
-            for k in 0..<4 {
+            let family: AirProfile.Category? = Crit.RiskColor.current == .warmTexture && v != nil ? forecastDrivers[date] : nil
+            // C: coverage says how much. One mark an hour like your baseline, two a bit like, four like flare days.
+            let marks = Crit.RiskColor.current == .coverage && v != nil ? (v! >= 1 ? 4 : v! >= 0.5 ? 2 : 1) : 4
+            for k in 0..<marks {
                 // Each bar breathes on its own phase, more the further out it is: not yet known.
                 let wave: Double = sin(flux * 1.6 + Double(n * 4 + k) * 0.55)
                 let h: CGFloat = 8 + CGFloat((2 + 4 * far) * wave)
                 let alpha: Double = base * (0.8 + 0.2 * (0.5 + 0.5 * wave))
                 let rect = CGRect(x: x(date) + CGFloat(k) * slot / 4, y: axis - h / 2, width: max(1, slot / 4 - 1.4), height: h)
-                ctx.fill(Path(rect), with: .color(tint.opacity(alpha)))
+                Self.mark(family, in: rect, ctx: &ctx, color: tint.opacity(alpha))
             }
         }
         // Moments: a dot on the axis per moment, in the colour of the air that day, so they never
@@ -349,6 +355,24 @@ struct NowTimeline: View {
                          at: CGPoint(x: (x(t) + x(t.addingTimeInterval(86_400))) / 2, y: axis + 26))
             }
             t = cal.date(byAdding: .hour, value: 6, to: t)!
+        }
+    }
+
+    /// One forecast mark in its family's shape: a bar (weather, or no driver), a dot, a cross, a slash or a ring.
+    private static func mark(_ f: AirProfile.Category?, in r: CGRect, ctx: inout GraphicsContext, color: Color) {
+        let d = max(2, min(r.width, 6)), c = CGPoint(x: r.midX, y: r.midY)
+        let sq = CGRect(x: c.x - d / 2, y: c.y - d / 2, width: d, height: d)
+        switch f {
+        case .particulates?: ctx.fill(Path(ellipseIn: sq), with: .color(color))
+        case .infections?: ctx.stroke(Path(ellipseIn: sq.insetBy(dx: 0.5, dy: 0.5)), with: .color(color), lineWidth: 1)
+        case .biologics?:
+            var p = Path(); p.move(to: CGPoint(x: c.x, y: sq.minY)); p.addLine(to: CGPoint(x: c.x, y: sq.maxY))
+            p.move(to: CGPoint(x: sq.minX, y: c.y)); p.addLine(to: CGPoint(x: sq.maxX, y: c.y))
+            ctx.stroke(p, with: .color(color), lineWidth: 1.2)
+        case .exertion?:
+            var p = Path(); p.move(to: CGPoint(x: r.minX, y: r.maxY)); p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+            ctx.stroke(p, with: .color(color), lineWidth: 1.4)
+        default: ctx.fill(Path(r), with: .color(color))
         }
     }
 

@@ -647,6 +647,18 @@ struct NowHomeView: View {
         }
     }
 
+    /// The family behind a forecast hour: the window's strongest driver. In the demo's rough afternoon, the
+    /// heat (weather) leads and ozone (pollutants) takes the evening.
+    private func driver(at t: Date) -> AirProfile.Category? {
+        if forced == .learned, !(model.progress?.isMet ?? false) {
+            let h = Calendar.current.component(.hour, from: t)
+            return (11...17).contains(h) ? .weather : (18...19).contains(h) ? .particulates : nil
+        }
+        guard let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }),
+              let top = w.drivers.max(by: { $0.logLR < $1.logLR }) else { return nil }
+        return AirProfile.Category.of(bin: top.bin)
+    }
+
     private func outlook(at t: Date) -> (text: String, tint: Color?) {
         let learned = forced == .learned || (forced == .auto && (model.progress?.isMet ?? false))
         // The demo event is the presentation's story: with the demo person learned, now matches their flare days.
@@ -770,11 +782,12 @@ struct NowHomeView: View {
 
     private var timeline: some View {
         let tints: [(Date, Double?)] = hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) }
+        let drivers = Dictionary(hours.compactMap { h in driver(at: h.date).map { (h.date, $0) } }, uniquingKeysWith: { a, _ in a })
         let fadeIn: CGFloat = railLeft ? 0.2 : 0.08
         let fadeOut: CGFloat = railLeft ? 0.92 : 0.8
         return NowTimeline(moments: moments, baselines: [],
                            tint: { airTint($0.weave) },
-                           forecastTints: tints, verdictTint: playheadTint, verdictText: playheadVerdict,
+                           forecastTints: tints, forecastDrivers: drivers, verdictTint: playheadTint, verdictText: playheadVerdict,
                            hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
             .frame(height: 104)
             // Full width; the + floats over its end, which fades out beneath it. The other end just softens.

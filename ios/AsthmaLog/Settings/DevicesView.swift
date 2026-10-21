@@ -54,7 +54,7 @@ struct DevicesView: View {
             Section("Apple Watch") {
                 if WCSession.isSupported(), WCSession.default.isPaired {
                     HStack(spacing: 12) {
-                        Circle().fill(WCSession.default.isWatchAppInstalled ? Verdict.green : Theme.secondaryText.opacity(0.35)).frame(width: 9, height: 9)
+                        Circle().fill(WCSession.default.isWatchAppInstalled ? Verdict.connected : Theme.secondaryText.opacity(0.35)).frame(width: 9, height: 9)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Apple Watch").font(.body.weight(.medium))
                             Text(WCSession.default.isWatchAppInstalled ? "felt air is on your watch. Its Rescue and Standard buttons log here." : "Install felt air on the watch to log from your wrist.")
@@ -87,7 +87,7 @@ struct DevicesView: View {
 
     private func capRow(_ b: PairedButton) -> some View {
         HStack(spacing: 10) {
-            Circle().fill(button.connectedIDs.contains(b.id) ? Verdict.green : Theme.secondaryText.opacity(0.35))
+            Circle().fill(button.connectedIDs.contains(b.id) ? Verdict.connected : Theme.secondaryText.opacity(0.35))
                 .frame(width: 8, height: 8)
             Text("felt button").font(.subheadline)
             Text(detail(b)).font(.caption).foregroundStyle(Theme.secondaryText).lineLimit(1)

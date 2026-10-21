@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// The open design decisions we want to settle with people rather than in a crit (docs/design/ab-tests.md).
-/// Each test is one setting with two or three arms; a facilitator sets the arms before a session on
-/// Settings › Demo and development › A/B tests, and the arms in force are shown there for the notes.
-/// Nothing here is measured or sent anywhere: the measure is what the facilitator watches and asks.
+/// Every open design question in one list (docs/design/ab-tests.md), grouped by screen: A-numbers are tested with
+/// people in a session (the facilitator sets the arms and watches), C-numbers are decided in a design crit.
+/// Settings › Demo and development › What we're testing. Nothing here is measured or sent anywhere.
 struct ABTest: Identifiable {
-    let id: String          // "A1"
+    let id: String          // "A1", "C1"
     let question: String    // what we're deciding
+    var group: String = "Logging and notes"   // the screen it's about
     let watch: String       // what to observe in the session
     let arms: [(value: String, label: String)]
     let defaultArm: String
@@ -28,7 +28,31 @@ struct ABTest: Identifiable {
                set: { UserDefaults.standard.set($0 == "on", forKey: key) })
     }
 
+    /// The groups, in the order the page shows them.
+    static let groups = ["Colour", "Now", "Insights", "Logging and notes", "Words and type"]
+
+    /// A crit question: decided in review, so there's no "watch" line, just what each option does.
+    static func crit(_ id: String, _ group: String, _ question: String, note: String, key: String, arms: [(String, String)], default d: String) -> ABTest {
+        var t = string(id, question, watch: note, key: key, arms: arms, default: d)
+        t.group = group
+        return t
+    }
+
+    var isCrit: Bool { id.hasPrefix("C") }
+
     static let all: [ABTest] = [
+        .crit("C1", "Colour", "How should risk be coloured?",
+              note: "Risk is how much an hour looks like your flare days: the forecast strip, the verdict pill, the sky's highlight. docs/design/risk-color.md",
+              key: Crit.RiskColor.key, arms: Crit.RiskColor.allCases.map { ($0.rawValue, $0.title) }, default: Crit.RiskColor.today.rawValue),
+        .crit("C2", "Colour", "Which inks for the air families?",
+              note: "Print is three inks, one per family (current). The others are earlier rounds.",
+              key: Crit.Inks.key, arms: Crit.Inks.allCases.map { ($0.rawValue, $0.title) }, default: Crit.Inks.print.rawValue),
+        .crit("C3", "Now", "Weather on the rail: one stop or three?",
+              note: "Three is by what the weather does: cold and dry, heat and humidity, sudden change. docs/design/weather-grouping.md",
+              key: Crit.WeatherRail.key, arms: Crit.WeatherRail.allCases.map { ($0.rawValue, $0.title) }, default: Crit.WeatherRail.oneStop.rawValue),
+        .crit("C4", "Insights", "How do we say where cold starts for you?",
+              note: "Under the Weather card, when your moments show it. Load the data set “Cold, below about 40°F” to see it.",
+              key: Crit.PersonalEdgeStyle.key, arms: Crit.PersonalEdgeStyle.allCases.map { ($0.rawValue, $0.title) }, default: Crit.PersonalEdgeStyle.sentence.rawValue),
         .string("A1", "Is a note a conversation or a journal entry?",
                 watch: "Time to a saved note; how many of the four domains get answered; whether they talk or tap; whether it feels like talking to someone (ask).",
                 key: Crit.CaptureStyle.key,
@@ -44,7 +68,7 @@ struct ABTest: Identifiable {
         .string("A4", "Is the sparkle understood without words?",
                 watch: "Ask what ✦ means without the tip; whether \"shows up often on your flare days\" reads as cause.",
                 key: "crit.patternMark",
-                arms: [("mark", "Sparkle mark (✦✦ / ✦)"), ("words", "Spelled out")], default: "mark"),
+                arms: [("mark", "Sparkle mark (✦✦ / ✦)"), ("words", "Spelled out")], default: "mark").in("Words and type"),
         ABTest(id: "A5", question: "How should a puff be logged on the phone?",
                watch: "Time to log; wrong-kind logs; first-try success without the tip; one-handed mid-flare (role-play).",
                arms: [(value: "pull", label: "Pull the + (glass well)"), (value: "menu", label: "System menu on the +"),
@@ -68,8 +92,10 @@ struct ABTest: Identifiable {
         .string("A8", "Which face for the sentence?",
                 watch: "Read the sentence aloud; which feels like felt air talking (ask); legibility at a glance.",
                 key: Prefs.statementTypeface,
-                arms: Theme.Typeface.allCases.map { ($0.rawValue, $0.title) }, default: Theme.Typeface.recursive.rawValue),
+                arms: Theme.Typeface.allCases.map { ($0.rawValue, $0.title) }, default: Theme.Typeface.recursive.rawValue).in("Words and type"),
     ]
+
+    func `in`(_ g: String) -> ABTest { var t = self; t.group = g; return t }
 
     /// `-ab "A1=journal,A2=suggested"` (Debug): set arms from the launch, for recordings and quick setup.
     static func applyLaunchArguments() {
@@ -85,7 +111,8 @@ struct ABTest: Identifiable {
     }
 }
 
-/// Settings › Demo and development › A/B tests: each open decision, the arm in force, and what to watch.
+/// Settings › Demo and development › What we're testing: every open question by screen, the option in force,
+/// and either what to watch (with people) or what the options do (crit).
 struct ABTestsView: View {
     /// Bumped on every change so the rows re-read their settings.
     @State private var version = 0
@@ -94,30 +121,38 @@ struct ABTestsView: View {
         Form {
             Section {
                 Text(summary).font(.subheadline.monospaced()).textSelection(.enabled)
-                Button("All to defaults") {
+                Button("All back to the current design") {
                     for t in ABTest.all { t.set(t.defaultArm) }
                     version += 1
                 }
             } header: {
                 Text("This session")
             } footer: {
-                Text("Copy this line into the session notes. Changes take effect at once; nothing is recorded or sent.")
+                Text("A-numbers are tested with people: set them before a session and copy this line into the notes. C-numbers are design crits we decide in review. Changes take effect at once; nothing is recorded or sent.")
             }
-            ForEach(ABTest.all) { t in
+            ForEach(ABTest.groups, id: \.self) { g in
                 Section {
-                    Picker(t.id, selection: Binding(get: { _ = version; return t.get() }, set: { t.set($0); version += 1 })) {
-                        ForEach(t.arms, id: \.value) { Text($0.label).tag($0.value) }
+                    ForEach(ABTest.all.filter { $0.group == g }) { t in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(t.id).font(.caption.monospaced().weight(.semibold)).foregroundStyle(Theme.secondaryText)
+                                Text(t.question).font(.subheadline.weight(.semibold))
+                            }
+                            Picker(t.question, selection: Binding(get: { _ = version; return t.get() }, set: { t.set($0); version += 1 })) {
+                                ForEach(t.arms, id: \.value) { Text($0.label + ($0.value == t.defaultArm ? " (current)" : "")).tag($0.value) }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            Text(t.isCrit ? t.watch : "Watch: \(t.watch)").font(.caption).foregroundStyle(Theme.secondaryText)
+                        }
+                        .padding(.vertical, 2)
                     }
-                    .pickerStyle(.inline)
-                    .labelsHidden()
                 } header: {
-                    Text("\(t.id) · \(t.question)")
-                } footer: {
-                    Text("Watch: \(t.watch)")
+                    Text(g)
                 }
             }
         }
-        .navigationTitle("A/B tests")
+        .navigationTitle("What we’re testing")
         .navigationBarTitleDisplayMode(.inline)
     }
 

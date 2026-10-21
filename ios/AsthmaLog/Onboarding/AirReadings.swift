@@ -139,7 +139,9 @@ struct AirReadings: View {
     }
 
     static func color(_ t: Tier) -> Color {
-        switch t {
+        // Air levels aren't risk: with the warm risk ink they read in white, with dots and words.
+        if Crit.RiskColor.levelsInWhite { return .white }
+        return switch t {
         case .good: Verdict.green
         case .ok: Verdict.yellow
         case .notGood: Verdict.red

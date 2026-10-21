@@ -87,6 +87,6 @@ private struct EdgeDots: View {
             ctx.draw(Text("warmer").font(.caption2).foregroundStyle(Theme.secondaryText), at: CGPoint(x: size.width - pad, y: 118), anchor: .trailing)
             ctx.draw(Text("from here").font(.caption2.weight(.semibold)), at: CGPoint(x: ex, y: 118), anchor: .center)
         }
-        .accessibilityLabel("Dots for each flare moment and each usual day, colder to warmer. Your flare moments cluster on the cold side.")
+        .accessibilityLabel("Dots for each flare moment and each usual day, colder to warmer. Your flare moments cluster on the \(edge.side == .below ? "cold" : "warm") side.")
     }
 }

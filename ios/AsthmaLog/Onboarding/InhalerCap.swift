@@ -1,15 +1,17 @@
 import AsthmaCore
 import SwiftUI
 
-/// Onboarding's pair screen: the inhaler seen from above, the felt button on its cap.
-/// Waiting for a felt button, the cap is an empty ring that listens. Without one, it's a **software cap**
-/// in the cap's colour that you press. It counts the way the felt button does (`hardware/felt-button/felt-button.ino`):
-/// the moment it goes down, after the firmware's 30 ms debounce, with no hold. The cap sinks for the firmware's
-/// 150 ms press flash, a ring fills with it, one firm thud, and it springs back.
-/// Chrome (the boot) has no colour; the cap's colour is the only ink, the same as the felt button's own cap.
+/// Onboarding's pair screen: a metered-dose inhaler in side profile, the felt button as the cap on its canister.
+/// The plastic boot is line art in the text colour with a faint fill, the mouthpiece pointing left; the metal
+/// canister stands in it, its top third above the rim; the felt cap sits on the canister in the cap's colour.
+/// Waiting for a felt button, the cap is a dashed outline that breathes. Without one, it's a
+/// **software cap** you press. It counts the way the felt button does (`hardware/felt-button/felt-button.ino`):
+/// the moment it goes down, after the firmware's 30 ms debounce, with no hold. Canister and cap slide into the
+/// boot over the firmware's 150 ms press flash, one firm thud, a small puff from the mouthpiece, and they spring
+/// back. Chrome has no colour; the cap's colour is the only ink, the same as the felt button's own cap.
 struct InhalerCap: View {
     enum Mode: Equatable {
-        /// A felt button is being paired: the cap is an empty ring, listening.
+        /// A felt button is being paired: the cap is a dashed outline, listening.
         case waiting
         /// No felt button: press the cap on screen.
         case soft
@@ -33,23 +35,32 @@ struct InhalerCap: View {
     @State private var down = false
     @State private var fired = false
     @State private var pending: Task<Void, Never>?
+    /// The puff: shown at the bottom of the travel, then drifting out and fading.
+    @State private var puffShown = false
+    @State private var puffOut = false
+    /// Reduce Motion: no travel, the cap brightens briefly instead.
+    @State private var highlight = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let capSize: CGFloat = 112
 
     private var ink: Color { cap == .standard ? Theme.standard : Theme.rescue }
 
     var body: some View {
-        ZStack {
-            if mode == .waiting { Listening().transition(.opacity) }
+        ZStack(alignment: .topLeading) {
             boot
-            ring
-            capFace
+            // Canister and cap ride down together; above the rim only, so they slide in behind the boot's wall.
+            ZStack(alignment: .topLeading) {
+                canister
+                capView
+            }
+            .offset(y: reduceMotion ? 0 : travel * Geo.travel)
+            .frame(width: Geo.size.width, height: Geo.size.height, alignment: .topLeading)
+            .mask(alignment: .topLeading) { Rectangle().frame(width: Geo.size.width, height: Geo.boot.minY + Geo.line / 2) }
+            puffDots
         }
-        .frame(width: 260, height: 300)
+        .frame(width: Geo.size.width, height: Geo.size.height, alignment: .topLeading)
         .contentShape(.rect)
         .animation(Theme.snap, value: mode)
-        .modifier(Press(enabled: mode == .soft, onChange: pressing))
+        .modifier(Press(enabled: mode != .waiting, onChange: pressing))
         .accessibilityElement()
         .accessibilityLabel(mode == .waiting ? OnboardingCopy.capWaitingLabel : OnboardingCopy.capLabel)
         .accessibilityHint(mode == .soft ? OnboardingCopy.capHint : "")
@@ -66,49 +77,94 @@ struct InhalerCap: View {
         #endif
     }
 
-    /// The inhaler's plastic holder from above: the body the canister sits in, and the mouthpiece below it.
+    // MARK: Drawing (side profile, mouthpiece to the left)
+
+    /// The plastic actuator: line art in the text colour over a faint plastic fill, open at the top.
     private var boot: some View {
-        VStack(spacing: -10) {
-            RoundedRectangle(cornerRadius: 58, style: .continuous).frame(width: 156, height: 176)
-            RoundedRectangle(cornerRadius: 16, style: .continuous).frame(width: 104, height: 52)
+        ZStack(alignment: .topLeading) {
+            BootShape().fill(.primary.opacity(0.06))
+            BootShape().stroke(.primary, style: StrokeStyle(lineWidth: Geo.line, lineCap: .round, lineJoin: .round))
+            // The mouthpiece's opening: a slightly flared rim, seen edge-on.
+            Capsule(style: .continuous)
+                .fill(.primary.opacity(0.06))
+                .overlay { Capsule(style: .continuous).stroke(.primary, lineWidth: Geo.line) }
+                .frame(width: Geo.mouth.width, height: Geo.mouth.height)
+                .offset(x: Geo.mouth.minX, y: Geo.mouth.minY)
+            // The seat the canister's stem sits in, seen through the boot's wall.
+            Capsule().fill(.primary.opacity(0.25))
+                .frame(width: Geo.canister.width * 0.5, height: Geo.line)
+                .offset(x: Geo.canister.midX - Geo.canister.width * 0.25, y: Geo.boot.maxY - 62)
         }
-        .foregroundStyle(.white.opacity(0.07))
-        .overlay {
-            VStack(spacing: -10) {
-                RoundedRectangle(cornerRadius: 58, style: .continuous).stroke(.white.opacity(0.18), lineWidth: 1).frame(width: 156, height: 176)
-                RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.18), lineWidth: 1).frame(width: 104, height: 52)
-            }
-        }
-        .offset(y: 26)
+        .frame(width: Geo.size.width, height: Geo.size.height, alignment: .topLeading)
     }
 
-    /// The travel: a ring that fills as the cap goes down.
-    private var ring: some View {
-        Circle()
-            .trim(from: 0, to: travel)
-            .stroke(.white.opacity(0.9), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-            .rotationEffect(.degrees(-90))
-            .frame(width: capSize + 22, height: capSize + 22)
-            .opacity(mode == .soft ? 1 : 0)
+    /// The metal canister: a neutral grey outline with a faint vertical highlight.
+    private var canister: some View {
+        let r = Geo.canister
+        let body = UnevenRoundedRectangle(topLeadingRadius: 12, bottomLeadingRadius: 4,
+                                          bottomTrailingRadius: 4, topTrailingRadius: 12, style: .continuous)
+        return ZStack(alignment: .topLeading) {
+            body.fill(Color(white: 0.55).opacity(0.22))
+            body.stroke(Color(white: 0.72), lineWidth: Geo.line)
+            Capsule().fill(.white.opacity(0.4))
+                .frame(width: 2.5, height: r.height * 0.6)
+                .offset(x: r.width * 0.22, y: r.height * 0.24)
+        }
+        .frame(width: r.width, height: r.height)
+        .offset(x: r.minX, y: r.minY)
     }
 
-    @ViewBuilder private var capFace: some View {
-        let pressedIn = reduceMotion ? 0 : travel
-        ZStack {
+    /// The felt cap on the canister: the cap's colour with a soft rim, or a dashed outline while waiting.
+    @ViewBuilder private var capView: some View {
+        let r = Geo.cap
+        ZStack(alignment: .top) {
             if mode == .waiting {
-                Circle().strokeBorder(.white.opacity(0.55), style: StrokeStyle(lineWidth: 2, dash: [4, 6]))
+                // Listening: the empty cap breathes (the rings that used to listen ran through the line art).
+                TimelineView(.animation(paused: reduceMotion)) { tl in
+                    let t = tl.date.timeIntervalSinceReferenceDate
+                    let breath = reduceMotion ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * sin(t * 2 * .pi / 2.6))
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .strokeBorder(.white.opacity(0.75 * breath), style: StrokeStyle(lineWidth: 2, dash: [4, 5]))
+                }
             } else {
-                Circle().fill(ink)
-                // The felt top: a softer disc inset in the cap.
-                Circle().fill(ink.mix(with: .white, by: 0.14)).padding(capSize * 0.13)
-                Circle().strokeBorder(.black.opacity(0.12), lineWidth: 1).padding(capSize * 0.13)
+                RoundedRectangle(cornerRadius: 11, style: .continuous).fill(ink)
+                // The felt top, softer, over a rim line so the cap reads round.
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(ink.mix(with: .white, by: 0.18))
+                    .frame(height: r.height * 0.42)
+                    .padding(.horizontal, 2).padding(.top, 2)
+                Capsule().fill(.black.opacity(0.16))
+                    .frame(height: 1.5).padding(.horizontal, 5)
+                    .offset(y: r.height * 0.42 + 2.5)
             }
         }
-        .frame(width: capSize, height: capSize)
-        .shadow(color: .black.opacity(mode == .waiting ? 0 : 0.45 * (1 - pressedIn)), radius: 10 * (1 - pressedIn), y: 6 * (1 - pressedIn))
-        .scaleEffect(1 - 0.08 * pressedIn)
-        .brightness(-0.12 * Double(pressedIn))
+        .frame(width: r.width, height: r.height)
+        .brightness(highlight ? 0.2 : 0)
+        .offset(x: r.minX, y: r.minY)
     }
+
+    /// A small puff from the mouthpiece at the bottom of the travel: riso dots, fading over 400 ms.
+    private var puffDots: some View {
+        let o = Geo.mouth
+        return ZStack(alignment: .topLeading) {
+            ForEach(Self.puff.indices, id: \.self) { i in
+                let d = Self.puff[i]
+                Circle().fill(.primary.opacity(0.4))
+                    .frame(width: d.z, height: d.z)
+                    .offset(x: o.minX - 4 - d.x * (puffOut ? 1.5 : 0.5), y: o.midY + d.y * (puffOut ? 1.4 : 0.5))
+            }
+        }
+        .frame(width: Geo.size.width, height: Geo.size.height, alignment: .topLeading)
+        .opacity(puffShown && !puffOut ? 1 : 0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// Fixed dot offsets (x leftward, y about the mouthpiece's centre, z size): the same puff each time.
+    private static let puff: [(x: CGFloat, y: CGFloat, z: CGFloat)] = [
+        (6, -8, 3), (10, 4, 2.5), (14, -16, 2), (18, 12, 3), (22, -2, 2.5), (26, -20, 2), (30, 18, 2),
+        (34, 6, 3), (38, -10, 2.5), (42, 0, 2), (46, 14, 2), (50, -14, 2.5), (56, 6, 2), (60, -4, 2),
+    ]
 
     // MARK: The press
 
@@ -116,7 +172,7 @@ struct InhalerCap: View {
         guard isDown != down else { return }
         down = isDown
         if isDown {
-            guard !fired else { return }
+            guard !fired, mode == .soft else { return }
             withAnimation(.easeIn(duration: Self.pressFlash)) { travel = 1 }
             // Counts after the firmware's debounce: a touch that lifts before then is a glitch, not a press.
             pending = Task {
@@ -126,20 +182,78 @@ struct InhalerCap: View {
             }
         } else {
             pending?.cancel()
-            if !fired { withAnimation(Theme.snap) { travel = 0 } }
+            // Let go: the canister springs back (before the press counted, nothing is logged).
+            withAnimation(fired ? Theme.lift : Theme.snap) { travel = 0; highlight = false }
         }
     }
 
     private func actuate() {
         guard !fired else { return }
         fired = true
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 1)
         onActuate()
-        // Stay at the bottom for the press flash, then spring back.
         Task {
+            // Reach the bottom with the press flash: the thud, the puff, then spring back.
+            try? await Task.sleep(for: .seconds(Self.pressFlash - Self.debounce))
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 1)
+            if reduceMotion {
+                highlight = true
+            } else {
+                puffShown = true
+                withAnimation(.easeOut(duration: 0.4)) { puffOut = true }
+            }
+            // Held, it stays down like a real canister; it springs back when you let go (or after the
+            // flash for VoiceOver's action, which has no release).
             try? await Task.sleep(for: .seconds(Self.pressFlash))
-            withAnimation(Theme.lift) { travel = 0 }
+            if !down { withAnimation(Theme.lift) { travel = 0; highlight = false } }
+            try? await Task.sleep(for: .seconds(0.3))
+            puffShown = false
+            puffOut = false
         }
+    }
+}
+
+/// The inhaler's layout in its 260 × 300 frame. Proportions from a rescue MDI: the boot about 1 : 2.4,
+/// the mouthpiece about 60% of the boot's width, a third of the canister above the rim, an 18% travel.
+nonisolated private enum Geo {
+    static let size = CGSize(width: 260, height: 300)
+    static let line: CGFloat = 2.5
+    /// The boot's upright body.
+    static let boot = CGRect(x: 136, y: 108, width: 76, height: 182)
+    /// The mouthpiece's height where it leaves the body.
+    static let mouthHeight: CGFloat = 46
+    /// The mouthpiece's flared opening at the left.
+    static let mouth = CGRect(x: 46, y: boot.maxY - mouthHeight - 6, width: 12, height: mouthHeight + 12)
+    static let canister = CGRect(x: boot.midX - 24, y: boot.minY - 44, width: 48, height: 128)
+    static let cap = CGRect(x: boot.midX - 30, y: canister.minY - 20, width: 60, height: 28)
+    static let travel: CGFloat = canister.height * 0.18
+}
+
+/// The boot's outline: open at the top between two short lips, down the back, out along the mouthpiece to its
+/// flare, back under the mouthpiece and up the front. Closes across the opening, which the fill needs.
+nonisolated private struct BootShape: Shape {
+    func path(in _: CGRect) -> Path {
+        let b = Geo.boot
+        let lip: CGFloat = 12
+        let mouthTop = b.maxY - Geo.mouthHeight
+        let flareX = Geo.mouth.midX
+        var p = Path()
+        p.move(to: CGPoint(x: b.minX + lip, y: b.minY))
+        p.addLine(to: CGPoint(x: b.minX + 6, y: b.minY))
+        p.addQuadCurve(to: CGPoint(x: b.minX, y: b.minY + 6), control: CGPoint(x: b.minX, y: b.minY))
+        p.addLine(to: CGPoint(x: b.minX, y: mouthTop - 18))
+        // The body angles into the mouthpiece.
+        p.addQuadCurve(to: CGPoint(x: b.minX - 22, y: mouthTop), control: CGPoint(x: b.minX, y: mouthTop))
+        p.addLine(to: CGPoint(x: flareX + 14, y: mouthTop + 2))
+        // The flare out to the opening's rim.
+        p.addQuadCurve(to: CGPoint(x: flareX, y: Geo.mouth.minY + 2), control: CGPoint(x: flareX + 4, y: mouthTop + 2))
+        p.addLine(to: CGPoint(x: flareX, y: Geo.mouth.maxY - 2))
+        p.addQuadCurve(to: CGPoint(x: flareX + 14, y: b.maxY), control: CGPoint(x: flareX + 4, y: b.maxY))
+        p.addLine(to: CGPoint(x: b.maxX - 24, y: b.maxY))
+        p.addQuadCurve(to: CGPoint(x: b.maxX, y: b.maxY - 24), control: CGPoint(x: b.maxX, y: b.maxY))
+        p.addLine(to: CGPoint(x: b.maxX, y: b.minY + 6))
+        p.addQuadCurve(to: CGPoint(x: b.maxX - 6, y: b.minY), control: CGPoint(x: b.maxX, y: b.minY))
+        p.addLine(to: CGPoint(x: b.maxX - lip, y: b.minY))
+        return p
     }
 }
 

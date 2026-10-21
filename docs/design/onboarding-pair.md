@@ -20,24 +20,28 @@ first time you see the air is the first time you press.
 
 ## The pair screen
 
-**With a felt button (default).** The sky is the map of where you are, dimmed. In the middle, the cap seen
-from above: an empty ring, breathing slow rings out (the old `Listening`), as if the phone is waiting for a
-press. The card says "Pair your inhaler", the Bluetooth status line, and the hint that orange is Rescue and
-teal is Standard. A press on either cap fills the ring with that cap's colour, then the fetch starts.
+The inhaler is drawn in side profile (Pandji, Oct 21: "more realistic"), the silhouette everyone knows:
+the plastic boot as line art in the text colour over a faint fill, its mouthpiece pointing left with a
+slightly flared opening; the metal canister standing in it (grey outline, a faint highlight), its top third
+above the rim; the felt cap on the canister, a little wider than it. Proportions from a rescue MDI: boot
+about 1 : 2.4, mouthpiece about 60% of its width. `Onboarding/InhalerCap.swift`.
 
-**Without a button.** "I don't have a felt button" swaps the waiting ring for a **software cap**: the same
-cap from above, filled in orange, sitting in the inhaler's boot (a rounded shape behind it, the plastic
-holder you press the canister into).
+**With a felt button (default).** The sky is the map of where you are, dimmed, with the inhaler on it. The
+cap is an empty dashed outline that breathes, waiting for a press. The card says "Pair your inhaler", the
+Bluetooth status line, and the hint that orange is Rescue and teal is Standard. A press on either cap fills
+the cap with that cap's colour, then the fetch starts.
+
+**Without a button.** "I don't have a felt button" fills the cap in orange: a **software cap** to press.
 
 What "inhaler-native" means here:
 
-- **It's a cap, not a +.** Round, seen from above, in the cap's colour. The boot behind it says "inhaler"
-  without a drawing of one.
+- **It's an inhaler, not a +.** The cap sits where your thumb goes on a real one, in the cap's colour.
 - **It presses the way the felt button does** (Pandji, Oct 21: "the more it feels like one thing the
   better"). The firmware (`hardware/felt-button/felt-button.ino`) has no hold: a press counts on the way
   down once the contact is steady for 30 ms (`DEBOUNCE_MS`), the LED flashes for 150 ms (`PRESS_MS`), and
-  repeats within 600 ms are ignored (`LOCKOUT_MS`). So the cap counts on touch-down after 30 ms, sinks
-  (shrinks and darkens a little) with a ring filling over 150 ms, one firm thud, and springs back. A touch
+  repeats within 600 ms are ignored (`LOCKOUT_MS`). So the cap counts on touch-down after 30 ms; canister
+  and cap slide into the boot (18% of the canister) over 150 ms, one firm thud, a small puff of grey riso
+  dots from the mouthpiece fading over 400 ms, and they spring back when you let go. A touch
   that lifts inside 30 ms is ignored, like a bounce.
 - **The press icon.** Beside the line that asks for a press (on the software cap and while waiting for the
   felt button) sits a line icon: a short button in slight perspective with SF `arrow.down` above it. The
@@ -45,7 +49,7 @@ What "inhaler-native" means here:
   No SF Symbol fits, so it's drawn (`Onboarding/PressIcon.swift`).
 - **Then the same reveal as the felt button.** Shimmer, scan, the readings landing.
 - VoiceOver: the cap is a button named "Press the cap"; its default action actuates straight away.
-  Reduce Motion: no sink, the ring still fills.
+  Reduce Motion: no travel, the cap brightens briefly.
 
 ## How the first moment is labelled
 

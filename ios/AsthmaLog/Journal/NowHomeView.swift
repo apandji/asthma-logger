@@ -174,6 +174,14 @@ struct NowHomeView: View {
                         if let e = all.last(where: { $0.moment != .okay }) { QuickRecordLive.shared.begin(for: e) }
                     }
                 }
+                if ProcessInfo.processInfo.arguments.contains("-openDetails") {
+                    // Screenshots: the latest rescue's details, as a tap on its sky opens them.
+                    Task {
+                        try? await Task.sleep(for: .seconds(3))
+                        let all = (try? context.fetch(FetchDescriptor<LogEvent>(sortBy: [SortDescriptor(\.loggedAt)]))) ?? []
+                        pinDetails = all.last { $0.moment == .rescue }
+                    }
+                }
                 guard ProcessInfo.processInfo.arguments.contains("-quickRecord") else { return }
                 Task {
                     try? await Task.sleep(for: .seconds(2))
@@ -194,7 +202,8 @@ struct NowHomeView: View {
                 openCapture(e)
             }
             .sheet(item: $pinDetails) { e in
-                NavigationStack { MomentDetailsView(event: e) }
+                // The sentence you were reading carries over as the details' title.
+                NavigationStack { MomentDetailsView(event: e, read: detailsRead(e)) }
                     .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) { bottomBar }
@@ -678,6 +687,11 @@ struct NowHomeView: View {
     }
 
     // MARK: Sky
+
+    /// The read a moment's details open with: the same sentence the header shows for it.
+    private func detailsRead(_ e: LogEvent) -> String {
+        e.modelContext == nil || e.id == justNow?.id ? nowRead : backRead(e)
+    }
 
     /// The header's read for the playhead, marks and all (what VerdictHeader shows as its title).
     private var headerRead: String {

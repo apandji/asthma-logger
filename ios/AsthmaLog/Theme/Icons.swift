@@ -60,4 +60,7 @@ enum Icons {
     static let dewPoint = "drop"
     static let wind = "wind"
     static let uv = "sun.max"
+
+    /// Medication taken (Moment details).
+    static let inhaler = "lungs.fill"
 }

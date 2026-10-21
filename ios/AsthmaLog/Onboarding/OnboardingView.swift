@@ -3,10 +3,11 @@ import CoreLocation
 import SwiftData
 import SwiftUI
 
-/// First run, in the home's own language (docs/design/design-system.md). Four screens and one moment:
-/// welcome · where you are (the location prompt, then the sky draws for the first time) · your felt
-/// button (press it: the phone answers, and the scan draws your **first capture**) · two optional
-/// permissions · what happens next. Skippable at the button: a tap on the + does the first capture.
+/// First run, in the home's own language (docs/design/design-system.md, docs/design/onboarding-pair.md):
+/// welcome · where you are (the location prompt, the map draws with no air on it yet) · **pair your inhaler**
+/// (press the felt button, or press the cap on screen without one: that press fetches the air, and the scan
+/// draws your **first moment**, a test press saved as a baseline) · name your inhalers · what felt air uses ·
+/// what happens next.
 struct OnboardingView: View {
     @Environment(LogService.self) private var services
     @Environment(ButtonLink.self) private var button
@@ -18,15 +19,21 @@ struct OnboardingView: View {
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
 
     enum Step: Int, CaseIterable, Comparable {
-        case welcome, here, button, inhalers, permissions, learn
+        case welcome, here, pair, inhalers, permissions, learn
         static func < (a: Step, b: Step) -> Bool { a.rawValue < b.rawValue }
     }
     @State private var step = Step.welcome
-    /// The air where you are, read on the "here" step; the first capture is stamped from it.
-    @State private var here: (lat: Double, lon: Double, place: String?, conditions: Conditions)?
+    /// Where you are, found on the "here" step. The air isn't read until the first press.
+    @State private var here: (lat: Double, lon: Double, place: String?)?
     @State private var locating = false
     @State private var noLocation = false
     @State private var first: LogEvent?
+    /// Between the press and the first moment's air arriving: the readings shimmer.
+    @State private var fetching = false
+    /// No felt button: the cap on screen takes the press.
+    @State private var softButton = false
+    /// Which cap was pressed (the felt button says; the cap on screen is Rescue's).
+    @State private var pressedCap: ButtonPacket.Cap = .rescue
     @State private var probing = false
     /// The inhalers' names (renamed later in Settings › Devices).
     @State private var rescueName = ""
@@ -55,14 +62,27 @@ struct OnboardingView: View {
         .environment(\.colorScheme, .dark)
         .animation(Theme.smooth, value: step)
         .onChange(of: button.syncPresses) { _, n in
-            guard n > 0, step == .button, first == nil else { return }
+            guard n > 0, step == .pair, first == nil, !fetching, !softButton else { return }
+            pressedCap = button.lastSyncCap ?? .rescue
             logMethod = "button"
             capture()
         }
         #if DEBUG
-        // Recordings in the simulator: `-demoPress` presses the button for you a few seconds into that step.
+        // Recordings in the simulator: `-demoPress` presses the felt button for you a few seconds into that step,
+        // `-demoNoButton` opens it on the cap on screen (and `-demoPress` then presses the cap for you).
+        // `-onboardingAt pair` starts there (it finds you first).
         .task(id: step) {
-            guard step == .button, ProcessInfo.processInfo.arguments.contains("-demoPress") else { return }
+            let args = ProcessInfo.processInfo.arguments
+            if step == .welcome, let i = args.firstIndex(of: "-onboardingAt"), i + 1 < args.count, args[i + 1] == "pair" {
+                goHere()
+                while locating { try? await Task.sleep(for: .milliseconds(200)) }
+                step = .pair
+                button.beginSync()
+                return
+            }
+            guard step == .pair else { return }
+            if args.contains("-demoNoButton") { button.endSync(); softButton = true }
+            guard args.contains("-demoPress"), !softButton else { return }
             try? await Task.sleep(for: .seconds(3))
             button.simulatePress(.rescue)
         }
@@ -78,16 +98,14 @@ struct OnboardingView: View {
             VerdictHeader(place: AnyView(HStack(spacing: 8) { MomentTag(moment: .okay, text: OnboardingCopy.firstTag); placeLine }),
                           title: AirWords.sentence(tense: .present, weave: f.weave, conditions: f.conditions),
                           verdict: nil, tint: nil, around: CalendarReader.shared.around(f.loggedAt)?.line)
-            AirReadings(conditions: f.conditions ?? here?.conditions, weave: f.weave,
+            // The magic moment: the readings land one by one, with a tick.
+            AirReadings(conditions: f.conditions, weave: f.weave,
                         pollen: DemoPollen.sample(at: f.loggedAt, season: pollenSeason))
+        } else if fetching {
+            VerdictHeader(place: AnyView(placeLine), title: OnboardingCopy.fetchingTop, verdict: nil, tint: nil)
+            AirReadings(conditions: nil, weave: WeaveSpec(), pollen: nil, pending: true)
         } else if step >= .here, here != nil || locating || noLocation {
             VerdictHeader(place: AnyView(placeLine), title: hereTitle, verdict: nil, tint: nil)
-            if let here {
-                AirReadings(conditions: here.conditions, weave: WeaveSpec(here.conditions.input),
-                            pollen: DemoPollen.sample(at: .now, season: pollenSeason))
-            } else if locating {
-                AirReadings(conditions: nil, weave: WeaveSpec(), pollen: nil, pending: true)
-            }
         } else {
             VerdictHeader(place: AnyView(Label("felt air", systemImage: "sparkles").font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)),
                           title: OnboardingCopy.welcomeTop, verdict: nil, tint: nil)
@@ -97,45 +115,56 @@ struct OnboardingView: View {
     private var placeLine: some View {
         HStack(spacing: 6) {
             Image(systemName: "location.fill").font(.caption)
-            Text(here?.place ?? (noLocation ? "No location" : "Finding you…")).lineLimit(1)
+            Text(here?.place ?? (noLocation ? OnboardingCopy.noLocation : OnboardingCopy.hereLocatingTop)).lineLimit(1)
         }
         .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
     }
 
     private var hereTitle: String {
-        if let here { return AirWords.sentence(tense: .present, weave: WeaveSpec(here.conditions.input), conditions: here.conditions) }
-        return noLocation ? "You can still log without it." : "Checking the air near you…"
+        if here != nil { return OnboardingCopy.hereFoundTop }
+        return noLocation ? OnboardingCopy.hereNoLocationTop : OnboardingCopy.hereLocatingTop
     }
 
     // MARK: Sky
 
     @ViewBuilder private var sky: some View {
-        let listening = step == .button && first == nil
-        if let f = first, step >= .button {
-            // The first capture: the map alone, then the scan, then the air. Logged by the button or the +.
-            NowSky(conditions: f.conditions ?? here?.conditions, weave: f.weave.isEmpty ? (here.map { WeaveSpec($0.conditions.input) } ?? WeaveSpec()) : f.weave,
+        if let f = first, step >= .pair {
+            // The first moment: the map alone, then the scan in the cap's colour, then the air.
+            NowSky(conditions: f.conditions, weave: f.weave,
                    date: f.loggedAt, pollen: DemoPollen.sample(at: f.loggedAt, season: pollenSeason), probing: $probing,
                    mapID: f.id.uuidString, coordinate: f.latitude.flatMap { lat in f.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
-                   captureInk: logMethod == "button" ? Theme.rescueSoft : Theme.standardSoft)
+                   captureInk: pressedCap == .standard ? Theme.standardSoft : Theme.rescueSoft)
                 .id(f.id)
         } else if let here, step >= .here {
-            // Where you are: the map draws in with the air's ripple, then the particles.
-            NowSky(conditions: here.conditions, weave: WeaveSpec(here.conditions.input), date: .now,
-                   pollen: DemoPollen.sample(at: .now, season: pollenSeason), probing: $probing,
+            // Where you are: the map, with no air on it yet. On the pair step it dims behind the cap.
+            NowSky(conditions: nil, weave: WeaveSpec(), date: .now, pollen: nil, probing: $probing,
                    mapID: "here", coordinate: (here.lat, here.lon))
-                .opacity(listening ? 0.45 : 1)
-                .overlay { if listening { Listening().transition(.opacity) } }
+                .opacity(step == .pair ? 0.4 : 1)
+                .overlay { if step == .pair { cap.transition(.opacity) } }
         } else {
-            // Before there's a place: the grain alone, breathing.
+            // Before there's a place (or without one): the grain alone, breathing.
             ParticleField(particles: [], animated: !reduceMotion, inviting: false)
                 .padding(.horizontal, 8)
                 .mask(EllipticalGradient(colors: [.black, .clear], center: .center, startRadiusFraction: 0.2, endRadiusFraction: 0.7))
-                .overlay { if step == .welcome { Listening(quiet: true) } }
+                .overlay {
+                    if step == .welcome { Listening(quiet: true) }
+                    if step == .pair { cap.transition(.opacity) }
+                }
         }
     }
 
+    /// The inhaler's cap, waiting for the felt button, or on screen to press.
+    private var cap: some View {
+        InhalerCap(mode: fetching ? .pressed : (softButton ? .soft : .waiting), cap: pressedCap,
+                   autoPress: softButton && ProcessInfo.processInfo.arguments.contains("-demoPress")) {
+            logMethod = "app"
+            capture()
+        }
+        .id(softButton)
+    }
+
     private var pageTop: Color {
-        let t = here?.conditions.best(.temperature)?.value ?? 62
+        let t = first?.conditions?.best(.temperature)?.value ?? 62
         return WeatherColor.light(WeatherColor.temperature(t), at: .now).mix(with: .black, by: 0.22)
     }
 
@@ -157,25 +186,32 @@ struct OnboardingView: View {
                 if here != nil {
                     body(OnboardingCopy.hereBody)
                     WeatherAttributionView()
-                    primary(OnboardingCopy.next) { step = .button; button.beginSync() }
+                    primary(OnboardingCopy.next) { step = .pair; button.beginSync() }
                 } else if noLocation {
                     body(OnboardingCopy.hereNoLocation)
-                    primary(OnboardingCopy.next) { step = .button; button.beginSync() }
+                    primary(OnboardingCopy.next) { step = .pair; button.beginSync() }
                 } else {
                     HStack(spacing: 10) { ProgressView(); body(OnboardingCopy.hereWaiting) }
                 }
-            case .button:
+            case .pair:
                 if first != nil {
-                    // Without a button there was no press: the + will be the way to log.
                     body(logMethod == "app" ? OnboardingCopy.firstBodyApp : OnboardingCopy.firstBodyButton)
-                    primary(OnboardingCopy.next) { step = .inhalers }
+                    primary(OnboardingCopy.next) { button.endSync(); step = .inhalers }
+                } else if fetching {
+                    HStack(spacing: 10) { ProgressView(); body(OnboardingCopy.fetchingBody) }
+                } else if softButton {
+                    pressRow(OnboardingCopy.softBody)
+                    fine(OnboardingCopy.softFine)
+                    secondary(OnboardingCopy.softHaveButton) {
+                        softButton = false
+                        button.beginSync()
+                    }
                 } else {
-                    body(buttonStatus)
+                    pressRow(buttonStatus)
                     fine(OnboardingCopy.buttonHint)
                     secondary(OnboardingCopy.buttonSkip) {
                         button.endSync()
-                        logMethod = "app"
-                        capture()
+                        softButton = true
                     }
                 }
             case .inhalers:
@@ -204,7 +240,7 @@ struct OnboardingView: View {
         switch step {
         case .welcome: OnboardingCopy.welcomeTitle
         case .here: OnboardingCopy.hereTitle
-        case .button: first == nil ? OnboardingCopy.buttonTitle : OnboardingCopy.firstTitle
+        case .pair: first == nil ? OnboardingCopy.pairTitle : OnboardingCopy.firstTitle
         case .inhalers: OnboardingCopy.inhalersTitle
         case .permissions: OnboardingCopy.dataTitle
         case .learn: OnboardingCopy.learnTitle
@@ -214,6 +250,14 @@ struct OnboardingView: View {
     /// One text size for the panel's words (body, primary), and one for the fine print.
     private func body(_ s: String) -> some View {
         Text(s).font(.body).foregroundStyle(.primary.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The press hint: the press icon beside the line that asks for a press.
+    private func pressRow(_ s: String) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            PressIcon(size: 26)
+            body(s)
+        }
     }
 
     private func fine(_ s: String) -> some View {
@@ -239,10 +283,9 @@ struct OnboardingView: View {
             // The system prompt appears here.
             if let fix = try? await services.location.currentLocation(timeout: .seconds(10)) {
                 let lat = fix.coordinate.latitude, lon = fix.coordinate.longitude
-                async let c = services.conditions.conditions(latitude: lat, longitude: lon)
-                async let marks = try? CLGeocoder().reverseGeocodeLocation(fix)
-                let place = await marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
-                here = (lat, lon, place, await c)
+                let marks = try? await CLGeocoder().reverseGeocodeLocation(fix)
+                let place = marks?.first.map { [$0.locality ?? $0.subAdministrativeArea, $0.administrativeArea].compactMap { $0 }.joined(separator: ", ") }
+                here = (lat, lon, place)
             } else {
                 noLocation = true
             }
@@ -250,13 +293,15 @@ struct OnboardingView: View {
         }
     }
 
-    /// The first capture: a baseline moment stamped with the air here, drawn by the scan.
+    /// The first moment: a test press, saved as a baseline (never a rescue, never in Health), stamped with
+    /// the air fetched now. The readings shimmer while it's fetched, then land.
     private func capture() {
-        guard first == nil else { return }
+        guard first == nil, !fetching else { return }
+        withAnimation(Theme.smooth) { fetching = true }
         Task {
             let e = await services.logFirstCapture(in: context)
             if let here, e.placeName == nil { e.placeName = here.place }
-            withAnimation(Theme.smooth) { first = e }
+            withAnimation(Theme.smooth) { first = e; fetching = false }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
     }

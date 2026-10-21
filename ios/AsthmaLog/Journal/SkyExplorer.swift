@@ -142,6 +142,28 @@ enum SkyExplorer {
         return p
     }
 
+    /// One of Weather's three items (Design crit › Weather on the rail), by its title. The word says which way
+    /// the weather is pushing; the large reading is the temperature, or the fall for Sudden change. No level:
+    /// weather gets plain words, never Good / OK / Not good.
+    static func facetProbe(_ title: String, conditions: Conditions?, temperatureF: Double?) -> SkyProbe? {
+        guard let facet = WeatherFacet.allCases.first(where: { $0.title == title }) else { return nil }
+        let h = conditions?.best(.humidity)?.value, fall = conditions?.tempFallF
+        let word = facet.word(temperatureF: temperatureF, humidityPct: h, tempFallF: fall)
+        let amount = facet.amount(temperatureF: temperatureF, humidityPct: h, tempFallF: fall)
+        let humidity = h.map { "\(Int($0.rounded()))% humidity." }
+        let (value, unit, note): (String, String, String?) = switch facet {
+        case .change:
+            (fall.map { "\(Int(max(0, $0).rounded()))" } ?? "–", "°F fell in 3 h", "Fronts and storms will join this when they're read.")
+        case .coldDry, .heatHumid:
+            (temperatureF.map { "\(Int($0.rounded()))" } ?? "–", "°F", humidity)
+        }
+        var p = SkyProbe(name: facet.title, kind: word, value: value, unit: unit, level: nil, note: note ?? "",
+                         color: WeatherColor.amber, intensity: amount,
+                         symbol: facet == .change ? Icons.tempDrop : facet == .coldDry ? "thermometer.snowflake" : "thermometer.sun")
+        p.before = facet == .change ? lookBack("Weather", conditions) : []
+        return p
+    }
+
     /// The look-back rows for a layer (weather, PM2.5, ozone), from the 48 hours stored with the reading.
     /// A window shows only when at least half its hours were read; otherwise it's missing, not clean.
     static func lookBack(_ name: String, _ c: Conditions?) -> [LookBackRow] {
@@ -381,7 +403,8 @@ enum RailGroup: String, CaseIterable {
     /// The sky's layers inside the group, in a fixed order.
     var items: [String] {
         switch self {
-        case .weather: []
+        // Design crit › Weather on the rail: three items by what the weather does (weather-grouping.md).
+        case .weather: Crit.WeatherRail.byFacet ? WeatherFacet.allCases.map(\.title) : []
         case .particles: ["PM2.5", "PM10", "Ozone", "NO₂"]
         case .biologics: ["Tree pollen", "Grass pollen", "Weed pollen"]
         }
@@ -404,7 +427,8 @@ enum RailRow: Hashable {
         var out: [RailRow] = []
         for g in RailGroup.allCases {
             out.append(.header(g))
-            if expanded { out += g.items.filter(present.contains).map { .item($0) } }
+            // Weather's items read the weather itself, so they're always there.
+            if expanded { out += g.items.filter { g == .weather || present.contains($0) }.map { .item($0) } }
         }
         if includesSelf { out += [.voice, .body] }
         return out
@@ -449,7 +473,7 @@ enum RailRow: Hashable {
     /// Whether this row has a reading to show (group headers only name themselves).
     var reads: Bool {
         switch self {
-        case .header(let g): g.items.isEmpty   // Weather reads; Pollutants and Allergens just name.
+        case .header(let g): g == .weather || g.items.isEmpty   // Weather reads; Pollutants and Allergens just name.
         case .item, .voice, .body: true
         }
     }
@@ -467,6 +491,8 @@ struct GroupRail: View {
     var weatherInk: Color? = nil
     /// Print: how far the weather is from mild (0…1), for the Weather stop's fill.
     var weatherAmount: Double = 0
+    /// Design crit › Weather on the rail: each of Weather's items (by title) and how much of it there is (0…1).
+    var weatherFacets: [String: Double] = [:]
     /// The moment wants a note: Voice wears a small dot.
     var voiceBadge = false
     /// Families the read marks as patterns: their icon wears a small dot (the sentence's underline, here).
@@ -493,6 +519,7 @@ struct GroupRail: View {
     }
 
     private func amount(_ name: String) -> Double {
+        if let f = weatherFacets[name] { return f }
         guard let l = layers.readable.first(where: { ($0.name == "Air" ? "PM2.5" : $0.name) == name }), !l.empty else { return 0 }
         return (Double(l.level.rawValue) + l.fraction) / 3
     }
@@ -502,7 +529,7 @@ struct GroupRail: View {
         if WeatherColor.print {
             let has: Double
             switch g {
-            case .weather: has = weatherAmount
+            case .weather: has = max(weatherAmount, weatherFacets.values.max() ?? 0)
             default: has = g.items.map(amount).max() ?? 0
             }
             let ink: Color = g == .weather ? WeatherColor.amber : g == .particles ? WeatherColor.aqua : WeatherColor.gold
@@ -538,7 +565,8 @@ struct GroupRail: View {
         case .item(let name):
             // A dot: bigger when there's more of it.
             let d = 5 + 7 * CGFloat(amount(name))
-            Circle().fill(amount(name) > 0 ? legible(WeatherColor.ink(for: name)) : Color.primary.opacity(on ? 0.95 : 0.4))
+            let ink = weatherFacets[name] != nil ? WeatherColor.amber : legible(WeatherColor.ink(for: name))
+            Circle().fill(amount(name) > 0 ? ink : Color.primary.opacity(on ? 0.95 : 0.4))
                 .frame(width: on ? d + 3 : d, height: on ? d + 3 : d)
                 .frame(width: 30, height: 18)
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.2).frame(width: 20, height: 20) } }

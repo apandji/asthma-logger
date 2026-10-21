@@ -108,6 +108,7 @@ Source:
 |---|---|---|---|
 | **(a) Self-report** | "Cold or flu" tag from a note (exists) | Only if asked per **day** ("Under the weather today?"), not per puff | Recall; people tag colds they notice |
 | **(b) Watch signals** | Resting heart rate, HRV (SDNN), sleeping respiratory rate, sleeping wrist temperature, sleep length, each against your own 30-day usual | **Yes**, passively, for every night | Detects "your body is off its usual", not infection. Stress, alcohol, travel and hard training trip it too. Needs a watch worn to bed |
+| **(c′) Ambee ILI** (owner, Oct 21) | Ambee's Influenza-like Illness risk for your metro area (CBSA), a 4-week forecast updated weekly, from the provider we're already contracting with | **Yes**: stamp each day's level as it arrives, on every moment that day, flare and baseline | Regional, weekly risk, "flu-like illness is high around here", not you. US only (others on request). **Forecast only: no history endpoint documented**, so days before we start stamping stay missing. Response fields not documented publicly. Same Ambee contract; add ILI to the dataset ask |
 | **(c) Public data** | CDC wastewater viral activity (flu A, RSV, COVID, weekly, by state) or NREVSS test positivity (weekly, HHS region) | Yes, but it's the same for everyone in your state that week | Regional, weekly: "colds going around", not you. **New data source; needs Pandji's OK** |
 | **(d) Don't track** | Say it in "what we can't see" | n/a | Hides the biggest trigger |
 
@@ -133,6 +134,10 @@ Sources:
 - ✓ Alavi A, Bogu GK, Wang M, et al. (Snyder MP). *Real-time alerting system for COVID-19 and other stress
   events using wearable data.* Nat Med. 2022;28(1):175–184.
 - ✓ Apple. HealthKit `HKQuantityTypeIdentifier.appleSleepingWristTemperature`; Apple Support 102674 (wrist temperature).
+- ✓ Ambee. *ILI (Influenza-like Illness) API*: `GET https://api.ambeedata.com/ili/forecast/by-lat-lng?lat=&lng=`,
+  4-week forecast, weekly interval and updates, coverage United States by CBSA (other regions on request).
+  docs.ambeedata.com/apis/ili (checked Oct 21; response fields, history and pricing not on the page; the page
+  says both "weekly" and "daily" forecasts, ask Ambee).
 - ✓ CDC. *Wastewater Viral Activity Level for SARS-CoV-2, Influenza A and RSV* (data.cdc.gov, weekly, Socrata
   JSON/CSV); CDC NREVSS *Percent of Tests Positive for Viral Respiratory Pathogens* (data.cdc.gov). Endpoint IDs
   not verified against the live portal.
@@ -141,7 +146,13 @@ Sources:
 
 ## 6. Infections: the recommendation
 
-**(a) + (b), with you as the judge.** The watch never says "infection".
+**(c′) + (a) + (b), with you as the judge.** Nothing ever says "infection" about you.
+
+0. **Ambee ILI as the day's context (new, Oct 21).** A day-level `ili_level` bin (low / moderate / high, Ambee's
+   own bands) stamped from the forecast for the moment's metro area, on flare and baseline frames alike, so it
+   gates like any air reading. It's the passive, everyone-has-it signal: no watch needed. It files under
+   **Infections** and reads like the air: "Flu-like illness was high around here." Store each week's level as it
+   arrives, since there's no documented history: the first weeks are missing, never "low".
 
 1. A passive bin, `body_off_usual` (v6): **yes** when last night's resting heart rate and one of sleeping
    respiratory rate or wrist temperature are both above your own 30-day usual; **missing** when there's no watch
@@ -150,12 +161,12 @@ Sources:
 2. When it's on for a morning, ask once, the day after, in the 8 am look-ahead or on Now: **"Your nights have
    been off your usual. Coming down with something?"** Yes / No / Not sure. A yes sets a day-level "cold or flu"
    for that day and the next few, on every moment including baselines. This is what fixes slide 4's catch.
-3. (c) later, as context only, never a bin: "Colds and flu are going around in your state this week." It could
-   be fetched as the national table and filtered on the phone so no location leaves it. Ask Pandji first.
+3. (c) CDC data is no longer needed if Ambee ILI is in the contract; keep it as the fallback.
 
 **What it may say on screen** (gated, words only):
 - Pattern: "Your flare days often came when you'd said you were coming down with something."
 - Watch only: "Your flare days often followed nights your heart and breathing ran above your usual."
+- Ambee ILI: "Flu-like illness was often high around here on your flare days."
 - Never: "infection", "virus", "you were sick", "your cold caused it".
 
 New Health reads (resting heart rate, HRV, wrist temperature) widen an existing prompt; still a permission

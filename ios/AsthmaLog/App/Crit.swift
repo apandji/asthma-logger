@@ -130,7 +130,7 @@ enum Crit {
         static var byFacet: Bool { UserDefaults.standard.string(forKey: key) == WeatherRail.facets.rawValue }
     }
 
-    /// How Insights says your own edge for a reading (docs/design/risk-color.md): a sentence with the number, words
+    /// How Insights says where cold (or heat) starts for you (docs/design/risk-color.md): a sentence with the number, words
     /// only, or the dots it came from. A crit for the "no numbers on screen" rule.
     enum PersonalEdgeStyle: String, CaseIterable, Identifiable {
         case sentence, words, dots

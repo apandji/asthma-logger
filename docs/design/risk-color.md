@@ -50,7 +50,10 @@ stretch of a sparkline, or the word, that is one of yours. The line and the text
 So orange has one meaning across the app: *this looks like your flare days*. On the forecast it fills an hour,
 on a reading or a sparkline it highlights the part that's yours.
 
-## Your own edge (Oct 21, in crit)
+## Cold for you (Oct 21, in crit)
+
+On screen it's never "edge" (owner): the card is "Cold, for you" (or "Heat, for you"), the dots mark "from here", and the footnote says "For most people, cold starts at freezing." `PersonalEdge` stays the code name.
+
 
 `PersonalEdge` (AsthmaCore) finds where *your* flare moments cluster on a reading, e.g. below about 40°F where
 the general cold edge is 32°F. It tries cut points every 5°, scores them like the forecast (smoothed log
@@ -58,7 +61,7 @@ likelihood ratio, k = 2), and keeps one only if it clears a stricter gate than a
 it, 20 baselines, raw lift above 1.5, and the same cut (±5°) winning on 60% of 200 random half-splits. Within 5°
 of the general edge it says the general one. Data set: Settings › Data sets › "Cold, below about 40°F".
 
-Three ways to say it, under the Weather card (Settings › Design crit › Your edge):
+Three ways to say it, under the Weather card (Settings › Design crit › Cold for you):
 
 1. **Sentence with the number:** "Your flare days often came when it was ~~below about 40°F~~" (highlighted).
    The first number outside a reading, so it bends the no-numbers rule.

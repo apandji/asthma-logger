@@ -203,7 +203,7 @@ struct DeveloperSettings: View {
                 Picker("Weather on the rail", selection: $critWeatherRail) {
                     ForEach(Crit.WeatherRail.allCases) { Text($0.title).tag($0) }
                 }
-                Picker("Your edge", selection: $critPersonalEdge) {
+                Picker("Cold for you", selection: $critPersonalEdge) {
                     ForEach(Crit.PersonalEdgeStyle.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("Insights state", selection: $critInsightsState) {

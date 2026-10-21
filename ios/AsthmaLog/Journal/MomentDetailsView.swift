@@ -2,72 +2,68 @@ import AsthmaCore
 import Charts
 import SwiftUI
 
-/// Everything about one moment, opened by pinching its card. Leads with the weather, then the air,
-/// then how both moved in the hours around it, where it was, the voice note, and every source.
+/// Everything about one moment: the one place its readings live (docs/design/moment-details.md).
+/// Printed on the same paper as Now, in the order you'd want after a rescue:
+/// 1. **The moment**: what it was, when and where, and the sentence you were reading on Now, carried over.
+///    Facts about it ("Before this") sit under the sentence, one line each.
+/// 2. **The air**: Weather · Pollutants · Allergens, the rail's three families in their inks, each reading
+///    with its unit, its amount dots and its word, and one quiet line saying where the numbers came from.
+/// 3. **Your words**: the voice note and its confirmed tags.
+/// 4. **The evidence**: the hours around it, where it was, every reading in full.
+/// 5. **Edit this moment.**
 struct MomentDetailsView: View {
     let event: LogEvent
-    /// In-place mode (the Journal's zoom): the map is the hero, shared with the sky panel, on black.
+    /// The sentence the header showed for this moment on Now (marks and all), so opening details keeps
+    /// your place. Nil from elsewhere: the moment's own past-tense sentence stands in.
+    var read: String? = nil
+    /// In-place mode (the Journal zoom, a Design-crit home): the map is the hero, shared with the sky panel.
     var mapNamespace: Namespace.ID? = nil
     var onClose: (() -> Void)? = nil
-    /// The Now home: just the air table, every pollutant with a reading, under the sky you tapped.
-    var airOnly = false
-    @State private var pull: CGFloat = 0
-    @AppStorage(LevelStyle.key) private var style = LevelStyle.signal
+    @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
+    @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
     @State private var around: HourlyHistory?
-    /// The moment's own pollen readings (Ambee, live or sample), not a demo season.
-    private var pollen: PollenSample? { DemoPollen.from(event.conditions) }
+
+    /// The same pollen the sky drew: the moment's own (Ambee, live or sample), else the demo season.
+    private var pollen: PollenSample? { DemoPollen.from(event.conditions) ?? DemoPollen.sample(at: event.loggedAt, season: pollenSeason) }
+    /// The same layers (and levels) the sky and the rail read, so a word here never disagrees with the rail.
+    private var layers: AirLayers { AirLayers(conditions: event.conditions, weave: event.weave, pollen: pollen) }
+    /// A live snapshot from Now (not saved): no voice note, no edit.
+    private var isSaved: Bool { event.modelContext != nil }
+    private var hasReadings: Bool { !(event.conditions?.observations.isEmpty ?? true) || pollen != nil }
 
     var body: some View {
-        if airOnly { airPage } else if let mapNamespace { inPlace(mapNamespace) } else { page }
+        if let mapNamespace { inPlace(mapNamespace) } else { page }
     }
 
-    private var airPage: some View {
+    private var page: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                if let c = event.conditions, !c.observations.isEmpty {
-                    air(c).padding(16).frostedCard()
-                    if !missingPollutants(c).isEmpty {
-                        Text("No \(missingPollutants(c).joined(separator: " or ")) from nearby monitors.")
-                            .font(.caption).foregroundStyle(Theme.secondaryText).padding(.horizontal, 4)
-                    }
-                } else {
-                    Text(event.envError ?? (event.envStatus == .pending ? "Checking the air…" : "No outdoor readings for this moment."))
-                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                        .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
-                }
+            VStack(alignment: .leading, spacing: 32) {
+                header
+                content
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
-        .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in
-            if y < -90 { onClose?() }   // pull down past the top to go back
-        }
-    }
-
-    /// Pollutants we look for but had no reading here: missing, not "good".
-    private func missingPollutants(_ c: Conditions) -> [String] {
-        [(Signal.pm25, "PM2.5"), (.pm10, "PM10"), (.ozone, "ozone"), (.no2, "NO₂")].filter { c.best($0.0) == nil }.map(\.1)
-    }
-
-    /// The Journal's zoom: the map grows out of the sky into a sharp hero, the details rise beneath it.
-    /// Pull down, pinch closed or tap the chevron to go back.
-    private func inPlace(_ ns: Namespace.ID) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // The same line as the Moment scale, in the same place, so zooming in keeps your bearings.
-            ScaleHeader(title: event.statement, reserveTwoLines: true) {
-                MomentDot(moment: event.moment, size: 8)
-                Text(event.detailsLine)
-            }
-            inPlaceScroll(ns)
-        }
-        .background(Color.black.ignoresSafeArea())
+        .background { paperBackground }
+        .navigationBarTitleDisplayMode(.inline)
         .task { await loadAround() }
     }
 
-    private func inPlaceScroll(_ ns: Namespace.ID) -> some View {
+    private var paperBackground: some View {
+        ZStack {
+            Theme.paper(paper)
+            SkyGrain(responds: false).opacity(0.5)
+        }
+        .ignoresSafeArea()
+    }
+
+    /// The Journal's zoom: the map grows out of the sky into a sharp hero, the details rise beneath it.
+    /// Pull down or tap the chevron to go back.
+    private func inPlace(_ ns: Namespace.ID) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 32) {
                 MomentMap(event: event)
                     .frame(height: event.latitude == nil ? 64 : 320)
                     .opacity(event.latitude == nil ? 0 : 1)
@@ -80,83 +76,94 @@ struct MomentDetailsView: View {
                                 .frame(width: 44, height: 44)
                                 .glassEffect(.regular.interactive(), in: .circle)
                         }
-                        .padding(.leading, 16).padding(.top, 8)
+                        .padding(.leading, 20).padding(.top, 8)
                         .accessibilityLabel("Close")
                     }
-                    .padding(.horizontal, -16)
+                    .padding(.horizontal, -20)
+                header
                 content
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 20)
             .padding(.bottom, 120)  // clear the + bar
         }
         .scrollIndicators(.hidden)
+        .background { paperBackground }
         .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in
-            pull = y
             if y < -90 { onClose?() }   // pull down past the top to go back
         }
-    }
-
-    private var page: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                content
-            }
-            .padding(16)
-            .padding(.bottom, 40)
-        }
-        .background { AmbientField(weave: event.weave, temperatureF: event.conditions?.best(.temperature)?.value, date: event.loggedAt, conditions: event.conditions, pollen: pollen).ignoresSafeArea() }
-        // A live snapshot (not saved) is Now, not a baseline.
-        .navigationTitle(event.modelContext == nil && event.moment == .okay ? "Now" : event.moment.title)
-        .navigationBarTitleDisplayMode(.inline)
         .task { await loadAround() }
     }
 
     @ViewBuilder private var content: some View {
-                if mapNamespace == nil { header }
-                if !event.uses.isEmpty { usesCard }
-                ExertionLine(event: event)
-                if let c = event.conditions, !c.observations.isEmpty {
-                    weather(c)
-                    air(c)
-                    aroundChart
-                } else {
-                    Text(event.envError ?? (event.envStatus == .pending ? "Checking the air…" : "No outdoor readings for this moment."))
-                        .font(.subheadline).foregroundStyle(Theme.secondaryText)
-                        .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
-                }
-                if mapNamespace == nil {
-                    MomentMap(event: event)
-                        .frame(height: 200)
-                        .clipShape(.rect(cornerRadius: 22, style: .continuous))
-                }
-                VoiceNoteButton(event: event).frame(maxWidth: .infinity)
-                if let c = event.conditions, !c.observations.isEmpty { sources(c) }
-                NavigationLink(value: event) {
-                    Text("Edit this moment").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered).buttonBorderShape(.capsule)
+        if hasReadings {
+            VStack(alignment: .leading, spacing: 28) {
+                ForEach(ReadingFamily.allCases, id: \.self) { family($0) }
+            }
+        } else {
+            Text(event.envError ?? (event.envStatus == .pending ? "Checking the air…" : "No outdoor readings for this moment."))
+                .font(.subheadline).foregroundStyle(Theme.secondaryText)
+        }
+        if isSaved { words }
+        aroundChart
+        whereSection
+        if let c = event.conditions, !c.observations.isEmpty { everyReading(c) }
+        if isSaved {
+            NavigationLink { EventDetailView(event: event) } label: {
+                Text("Edit this moment").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered).buttonBorderShape(.capsule).tint(.primary)
+        }
     }
 
-    // MARK: Sections
+    // MARK: 1. The moment
 
-    /// What was taken: each use, its inhaler, puffs and how it was logged. The one place puffs show (a fact
-    /// you logged, kept off Home, which stays in words).
-    private var usesCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(event.uses.sorted { $0.at < $1.at }) { u in
-                HStack(spacing: 12) {
-                    Image(systemName: "lungs.fill").foregroundStyle(u.kind == .rescue ? Theme.rescue : Theme.standard)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(Inhaler.load().first { $0.id == u.inhalerID }?.name ?? u.inhalerName ?? (u.kind == .rescue ? "Rescue inhaler" : "Daily inhaler"))
-                            .font(.body.weight(.medium))
-                        Text([u.puffs == 1 ? "1 puff" : "\(u.puffs) puffs", Self.device(u)].compactMap { $0 }.joined(separator: " · "))
-                            .font(.caption).foregroundStyle(Theme.secondaryText)
-                    }
-                    Spacer()
-                }
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // The context line, as on Now: the kind as a word, then when and where.
+            HStack(spacing: 10) {
+                if isSaved { MomentTag(moment: event.moment) } else { MomentTag(moment: event.moment, text: "Now") }
+                Text(isSaved ? event.whenAndWhere : (event.placeName ?? "Near you"))
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                    .lineLimit(2)
+            }
+            // The page's one Recursive sentence: the read you came from.
+            MarkedText(text: sentence, font: Theme.Typeface.sentence(size: 22), kerning: Theme.serifKerning)
+            facts
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var sentence: String {
+        if let read, !read.isEmpty { return read }
+        return event.conditions?.input.hasAnyValue == true ? event.pastStatement : event.statement
+    }
+
+    /// Facts about the moment, one line each under the sentence: what was taken, and what happened before it
+    /// (exertion).
+    @ViewBuilder private var facts: some View {
+        let lines = useLines
+        if !lines.isEmpty || event.exerted == true {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(lines, id: \.self) { fact(Icons.inhaler, $0) }
+                // Before this: active in the hour before (Health / Motion), in words, or nothing.
+                ExertionLine(event: event, card: false)
             }
         }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
+    }
+
+    private func fact(_ symbol: String, _ text: String) -> some View {
+        Label { Text(text) } icon: { Image(systemName: symbol).foregroundStyle(Theme.secondaryText) }
+            .font(.subheadline)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// "Albuterol · 2 puffs · felt button": each use, the one place puffs show (a fact you logged).
+    private var useLines: [String] {
+        event.uses.sorted { $0.at < $1.at }.map { u in
+            let name = Inhaler.load().first { $0.id == u.inhalerID }?.name ?? u.inhalerName
+                ?? (u.kind == .rescue ? "Rescue inhaler" : "Daily inhaler")
+            return [name, u.puffs == 1 ? "1 puff" : "\(u.puffs) puffs", Self.device(u)].compactMap { $0 }.joined(separator: " · ")
+        }
     }
 
     private static func device(_ u: InhalerUse) -> String? {
@@ -168,166 +175,172 @@ struct MomentDetailsView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(event.loggedAt.formatted(.dateTime.weekday(.wide).month().day().hour().minute()))
-                .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
-            Text(event.placeName ?? "Near you")
-                .font(Theme.Typeface.sentence(size: 26)).kerning(Theme.serifKerning)
+    // MARK: 2. The air
+
+    private static func ink(_ f: ReadingFamily) -> Color {
+        switch f {
+        case .weather: WeatherColor.amber
+        case .pollutants: WeatherColor.aqua
+        case .allergens: WeatherColor.gold
         }
     }
 
-    private func weather(_ c: Conditions) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                if let t = c.best(.temperature) {
-                    Text("\(Int(t.value.rounded()))°").font(.system(size: 64, weight: .light, design: .rounded))
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(event.weave.words[.temperature]?.capitalized ?? "Temperature").font(.headline)
-                    Text(event.weave.words[.humidity].map { $0.capitalized + " air" } ?? "").font(.subheadline)
-                        .foregroundStyle(Theme.secondaryText)
-                }
-            }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
-                tile(Icons.humidity, "Humidity", c.best(.humidity).map { "\(Int($0.value.rounded()))%" })
-                tile(Icons.dewPoint, "Dew point", c.best(.dewpoint).map { "\(Int($0.value.rounded()))°F" })
-                tile(Icons.wind, "Wind", c.best(.windSpeed).map { "\(Int($0.value.rounded())) mph" })
-                tile(Icons.uv, "UV index", c.best(.uvIndex).map { "\(Int($0.value.rounded()))" })
-            }
-            if !c.alerts.isEmpty {
-                ForEach(c.alerts, id: \.name) { a in
-                    Label(a.name, systemImage: "exclamationmark.triangle.fill").font(.footnote).foregroundStyle(.orange)
-                }
-            }
-        }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
-    }
-
-    @ViewBuilder private func tile(_ symbol: String, _ name: String, _ value: String?) -> some View {
-        if let value { tileBody(symbol, name, value) }
-    }
-
-    private func tileBody(_ symbol: String, _ name: String, _ value: String?) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol).frame(width: 22).foregroundStyle(Theme.secondaryText)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(.caption).foregroundStyle(Theme.secondaryText)
-                Text(value ?? "—").font(.headline.monospacedDigit())
-            }
+    private static func icon(_ f: ReadingFamily) -> String {
+        switch f {
+        case .weather: Icons.weather
+        case .pollutants: Icons.particles
+        case .allergens: Icons.biologics
         }
     }
 
-    private func air(_ c: Conditions) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Air").font(.headline)
+    /// One family: its name in its ink (as on the rail), a reading per row, and where they came from.
+    private func family(_ f: ReadingFamily) -> some View {
+        let rows = rows(f)
+        let obs = event.conditions.map(f.observations(in:)) ?? []
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: Self.icon(f)).foregroundStyle(Self.ink(f))
+                Text(f.title)
                 Spacer()
-                if let aqi = c.best(.aqi) {
-                    // The AQI is an index across pollutants, so it's a summary, not a row.
-                    Text(aqiLine(aqi)).font(.caption).foregroundStyle(Theme.secondaryText)
+                if f == .pollutants, let aqi = event.conditions?.best(.aqi) {
+                    Text(ObservationCopy.aqiSummary(aqi)).font(.caption).foregroundStyle(Theme.secondaryText)
                 }
             }
-            .padding(.bottom, 6)
-            let rows = airRows(c)
-            if rows.isEmpty {
-                Text("No air readings from nearby monitors.").font(.subheadline).foregroundStyle(Theme.secondaryText).padding(.vertical, 8)
+            .font(.subheadline.weight(.semibold))
+            .padding(.bottom, 10)
+            .overlay(alignment: .bottom) { Rectangle().fill(Self.ink(f)).frame(height: 1.5) }
+            ForEach(rows) { r in
+                row(r, ink: Self.ink(f))
+                if r.id != rows.last?.id { Rectangle().fill(Theme.secondaryText.opacity(0.18)).frame(height: 0.5).padding(.leading, 30) }
             }
-            ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
-                if i > 0 { Divider() }
-                airRowBody(r.name, r.obs, level: r.level, ink: r.ink)
-            }
-            Divider()
-            if let pollen {
-                ForEach(Array(pollen.kinds.enumerated()), id: \.offset) { k, kind in
-                    if k > 0 { Divider() }
-                    HStack(spacing: 12) {
-                        LevelIndicator(level: kind.level, ink: WeatherColor.pollen[k], style: style).frame(minWidth: 30)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("\(kind.name) pollen")
-                            if kind.count > 0 && kind.name != "Grass" {
-                                Text(kind.species).font(.caption).foregroundStyle(Theme.secondaryText)
-                            }
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 1) {
-                            Text(Tier(kind.level).word)
-                            Text("\(kind.count) grains/m³").font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
-                        }
-                    }
-                    .font(.subheadline).padding(.vertical, 8)
+            if f == .weather, let alerts = event.conditions?.alerts, !alerts.isEmpty {
+                ForEach(alerts, id: \.name) { a in
+                    Label(a.name, systemImage: "exclamationmark.triangle.fill").font(.footnote.weight(.medium)).padding(.top, 8)
                 }
+            }
+            if let line = provenance(f, obs) {
+                Text(line).font(.caption).foregroundStyle(Theme.secondaryText).padding(.top, 8)
+            }
+        }
+    }
+
+    private func provenance(_ f: ReadingFamily, _ obs: [EnvObservation]) -> String? {
+        if f == .allergens, obs.isEmpty, pollen != nil { return "Sample pollen for this season, not a reading" }
+        return ObservationCopy.provenance(obs)
+    }
+
+    struct Row: Identifiable {
+        let id: String
+        var detail: String? = nil
+        /// The reading with its unit, or nil: no reading (missing, never "good").
+        var value: String?
+        /// Air and pollen: Good / OK / Not good. Weather: its plain word (Hot, Humid), never a judgement.
+        var word: String?
+        var level: WeaveSpec.Level?
+    }
+
+    private func rows(_ f: ReadingFamily) -> [Row] {
+        let c = event.conditions
+        func v(_ s: Signal) -> String? { c?.best(s).map(ObservationCopy.value) }
+        func cap(_ w: String?) -> String? { w.map { $0.prefix(1).uppercased() + $0.dropFirst() } }
+        switch f {
+        case .weather:
+            var out: [Row] = []
+            if let t = v(.temperature) { out.append(Row(id: "Temperature", detail: c?.weatherCondition, value: t, word: cap(event.weave.words[.temperature]))) }
+            if let h = v(.humidity) { out.append(Row(id: "Humidity", value: h, word: cap(event.weave.words[.humidity]))) }
+            if let d = v(.dewpoint) { out.append(Row(id: "Dew point", value: d)) }
+            if let w = v(.windSpeed) { out.append(Row(id: "Wind", value: w)) }
+            if let u = v(.uvIndex) { out.append(Row(id: "UV index", value: u)) }
+            return out
+        case .pollutants:
+            let l = layers
+            return [("PM2.5", Signal.pm25, l.pm25), ("PM10", .pm10, l.pm10), ("Ozone", .ozone, l.ozone), ("NO₂", .no2, l.no2)].map { name, s, layer in
+                Row(id: name, value: v(s), word: layer.map { Tier($0.level).word }, level: layer?.level)
+            }
+        case .allergens:
+            let kinds = pollen?.kinds ?? []
+            let l = layers
+            return [("Tree pollen", l.tree), ("Grass pollen", l.grass), ("Weed pollen", l.weed)].enumerated().map { i, pair in
+                let kind = i < kinds.count ? kinds[i] : nil
+                return Row(id: pair.0, detail: kind.flatMap { $0.count > 0 && $0.name != "Grass" ? $0.species : nil },
+                           value: kind.map { "\($0.count) grains/m³" }, word: pair.1.map { Tier($0.level).word }, level: pair.1?.level)
+            }
+        }
+    }
+
+    private func row(_ r: Row, ink: Color) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: Icons.layer(r.id) == "circle.fill" ? Self.weatherIcon(r.id) : Icons.layer(r.id))
+                .font(.subheadline).foregroundStyle(r.value == nil ? Theme.secondaryText : ink).frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(r.id).foregroundStyle(r.value == nil ? Theme.secondaryText : .primary)
+                if let d = r.detail { Text(d).font(.caption).foregroundStyle(Theme.secondaryText) }
+            }
+            Spacer(minLength: 8)
+            if let value = r.value {
+                if let level = r.level { AmountDots(level: level, ink: ink) }
+                VStack(alignment: .trailing, spacing: 1) {
+                    if let w = r.word { Text(w) }
+                    Text(value).font(r.word == nil ? .subheadline.monospacedDigit() : .caption.monospacedDigit())
+                        .foregroundStyle(r.word == nil ? .primary : Theme.secondaryText)
+                }
+                .frame(minWidth: 76, alignment: .trailing)
             } else {
-                HStack {
-                    LevelIndicator(level: nil, ink: WeaveSwatch.ink(.pollen), style: style).frame(minWidth: 30)
-                    Text("Pollen")
-                    Spacer()
-                    Text("No reading").foregroundStyle(Theme.secondaryText)
-                }
-                .font(.subheadline).padding(.vertical, 8)
+                Text("No reading").font(.caption).foregroundStyle(Theme.secondaryText)
             }
         }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
+        .font(.subheadline)
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
     }
 
-    /// Only pollutants with a reading get a row: a missing monitor isn't a value worth a line.
-    @ViewBuilder private func airRow(_ name: String, _ o: EnvObservation?, level: WeaveSpec.Level?, ink: Color = WeaveSwatch.ink(.air)) -> some View {
-        if o != nil { airRowBody(name, o, level: level, ink: ink) }
+    private static func weatherIcon(_ name: String) -> String {
+        switch name {
+        case "Temperature": "thermometer.medium"
+        case "Humidity": Icons.humidity
+        case "Dew point": Icons.dewPoint
+        case "Wind": Icons.wind
+        case "UV index": Icons.uv
+        default: "circle"
+        }
     }
 
-    private func airRowBody(_ name: String, _ o: EnvObservation?, level: WeaveSpec.Level?, ink: Color) -> some View {
-        HStack(spacing: 12) {
-            LevelIndicator(level: level, ink: ink, style: style).frame(minWidth: 30)
-            Text(name)
-            Spacer()
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(level.map { Tier($0).word } ?? "No reading").foregroundStyle(level == nil ? Theme.secondaryText : .primary)
-                if let o { Text(ObservationCopy.value(o)).font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText) }
+    // MARK: 3. Your words
+
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("What you said", Icons.voice)
+            if let t = event.voiceTranscript, !t.isEmpty {
+                Text("“\(t)”").font(.body).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(event.moment == .rescue ? "Nothing said yet. A few words about where you were or what you were doing help felt air learn." : "Nothing said.")
+                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        }
-        .font(.subheadline).padding(.vertical, 8)
-    }
-
-    struct AirRow { let name: String; let obs: EnvObservation; let level: WeaveSpec.Level?; let ink: Color }
-
-    /// Pollutants with a reading, in a fixed order. Built step by step so the type checker stays quick.
-    private func airRows(_ c: Conditions) -> [AirRow] {
-        var rows: [AirRow] = []
-        if let o = c.best(.pm25) { rows.append(AirRow(name: "PM2.5", obs: o, level: band(Banding.pm25(o.value)), ink: WeatherColor.pm25)) }
-        if let o = c.best(.pm10) { rows.append(AirRow(name: "PM10", obs: o, level: band(Banding.pm10(o.value)), ink: WeatherColor.pm10)) }
-        if let o = c.best(.ozone) { rows.append(AirRow(name: "Ozone", obs: o, level: band(Banding.ozone(ppb: o.value)), ink: WeatherColor.ozone)) }
-        if let o = c.best(.no2) { rows.append(AirRow(name: "NO₂", obs: o, level: band(Banding.no2(ppb: o.value)), ink: WeatherColor.no2)) }
-        return rows
-    }
-
-    /// "Overall AQI 14 · Good · mostly ozone"
-    private func aqiLine(_ o: EnvObservation) -> String {
-        let parts = (o.category ?? "").components(separatedBy: " · ")
-        let word = o.value <= 50 ? "Good" : o.value <= 100 ? "OK" : "Not good"
-        var line = "Overall AQI \(Int(o.value)) · \(word)"
-        if parts.count > 1, let p = parts.last, !p.isEmpty { line += " · mostly \(p)" }
-        return line
-    }
-
-    private func band(_ b: PollutantBand) -> WeaveSpec.Level? {
-        switch b {
-        case .low: .low
-        case .moderate: .medium
-        case .high: .high
-        case .unknown: nil
+            if event.tagsReviewed, !event.tags.isEmpty {
+                // Confirmed tags only: these are what become bins.
+                FlowTags(tags: event.tags.sorted().map(\.label))
+            }
+            VoiceNoteButton(event: event)
         }
     }
 
-    /// Temperature and PM2.5 six hours either side, with this moment marked.
+    private func sectionTitle(_ text: String, _ symbol: String) -> some View {
+        Label(text, systemImage: symbol)
+            .font(.subheadline.weight(.semibold))
+            .labelStyle(.titleAndIcon)
+    }
+
+    // MARK: 4. The evidence
+
+    /// Temperature and PM2.5 six hours either side, in their families' inks, with this moment marked.
     @ViewBuilder private var aroundChart: some View {
         if let h = around, h.temperature.count > 1 || h.pm25.count > 1 {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("The hours around it").font(.headline)
-                // The family inks, the same as the sky and the rail.
+            VStack(alignment: .leading, spacing: 12) {
+                sectionTitle("The hours around it", "chart.xyaxis.line")
                 if h.temperature.count > 1 { mini("Temperature °F", h.temperature, WeatherColor.amber) }
                 if h.pm25.count > 1 { mini("PM2.5 µg/m³", h.pm25, WeatherColor.aqua) }
             }
-            .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
         }
     }
 
@@ -341,9 +354,10 @@ struct MomentDetailsView: View {
                     LineMark(x: .value("Time", p.date), y: .value(title, p.value))
                         .foregroundStyle(ink).interpolationMethod(.monotone)
                 }
+                // The moment: a plain rule in the page's ink (colour stays with the air).
                 RuleMark(x: .value("Moment", event.loggedAt))
-                    .foregroundStyle(event.moment == .rescue ? Theme.rescue : Theme.standard)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
+                    .foregroundStyle(Color.primary.opacity(0.7))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
             }
             .chartYScale(domain: (lo - pad)...(hi + pad))
             .chartXAxis { AxisMarks(values: .stride(by: .hour, count: 3)) { AxisValueLabel(format: .dateTime.hour()) } }
@@ -352,17 +366,59 @@ struct MomentDetailsView: View {
         }
     }
 
-    private func sources(_ c: Conditions) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Sources").font(.headline)
-            ForEach(Array(c.observations.enumerated()), id: \.offset) { _, o in
-                Text(ObservationCopy.line(o)).font(.caption).foregroundStyle(Theme.secondaryText)
+    /// Where it was: a small map, the place, and indoors or out. The map says *where you were*, never
+    /// where the air was measured: every reading is for the area around it.
+    @ViewBuilder private var whereSection: some View {
+        if event.latitude != nil || event.placeName != nil {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionTitle("Where", "mappin.and.ellipse")
+                if mapNamespace == nil, event.latitude != nil {
+                    MomentMap(event: event)
+                        .frame(height: 150)
+                        .clipShape(.rect(cornerRadius: 16, style: .continuous))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text([event.placeName, indoorWords].compactMap { $0 }.joined(separator: " · "))
+                        .font(.subheadline)
+                    Text("The readings are for the outdoor air around here, not this exact spot.")
+                        .font(.caption).foregroundStyle(Theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+        }
+    }
+
+    /// "Indoors" when you said so; "Likely indoors" when it's the phone's guess.
+    private var indoorWords: String? {
+        if let confirmed = event.indoorConfirmedRaw.flatMap(IndoorOutdoor.init(rawValue:)) {
+            return confirmed == .indoor ? "Indoors" : confirmed == .outdoor ? "Outdoors" : nil
+        }
+        switch event.indoorGuess {
+        case .indoor?: return "Likely indoors"
+        case .outdoor?: return "Likely outdoors"
+        default: return nil
+        }
+    }
+
+    /// Every reading with its full provenance, folded away: honest, one tap down.
+    private func everyReading(_ c: Conditions) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(c.observations.enumerated()), id: \.offset) { _, o in
+                        Text(ObservationCopy.line(o)).font(.caption).foregroundStyle(Theme.secondaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(.top, 8)
+            } label: {
+                sectionTitle("Every reading", "list.bullet").foregroundStyle(Color.primary)
+            }
+            .tint(Theme.secondaryText)
             if c.observations.contains(where: { $0.source == WeatherProvider.source }) { WeatherAttributionView() }
             NavigationLink("Where your data comes from") { SourcesView() }
-                .font(.footnote.weight(.semibold))
+                .font(.footnote.weight(.semibold)).tint(.primary)
         }
-        .padding(16).frame(maxWidth: .infinity, alignment: .leading).frostedCard()
     }
 
     private func loadAround() async {
@@ -370,5 +426,21 @@ struct MomentDetailsView: View {
         let from = event.loggedAt.addingTimeInterval(-6 * 3600)
         let to = min(event.loggedAt.addingTimeInterval(6 * 3600), .now)
         around = await HourlyHistory.load(latitude: lat, longitude: lon, from: from, to: to)
+    }
+}
+
+/// Confirmed tags as quiet chips that wrap.
+private struct FlowTags: View {
+    let tags: [String]
+
+    var body: some View {
+        FlowLayout(spacing: 6) {
+            ForEach(tags, id: \.self) { t in
+                Text(t).font(.footnote.weight(.medium))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Capsule().fill(Color.primary.opacity(0.08)))
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
+            }
+        }
     }
 }

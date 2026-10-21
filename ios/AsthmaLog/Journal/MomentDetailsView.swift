@@ -114,6 +114,7 @@ struct MomentDetailsView: View {
     @ViewBuilder private var content: some View {
                 if mapNamespace == nil { header }
                 if !event.uses.isEmpty { usesCard }
+                ExertionLine(event: event)
                 if let c = event.conditions, !c.observations.isEmpty {
                     weather(c)
                     air(c)

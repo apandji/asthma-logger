@@ -158,6 +158,9 @@ final class LogService {
     func enrich(_ event: LogEvent) async {
         event.envStatus = .pending
         event.envError = nil
+        // Active in the hour before (a pattern of its own, in the profile's Self family). Needs no location,
+        // so a failed fix doesn't lose it.
+        await ExertionReader.stamp(event)
         do {
             let fix = try await location.currentLocation()
             event.latitude = fix.coordinate.latitude
@@ -166,12 +169,6 @@ final class LogService {
             event.floorLevel = fix.floor?.level
 
             let state = await motion.recent()
-            // Active in the hour before (a pattern of its own, in the profile's Self family).
-            let at = event.loggedAt
-            let v = await motion.vigorousMinutes(before: at)
-            let h = await HealthReader.shared.activity(before: at)
-            event.exerted = UserDefaults.standard.bool(forKey: "demo.active") ? true   // Settings › Demo triggers
-                : Exertion.active(workout: h.workout, vigorousMinutes: v, steps: h.steps)
             event.apply(IndoorOutdoorGuesser.guess(IndoorSignals(
                 horizontalAccuracyM: fix.horizontalAccuracy, atPlace: nil, motion: state, floorLevel: fix.floor?.level
             )))

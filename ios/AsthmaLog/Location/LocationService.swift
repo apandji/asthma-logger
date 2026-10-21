@@ -77,20 +77,32 @@ final class MotionService {
         }
     }
 
-    /// Running or cycling minutes in the `window` before `date`, for the exertion bin. Nil when Motion isn't
-    /// available or allowed (missing, not "still").
-    func vigorousMinutes(before date: Date, window: TimeInterval = 30 * 60) async -> Double? {
-        guard CMMotionActivityManager.isActivityAvailable(), CMMotionActivityManager.authorizationStatus() == .authorized else { return nil }
+    /// For the exertion bin (`ExertionReader`): running and cycling minutes apart, so a moment can say "a run" or "a bike ride", and a note on what
+    /// came back (Settings › Exertion check). Nil minutes: Motion can't say (not allowed, older than the
+    /// week iOS keeps, or nothing recorded).
+    func vigorous(before date: Date, window: TimeInterval = 30 * 60) async -> (running: Double?, cycling: Double?, note: String) {
+        guard CMMotionActivityManager.isActivityAvailable() else { return (nil, nil, "Motion isn't available on this device.") }
+        guard CMMotionActivityManager.authorizationStatus() == .authorized else {
+            return (nil, nil, "Motion & Fitness isn't allowed (status \(CMMotionActivityManager.authorizationStatus().rawValue)).")
+        }
+        guard Exertion.motionCanSay(at: date) else { return (nil, nil, "Older than the week iOS keeps.") }
         let start = date.addingTimeInterval(-window)
+        let end = min(date, .now)
         return await withCheckedContinuation { continuation in
-            manager.queryActivityStarting(from: start, to: date, to: .main) { activities, error in
-                guard error == nil, let a = activities else { continuation.resume(returning: nil); return }
-                var minutes = 0.0
-                for (i, x) in a.enumerated() where x.running || x.cycling {
-                    let end = i + 1 < a.count ? a[i + 1].startDate : date
-                    minutes += max(0, end.timeIntervalSince(max(x.startDate, start))) / 60
+            manager.queryActivityStarting(from: start, to: end, to: .main) { activities, error in
+                guard error == nil, let a = activities, !a.isEmpty else {
+                    continuation.resume(returning: (nil, nil, error.map { "Motion error: \($0.localizedDescription)" } ?? "Nothing recorded."))
+                    return
                 }
-                continuation.resume(returning: minutes)
+                var running = 0.0, cycling = 0.0, walking = 0.0
+                for (i, x) in a.enumerated() {
+                    let until = i + 1 < a.count ? a[i + 1].startDate : end
+                    let minutes = max(0, until.timeIntervalSince(max(x.startDate, start))) / 60
+                    if x.running { running += minutes } else if x.cycling { cycling += minutes } else if x.walking { walking += minutes }
+                }
+                let note = String(format: "In the 30 min before: running %.1f min, cycling %.1f min, walking %.1f min (%d readings).",
+                                  running, cycling, walking, a.count)
+                continuation.resume(returning: (running, cycling, note))
             }
         }
     }

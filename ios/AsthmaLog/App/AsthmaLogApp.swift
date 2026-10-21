@@ -86,6 +86,8 @@ struct AsthmaLogApp: App {
                     #endif
                     await services.resumePending(in: context)
                     await services.backfillLookBack(in: context)
+                    // Once: moments from before exertion was stamped get it from Health and Motion history.
+                    await ExertionReader.restampIfNeeded(in: context)
                 }
         }
         .modelContainer(container)

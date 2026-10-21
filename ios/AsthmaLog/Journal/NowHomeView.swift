@@ -1507,7 +1507,7 @@ struct NowSky: View {
                         })
                         .frame(width: 260).position(x: x, y: y).transition(.opacity)
                     case .body:
-                        BodyPanel(date: selfEvent?.loggedAt ?? date, interactive: !probing)
+                        BodyPanel(date: selfEvent?.loggedAt ?? date, interactive: !probing, event: selfEvent)
                             .frame(width: 248).position(x: x, y: y).transition(.opacity)
                     default:
                         if let probe {

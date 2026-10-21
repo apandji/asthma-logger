@@ -45,6 +45,9 @@ final class LogEvent {
     var tagsReviewed: Bool = false
     /// Active in the hour before (Health workouts, Motion, steps; `Exertion`). Nil: Health and Motion couldn't say.
     var exerted: Bool?
+    /// Which signal said active (`ExertionSource.rawValue`: "workout.walk", "motion.running", "steps"), so the
+    /// moment can say what it came from. Nil when not active, unknown, or stamped before this was kept.
+    var exertedByRaw: String?
     /// File name of this moment's voice note in Documents/VoiceNotes (audio stays on the phone).
     var voiceNoteFile: String?
     /// "University City, MO", looked up once from the coordinates.
@@ -89,6 +92,11 @@ final class LogEvent {
 
     var indoorOutdoor: IndoorOutdoor? {
         indoorConfirmedRaw.flatMap(IndoorOutdoor.init(rawValue:)) ?? indoorGuess
+    }
+
+    var exertedBy: ExertionSource? {
+        get { exertedByRaw.flatMap(ExertionSource.init(rawValue:)) }
+        set { exertedByRaw = newValue?.rawValue }
     }
 
     var tags: Set<JournalTag> {

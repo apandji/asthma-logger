@@ -218,10 +218,11 @@ struct DeveloperSettings: View {
                 }
                 Toggle("Presses look like test sprays", isOn: $demoPriming)
                 Toggle("New moments count as active", isOn: $demoActive)
+                NavigationLink("Exertion check") { ExertionCheckView() }
             } header: {
                 Text("Demo triggers")
             } footer: {
-                Text("Rescue-use check: the card on Now. Test sprays: the logged panel asks \"Were those test sprays?\" on any press. Active: new moments are stamped active (the exertion pattern). Also staged elsewhere: Demo scenario (smoke, storm, cold snap, pollen day: the header, air chips, advice card and the journal's exposure question), Demo calendar (what's on, beside the air), data sets (underlined patterns and the Insights ring's bubble).")
+                Text("Rescue-use check: the card on Now. Test sprays: the logged panel asks \"Were those test sprays?\" on any press. Active: new moments are stamped active, from a walk (the exertion pattern and the moment's line). Exertion check: what Health and Motion return for your latest moments. Also staged elsewhere: Demo scenario (smoke, storm, cold snap, pollen day: the header, air chips, advice card and the journal's exposure question), Demo calendar (what's on, beside the air), data sets (underlined patterns and the Insights ring's bubble).")
             }
             #endif
 

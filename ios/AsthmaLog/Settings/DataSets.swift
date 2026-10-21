@@ -55,6 +55,8 @@ enum DataSets {
         var voiceNoteFile: String?
         var placeName: String?
         var isBackfilled: Bool?
+        var exerted: Bool?
+        var exertedBy: String?
         var uses: [Use]?
         var notes: [Note]?
 
@@ -67,7 +69,7 @@ enum DataSets {
             conditionsData = e.conditionsData; indoorGuessRaw = e.indoorGuessRaw; indoorConfirmedRaw = e.indoorConfirmedRaw
             tagsRaw = e.tagsRaw; note = e.note; isDemoMoment = e.isDemoMoment; isFirstCapture = e.isFirstCapture
             voiceTranscript = e.voiceTranscript; tagsReviewed = e.tagsReviewed; voiceNoteFile = e.voiceNoteFile; placeName = e.placeName
-            isBackfilled = e.isBackfilled
+            isBackfilled = e.isBackfilled; exerted = e.exerted; exertedBy = e.exertedByRaw
             uses = e.uses.map { Use(at: $0.at, lastPressAt: $0.lastPressAt, puffs: $0.puffs, kind: $0.kindRaw, inhalerName: $0.inhalerName,
                                     device: $0.deviceRaw, deviceID: $0.deviceID, healthSampleID: $0.healthSampleID) }
             notes = e.notes.map { Note(recordedAt: $0.recordedAt, audioFile: $0.audioFile, transcript: $0.transcript, source: $0.sourceRaw) }
@@ -80,7 +82,7 @@ enum DataSets {
             e.indoorGuessRaw = indoorGuessRaw; e.indoorConfirmedRaw = indoorConfirmedRaw; e.tagsRaw = tagsRaw
             e.note = note; e.isDemoMoment = isDemoMoment; e.isFirstCapture = isFirstCapture
             e.voiceTranscript = voiceTranscript; e.tagsReviewed = tagsReviewed; e.voiceNoteFile = voiceNoteFile; e.placeName = placeName
-            e.isBackfilled = isBackfilled ?? false
+            e.isBackfilled = isBackfilled ?? false; e.exerted = exerted; e.exertedByRaw = exertedBy
             for u in uses ?? [] {
                 let kind = Inhaler.Kind(rawValue: u.kind) ?? .rescue
                 let use = InhalerUse(at: u.at, kind: kind, inhaler: Inhaler.current(kind), device: InhalerUse.Device(rawValue: u.device) ?? .unknown,

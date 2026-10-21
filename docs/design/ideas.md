@@ -70,3 +70,6 @@ Things noticed while building, not yet decided. Add as you go; move an item out 
 - **Weather by what it does** (Oct 21): see weather-grouping.md. Three items under Weather (Cold, dry air /
   Heat and humidity / Sudden change) instead of instruments; pressure joins Sudden change as one bin later
   (`pressure_change`, from WeatherKit history). Crit switch: Design crit › Weather on the rail.
+- **Risk colour** (Oct 21): see risk-color.md. Risk becomes one warm ink (graphite → orange → bright orange,
+  three steps); families move to icons, names and riso textures; green/gold/red retires. Five-second test with
+  the TestFlight group before it ships; candidate crit switch: Design crit › Risk colour (today / A / A + D).

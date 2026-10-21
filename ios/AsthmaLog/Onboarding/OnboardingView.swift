@@ -5,7 +5,7 @@ import SwiftUI
 
 /// First run, in the home's own language (docs/design/design-system.md, docs/design/onboarding-pair.md):
 /// welcome · where you are (the location prompt, the map draws with no air on it yet) · **pair your inhaler**
-/// (press the felt button, or hold the cap on screen without one: that press fetches the air, and the scan
+/// (press the felt button, or press the cap on screen without one: that press fetches the air, and the scan
 /// draws your **first moment**, a test press saved as a baseline) · name your inhalers · what felt air uses ·
 /// what happens next.
 struct OnboardingView: View {
@@ -69,7 +69,7 @@ struct OnboardingView: View {
         }
         #if DEBUG
         // Recordings in the simulator: `-demoPress` presses the felt button for you a few seconds into that step,
-        // `-demoNoButton` opens it on the cap on screen (and `-demoPress` then holds the cap for you).
+        // `-demoNoButton` opens it on the cap on screen (and `-demoPress` then presses the cap for you).
         // `-onboardingAt pair` starts there (it finds you first).
         .task(id: step) {
             let args = ProcessInfo.processInfo.arguments
@@ -153,7 +153,7 @@ struct OnboardingView: View {
         }
     }
 
-    /// The inhaler's cap, waiting for the felt button, or on screen to press and hold.
+    /// The inhaler's cap, waiting for the felt button, or on screen to press.
     private var cap: some View {
         InhalerCap(mode: fetching ? .pressed : (softButton ? .soft : .waiting), cap: pressedCap,
                    autoPress: softButton && ProcessInfo.processInfo.arguments.contains("-demoPress")) {
@@ -200,14 +200,14 @@ struct OnboardingView: View {
                 } else if fetching {
                     HStack(spacing: 10) { ProgressView(); body(OnboardingCopy.fetchingBody) }
                 } else if softButton {
-                    body(OnboardingCopy.softBody)
+                    pressRow(OnboardingCopy.softBody)
                     fine(OnboardingCopy.softFine)
                     secondary(OnboardingCopy.softHaveButton) {
                         softButton = false
                         button.beginSync()
                     }
                 } else {
-                    body(buttonStatus)
+                    pressRow(buttonStatus)
                     fine(OnboardingCopy.buttonHint)
                     secondary(OnboardingCopy.buttonSkip) {
                         button.endSync()
@@ -250,6 +250,14 @@ struct OnboardingView: View {
     /// One text size for the panel's words (body, primary), and one for the fine print.
     private func body(_ s: String) -> some View {
         Text(s).font(.body).foregroundStyle(.primary.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// The press hint: the press icon beside the line that asks for a press.
+    private func pressRow(_ s: String) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            PressIcon(size: 26)
+            body(s)
+        }
     }
 
     private func fine(_ s: String) -> some View {

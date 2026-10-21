@@ -3,14 +3,15 @@ import SwiftUI
 
 /// Onboarding's pair screen: the inhaler seen from above, the felt button on its cap.
 /// Waiting for a felt button, the cap is an empty ring that listens. Without one, it's a **software cap**
-/// in the cap's colour that you press and hold, like actuating an inhaler: the cap travels down, a ring fills,
-/// a light tick as it travels and one firm thud at the bottom. Let go early and nothing happens.
+/// in the cap's colour that you press. It counts the way the felt button does (`hardware/felt-button/felt-button.ino`):
+/// the moment it goes down, after the firmware's 30 ms debounce, with no hold. The cap sinks for the firmware's
+/// 150 ms press flash, a ring fills with it, one firm thud, and it springs back.
 /// Chrome (the boot) has no colour; the cap's colour is the only ink, the same as the felt button's own cap.
 struct InhalerCap: View {
     enum Mode: Equatable {
         /// A felt button is being paired: the cap is an empty ring, listening.
         case waiting
-        /// No felt button: press and hold the cap on screen.
+        /// No felt button: press the cap on screen.
         case soft
         /// Pressed (by either): filled in the cap's colour, no longer pressable.
         case pressed
@@ -18,18 +19,20 @@ struct InhalerCap: View {
 
     let mode: Mode
     var cap: ButtonPacket.Cap = .rescue
-    /// Recordings in the simulator (Debug, `-demoPress`): holds the cap by itself a few seconds in.
+    /// Recordings in the simulator (Debug, `-demoPress`): presses the cap by itself a few seconds in.
     var autoPress = false
-    /// The hold reached the bottom of its travel.
+    /// The press counted.
     var onActuate: () -> Void = {}
 
-    /// How long a press takes to reach the bottom, like a canister's travel.
-    static let travelTime: Double = 0.6
+    /// The felt button's own timings (`felt-button.ino`): a press counts once the contact has been steady
+    /// for `DEBOUNCE_MS`, and the LED flashes for `PRESS_MS`. There's no hold threshold in the firmware.
+    static let debounce: Double = 0.030
+    static let pressFlash: Double = 0.150
 
     @State private var travel: CGFloat = 0
-    @State private var holding = false
+    @State private var down = false
     @State private var fired = false
-    @State private var ticks: Task<Void, Never>?
+    @State private var pending: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let capSize: CGFloat = 112
@@ -46,7 +49,7 @@ struct InhalerCap: View {
         .frame(width: 260, height: 300)
         .contentShape(.rect)
         .animation(Theme.snap, value: mode)
-        .modifier(Hold(enabled: mode == .soft, minimum: Self.travelTime, onPressing: pressing, onDone: actuate))
+        .modifier(Press(enabled: mode == .soft, onChange: pressing))
         .accessibilityElement()
         .accessibilityLabel(mode == .waiting ? OnboardingCopy.capWaitingLabel : OnboardingCopy.capLabel)
         .accessibilityHint(mode == .soft ? OnboardingCopy.capHint : "")
@@ -57,8 +60,8 @@ struct InhalerCap: View {
             guard autoPress, mode == .soft else { return }
             try? await Task.sleep(for: .seconds(3))
             pressing(true)
-            try? await Task.sleep(for: .seconds(Self.travelTime))
-            actuate()
+            try? await Task.sleep(for: .seconds(Self.pressFlash))
+            pressing(false)
         }
         #endif
     }
@@ -109,25 +112,20 @@ struct InhalerCap: View {
 
     // MARK: The press
 
-    private func pressing(_ down: Bool) {
-        if down {
+    private func pressing(_ isDown: Bool) {
+        guard isDown != down else { return }
+        down = isDown
+        if isDown {
             guard !fired else { return }
-            holding = true
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6)
-            withAnimation(.linear(duration: Self.travelTime)) { travel = 1 }
-            // A light tick as the canister travels.
-            ticks = Task {
-                let tick = UIImpactFeedbackGenerator(style: .light)
-                for k in 1...2 {
-                    try? await Task.sleep(for: .seconds(Self.travelTime / 3))
-                    guard !Task.isCancelled else { return }
-                    tick.impactOccurred(intensity: 0.4 + 0.2 * Double(k))
-                }
+            withAnimation(.easeIn(duration: Self.pressFlash)) { travel = 1 }
+            // Counts after the firmware's debounce: a touch that lifts before then is a glitch, not a press.
+            pending = Task {
+                try? await Task.sleep(for: .seconds(Self.debounce))
+                guard !Task.isCancelled else { return }
+                actuate()
             }
         } else {
-            holding = false
-            ticks?.cancel()
-            // Let go early: it springs back, nothing logged.
+            pending?.cancel()
             if !fired { withAnimation(Theme.snap) { travel = 0 } }
         }
     }
@@ -135,23 +133,26 @@ struct InhalerCap: View {
     private func actuate() {
         guard !fired else { return }
         fired = true
-        ticks?.cancel()
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 1)
-        withAnimation(Theme.lift) { travel = 0 }
         onActuate()
+        // Stay at the bottom for the press flash, then spring back.
+        Task {
+            try? await Task.sleep(for: .seconds(Self.pressFlash))
+            withAnimation(Theme.lift) { travel = 0 }
+        }
     }
 }
 
-/// A press and hold that reports going down and reaching the end, and does nothing when disabled.
-private struct Hold: ViewModifier {
+/// Touch down and up, reported as they happen (no hold), and nothing when disabled.
+private struct Press: ViewModifier {
     let enabled: Bool
-    let minimum: Double
-    let onPressing: (Bool) -> Void
-    let onDone: () -> Void
+    let onChange: (Bool) -> Void
 
     func body(content: Content) -> some View {
         if enabled {
-            content.onLongPressGesture(minimumDuration: minimum, maximumDistance: 40, perform: onDone, onPressingChanged: onPressing)
+            content.gesture(DragGesture(minimumDistance: 0)
+                .onChanged { _ in onChange(true) }
+                .onEnded { _ in onChange(false) })
         } else {
             content
         }

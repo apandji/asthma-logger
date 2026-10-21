@@ -34,11 +34,11 @@ enum OnboardingCopy {
     static let buttonBluetoothOff = "Turn on Bluetooth to connect."
     static let buttonNotAllowed = "Bluetooth is off for felt air. Turn it on in Settings › felt air."
     /// Without a felt button: the cap on screen.
-    static let softBody = "Press and hold the cap, the way you'd press your inhaler."
+    static let softBody = "Press the cap, the way you'd press your inhaler."
     static let softFine = "This first press is a test, not a rescue."
     static let softHaveButton = "I have a felt button"
     static let capLabel = "Inhaler cap"
-    static let capHint = "Press and hold to take a test press."
+    static let capHint = "Press to take a test press."
     static let capWaitingLabel = "Waiting for a press on your felt button"
     /// Between the press and the readings landing.
     static let fetchingTop = "Checking the air here…"

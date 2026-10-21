@@ -74,6 +74,9 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
     /// v5 (iOS only): active in the hour before (Health workouts, Motion, steps). Nil when neither Health nor
     /// Motion could say: missing, not "no".
     public var exerted: Bool?
+    /// Later (not MVP, `Infection`): flu-like illness around that day. Nil = not stamped: missing, not "low".
+    /// No bin reads it until `Infection.isEnabled`.
+    public var infection: InfectionLevel?
 
     /// Whether the journal-tag bins have data for this frame. A confirmed tag implies a review.
     public var tagsSampled: Bool { tagsReviewed || !tags.isEmpty }
@@ -95,7 +98,8 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         indoorOutdoor: IndoorOutdoor? = nil,
         tags: Set<JournalTag> = [],
         tagsReviewed: Bool = false,
-        exerted: Bool? = nil
+        exerted: Bool? = nil,
+        infection: InfectionLevel? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -114,11 +118,12 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         self.tags = tags
         self.tagsReviewed = tagsReviewed
         self.exerted = exerted
+        self.infection = infection
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, hourOfDay, season, tempBand, humidityBand, pm25Band, ozoneBand, pollenWeed
-        case smokeAtPoint, heatAlert, tempDrop, place, indoorOutdoor, tags, tagsReviewed, exerted
+        case smokeAtPoint, heatAlert, tempDrop, place, indoorOutdoor, tags, tagsReviewed, exerted, infection
     }
 
     public init(from decoder: Decoder) throws {
@@ -140,5 +145,6 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         tags = try c.decodeIfPresent(Set<JournalTag>.self, forKey: .tags) ?? []
         tagsReviewed = try c.decodeIfPresent(Bool.self, forKey: .tagsReviewed) ?? false
         exerted = try c.decodeIfPresent(Bool.self, forKey: .exerted)
+        infection = try c.decodeIfPresent(InfectionLevel.self, forKey: .infection)
     }
 }

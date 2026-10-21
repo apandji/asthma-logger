@@ -64,6 +64,15 @@ public enum Bins {
         }
     }
 
+    /// Built but not counted: later bins (not MVP). Turning one on = append it to `all` and bump `BinSpec`.
+    public static let later: [BinDef] = [
+        // Infections (`Infection`): only days the area level was stamped; the rest are missing, not "low".
+        BinDef(bin: Infection.bin, isBoolean: false, sampled: { $0.infection.map { $0 != .unknown } ?? false }) { f in
+            guard let l = f.infection, l != .unknown else { return nil }
+            return l.rawValue
+        },
+    ]
+
     public static func label(_ bin: String) -> String {
         switch bin {
         case "pm25": return "PM2.5"
@@ -78,6 +87,7 @@ public enum Bins {
         case "indoor_outdoor": return "Indoors / outdoors"
         case "temp_drop": return "Sharp temperature drop"
         case "exertion": return "Being active"
+        case "ili": return "Flu-like illness around"
         default:
             if bin.hasPrefix("tag_"), let tag = JournalTag(rawValue: String(bin.dropFirst(4))) {
                 return tag.label

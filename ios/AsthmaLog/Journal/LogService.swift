@@ -175,6 +175,7 @@ final class LogService {
 
             let c = await conditions.conditions(latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude)
             event.conditions = c
+            await InfectionStamp.stamp(event)
             event.envStatus = c.observations.isEmpty ? .failed : (c.errors.isEmpty ? .ready : .partial)
             if c.observations.isEmpty { event.envError = "Couldn't reach the air services. Open the moment to try again." }
         } catch {

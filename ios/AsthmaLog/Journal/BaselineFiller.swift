@@ -57,6 +57,7 @@ final class BaselineFiller {
                     e.isBackfilled = true
                     // Active or not in the hour before, from Motion and Health history (missing when they can't say).
                     await ExertionReader.stamp(e, demo: false)
+                    await InfectionStamp.stamp(e)
                     context.insert(e)
                     baselines.append(slot.date)
                 }

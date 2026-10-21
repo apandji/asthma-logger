@@ -8,6 +8,10 @@ import SwiftUI
 struct InsightsView: View {
     /// The home sky's colour at the moment the page opened: the bloom starts from it.
     var skyColor: Color? = nil
+    /// Opened from a pattern tip: that family's card opens, selected, and the page scrolls to it.
+    var focus: AirProfile.Category? = nil
+    /// The factor's bin within it, for the row's highlight.
+    var focusBin: String? = nil
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @AppStorage(Prefs.useDemoData) private var demo = false
     @State private var model = InsightsModel()
@@ -26,6 +30,7 @@ struct InsightsView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 24) {
                     // SF for the page's name; the one Recursive line on the page is your archetype.
@@ -56,6 +61,14 @@ struct InsightsView: View {
                 .opacity(shown ? 1 : 0)
             }
             .scrollIndicators(.hidden)
+            .task {
+                guard let focus else { return }
+                open = [focus]
+                picked = focus
+                try? await Task.sleep(for: .milliseconds(700))   // after the page has arrived
+                withAnimation(Theme.smooth) { proxy.scrollTo(focus, anchor: .center) }
+            }
+            }
             .background(paperBackground)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Page.self) { page in
@@ -159,16 +172,22 @@ struct InsightsView: View {
             let lead = arch.categories.first ?? axes.first?.category
             let opened = open ?? Set([lead].compactMap { $0 })
             ForEach(axes) { a in
-                CategoryCard(axis: a, triggers: report.map { AirProfile.triggers(a.category, report: $0) } ?? [],
-                             starred: Set(arch.leads.map(\.id)), selected: picked == a.category,
-                             expanded: opened.contains(a.category)) {
-                    withAnimation(Theme.snap) {
-                        var next = opened
-                        if next.contains(a.category) { next.remove(a.category) } else { next.insert(a.category) }
-                        open = next
-                        picked = next.contains(a.category) ? a.category : nil
-                    }
-                }
+                card(a, arch: arch, opened: opened).id(a.category)
+            }
+        }
+    }
+
+    private func card(_ a: AirProfile.Axis, arch: Archetype, opened: Set<AirProfile.Category>) -> some View {
+        let triggers: [AirProfile.Trigger] = report.map { AirProfile.triggers(a.category, report: $0) } ?? []
+        let starred = Set(arch.leads.map(\.id))
+        let mark: String? = focus == a.category ? focusBin : nil
+        return CategoryCard(axis: a, triggers: triggers, starred: starred, selected: picked == a.category,
+                            expanded: opened.contains(a.category), highlight: mark) {
+            withAnimation(Theme.snap) {
+                var next = opened
+                if next.contains(a.category) { next.remove(a.category) } else { next.insert(a.category) }
+                open = next
+                picked = next.contains(a.category) ? a.category : nil
             }
         }
     }

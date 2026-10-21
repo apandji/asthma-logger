@@ -35,7 +35,8 @@ struct AirRadar: View {
         case .weather: WeatherColor.print ? WeatherColor.amber : WeatherColor.temperature(38)
         case .biologics: WeatherColor.pollen[2]
         case .particulates: WeatherColor.no2
-        case .exertion: Theme.rescueSoft
+        // Self isn't air: it prints in the key ink, like the text (Print, owner Oct 21), not a fourth hue.
+        case .exertion: WeatherColor.flat ? Color.primary : Theme.rescueSoft
         }
     }
 

@@ -156,6 +156,12 @@ public enum TheRead {
         return out
     }
 
+    /// The bin a factor's name came from ("Heat" → "temp"), so a tip can open its family in Insights.
+    public static func bin(ofFactor name: String) -> String? {
+        if name == noun("temp_drop", "yes") { return "temp_drop" }
+        return markable.first { noun($0.0, $0.1) == name }?.0
+    }
+
     /// The first marked thing in a sentence. Nil when the sentence isn't one of ours.
     public static func factor(in sentence: String) -> String? { factors(in: sentence).first?.factor }
 

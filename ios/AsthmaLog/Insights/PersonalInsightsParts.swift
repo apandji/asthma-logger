@@ -12,6 +12,8 @@ struct CategoryCard: View {
     let starred: Set<String>
     let selected: Bool
     let expanded: Bool
+    /// The bin a pattern tip opened Insights on: its row is marked so the eye lands on it.
+    var highlight: String? = nil
     let toggle: () -> Void
     /// The starred one first, whatever its strength word says.
     private var ordered: [AirProfile.Trigger] {
@@ -74,6 +76,12 @@ struct CategoryCard: View {
                 .foregroundStyle(t.strength == .strong || t.strength == .some ? Color.primary : Theme.secondaryText)
         }
         .padding(.leading, 20)
+        .padding(.vertical, highlight != nil && t.row?.bin == highlight ? 6 : 0)
+        .background {
+            if let h = highlight, t.row?.bin == h {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.08)).padding(.leading, 8)
+            }
+        }
     }
 }
 

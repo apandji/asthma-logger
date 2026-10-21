@@ -53,6 +53,8 @@ struct NowHomeView: View {
     @State private var noticed = 0
     /// A tapped underline's tip, said by the Insights ring (owner, Oct 18: patterns live in Insights).
     @State private var patternTip: PatternTip?
+    /// The bin a tip's "See in Insights" opens on; cleared when Insights closes.
+    @State private var insightsFocus: String?
     @Namespace private var hero
     /// The rail is open (held or pinned): the pill above it steps aside.
     @State private var railOpen = false
@@ -196,10 +198,11 @@ struct NowHomeView: View {
                     .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) { bottomBar }
-            .sheet(isPresented: $showInsights) {
+            .sheet(isPresented: $showInsights, onDismiss: { insightsFocus = nil }) {
                 // The sparkle grows into the page (a zoom from the button), and the page starts in this sky's colour
                 // before its own bloom comes through: the same page, turned.
-                InsightsView(skyColor: skyColorNow)
+                InsightsView(skyColor: skyColorNow, focus: insightsFocus.flatMap { AirProfile.Category.of(bin: $0) },
+                             focusBin: insightsFocus)
                     .navigationTransition(.zoom(sourceID: "insights", in: hero))
                     .presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper)).presentationCornerRadius(32)
             }
@@ -478,6 +481,7 @@ struct NowHomeView: View {
         .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
             if let tip = patternTip, held == nil {
                 RingSays(tip: tip, towardLeading: !railLeft, below: true) {
+                    insightsFocus = TheRead.bin(ofFactor: tip.factor)
                     patternTip = nil
                     showInsights = true
                 }

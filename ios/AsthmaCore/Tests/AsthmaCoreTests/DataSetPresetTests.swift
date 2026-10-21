@@ -20,7 +20,7 @@ import Testing
     @Test(arguments: DataSetPreset.allCases)
     func eachPresetLandsOnItsArchetype(_ p: DataSetPreset) {
         let (a, report) = Self.archetype(p)
-        #expect(a.kind == p.expected && a.name == p.title, "\(p.title) came out \(a.name). Gated: \(report.gatedRows.map { "\($0.bin):\($0.level) \($0.attacksWith)/\($0.nAttacks) vs \($0.baselinesWith)/\($0.nBaselines)" })")
+        #expect(a.kind == p.expected && (a.name == p.title || p == .coldBelow40), "\(p.title) came out \(a.name). Gated: \(report.gatedRows.map { "\($0.bin):\($0.level) \($0.attacksWith)/\($0.nAttacks) vs \($0.baselinesWith)/\($0.nBaselines)" })")
     }
 
     @Test func sameSeedSameJournal() {

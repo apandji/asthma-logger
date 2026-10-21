@@ -181,7 +181,8 @@ struct InsightsView: View {
         let triggers: [AirProfile.Trigger] = report.map { AirProfile.triggers(a.category, report: $0) } ?? []
         let starred = Set(arch.leads.map(\.id))
         let mark: String? = focus == a.category ? focusBin : nil
-        return CategoryCard(axis: a, triggers: triggers, starred: starred, selected: picked == a.category,
+        return VStack(spacing: 10) {
+          CategoryCard(axis: a, triggers: triggers, starred: starred, selected: picked == a.category,
                             expanded: opened.contains(a.category), highlight: mark) {
             withAnimation(Theme.snap) {
                 var next = opened
@@ -189,7 +190,21 @@ struct InsightsView: View {
                 open = next
                 picked = next.contains(a.category) ? a.category : nil
             }
+          }
+          if a.category == .weather, let e = tempEdge {
+              PersonalEdgeCard(edge: e.edge, flare: e.flare, baseline: e.baseline)
+          }
         }
+    }
+
+    /// Your own temperature edge, cold side first (`PersonalEdge`): rescue vs baseline moments' temperatures.
+    private var tempEdge: (edge: PersonalEdge, flare: [Double], baseline: [Double])? {
+        let real = events.filter { !$0.isDemo }
+        let t = { (k: MomentKind) in real.filter { $0.moment == k }.compactMap { $0.conditions?.input.temperatureF } }
+        let flare = t(.rescue), baseline = t(.okay)
+        if let e = PersonalEdge.find(flare: flare, baseline: baseline, side: .below, general: 32) { return (e, flare, baseline) }
+        if let e = PersonalEdge.find(flare: flare, baseline: baseline, side: .above, general: 90) { return (e, flare, baseline) }
+        return nil
     }
 
     // MARK: When and where

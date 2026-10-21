@@ -18,6 +18,8 @@ enum Theme {
     static let standard = Color(light: 0x2B8FD6, dark: 0x4FB0F5)  // blue
     /// The same two, softened: for the scan ripple, so they don't compete with the particles' inks.
     static let rescueSoft = Color(light: 0xF2B48C, dark: 0xFFC9A3)
+    /// The risk ink as a highlighter (docs/design/risk-color.md): laid behind what's yours, never as text colour.
+    static let riskHighlight = Color(light: 0xE0791F, dark: 0xFF9D36)
     /// What you felt (symptom tags and words), kept apart from the rescue orange so "felt" and "rescue"
     /// never read as the same thing.
     static let symptom = Color(light: 0xB8434D, dark: 0xF08A92)

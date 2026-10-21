@@ -12,10 +12,15 @@ public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
     case hotHazy, coldEffort, stormSeason, seasonal, coldSeason
     // Any other pair, then three or more.
     case allergenEffort, mixed
+    // A personal edge: flares below about 40°F, well above the general cold edge (32°F).
+    case coldBelow40
 
     public var id: String { rawValue }
 
-    public var title: String { expected == .paired ? "Effort-led, with allergens" : Archetype.name(expected) }
+    public var title: String {
+        if self == .coldBelow40 { return "Cold, below about 40°F" }
+        return expected == .paired ? "Effort-led, with allergens" : Archetype.name(expected)
+    }
 
     /// The archetype the preset should produce.
     public var expected: Archetype.Kind {
@@ -36,10 +41,12 @@ public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
         case .coldSeason: .coldSeason
         case .allergenEffort: .paired
         case .mixed: .mixed
+        // Nothing passes the general bins (40°F is "mild"); only the personal edge finds it.
+        case .coldBelow40: .noClearTrigger
         }
     }
 
-    enum Raise: CaseIterable { case weed, ozone, pm25, humid, hot, cold, dry, drop, exercise, ili }
+    enum Raise: CaseIterable { case weed, ozone, pm25, humid, hot, cold, dry, drop, exercise, ili, coolish }
 
     var raised: Set<Raise> {
         switch self {
@@ -58,6 +65,7 @@ public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
         case .coldSeason: [.cold, .ili]
         case .allergenEffort: [.weed, .exercise]
         case .mixed: [.weed, .ozone, .humid]
+        case .coldBelow40: [.coolish]
         }
     }
 
@@ -88,7 +96,7 @@ public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
             let hour = rng.int(7, 22), minute = rng.int(0, 59)
             let at = calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
             func on(_ r: Raise) -> Bool { raised.contains(r) && rng.chance(rescue ? 0.72 : 0.08) }
-            var t = rng.normal(64, 9), rh = rng.normal(50, 8), pm = abs(rng.normal(8, 3)), o3 = abs(rng.normal(36, 8))
+            var t = self == .coldBelow40 ? rng.normal(54, 11) : rng.normal(64, 9), rh = rng.normal(50, 8), pm = abs(rng.normal(8, 3)), o3 = abs(rng.normal(36, 8))
             var weed = "Low", fall: Double? = rng.chance(0.5) ? abs(rng.normal(3, 2)) : nil
             if on(.weed) { weed = "High" }
             if on(.ozone) { o3 = rng.normal(82, 6) }
@@ -97,6 +105,7 @@ public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
             if on(.hot) { t = rng.normal(94, 2) }
             if on(.drop) { fall = rng.normal(19, 2) }
             if on(.cold) { t = rng.normal(24, 4) }
+            if on(.coolish) { t = rng.normal(36.5, 2) }
             if on(.dry) { rh = rng.normal(24, 4) }
             var ili: InfectionLevel?
             if raised.contains(.ili) { ili = on(.ili) ? .high : (rng.chance(0.7) ? .low : .moderate) }

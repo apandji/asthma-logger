@@ -50,6 +50,26 @@ stretch of a sparkline, or the word, that is one of yours. The line and the text
 So orange has one meaning across the app: *this looks like your flare days*. On the forecast it fills an hour,
 on a reading or a sparkline it highlights the part that's yours.
 
+## Your own edge (Oct 21, in crit)
+
+`PersonalEdge` (AsthmaCore) finds where *your* flare moments cluster on a reading, e.g. below about 40°F where
+the general cold edge is 32°F. It tries cut points every 5°, scores them like the forecast (smoothed log
+likelihood ratio, k = 2), and keeps one only if it clears a stricter gate than a fixed bin: 8 flare moments past
+it, 20 baselines, raw lift above 1.5, and the same cut (±5°) winning on 60% of 200 random half-splits. Within 5°
+of the general edge it says the general one. Data set: Settings › Data sets › "Cold, below about 40°F".
+
+Three ways to say it, under the Weather card (Settings › Design crit › Your edge):
+
+1. **Sentence with the number:** "Your flare days often came when it was ~~below about 40°F~~" (highlighted).
+   The first number outside a reading, so it bends the no-numbers rule.
+2. **Words only:** "…on days colder than almost all your usual ones" (highlighted). The share of your baselines
+   past the edge picks the words.
+3. **The dots it came from:** a tally on a colder → warmer line, flares stacking up, usual days down, the side
+   past your edge highlighted. No numbers.
+
+Next, if it holds: your edge on the sparkline (the highlight starts there, not at the general edge), humidity the
+same way, and the edge as a level in the rate table so the forecast uses it.
+
 Not yet decided: whether the forecast strip carries the driving family's texture or only the risk ink (A vs
 A + D), and whether diverging (B) is worth a test for "quieter than your usual".
 

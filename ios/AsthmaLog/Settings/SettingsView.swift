@@ -127,6 +127,7 @@ struct DeveloperSettings: View {
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
     @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.print
     @AppStorage(Crit.WeatherRail.key) private var critWeatherRail = Crit.WeatherRail.oneStop
+    @AppStorage(Crit.PersonalEdgeStyle.key) private var critPersonalEdge = Crit.PersonalEdgeStyle.sentence
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false
@@ -201,6 +202,9 @@ struct DeveloperSettings: View {
                 }
                 Picker("Weather on the rail", selection: $critWeatherRail) {
                     ForEach(Crit.WeatherRail.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Your edge", selection: $critPersonalEdge) {
+                    ForEach(Crit.PersonalEdgeStyle.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("Insights state", selection: $critInsightsState) {
                     ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }

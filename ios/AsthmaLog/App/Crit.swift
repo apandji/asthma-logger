@@ -130,6 +130,21 @@ enum Crit {
         static var byFacet: Bool { UserDefaults.standard.string(forKey: key) == WeatherRail.facets.rawValue }
     }
 
+    /// How Insights says your own edge for a reading (docs/design/risk-color.md): a sentence with the number, words
+    /// only, or the dots it came from. A crit for the "no numbers on screen" rule.
+    enum PersonalEdgeStyle: String, CaseIterable, Identifiable {
+        case sentence, words, dots
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .sentence: "Sentence with the number"
+            case .words: "Words only"
+            case .dots: "The dots it came from"
+            }
+        }
+        static let key = "crit.personalEdge"
+    }
+
     /// The page: black (ink on night) or linen, a warm off-white paper that suits the riso grain.
     enum Paper: String, CaseIterable, Identifiable {
         case black, linen

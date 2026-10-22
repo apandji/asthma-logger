@@ -210,14 +210,18 @@ struct InsightsRingButton: View {
     var body: some View {
         Button(action: { bubbleDismissed = true; open() }) {
             ZStack {
-                // Learning, as a ring of riso dots that builds as felt air learns (Insights' LearningRing, small).
-                // It draws itself in from empty when it appears, so you see it building.
-                let dots = size < 50 ? 20 : 28
-                let big: CGFloat = size < 50 ? 1.6 : 2.3
-                DotRing(fill: 1, dots: dots, on: 0.9, inset: big + 1).fill(Theme.secondaryText.opacity(0.4))
-                DotRing(fill: shown ? progress : 0, dots: dots, on: big, inset: big + 1)
-                    .fill(Color.primary.opacity(learned ? 1 : 0.8))
-                    .animation(reduceMotion ? nil : .smooth(duration: 1.4), value: shown ? progress : 0)
+                // Learning, as a thin arc that fills as felt air learns, drawing itself in when it appears. A full
+                // ring of dots read as a gear beside Settings (owner, Oct 21), so it's a line, and once learned it
+                // goes: the sparkles alone say Insights.
+                if !learned {
+                    let w: CGFloat = size < 50 ? 1.5 : 2
+                    Circle().inset(by: w / 2 + 1).stroke(Theme.secondaryText.opacity(0.3), lineWidth: w * 0.6)
+                    Circle().inset(by: w / 2 + 1)
+                        .trim(from: 0, to: shown ? progress : 0)
+                        .stroke(Color.primary.opacity(0.85), style: StrokeStyle(lineWidth: w, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(reduceMotion ? nil : .smooth(duration: 1.4), value: shown ? progress : 0)
+                }
                 // SF Symbols' own animation: a slow breath while learning; one sparkle becomes two, with a
                 // bounce, once it has learned.
                 Image(systemName: learned ? "sparkles" : "sparkle")

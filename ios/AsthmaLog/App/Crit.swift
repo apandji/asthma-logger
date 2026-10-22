@@ -147,11 +147,16 @@ enum Crit {
             }
         }
         static let key = "crit.riskColor"
-        static var current: RiskColor { UserDefaults.standard.string(forKey: key).flatMap(RiskColor.init) ?? .today }
+        // The default since Oct 21 (owner): one warm ink, with the family's mark shape on the forecast.
+        static let proposal = RiskColor.warmTexture
+        static var current: RiskColor { UserDefaults.standard.string(forKey: key).flatMap(RiskColor.init) ?? proposal }
         /// A or A + D: orange is risk and nothing else is warm.
         static var warm: Bool { current == .warmInk || current == .warmTexture }
         /// Air levels (good / OK / not good) lose their colour and read in white: A, A + D and C.
         static var levelsInWhite: Bool { warm || current == .coverage }
+        /// Families say *which* with icons, names and texture, not hue (A, A + D, C): the rail, the cards, the radar,
+        /// moment details. The sky's particles keep their inks.
+        static var familiesInInk: Bool { warm || current == .coverage }
     }
 
     /// How Insights says where cold (or heat) starts for you (docs/design/risk-color.md): a sentence with the number, words

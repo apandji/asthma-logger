@@ -43,7 +43,7 @@ struct ABTest: Identifiable {
     static let all: [ABTest] = [
         .crit("C1", "Colour", "How should risk be coloured?",
               note: "Risk is how much an hour looks like your flare days: the forecast strip, the verdict pill, the sky's highlight.",
-              key: Crit.RiskColor.key, arms: Crit.RiskColor.allCases.map { ($0.rawValue, $0.title) }, default: Crit.RiskColor.today.rawValue),
+              key: Crit.RiskColor.key, arms: Crit.RiskColor.allCases.map { ($0.rawValue, $0.title) }, default: Crit.RiskColor.proposal.rawValue),
         .crit("C2", "Colour", "Which inks for the air families?",
               note: "Print is three inks, one per family. The others are earlier rounds.",
               key: Crit.Inks.key, arms: Crit.Inks.allCases.map { ($0.rawValue, $0.title) }, default: Crit.Inks.print.rawValue),

@@ -113,6 +113,12 @@ struct InsightsView: View {
     /// The inks of what shows up most on your flare days, strongest first: the page is drawn from you.
     /// Before felt air has learned, a quiet blend of the weather's blues.
     private var factorColors: [Color] {
+        // Families in ink: the page is warm graphite, with the risk ink when something is yours.
+        if Crit.RiskColor.familiesInInk {
+            let yours = demoLearned || !(model.report?.gatedRows ?? []).isEmpty
+            return yours ? [Verdict.yellow, WeatherColor.hex(0x3A332C), WeatherColor.hex(0x1C1A17)]
+                         : [WeatherColor.hex(0x3A3833), WeatherColor.hex(0x2A2724), WeatherColor.hex(0x1C1A17)]
+        }
         if demoLearned { return [WeatherColor.pollen[2], WeatherColor.pollen[1], WeatherColor.ozone] }
         let rows = (model.report?.gatedRows ?? []).sorted { $0.lift > $1.lift }
         // The same inks as the radar and the cards (WeatherColor.ink(bin:level:)).

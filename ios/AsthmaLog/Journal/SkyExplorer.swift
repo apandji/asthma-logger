@@ -565,6 +565,10 @@ struct GroupRail: View {
 
     /// Print: the key never changes hue. Each family's ink, full when something's in the air, faint when not.
     private func groupInk(_ g: RailGroup) -> Color? {
+        if Crit.RiskColor.familiesInInk {
+            let has = g == .weather ? max(weatherAmount, weatherFacets.values.max() ?? 0) : (g.items.map(amount).max() ?? 0)
+            return Color.primary.opacity(has > 0 ? 1 : 0.38)
+        }
         if WeatherColor.print {
             let has: Double
             switch g {
@@ -597,14 +601,15 @@ struct GroupRail: View {
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.5) } }
                 .overlay(alignment: .topTrailing) {
                     if patterns.contains(g) && !on {
-                        Circle().fill(Color.primary.opacity(0.85)).frame(width: 6, height: 6).offset(x: -1, y: 3)
+                        // One of your patterns: the risk highlight, where families are in ink.
+                        Circle().fill(Crit.RiskColor.familiesInInk ? Verdict.red : Color.primary.opacity(0.85)).frame(width: 6, height: 6).offset(x: -1, y: 3)
                     }
                 }
                 .accessibilityLabel(patterns.contains(g) ? "\(g.title), often on your flare days" : g.title)
         case .item(let name):
             // A dot: bigger when there's more of it.
             let d = 5 + 7 * CGFloat(amount(name))
-            let ink = weatherFacets[name] != nil ? WeatherColor.weatherInk : legible(WeatherColor.ink(for: name))
+            let ink = Crit.RiskColor.familiesInInk ? Color.primary : weatherFacets[name] != nil ? WeatherColor.weatherInk : legible(WeatherColor.ink(for: name))
             Circle().fill(amount(name) > 0 ? ink : Color.primary.opacity(on ? 0.95 : 0.4))
                 .frame(width: on ? d + 3 : d, height: on ? d + 3 : d)
                 .frame(width: 30, height: 18)

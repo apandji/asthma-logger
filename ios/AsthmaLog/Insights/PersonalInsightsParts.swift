@@ -60,11 +60,11 @@ struct CategoryCard: View {
                 HStack(spacing: 5) {
                     if let r = t.row, starred.contains(r.id) {
                         Image(systemName: "star.fill").font(.caption2)
-                            .foregroundStyle(WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
+                            .foregroundStyle(Crit.RiskColor.familiesInInk ? Verdict.red : WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
                             .accessibilityLabel("Leads your profile")
                     } else if let r = t.row, t.strength == .strong || t.strength == .some {
                         // Your pattern, in the same ink as the page's wash and the radar.
-                        Circle().fill(WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
+                        Circle().fill(Crit.RiskColor.familiesInInk ? Verdict.red : WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
                             .frame(width: 8, height: 8).accessibilityHidden(true)
                     }
                     Text(t.name).font(.subheadline)

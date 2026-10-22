@@ -33,6 +33,8 @@ struct AirRadar: View {
     /// Blue), so the radar, the card and the page's wash agree. No pattern: neutral grey.
     static func ink(_ a: AirProfile.Axis) -> Color {
         guard a.status == .pattern || a.status == .early else { return Color(white: 0.55) }
+        // Families in ink: a pattern is yours, so it takes the risk highlight; leaning stays ink.
+        if Crit.RiskColor.familiesInInk { return a.status == .pattern ? Verdict.red : .primary }
         if let r = a.lead, let c = WeatherColor.ink(bin: r.bin, level: r.level) { return c }
         return ink(a.category)
     }

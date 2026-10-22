@@ -178,7 +178,8 @@ struct MomentDetailsView: View {
     // MARK: 2. The air
 
     private static func ink(_ f: ReadingFamily) -> Color {
-        switch f {
+        if Crit.RiskColor.familiesInInk { return .primary }
+        return switch f {
         case .weather: WeatherColor.weatherInk
         case .pollutants: WeatherColor.aqua
         case .allergens: WeatherColor.gold
@@ -338,8 +339,8 @@ struct MomentDetailsView: View {
         if let h = around, h.temperature.count > 1 || h.pm25.count > 1 {
             VStack(alignment: .leading, spacing: 12) {
                 sectionTitle("The hours around it", "chart.xyaxis.line")
-                if h.temperature.count > 1 { mini("Temperature °F", h.temperature, WeatherColor.weatherInk) }
-                if h.pm25.count > 1 { mini("PM2.5 µg/m³", h.pm25, WeatherColor.aqua) }
+                if h.temperature.count > 1 { mini("Temperature °F", h.temperature, Self.ink(.weather)) }
+                if h.pm25.count > 1 { mini("PM2.5 µg/m³", h.pm25, Self.ink(.pollutants)) }
             }
         }
     }

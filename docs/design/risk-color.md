@@ -76,6 +76,14 @@ same way, and the edge as a level in the rate table so the forecast uses it.
 Not yet decided: whether the forecast strip carries the driving family's texture or only the risk ink (A vs
 A + D), and whether diverging (B) is worth a test for "quieter than your usual".
 
+## The default (owner, Oct 21)
+
+**A + D is the default.** Families say *which* with icons, names and texture, never hue: the rail's icons and
+dots, moment details' family headers and charts, the Insights cards and radar are white ink. Where something is
+*yours* (a pattern), it takes the risk ink as a highlight: the rail's pattern dot, the card's star and dot, the
+radar's pattern corners, the Insights page wash (warm graphite into orange). The sky's particles and event
+washes (smoke, a cold snap) keep the family inks. Today's pink, aqua and yellow survive only as the Today option.
+
 ## On the phone (Oct 21)
 
 Settings › Demo and development › What we're testing › C1 "How should risk be coloured?":

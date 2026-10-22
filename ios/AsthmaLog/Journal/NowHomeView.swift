@@ -1503,8 +1503,8 @@ struct NowSky: View {
                 // the colour you're reading is the colour that's named (owner, Oct 18).
                 if row == .header(.weather) || (pinned == .header(.weather) && row == nil) || onWeatherItem {
                     let t = temperature ?? WeatherColor.fallbackTemp(weave)
-                    (WeatherColor.print ? WeatherColor.weatherInk : WeatherColor.light(WeatherColor.temperature(t), at: date))
-                        .opacity(WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
+                    (Crit.RiskColor.familiesInInk ? Color.white : WeatherColor.print ? WeatherColor.weatherInk : WeatherColor.light(WeatherColor.temperature(t), at: date))
+                        .opacity(Crit.RiskColor.familiesInInk ? 0.08 + 0.2 * WeatherColor.weatherAmount(t) : WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }

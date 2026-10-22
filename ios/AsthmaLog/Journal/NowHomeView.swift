@@ -46,6 +46,8 @@ struct NowHomeView: View {
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
     @State private var showInsights = false
+    /// A loadout's landing (Settings › Demo and development › Loadouts): an hour tomorrow, or Insights.
+    @AppStorage(Loadout.pendingKey) private var pendingLoadout = ""
     /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
     /// top, the rail's icons, the + at the bottom, all on the same line.
     static let column: CGFloat = 36
@@ -207,6 +209,22 @@ struct NowHomeView: View {
                     .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) { bottomBar }
+            .onChange(of: pendingLoadout, initial: true) { _, v in
+                guard !v.isEmpty else { return }
+                Task { @MainActor in
+                    // After the Settings sheet has gone, or the Insights sheet can't present.
+                    try? await Task.sleep(for: .milliseconds(800))
+                    let parts = v.split(separator: ";")
+                    if let f = parts.first(where: { $0.hasPrefix("focus=") }), let h = Int(f.dropFirst(6)) {
+                        let t = Loadout.tomorrow(at: h)
+                        // The forecast hours arrive a moment after a data set loads: wait for tomorrow to exist.
+                        for _ in 0..<40 where (hours.last?.date ?? .distantPast) < t { try? await Task.sleep(for: .milliseconds(250)) }
+                        withAnimation(Theme.smooth) { focusTime = min(t, hours.last?.date ?? t) }
+                    }
+                    if parts.contains("open=insights") { showInsights = true }
+                    pendingLoadout = ""
+                }
+            }
             .sheet(isPresented: $showInsights, onDismiss: { insightsFocus = nil }) {
                 // The sparkle grows into the page (a zoom from the button), and the page starts in this sky's colour
                 // before its own bloom comes through: the same page, turned.
@@ -684,7 +702,10 @@ struct NowHomeView: View {
         return (sentence, nil)
     }
 
-    private static let green = Verdict.green, yellow = Verdict.yellow, red = Verdict.red
+    // Read each time: the Risk colour crit (or a loadout) can change them while the app runs.
+    private static var green: Color { Verdict.green }
+    private static var yellow: Color { Verdict.yellow }
+    private static var red: Color { Verdict.red }
 
     /// Before felt air has learned. Not a countdown: you're not a number (owner, Oct 17).
     private var sentence: String { "Still learning" }

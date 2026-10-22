@@ -46,6 +46,10 @@ struct AsthmaLogApp: App {
                     if args.contains("-demoWeek") { DemoSeeder.add(in: context) }
                     if args.contains("-skipOnboarding") { UserDefaults.standard.set(true, forKey: Prefs.didOnboard) }
                     if args.contains("-showOnboarding") { UserDefaults.standard.set(false, forKey: Prefs.didOnboard) }
+                    // `-loadout riskAD`-style ids (Settings › Loadouts) set up a whole demo.
+                    if let l = Loadout.applyLaunchArgument(context: context), l.land == .onboarding || l.land == .pair {
+                        UserDefaults.standard.set(false, forKey: Prefs.didOnboard)
+                    }
                     // `-dataSet hotHazy` (any DataSetPreset) loads a made-up person; `-freshStart` erases everything.
                     if let i = args.firstIndex(of: "-dataSet"), i + 1 < args.count {
                         if let p = DataSetPreset(rawValue: args[i + 1]) { DataSets.load(p, context: context) }

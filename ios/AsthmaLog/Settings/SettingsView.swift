@@ -132,6 +132,8 @@ struct DeveloperSettings: View {
 
     var body: some View {
         Form {
+            LoadoutsSection(close: close)
+
             // Every open design question in one place, grouped by screen (docs/design/ab-tests.md). In every build,
             // so a TestFlight session can be set up on the phone.
             Section {

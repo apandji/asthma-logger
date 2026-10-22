@@ -9,7 +9,10 @@ logged or sent: the measure is what the facilitator watches and asks.
 Since Oct 21 the page holds every open question, grouped by screen (Colour, Now, Insights, Logging and notes,
 Words and type). **A-numbers** are tested with people (below). **C-numbers** are design crits decided in review:
 C1 risk colour (docs/design/risk-color.md), C2 family inks, C3 weather on the rail, C4 how we say where cold
-starts for you. "All back to the current design" resets every one. The rest of Demo and development is "Staged
+starts for you. "All back to the current design" resets every one. **Loadouts** (top of Demo and development) set up a
+whole demo in one tap: the data set, every switch back to its default plus the few the demo needs, the staged
+day, and where to land (tomorrow at 2 PM on the timeline, Insights, or onboarding). Debug: `-loadout risk-warmTexture`.
+The rest of Demo and development is "Staged
 for a demo" (made-up moments and situations) and "Tools" (onboarding, tutorial, exertion check, prototypes).
 
 Debug builds can also set arms at launch: `-ab "A1=journal,A2=suggested"`.

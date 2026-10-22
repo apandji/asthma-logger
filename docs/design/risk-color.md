@@ -89,8 +89,8 @@ Settings › Demo and development › What we're testing › C1 "How should risk
 - **E · Two palettes:** families move to cool hues (blue weather, teal pollutants, green allergens, violet
   exercise, indigo colds), risk is a warm status scale (grey, amber, red).
 
-To see the warm hours: load the data set "Still learning", then set "Insights ring" (Staged for a demo) to
-Learned and drag the timeline to tomorrow afternoon.
+Quickest: Demo and development › Loadouts › Risk colour, one row per option. Each loads "Still learning", forces
+the ring to learned (a staged rough afternoon) and lands on tomorrow at 2 PM.
 
 ## Five-second test
 

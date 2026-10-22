@@ -73,7 +73,9 @@ struct OnboardingView: View {
         // `-onboardingAt pair` starts there (it finds you first).
         .task(id: step) {
             let args = ProcessInfo.processInfo.arguments
-            if step == .welcome, let i = args.firstIndex(of: "-onboardingAt"), i + 1 < args.count, args[i + 1] == "pair" {
+            let fromLoadout = UserDefaults.standard.bool(forKey: Loadout.pairKey)
+            if fromLoadout { UserDefaults.standard.removeObject(forKey: Loadout.pairKey) }
+            if step == .welcome, fromLoadout || (args.firstIndex(of: "-onboardingAt").map { $0 + 1 < args.count && args[$0 + 1] == "pair" } ?? false) {
                 goHere()
                 while locating { try? await Task.sleep(for: .milliseconds(200)) }
                 step = .pair

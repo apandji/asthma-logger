@@ -390,6 +390,19 @@ struct NowHomeView: View {
     /// slate for a storm, ochre for smoke, ice for a temperature drop.
     private var pageTop: Color {
         if case .now = focus, let e = liveEvent {
+            // Families in ink: an event darkens the page to graphite for everyone, and warms it with the risk ink
+            // only when it's one of yours (smoke if smoky air is, a drop or a storm if that weather is).
+            if Crit.RiskColor.familiesInInk {
+                let paper = WeatherColor.hex(0x3A3833)
+                let mine = Self.yours(shared(liveAir.conditions, at: now))
+                let s: Double? = switch e {
+                case .smoke: mine["Smoke"] ?? mine["PM2.5"]
+                case .tempDrop: mine["Drop"] ?? mine["Weather"]
+                case .storm, .mold: mine["Weather"]
+                }
+                let base = e == .storm ? paper.mix(with: .black, by: 0.35) : paper
+                return s.map { base.mix(with: Verdict.red, by: 0.25 + 0.3 * $0) } ?? base
+            }
             // Print: an event takes its family's ink (owner, Oct 18). Storm, a sharp drop and mold weather are
             // weather, so magenta; smoke is fine particles, so aqua. No colour of its own for any event.
             if WeatherColor.print {
@@ -746,6 +759,7 @@ struct NowHomeView: View {
                       onRecord: { openCapture($0) }, makeNote: s.makeNote,
                       scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil,
                       patterns: scrubbing ? [] : RailGroup.marked(in: headerRead),
+                      yours: scrubbing ? [:] : Self.yours(shared(s.conditions, at: s.date)),
                       onRailOpen: { railOpen = $0 })
             .onTapGesture { s.onTap() }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { skyWidth = $0 }
@@ -968,6 +982,29 @@ struct NowHomeView: View {
     private var gatedRows: [LiftRow] {
         if forced == .learned, !(model.progress?.isMet ?? false) { return AirProfile.demoPerson.axes.compactMap(\.lead).filter(\.gated) }
         return model.report?.gatedRows ?? []
+    }
+
+    /// What in this sky is one of yours, by the sky's names ("PM2.5", "Weed pollen", "Weather", "Smoke", "Drop"),
+    /// 1 when it shows up often on your flare days, 0.65 sometimes. Empty before felt air has learned: then the
+    /// dots and washes are plain ink, sized by how much is in the air.
+    static func yours(_ rows: [LiftRow]) -> [String: Double] {
+        var out: [String: Double] = [:]
+        for r in rows {
+            let s = AirProfile.Strength.of(r) == .strong ? 1.0 : 0.65
+            let names: [String] = switch r.bin {
+            case "pm25": ["PM2.5"]
+            case "ozone": ["Ozone"]
+            case "pollen_weed": ["Weed pollen"]
+            case "pollen_tree": ["Tree pollen"]
+            case "pollen_grass": ["Grass pollen"]
+            case "smoke_at_point": ["Smoke", "PM2.5"]
+            case "temp_drop": ["Drop", "Weather"]
+            case "temp", "humidity", "heat_alert": ["Weather"]
+            default: []
+            }
+            for n in names { out[n] = max(out[n] ?? 0, s) }
+        }
+        return out
     }
 
     private func shared(_ c: Conditions?, at d: Date) -> [LiftRow] {
@@ -1398,6 +1435,8 @@ struct NowSky: View {
     var scrubTemperature: Double? = nil
     /// Families the header's read marks as patterns, badged on the rail.
     var patterns: Set<RailGroup> = []
+    /// What's yours in this sky, and how strongly (`NowHomeView.yours`). Drives the orange of the dots and washes.
+    var yours: [String: Double] = [:]
     /// Told when the rail opens or closes (held, or pinned on Voice / Body), so what sits above it can step aside.
     var onRailOpen: ((Bool) -> Void)? = nil
     @State private var voice = VoiceSession()
@@ -1488,10 +1527,17 @@ struct NowSky: View {
                             }
                     }
                 }
-                if event == .smoke {
+                if event == .smoke, Crit.RiskColor.familiesInInk {
+                    // Smoke: a grey haze for everyone; orange when smoky air is one of yours.
+                    (yours["Smoke"] ?? yours["PM2.5"]).map { Verdict.red.opacity(0.14 + 0.16 * $0) } ?? Color.gray.opacity(0.28)
+                } else if event == .smoke {
                     (WeatherColor.print ? WeatherColor.aqua : Color(red: 0.62, green: 0.46, blue: 0.32)).opacity(WeatherColor.print ? 0.22 : 0.32).allowsHitTesting(false)
                 }
-                if event == .tempDrop {
+                if event == .tempDrop, Crit.RiskColor.familiesInInk {
+                    LinearGradient(colors: [(yours["Drop"].map { Verdict.red.opacity(0.22 + 0.2 * $0) } ?? Color.white.opacity(0.22)), .clear],
+                                   startPoint: .top, endPoint: .center)
+                        .allowsHitTesting(false)
+                } else if event == .tempDrop {
                     LinearGradient(colors: [(WeatherColor.print ? WeatherColor.weatherInk : Color(red: 0.55, green: 0.75, blue: 1)).opacity(0.38), .clear], startPoint: .top, endPoint: .center)
                         .allowsHitTesting(false)
                 }
@@ -1503,18 +1549,27 @@ struct NowSky: View {
                 // the colour you're reading is the colour that's named (owner, Oct 18).
                 if row == .header(.weather) || (pinned == .header(.weather) && row == nil) || onWeatherItem {
                     let t = temperature ?? WeatherColor.fallbackTemp(weave)
-                    (Crit.RiskColor.familiesInInk ? Color.white : WeatherColor.print ? WeatherColor.weatherInk : WeatherColor.light(WeatherColor.temperature(t), at: date))
-                        .opacity(Crit.RiskColor.familiesInInk ? 0.08 + 0.2 * WeatherColor.weatherAmount(t) : WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
+                    // Families in ink: plain ink for how far from mild; orange when this weather is one of yours.
+                    let mine = yours["Weather"]
+                    (Crit.RiskColor.familiesInInk ? (mine == nil ? Color.white : Verdict.red) : WeatherColor.print ? WeatherColor.weatherInk : WeatherColor.light(WeatherColor.temperature(t), at: date))
+                        .opacity(Crit.RiskColor.familiesInInk ? (mine.map { 0.14 + 0.3 * $0 } ?? 0.08 + 0.2 * WeatherColor.weatherAmount(t)) : WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
-                ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
+                // The dots: how much of each is in the air (size and count). Families in ink: plain ink, and orange
+                // for what's yours (paler for "sometimes"). Before learning nothing is yours, so it's all ink.
+                ParticleField(particles: stack.map { layer in
+                                  let ink: Color = !Crit.RiskColor.familiesInInk ? layer.color
+                                      : yours[layer.name].map { Color.white.mix(with: Verdict.red, by: 0.45 + 0.55 * $0) }
+                                      ?? (light ? Color(white: 0.18) : Color.white.opacity(0.85))
+                                  return (ink, layer.empty ? 0 : (Double(layer.level.rawValue) + max(0, min(1, layer.fraction))) / 3)
+                              },
                               fragments: stack.map { event == .storm && $0.name.hasSuffix("pollen") },
                               selected: row == .header(.weather) || onWeatherItem ? -1 : selectedLayer(stack),
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
                               rippleInk: rippleInk, scan: true, hollow: sketch,
-                              breathes: !isPast, drift: sketch ? 1 + 2 * farness : 0,
+                              breathes: !isPast,
                               reveal: sketch ? .soft : isPast ? .inward : .outward)
             }
             .frame(width: size.width, height: size.height)
@@ -1771,6 +1826,11 @@ struct NowSky: View {
         case .voice, .body:
             p = nil   // Self's panels read themselves.
         }
+        if var q = p {
+            let key = q.name == "Air" ? "PM2.5" : RailGroup.weather.items.contains(q.name) ? "Weather" : q.name
+            q.yours = yours[key]
+            p = q
+        }
         if var probe = p, let h = history {
             switch probe.name {
             case "Weather":
@@ -1807,10 +1867,11 @@ struct NowSky: View {
     private func stopPulse() { pulse?.cancel(); pulse = nil }
 }
 
-/// The air as particles: every cell of a fine grid gets at most one dot, given to a layer by a fixed
-/// hash with odds that rise with that layer's amount, so each layer is an even sprinkle over the whole
-/// place in its own ink. More of it means more dots and bigger ones. The layer being read stays lit and
-/// the rest fade back. A ripple runs through the dots when a sky appears.
+/// The air as a halftone screen laid over the map (owner, Oct 21: scattered dots read as "it's over here"):
+/// dots on an even grid turned 12°, like a riso screen, every cell the same distance apart. Present layers take
+/// turns cell by cell, so each is an even share of the screen, and how much of it there is is the dot's size,
+/// never where the dots fall. The layer being read stays lit and the rest fade back. A ripple runs through the
+/// dots when a sky appears.
 struct ParticleField: View {
     /// Each layer's ink and amount (0 none … 1 high), in reading order.
     let particles: [(Color, Double)]
@@ -1828,15 +1889,13 @@ struct ParticleField: View {
     var hollow = false
     /// Now breathes; the past is still.
     var breathes = true
-    /// The future drifts, more the further out: 0 still … 3 restless.
-    var drift: CGFloat = 0
     /// How the reveal moves: the past closes in onto the pin (it happened, it settles), now rings out from
     /// it, the future washes in wide and soft (not yet known).
     enum Reveal { case inward, outward, soft }
     var reveal: Reveal = .outward
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let spacing: CGFloat = 8
+    private let spacing: CGFloat = 10
     private let rippleSeconds = 1.6
     private let rippleEvery = 5.0
 
@@ -1860,30 +1919,24 @@ struct ParticleField: View {
 
         let clock = (animated && !reduceMotion) ? time.timeIntervalSinceReferenceDate : 0
         let breath = breathes ? clock : 0
-        // Odds per layer: a floor so any present layer shows, rising with amount; capped so the map shows.
-        var weights = particles.map { $0.1 > 0 ? 0.012 + 0.09 * $0.1 : 0 }
-        let total = weights.reduce(0, +)
-        if total > 0.3 { weights = weights.map { $0 * 0.3 / total } }
-        let cumulative = weights.reduce(into: [Double]()) { $0.append(($0.last ?? 0) + $1) }
         return Canvas(rendersAsynchronously: true) { ctx, size in
             // Every ripple starts at the pin: the place, then the air around it.
             let centre = CGPoint(x: size.width / 2, y: size.height / 2)
             let reach = hypot(size.width, size.height) * 0.6
             let radius = wave.map { reveal == .inward ? reach * (1 - CGFloat($0)) : CGFloat($0) * reach }
             let fade = wave.map { scan && firstPass ? 1 : 1 - $0 } ?? 0
-            let cols = Int(size.width / spacing) + 1, rows = Int(size.height / spacing) + 1
-            for i in 0..<cols {
-                for j in 0..<rows {
-                    var h = UInt32(truncatingIfNeeded: i &* 73856093 ^ j &* 19349663)
-                    h = (h ^ (h >> 13)) &* 1274126177
-                    let u = Double(h & 0xFFFF) / 65535, jx = Double((h >> 16) & 0xFF) / 255, jy = Double((h >> 24) & 0xFF) / 255
-                    var x = (CGFloat(i) + 0.2 + 0.6 * jx) * spacing, y = (CGFloat(j) + 0.2 + 0.6 * jy) * spacing
-                    if drift > 0, clock > 0 {
-                        // Not yet settled: each dot wanders on its own slow path.
-                        x += drift * 1.6 * CGFloat(sin(clock * 0.5 + jx * 6.3))
-                        y += drift * 1.6 * CGFloat(cos(clock * 0.43 + jy * 6.3))
-                    }
-                    let k = cumulative.firstIndex { u < $0 }
+            // A hex screen turned 12° about the pin, filling the frame.
+            let angle = 12 * Double.pi / 180, ca = CGFloat(cos(angle)), sa = CGFloat(sin(angle))
+            let rowH = spacing * 0.866
+            let n = Int(hypot(size.width, size.height) / 2 / rowH) + 2
+            let present = particles.indices.filter { particles[$0].1 > 0 }
+            for j in -n...n {
+                for i in -n...n {
+                    let gx = (CGFloat(i) + (j & 1 == 0 ? 0 : 0.5)) * spacing, gy = CGFloat(j) * rowH
+                    let x = centre.x + gx * ca - gy * sa, y = centre.y + gx * sa + gy * ca
+                    guard x > -6, x < size.width + 6, y > -6, y < size.height + 6 else { continue }
+                    // Layers take turns, evenly: no layer gathers anywhere.
+                    let k: Int? = present.isEmpty ? nil : present[((i + 2 * j) % present.count + present.count) % present.count]
                     let dist = hypot(x - centre.x, y - centre.y)
                     // The scan: nothing exists ahead of the ring yet.
                     // The ring runs ahead over bare grain; inside it, the air fills in, growing up just behind the front.
@@ -1898,7 +1951,7 @@ struct ParticleField: View {
                     var r: CGFloat, color: Color
                     if let k {
                         let amount = CGFloat(particles[k].1)
-                        r = 0.8 + 2.6 * amount
+                        r = 0.7 + 3.0 * amount
                         let dim = selected != nil && selected != k
                         color = particles[k].0.opacity(dim ? 0.15 : 0.9)
                         if selected == k { r *= 1.6 }

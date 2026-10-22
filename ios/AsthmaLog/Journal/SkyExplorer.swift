@@ -27,6 +27,17 @@ struct SkyProbe: Equatable {
     /// The 48 hours before, as lines: temperature and humidity for Weather, the pollutant's own hours
     /// for PM2.5 and ozone. Filled in by the sky once its history has loaded.
     var lines: [SparkSeries] = []
+    /// How much this reading is one of yours right now (1 often, 0.65 sometimes), nil when it isn't or nothing is
+    /// learned yet. With families in ink it decides the colour: orange when yours, ink when not.
+    var yours: Double? = nil
+
+    /// The colour to draw this reading with: the risk highlight when it's yours (paler for "sometimes"), plain ink
+    /// otherwise, when families are in ink; the layer's own ink under the older palettes.
+    var ink: Color {
+        guard Crit.RiskColor.familiesInInk else { return color }
+        guard let y = yours else { return .primary }
+        return Color.white.mix(with: Verdict.red, by: 0.45 + 0.55 * y)
+    }
 
     /// What the highlight is tinted with: the level, in the same three colors as the verdict line
     /// (good green, OK yellow, not good red). The layer's own ink stays in the sky; its name is in the label.
@@ -308,14 +319,14 @@ struct SkyProbeOverlay: View {
             if showsGlow, let band {
                 // One regional reading: the layer lights up edge to edge, not a spot.
                 Rectangle()
-                    .fill(LinearGradient(colors: [.clear, probe.color.opacity(0.4), probe.color.opacity(0.4), .clear],
+                    .fill(LinearGradient(colors: [.clear, probe.ink.opacity(0.4), probe.ink.opacity(0.4), .clear],
                                          startPoint: .top, endPoint: .bottom))
                     .frame(width: width, height: band.upperBound - band.lowerBound)
                     .blur(radius: 8)
                     .position(x: width / 2, y: (band.lowerBound + band.upperBound) / 2)
             } else if showsGlow {
             Circle()
-                .fill(RadialGradient(colors: [probe.color.opacity(0.5), probe.color.opacity(0.15), .clear],
+                .fill(RadialGradient(colors: [probe.ink.opacity(0.5), probe.ink.opacity(0.15), .clear],
                                      center: .center, startRadius: 0, endRadius: 80))
                 .frame(width: 160, height: 160)
                 .blur(radius: 6)
@@ -345,7 +356,7 @@ struct SkyProbeOverlay: View {
                     Text(probe.name)
                 } icon: {
                     // The connection to the field: this is the ink of the particles you're reading.
-                    Image(systemName: probe.symbol ?? SkyExplorer.icon(probe.name)).foregroundStyle(probe.level == nil ? .primary : probe.color)
+                    Image(systemName: probe.symbol ?? SkyExplorer.icon(probe.name)).foregroundStyle(probe.level == nil ? .primary : probe.ink)
                 }
                 .font(.subheadline.weight(.semibold))
                 Text(probe.kind).font(.caption).foregroundStyle(Theme.secondaryText)
@@ -357,7 +368,7 @@ struct SkyProbeOverlay: View {
                 Spacer(minLength: 8)
                 if let level = probe.level {
                     VStack(alignment: .trailing, spacing: 4) {
-                        AmountDots(level: level, ink: probe.color)
+                        AmountDots(level: level, ink: probe.ink)
                         Text(Tier(level).word).font(.caption2.weight(.semibold))
                     }
                 }
@@ -694,7 +705,7 @@ struct GroupSummary: View {
                         .foregroundStyle(layer == nil ? Theme.secondaryText : .primary)
                     Spacer(minLength: 6)
                     if let layer {
-                        AmountDots(level: layer.level, ink: layer.color)
+                        AmountDots(level: layer.level, ink: Crit.RiskColor.familiesInInk ? .primary : layer.color)
                         Text(Tier(layer.level).word).font(.caption2.weight(.semibold)).frame(width: 52, alignment: .trailing)
                     } else {
                         Text("No reading").font(.caption2).foregroundStyle(Theme.secondaryText)

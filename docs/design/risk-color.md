@@ -84,6 +84,21 @@ dots, moment details' family headers and charts, the Insights cards and radar ar
 radar's pattern corners, the Insights page wash (warm graphite into orange). The sky's particles and event
 washes (smoke, a cold snap) keep the family inks. Today's pink, aqua and yellow survive only as the Today option.
 
+## The sky's dots and washes (owner, Oct 21)
+
+- **Dots are a halftone screen, not a scatter.** An even hex grid turned 12° over the map, like a riso screen.
+  Layers take turns cell by cell, so none gathers anywhere; how much is in the air is the dot's size. Nothing in
+  the dots says *where*.
+- **Colour follows "yours".** Plain ink (white on black paper) for how much is in the air; orange for a layer
+  that's one of your patterns right now, full for "often", paler for "sometimes". The reading's label and its
+  amount dots follow the same rule.
+- **Washes the same way.** Holding Weather: a faint white wash by how far from mild, orange when this weather is
+  yours. Events (smoke, a sharp drop, a storm) darken the page to graphite for everyone, warmer with orange only
+  when that event is one of yours.
+- **Before felt air has learned, nothing is yours,** so there's no orange in the sky: ink sized by how much is in
+  the air, against the general edges (tier one). Orange arrives with the first gated pattern, the same moment
+  the Insights ring completes. Nothing leans orange before it's earned.
+
 ## On the phone (Oct 21)
 
 Settings › Demo and development › What we're testing › C1 "How should risk be coloured?":

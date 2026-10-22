@@ -261,7 +261,8 @@ public enum TheRead {
     /// The sentence for Now or Ahead.
     /// - `shared`: from `shared(_:rows:)` (empty before felt air has learned).
     /// - `notable`: what's at a high level, as present-tense clauses ("weed pollen is high"), for before it has learned.
-    /// - `looksLikeFlare`: unused since the verdict moved to the pill alone (kept so callers needn't change).
+    /// - `looksLikeFlare`: the pill says this hour looks like your flare days. The sentence still never repeats
+    ///   it, but it mustn't contradict it either: with nothing to name, it says no single reading stands out.
     public static func sentence(time: Time, learned: Bool, event: AirAdvice.Event?, fallF: Double?, fires: WildfiresNearby? = nil,
                                 shared: [LiftRow], notable: [String], looksLikeFlare: Bool = false) -> String {
         var parts: [String] = []
@@ -294,7 +295,7 @@ public enum TheRead {
             } else if event == nil, let n = notable.first {
                 parts.append("\(when): \(n).")
             } else if event == nil {
-                parts.append("\(when): nothing in the forecast stands out.")
+                parts.append(looksLikeFlare ? "\(when): no single reading stands out." : "\(when): nothing in the forecast stands out.")
             }
         }
         return parts.joined(separator: " ")

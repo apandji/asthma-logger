@@ -6,7 +6,7 @@ import SwiftUI
 /// staged situation, and where to land (an hour on the timeline, Insights, or onboarding). Settings › Demo and
 /// development › Loadouts. `-loadout riskAD` (Debug) applies one at launch.
 struct Loadout: Identifiable {
-    enum Land { case now, insights, onboarding, pair }
+    enum Land { case now, insights, onboarding, pair, lastRescue }
 
     let id: String
     let group: String
@@ -32,7 +32,29 @@ struct Loadout: Identifiable {
                 settings: [Crit.RiskColor.key: c.rawValue], ring: .learned, tomorrowAt: 14)
     }
 
-    static let all: [Loadout] = [
+    /// Friday's MVP walk-through, in the order of the journey (docs/design/mvp-demo.md).
+    static let demoRun: [Loadout] = [
+        Loadout(id: "demo-1", group: "Demo run", title: "1 · Pair your inhaler",
+                note: "Onboarding at the press-the-cap step. Press the cap on screen: the first press brings in the air.", land: .pair),
+        Loadout(id: "demo-2", group: "Demo run", title: "2 · Now, then log a puff",
+                note: "Someone a few weeks in. Read the sky, hold the rail, pull the + for a rescue, then Quick journal.",
+                dataSet: .hotHazy),
+        Loadout(id: "demo-3", group: "Demo run", title: "3 · Look back at a moment",
+                note: "Their last rescue: “It was hot and ozone was high”, the orange dots are theirs. Tap the sky for details.",
+                dataSet: .hotHazy, land: .lastRescue),
+        Loadout(id: "demo-4", group: "Demo run", title: "4 · Still learning",
+                note: "A week in: the ring filling, when and where so far.", dataSet: .stillLearning, land: .insights),
+        Loadout(id: "demo-5", group: "Demo run", title: "5 · Your archetype",
+                note: "Hot, hazy days: the five families, what shows up on their flare days.", dataSet: .hotHazy, land: .insights),
+        Loadout(id: "demo-6", group: "Demo run", title: "6 · Cold, for you",
+                note: "Someone who flares below about 40°F. Scroll to the Weather card.",
+                dataSet: .coldBelow40, settings: [Crit.PersonalEdgeStyle.key: Crit.PersonalEdgeStyle.dots.rawValue], land: .insights),
+        Loadout(id: "demo-7", group: "Demo run", title: "7 · Look ahead",
+                note: "Tomorrow at 2 PM looks more like their flare days. Drag the timeline to see the hours.",
+                dataSet: .stillLearning, ring: .learned, tomorrowAt: 14),
+    ]
+
+    static let all: [Loadout] = demoRun + [
         Loadout(id: "mine", group: "Start", title: "My data, as designed",
                 note: "Your own moments, real air, every switch at its default.", mine: true),
         Loadout(id: "onboarding", group: "Start", title: "Onboarding",
@@ -57,7 +79,7 @@ struct Loadout: Identifiable {
                 note: "The same person, said with the number.", dataSet: .coldBelow40, land: .insights),
     ]
 
-    static let groups = ["Start", "Risk colour", "Insights"]
+    static let groups = ["Demo run", "Start", "Risk colour", "Insights"]
 
     /// Everything back to default, then this loadout. `close` dismisses Settings; Now finishes the landing.
     @MainActor func apply(context: ModelContext) {
@@ -75,6 +97,7 @@ struct Loadout: Identifiable {
         var pending: [String] = []
         if let tomorrowAt { pending.append("focus=\(tomorrowAt)") }
         if land == .insights { pending.append("open=insights") }
+        if land == .lastRescue { pending.append("focus=last") }
         d.set(pending.isEmpty ? "" : pending.joined(separator: ";") + ";\(UUID().uuidString.prefix(6))", forKey: Self.pendingKey)
         if land == .pair { d.set(true, forKey: Self.pairKey) }
     }
@@ -131,8 +154,9 @@ struct LoadoutsSection: View {
                     }
                 }
             } header: {
-                Text(g == "Start" ? "Loadouts" : g)
+                Text(g == "Demo run" ? "Demo run" : g == "Start" ? "Loadouts" : g)
             } footer: {
+                if g == "Demo run" { Text("The MVP walk-through, in order. Each step loads its person and lands you on the right screen.") }
                 if g == "Start" { Text("One tap sets the data set, the switches and the staged day, then lands you there. Every switch goes back to its default first.") }
             }
         }

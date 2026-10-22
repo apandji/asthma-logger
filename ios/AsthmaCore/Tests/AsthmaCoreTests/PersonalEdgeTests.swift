@@ -39,3 +39,14 @@ import Testing
         #expect(PersonalEdge.find(flare: [35, 36, 37], baseline: Array(repeating: 60, count: 40), side: .below, general: 32) == nil)
     }
 }
+
+@Suite struct AheadSentenceTests {
+    @Test func neverContradictsAFlarePill() {
+        let calm = TheRead.sentence(time: .ahead("Tomorrow afternoon"), learned: true, event: nil, fallF: nil,
+                                    shared: [], notable: [], looksLikeFlare: false)
+        let rough = TheRead.sentence(time: .ahead("Tomorrow afternoon"), learned: true, event: nil, fallF: nil,
+                                     shared: [], notable: [], looksLikeFlare: true)
+        #expect(calm == "Tomorrow afternoon: nothing in the forecast stands out.")
+        #expect(rough == "Tomorrow afternoon: no single reading stands out.")
+    }
+}

@@ -385,6 +385,9 @@ enum WeatherColor {
     }
 
     static func temperature(_ f: Double) -> Color {
+        // Families in ink (Risk colour A, A + D, C): the sky's base is plain paper. Temperature is in the words and
+        // the reading, and only what's yours takes colour (the risk ink, drawn on top).
+        if Crit.RiskColor.familiesInInk { return paperTone }
         // Print: paper, with Amber laid on as the temperature leaves mild, in either direction.
         if print { return paperTone.mix(with: weatherInk, by: 0.7 * weatherAmount(f)) }
         guard let first = stops.first, let last = stops.last else { return .gray }

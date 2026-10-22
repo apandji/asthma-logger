@@ -221,6 +221,11 @@ struct NowHomeView: View {
                         for _ in 0..<40 where (hours.last?.date ?? .distantPast) < t { try? await Task.sleep(for: .milliseconds(250)) }
                         withAnimation(Theme.smooth) { focusTime = min(t, hours.last?.date ?? t) }
                     }
+                    if parts.contains("focus=last") {
+                        // The latest rescue moment, once the data set's moments have arrived.
+                        for _ in 0..<40 where !moments.contains(where: { $0.moment == .rescue }) { try? await Task.sleep(for: .milliseconds(250)) }
+                        if let m = moments.last(where: { $0.moment == .rescue }) { withAnimation(Theme.smooth) { focusTime = m.loggedAt } }
+                    }
                     if parts.contains("open=insights") { showInsights = true }
                     pendingLoadout = ""
                 }
@@ -425,6 +430,18 @@ struct NowHomeView: View {
         case .now: (liveAir.conditions?.best(.temperature)?.value, now)
         case .moment(let m): (m.conditions?.best(.temperature)?.value, m.loggedAt)
         case .hour(let h): (h.conditions.best(.temperature)?.value, h.date)
+        }
+        // Families in ink: the page is graphite paper, warmed with the risk ink when the weather then is one of
+        // yours (heat, a cold snap, muggy air), never tinted by the temperature's own hue.
+        if Crit.RiskColor.familiesInInk {
+            let air: Conditions? = switch focus {
+            case .now: liveAir.conditions
+            case .moment(let m): m.conditions
+            case .hour(let h): h.conditions
+            }
+            let paper = WeatherColor.hex(0x2E2C29)
+            let c = Self.yours(shared(air, at: d))["Weather"].map { paper.mix(with: Verdict.red, by: 0.18 + 0.22 * $0) } ?? paper
+            return inFuture ? c.mix(with: Color(white: 0.2), by: 0.45) : c
         }
         let c = WeatherColor.light(WeatherColor.temperature(t ?? 62), at: d).mix(with: .black, by: 0.22)
         return inFuture ? c.mix(with: Color(white: 0.2), by: 0.45) : c

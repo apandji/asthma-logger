@@ -1912,7 +1912,7 @@ struct ParticleField: View {
     var reveal: Reveal = .outward
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let spacing: CGFloat = 10
+    private let spacing: CGFloat = 13
     private let rippleSeconds = 1.6
     private let rippleEvery = 5.0
 
@@ -1968,9 +1968,9 @@ struct ParticleField: View {
                     var r: CGFloat, color: Color
                     if let k {
                         let amount = CGFloat(particles[k].1)
-                        r = 0.7 + 3.0 * amount
+                        r = 0.6 + 2.0 * amount
                         let dim = selected != nil && selected != k
-                        color = particles[k].0.opacity(dim ? 0.15 : 0.9)
+                        color = particles[k].0.opacity(dim ? 0.12 : 0.6)
                         if selected == k { r *= 1.6 }
                         r *= CGFloat(emerge)
                         color = color.opacity(emerge)

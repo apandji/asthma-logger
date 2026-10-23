@@ -35,8 +35,10 @@ struct SkyProbe: Equatable {
     /// otherwise, when families are in ink; the layer's own ink under the older palettes.
     var ink: Color {
         guard Crit.RiskColor.familiesInInk else { return color }
-        guard let y = yours else { return .primary }
-        return Color.white.mix(with: Verdict.red, by: 0.45 + 0.55 * y)
+        // A concrete ink, not `.primary`, which glass mutes to grey.
+        let plain = Color(uiColor: .label)
+        guard let y = yours else { return plain }
+        return plain.mix(with: Verdict.red, by: 0.55 + 0.45 * y)
     }
 
     /// What the highlight is tinted with: the level, in the same three colors as the verdict line
@@ -692,25 +694,41 @@ struct StrataScale: View {
 struct GroupSummary: View {
     let group: RailGroup
     let layers: AirLayers
+    /// What's yours right now, by layer name (`NowHomeView.yours`): those rows light up orange.
+    var yours: [String: Double] = [:]
+    @Environment(\.colorScheme) private var scheme
+
+    /// Glass mutes `.primary` to a grey, so the dots and icons take an explicit ink: paper white on black,
+    /// near-black on linen; the risk orange when it's one of yours (paler for "sometimes").
+    private func ink(_ name: String, _ layer: AirLayers.Layer?) -> Color {
+        guard let layer else { return Theme.secondaryText }
+        guard Crit.RiskColor.familiesInInk else { return layer.color }
+        let plain: Color = scheme == .dark ? .white : Color(white: 0.12)
+        return yours[name].map { plain.mix(with: Verdict.red, by: 0.55 + 0.45 * $0) } ?? plain
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(group.title, systemImage: group.icon).font(.subheadline.weight(.semibold))
             ForEach(group.items, id: \.self) { name in
                 let layer = layers.readable.first { ($0.name == "Air" ? "PM2.5" : $0.name) == name }
+                let mine = yours[name] != nil
                 HStack(spacing: 8) {
                     Image(systemName: Icons.layer(name)).font(.caption)
-                        .foregroundStyle(layer?.color ?? Theme.secondaryText).frame(width: 18)
-                    Text(name).font(.subheadline)
+                        .foregroundStyle(ink(name, layer)).frame(width: 18)
+                    Text(name).font(.subheadline).lineLimit(1).minimumScaleFactor(0.85).layoutPriority(1)
                         .foregroundStyle(layer == nil ? Theme.secondaryText : .primary)
                     Spacer(minLength: 6)
                     if let layer {
-                        AmountDots(level: layer.level, ink: Crit.RiskColor.familiesInInk ? .primary : layer.color)
-                        Text(Tier(layer.level).word).font(.caption2.weight(.semibold)).frame(width: 52, alignment: .trailing)
+                        AmountDots(level: layer.level, ink: ink(name, layer))
+                        Text(Tier(layer.level).word).font(.caption2.weight(.semibold))
+                            .foregroundStyle(mine && Crit.RiskColor.familiesInInk ? AnyShapeStyle(Verdict.red) : AnyShapeStyle(.primary))
+                            .frame(width: 52, alignment: .trailing)
                     } else {
                         Text("No reading").font(.caption2).foregroundStyle(Theme.secondaryText)
                     }
                 }
+                .accessibilityLabel(mine ? "\(name), often on your flare days" : name)
             }
         }
         .padding(12)

@@ -50,6 +50,18 @@ struct NowHomeView: View {
 
     /// A rough afternoon in the air itself: 2–5 PM high ozone, high weed pollen and heat (both of the demo
     /// person's patterns); 11 AM–1 PM and 6–7 PM high ozone only (one pattern). Readings, so they're binned.
+    /// Pollen for a forecast hour: the demo season's sample, or in the staged demo the staged weed pollen, so the
+    /// Allergens panel shows what the sentence names.
+    private func hourPollen(_ h: NowHour) -> PollenSample? {
+        if isStagedDemo, let w = h.conditions.best(.pollenWeed), w.category == "High" {
+            let base = DemoPollen.sample(at: h.date, season: pollenSeason)
+            return PollenSample(tree: base?.tree ?? .init(name: "Tree", species: "", count: 0, level: .low),
+                                grass: base?.grass ?? .init(name: "Grass", species: "", count: 0, level: .low),
+                                weed: .init(name: "Weed", species: "Ragweed", count: Int(w.value), level: .high))
+        }
+        return DemoPollen.sample(at: h.date, season: pollenSeason)
+    }
+
     static func staged(_ h: NowHour) -> NowHour {
         let hour = Calendar.current.component(.hour, from: h.date)
         let peak = (14...17).contains(hour), shoulder = (11...13).contains(hour) || (18...19).contains(hour)
@@ -881,7 +893,7 @@ struct NowHomeView: View {
                              mapNamespace: mapZoom, onPin: { pinDetails = m }, showsSelf: true, selfEvent: m, onTap: { pinDetails = m })
         case .hour(let h):
             return SkyInputs(conditions: h.conditions, weave: h.weave, date: h.date,
-                             pollen: DemoPollen.sample(at: h.date, season: pollenSeason),
+                             pollen: hourPollen(h),
                              mapID: mapID, coordinate: forecastCoordinate, sketch: true)
         }
     }
@@ -1145,7 +1157,7 @@ struct NowHomeView: View {
         let when = label ?? Self.when(h.date)
         let read = TheRead.sentence(time: .ahead(when), learned: isLearned, event: aheadEvent(h)?.advice,
                                     fallF: h.conditions.tempFallF, shared: shared(h.conditions, at: h.date),
-                                    notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true).map(\.clause),
+                                    notable: notable(h.conditions, weave: h.weave, pollen: hourPollen(h), ahead: true).map(\.clause),
                                     looksLikeFlare: tint == Self.red || tint == Self.yellow)
         return explained(read, at: h.date, when: when, conditions: h.conditions)
     }
@@ -1192,7 +1204,7 @@ struct NowHomeView: View {
             return []
         case .hour(let h):
             return adviceDeck(event: aheadEvent(h), fallF: h.conditions.tempFallF,
-                              notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true),
+                              notable: notable(h.conditions, weave: h.weave, pollen: hourPollen(h), ahead: true),
                               home: forecastAtHome, ahead: true)
         }
     }
@@ -1720,7 +1732,7 @@ struct NowSky: View {
                     let x = railLeft ? 64 + 130 : size.width - 64 - 130, y = min(max(mids[i], 110), size.height - 110)
                     switch shown {
                     case .header(let g) where !g.items.isEmpty && g != .weather:
-                        GroupSummary(group: g, layers: layers)
+                        GroupSummary(group: g, layers: layers, yours: yours)
                             .frame(width: 224)
                             .position(x: railLeft ? 64 + 118 : size.width - 64 - 118, y: min(max(mids[i], 90), size.height - 90))
                             .allowsHitTesting(false)

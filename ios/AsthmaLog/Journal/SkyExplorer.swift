@@ -500,6 +500,8 @@ enum RailRow: Hashable {
     /// height: the stops stay put as the header grows and shrinks above. Only when the sky is shorter than
     /// the reference, the rail keeps its size and draws over what's above (no longer compressed).
     static let reference: CGFloat = 520
+    /// From the sky's bottom edge to the lowest stop.
+    static let bottomGap: CGFloat = 70
 
     /// Row centres in points, bottom-anchored.
     static func ys(_ rows: [RailRow], in height: CGFloat) -> [CGFloat] { ys(count: rows.count, in: height) }
@@ -508,8 +510,10 @@ enum RailRow: Hashable {
         // Never compressed (owner, Oct 18: "it should stay consistent and on top of everything"): the column is
         // the same size, the same distance from the bottom, whatever the sky's height. A short sky (a long
         // sentence, a card) lets the top of the rail rise over the header instead of squeezing it.
-        let base = reference
-        return mids(count: count).map { height - (1 - CGFloat($0)) * base }
+        // The last stop sits a fixed gap above the sky's bottom (owner, Oct 23: anchor it low so it never fights
+        // the cards above); the column grows upward from there.
+        let base = reference, m = mids(count: count), last = CGFloat(m.last ?? 0.5)
+        return m.map { height - bottomGap - (last - CGFloat($0)) * base }
     }
 
     /// The name tag beside the thumb.

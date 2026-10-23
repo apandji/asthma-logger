@@ -162,9 +162,16 @@ enum DataSets {
         active = preset.title
     }
 
+    /// One moment at a time, so the context drops them and their uses and notes cascade. A batch
+    /// `delete(model:)` can fail quietly once moments have uses and notes, and then the next data set lands on
+    /// top of the old one (every archetype read "Mixed" on the phone). Orphaned uses and notes go too.
     private static func wipeMoments(_ context: ModelContext) {
-        try? context.delete(model: LogEvent.self)
+        for e in (try? context.fetch(FetchDescriptor<LogEvent>())) ?? [] { context.delete(e) }
+        for u in (try? context.fetch(FetchDescriptor<InhalerUse>())) ?? [] { context.delete(u) }
+        for n in (try? context.fetch(FetchDescriptor<VoiceNote>())) ?? [] { context.delete(n) }
         try? context.save()
+        let left = (try? context.fetchCount(FetchDescriptor<LogEvent>())) ?? 0
+        assert(left == 0, "Data set wipe left \(left) moments")
     }
 
     // MARK: Fresh start

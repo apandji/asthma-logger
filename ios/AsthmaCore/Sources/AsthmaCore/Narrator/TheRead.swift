@@ -177,16 +177,27 @@ public enum TheRead {
     /// What the sentence had no room for, plainly: "Fine particles and tree pollen were high too." Nil when
     /// there's nothing more. Never marked: a third pattern still has its dot on the rail and its row in Insights.
     public static func tooLine(_ clauses: [Clause], time: Time) -> String? {
-        let rest = clauses.dropFirst(2).map { subject(of: $0.text) }
-        guard !rest.isEmpty else { return nil }
-        let list = rest.count == 1 ? rest[0] : rest.dropLast().joined(separator: ", ") + " and " + rest.last!
-        let plural = rest.count > 1 || list.hasSuffix("particles")
-        let verb: String = switch time {
-        case .back: plural ? "were" : "was"
-        case .now: plural ? "are" : "is"
-        case .ahead: plural ? "look" : "looks"
+        let all = clauses.dropFirst(2).map { subject(of: $0.text) }
+        guard !all.isEmpty else { return nil }
+        // An alert isn't "high": it's there or not. "There was also a heat alert."
+        let events = all.filter { $0.hasPrefix("a ") || $0.hasPrefix("an ") }
+        let rest = all.filter { !events.contains($0) }
+        let join = { (xs: [String]) in xs.count == 1 ? xs[0] : xs.dropLast().joined(separator: ", ") + " and " + xs.last! }
+        var out: [String] = []
+        if !rest.isEmpty {
+            let list = join(rest)
+            let plural = rest.count > 1 || list.hasSuffix("particles")
+            let verb: String = switch time {
+            case .back: plural ? "were" : "was"
+            case .now: plural ? "are" : "is"
+            case .ahead: plural ? "look" : "looks"
+            }
+            out.append(list.prefix(1).uppercased() + list.dropFirst() + " \(verb) high too.")
         }
-        return list.prefix(1).uppercased() + list.dropFirst() + " \(verb) high too."
+        if !events.isEmpty {
+            out.append((time == .back ? "There was also " : "There's also ") + join(events) + ".")
+        }
+        return out.joined(separator: " ")
     }
 
     /// "Fine particles were high." → "fine particles"; "It was hot." → "heat".

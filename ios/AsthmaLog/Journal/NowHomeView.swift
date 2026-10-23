@@ -695,6 +695,16 @@ struct NowHomeView: View {
     }
 
     /// The verdict as a strength for the rail (nil while still learning).
+    /// How much the time on screen looks like your flare days, for the sky's field: the verdict where there is one
+    /// (now, the forecast), and for a past moment how strongly its air matched your patterns, so a risky moment is
+    /// orange at a glance, past or ahead. Nil while still learning.
+    private func fieldRisk(_ c: Conditions?, at t: Date) -> Double? {
+        guard isLearned else { return nil }
+        let verdict = verdictStrength(outlook(at: t).tint) ?? 0
+        let matched = Self.yours(shared(c, at: t)).values.max() ?? 0
+        return max(verdict, matched)
+    }
+
     private func verdictStrength(_ tint: Color?) -> Double? {
         switch tint {
         case Verdict.green?: 0
@@ -786,7 +796,7 @@ struct NowHomeView: View {
                       scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil,
                       patterns: scrubbing ? [] : RailGroup.marked(in: headerRead),
                       yours: scrubbing ? [:] : Self.yours(shared(s.conditions, at: s.date)),
-                      risk: verdictStrength(outlook(at: s.date).tint),
+                      risk: fieldRisk(s.conditions, at: s.date),
                       onRailOpen: { railOpen = $0 })
             .onTapGesture { s.onTap() }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { skyWidth = $0 }
@@ -1614,6 +1624,14 @@ struct NowSky: View {
                     let mine = yours["Weather"]
                     (Crit.RiskColor.familiesInInk ? (mine == nil ? Color.white : Verdict.red) : WeatherColor.print ? WeatherColor.weatherInk : WeatherColor.light(WeatherColor.temperature(t), at: date))
                         .opacity(Crit.RiskColor.familiesInInk ? (mine.map { 0.14 + 0.3 * $0 } ?? 0.08 + 0.2 * WeatherColor.weatherAmount(t)) : WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+                // The field: the whole sky washes orange with how much this time looks like your flare days, behind
+                // the dots, so a risky moment, past or ahead, reads at a glance. Nothing while still learning.
+                if Crit.RiskColor.familiesInInk, let r = risk, r > 0 {
+                    RadialGradient(colors: [Verdict.red.opacity(0.10 + 0.28 * r), Verdict.red.opacity(0.04 + 0.12 * r)],
+                                   center: .center, startRadius: 0, endRadius: size.width * 0.9)
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }

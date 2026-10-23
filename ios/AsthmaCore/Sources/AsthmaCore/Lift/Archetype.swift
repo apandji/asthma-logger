@@ -150,7 +150,7 @@ public struct Archetype: Sendable, Equatable {
         case .suddenChange: "Your flare days tend to follow a sharp drop in temperature or a change in the weather."
         case .biologics: "Your flare days line up with living things in the air: pollen, pets or mold."
         case .particulates: "Your flare days line up with what's floating in the air: ozone, fine particles or smoke."
-        case .exertion: "Your flare days come with effort: exercise, or laughing or crying hard."
+        case .exertion: "Your flare days come after being active."
         case .infections: "Your flare days tend to come when colds and flu are going around."
         case .hotHazy: "Your flare days tend to be hot, with ozone or fine particles up."
         case .coldEffort: "Your flare days come with effort in cold or dry air."

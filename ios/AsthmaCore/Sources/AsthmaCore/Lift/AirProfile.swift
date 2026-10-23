@@ -32,7 +32,7 @@ public struct AirProfile: Sendable, Equatable {
             case .weather: "Cold, dry air, heat and humidity, sudden changes"
             case .biologics: "Pollen, mold, pets"
             case .particulates: "Fine particles, ozone, smoke, fumes, strong scents"
-            case .exertion: "Being active, laughing or crying hard"
+            case .exertion: "Being active in the hour before"
             case .infections: "Flu-like illness around, colds you mention"
             }
         }
@@ -48,7 +48,7 @@ public struct AirProfile: Sendable, Equatable {
             case "pollen_weed", "pollen_tree", "pollen_grass", "tag_pets", "tag_mold": .biologics
             case "pm25", "ozone", "smoke_at_point", "tag_smoke", "tag_dust", "tag_cleaningProducts", "tag_strongScents",
                  "tag_cooking": .particulates
-            case "tag_exercise", "tag_laughingOrCrying", "exertion": .exertion
+            case "tag_exercise", "exertion": .exertion
             case "ili", "tag_coldOrFlu": .infections
             default: nil
             }

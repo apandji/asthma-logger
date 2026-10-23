@@ -3,8 +3,8 @@ import Testing
 
 @Suite struct AirProfileTests {
     @Test func everyBinHasAFamilyOrIsKnowinglyLeftOut() {
-        // Stress is a tag only, never sampled on baselines: off the radar until it has a signal (trigger lens).
-        let outside: Set<String> = ["hour", "season", "place", "indoor_outdoor", "tag_stress"]
+        // Stress, laughing and crying are tags only, never sampled on baselines: off the radar until they have a signal.
+        let outside: Set<String> = ["hour", "season", "place", "indoor_outdoor", "tag_stress", "tag_laughingOrCrying"]
         for def in Bins.all where !outside.contains(def.bin) {
             #expect(AirProfile.Category.of(bin: def.bin) != nil, "\(def.bin) has no family")
         }

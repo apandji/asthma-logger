@@ -46,6 +46,8 @@ struct NowHomeView: View {
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
     @State private var showInsights = false
+    /// Bumps each time the patterns are re-learned, so a loadout's landing can wait for the new person's.
+    @State private var rebuilt = 0
     /// A loadout's landing (Settings › Demo and development › Loadouts): an hour tomorrow, or Insights.
     @AppStorage(Loadout.pendingKey) private var pendingLoadout = ""
     /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
@@ -211,6 +213,7 @@ struct NowHomeView: View {
             .overlay(alignment: .bottom) { bottomBar }
             .onChange(of: pendingLoadout, initial: true) { _, v in
                 guard !v.isEmpty else { return }
+                let start = rebuilt
                 Task { @MainActor in
                     // After the Settings sheet has gone, or the Insights sheet can't present.
                     try? await Task.sleep(for: .milliseconds(800))
@@ -219,13 +222,15 @@ struct NowHomeView: View {
                         let t = Loadout.tomorrow(at: h)
                         // The forecast hours arrive a moment after a data set loads: wait for tomorrow to exist.
                         for _ in 0..<40 where (hours.last?.date ?? .distantPast) < t { try? await Task.sleep(for: .milliseconds(250)) }
+                        guard pendingLoadout == v else { return }
                         withAnimation(Theme.smooth) { focusTime = min(t, hours.last?.date ?? t) }
                     }
                     if parts.contains("focus=last") {
                         // The latest rescue moment, once the data set's moments have arrived.
                         for _ in 0..<40 where !moments.contains(where: { $0.moment == .rescue }) { try? await Task.sleep(for: .milliseconds(250)) }
-                        // Wait for felt air to have re-learned this person, or every rescue ties.
-                        for _ in 0..<40 where gatedRows.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+                        // Wait for felt air to have re-learned this person (not the one before), or every rescue ties.
+                        for _ in 0..<60 where rebuilt == start || gatedRows.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+                        guard pendingLoadout == v else { return }   // another loadout took over meanwhile
                         // The latest rescue that shares the most with their pattern: a good example, not a mild day,
                         // and at least an hour back so it reads as looking back, not as now.
                         let rescues = moments.filter { $0.moment == .rescue && $0.loggedAt < now.addingTimeInterval(-3600) }
@@ -289,10 +294,12 @@ struct NowHomeView: View {
                 }
             }
 
-            .task(id: events.count) {
+            // Re-learn when moments change, and when a loadout lands (a reload can keep the same count).
+            .task(id: "\(events.count)|\(pendingLoadout)") {
                 try? await Task.sleep(for: .seconds(1.2))
                 guard !Task.isCancelled else { return }
                 model.rebuild(events: events, demo: demo)
+                rebuilt += 1
                 model.narrate()
                 if let p = away ?? here { await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here") }
             }
@@ -700,9 +707,10 @@ struct NowHomeView: View {
     /// orange at a glance, past or ahead. Nil while still learning.
     private func fieldRisk(_ c: Conditions?, at t: Date) -> Double? {
         guard isLearned else { return nil }
-        let verdict = verdictStrength(outlook(at: t).tint) ?? 0
-        let matched = Self.yours(shared(c, at: t)).values.max() ?? 0
-        return max(verdict, matched)
+        // A past moment has no verdict of its own: how strongly its air matched your patterns. Now and ahead follow
+        // the pill exactly, so the field and the pill never disagree.
+        if t < now.addingTimeInterval(-30 * 60) { return Self.yours(shared(c, at: t)).values.max() ?? 0 }
+        return verdictStrength(outlook(at: t).tint) ?? 0
     }
 
     private func verdictStrength(_ tint: Color?) -> Double? {
@@ -1099,10 +1107,13 @@ struct NowHomeView: View {
                 .sorted { ($0.attackRate - $0.baselineRate) > ($1.attackRate - $1.baselineRate) }
                 .map { TheRead.noun($0.bin, $0.level) }
         }
+        // Only what's a pattern (gated), and only the air: never the hour or the place.
+        let gated = Set(gatedRows.map(\.id))
         if let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }) {
-            return w.drivers.sorted { $0.logLR > $1.logLR }.map { TheRead.noun($0.bin, $0.level) }
+            return w.drivers.filter { gated.contains($0.id) && !TheRead.personalBins.contains($0.bin) }
+                .sorted { $0.logLR > $1.logLR }.map { TheRead.noun($0.bin, $0.level) }
         }
-        return shared(liveAir.conditions, at: t).map { TheRead.noun($0.bin, $0.level) }
+        return []
     }
 
     /// An event the forecast shows (a sharp drop, mold weather).
@@ -1640,7 +1651,7 @@ struct NowSky: View {
                 ParticleField(particles: stack.map { layer in
                                   // How orange: a layer that's one of your patterns most of all, and every dot a little
                                   // with the time's risk, so the screen warms as the hour looks more like your flare days.
-                                  let mine = yours[layer.name].map { 0.45 + 0.55 * $0 } ?? 0
+                                  let mine = yours[layer.name == "Air" ? "PM2.5" : layer.name].map { 0.45 + 0.55 * $0 } ?? 0
                                   let warmth = max(mine, 0.85 * (risk ?? 0))
                                   let plain = light ? Color(white: 0.18) : Color.white.opacity(0.85)
                                   let ink: Color = !Crit.RiskColor.familiesInInk ? layer.color
@@ -1917,11 +1928,12 @@ struct NowSky: View {
         if var probe = p, let h = history {
             switch probe.name {
             case "Weather":
+                let inInk = Crit.RiskColor.familiesInInk
                 probe.lines = [SparkSeries(name: "Temperature", unit: "°", points: h.temperature, ink: .white),
-                               SparkSeries(name: "Humidity", unit: "%", points: h.humidity, ink: Color(red: 0.55, green: 0.7, blue: 0.95))]
+                               SparkSeries(name: "Humidity", unit: "%", points: h.humidity, ink: inInk ? Color.white.opacity(0.6) : Color(red: 0.55, green: 0.7, blue: 0.95))]
                     .filter { $0.points.count > 1 }
             case "PM2.5", "Air":
-                probe.lines = h.pm25.count > 1 ? [SparkSeries(name: "PM2.5", unit: "", points: h.pm25, ink: WeatherColor.pm25)] : []
+                probe.lines = h.pm25.count > 1 ? [SparkSeries(name: "PM2.5", unit: "", points: h.pm25, ink: Crit.RiskColor.familiesInInk ? probe.ink : WeatherColor.pm25)] : []
             default: break
             }
             p = probe

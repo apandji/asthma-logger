@@ -135,8 +135,13 @@ struct InsightsView: View {
     private func archetypeBlock(_ a: Archetype) -> some View {
         // Three steps only: the name (Recursive), what it means (body), the evidence (one grey line).
         VStack(spacing: 10) {
-            Text(a.name).font(Theme.serifTitleLarge).kerning(Theme.serifKerning).multilineTextAlignment(.center)
-            Text(a.line).font(.body).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            // Nothing passes the general bins, but felt air found where cold (or heat) starts for you: say that, not
+            // "nothing stands out" above a card that says the opposite.
+            let edge = a.kind == .noClearTrigger ? tempEdge?.edge : nil
+            let name = edge.map { $0.side == .below ? "Cold-sensitive, your way" : "Heat-sensitive, your way" } ?? a.name
+            let line = edge.map { $0.side == .below ? ($0.isGeneral ? "Your flare days come on freezing days, more than your usual ones do." : "Your flare days come on days colder than most of your usual ones, before it’s freezing.") : "Your flare days come on days warmer than most of your usual ones." } ?? a.line
+            Text(name).font(Theme.serifTitleLarge).kerning(Theme.serifKerning).multilineTextAlignment(.center)
+            Text(line).font(.body).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             // Learned, not a score. It can move: felt air keeps learning, and seasons change what's in the air.
             Button { path.append(Page.history) } label: {
                 HStack(spacing: 6) {

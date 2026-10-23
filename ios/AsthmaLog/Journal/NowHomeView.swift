@@ -2666,11 +2666,21 @@ struct CardStack<Content: View>: View {
                     // 0 = in front, 1 = next, 2 = the one behind that.
                     let k = (i - front + n) % n
                     let depth = min(k, 2)
+                    // Only the front card shows its words. The ones behind are blank sheets that peek out above it:
+                    // glass is see-through, so their text would read through the front card.
                     content(c)
+                        .opacity(k == 0 ? 1 : 0)
+                        .background(alignment: .top) {
+                            if k != 0 {
+                                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                                    .fill(Color.primary.opacity(0.07))
+                                    .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.primary.opacity(0.18), lineWidth: 1))
+                            }
+                        }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                         .scaleEffect(1 - 0.05 * CGFloat(depth), anchor: .top)
                         .offset(y: -10 * CGFloat(depth) + (k == 0 ? drag * 0.3 : 0))
-                        .opacity(depth == 0 ? 1 : depth == 1 ? 0.55 : 0.3)
+                        .opacity(depth == 0 ? 1 : depth == 1 ? 0.8 : 0.5)
                         .zIndex(Double(n - k))
                         .allowsHitTesting(k == 0)
                         .accessibilityHidden(k != 0)

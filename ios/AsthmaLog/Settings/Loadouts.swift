@@ -91,7 +91,7 @@ struct Loadout: Identifiable {
         for k in ["demo.care", "demo.priming", "demo.active"] { d.removeObject(forKey: k) }
         if mine {
             if let own = DataSets.saved().first(where: { $0.name == DataSets.ownData }) { DataSets.load(own, context: context) }
-        } else if let dataSet, DataSets.active != dataSet.title {
+        } else if let dataSet {   // always fresh: a puff logged in an earlier step must not become "the last rescue"
             DataSets.load(dataSet, context: context)
         }
         var pending: [String] = []

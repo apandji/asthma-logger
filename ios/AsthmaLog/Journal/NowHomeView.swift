@@ -224,7 +224,16 @@ struct NowHomeView: View {
                     if parts.contains("focus=last") {
                         // The latest rescue moment, once the data set's moments have arrived.
                         for _ in 0..<40 where !moments.contains(where: { $0.moment == .rescue }) { try? await Task.sleep(for: .milliseconds(250)) }
-                        if let m = moments.last(where: { $0.moment == .rescue }) { withAnimation(Theme.smooth) { focusTime = m.loggedAt } }
+                        // Wait for felt air to have re-learned this person, or every rescue ties.
+                        for _ in 0..<40 where gatedRows.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+                        // The latest rescue that shares the most with their pattern: a good example, not a mild day,
+                        // and at least an hour back so it reads as looking back, not as now.
+                        let rescues = moments.filter { $0.moment == .rescue && $0.loggedAt < now.addingTimeInterval(-3600) }
+                        let best = rescues.max { a, b in
+                            let x = shared(a.conditions, at: a.loggedAt).count, y = shared(b.conditions, at: b.loggedAt).count
+                            return x != y ? x < y : a.loggedAt < b.loggedAt
+                        }
+                        if let m = best { withAnimation(Theme.smooth) { focusTime = m.loggedAt } }
                     }
                     if parts.contains("open=insights") { showInsights = true }
                     pendingLoadout = ""

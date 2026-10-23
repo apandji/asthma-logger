@@ -38,9 +38,32 @@ struct NowHomeView: View {
     @State private var here: NowReading?
     /// The forecast's place when you've picked one (Home, Work, an address); nil means here.
     @State private var away: NowReading?
-    @State private var hours: [NowHour] = [] {
+    @State private var forecastHours: [NowHour] = [] {
         // Only for where you are, not a forecast place you picked.
-        didSet { if !hours.isEmpty, chosen == nil { scheduleMorningBrief() } }
+        didSet { if !forecastHours.isEmpty, chosen == nil { scheduleMorningBrief() } }
+    }
+    /// The forecast as shown: real, or in the staged demo (Insights ring forced to learned) with an exaggerated
+    /// afternoon whose air matches the demo person's patterns, so the air drives the verdict, the sentence, the
+    /// dots and the readings alike (owner, Oct 23: "I want the air dataset to drive this").
+    private var hours: [NowHour] { isStagedDemo ? forecastHours.map(Self.staged) : forecastHours }
+    private var isStagedDemo: Bool { forced == .learned && !(model.progress?.isMet ?? false) }
+
+    /// A rough afternoon in the air itself: 2–5 PM high ozone, high weed pollen and heat (both of the demo
+    /// person's patterns); 11 AM–1 PM and 6–7 PM high ozone only (one pattern). Readings, so they're binned.
+    static func staged(_ h: NowHour) -> NowHour {
+        let hour = Calendar.current.component(.hour, from: h.date)
+        let peak = (14...17).contains(hour), shoulder = (11...13).contains(hour) || (18...19).contains(hour)
+        guard peak || shoulder else { return h }
+        var c = h.conditions
+        func obs(_ s: Signal, _ v: Double, _ unit: String, _ cat: String? = nil) -> EnvObservation {
+            EnvObservation(signal: s, value: v, unit: unit, asOf: h.date, source: NowHour.source, spatialScale: .region,
+                           category: cat)
+        }
+        var add = [obs(.ozone, peak ? 96 : 84, "ppb")]
+        if peak { add += [obs(.pollenWeed, 190, "grains/m³", "High"), obs(.temperature, 93, "°F")] }
+        c.observations.removeAll { o in add.contains { $0.signal == o.signal } }
+        c.observations.insert(contentsOf: add, at: 0)
+        return NowHour(date: h.date, conditions: c, airCarried: h.airCarried)
     }
     @State private var model = InsightsModel()
     /// Where the playhead is. Nil means now.
@@ -260,7 +283,7 @@ struct NowHomeView: View {
             .sheet(isPresented: $showPlaces) { PlacePicker(chosen: $chosen).presentationDetents([.medium, .large]) }
             .onChange(of: chosen) { _, new in
                 away = new.map { NowReading(lat: $0.lat, lon: $0.lon, place: $0.name, conditions: Conditions()) }
-                hours = []
+                forecastHours = []
                 Task { await loadForecastPlace() }
             }
 
@@ -740,10 +763,13 @@ struct NowHomeView: View {
         if learned, demoEvent != .none, abs(t.timeIntervalSince(now)) < 30 * 60 { return ("Matches your flare days", Self.red) }
         if learned {
             if forced == .learned, !(model.progress?.isMet ?? false) {
-                // Demo: a rough afternoon, so every color can be seen on the track.
-                let h = Calendar.current.component(.hour, from: t)
-                if (14...17).contains(h) { return ("Matches your flare days", Self.red) }
-                if (11...13).contains(h) || (18...19).contains(h) { return ("A bit like your flare days", Self.yellow) }
+                // Demo: the staged afternoon's air decides, by how many of the demo person's patterns it matches.
+                let air = t > now.addingTimeInterval(30 * 60)
+                    ? hours.min(by: { abs($0.date.timeIntervalSince(t)) < abs($1.date.timeIntervalSince(t)) })?.conditions
+                    : liveAir.conditions
+                let n = shared(air, at: t).filter { !TheRead.personalBins.contains($0.bin) }.count
+                if n >= 2 { return ("Matches your flare days", Self.red) }
+                if n == 1 { return ("A bit like your flare days", Self.yellow) }
                 return ("Looks like your baseline days", Self.green)
             }
             if let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }) {
@@ -1082,38 +1108,29 @@ struct NowHomeView: View {
         let read = TheRead.sentence(time: .now, learned: isLearned, event: liveEvent?.advice, fallF: air.conditions?.tempFallF,
                                     fires: fires, shared: shared(air.conditions, at: now),
                                     notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false).map(\.clause))
-        return explained(read, at: now, when: "Right now")
+        return explained(read, at: now, when: "Right now", conditions: air.conditions)
     }
 
     /// The pill says this time looks like your flare days, but the sentence found nothing to name: say what's behind
     /// the verdict instead ("Tomorrow afternoon: high ozone and heat, like your flare days"), so the two agree.
     /// The reasons are the forecast window's strongest matches with your pattern; in the staged demo, the demo
     /// person's own patterns. Never a cause: "like your flare days", not "because".
-    private func explained(_ read: String, at t: Date, when: String) -> String {
+    private func explained(_ read: String, at t: Date, when: String, conditions: Conditions?) -> String {
         guard read.contains("stands out") else { return read }
         let tint = outlook(at: t).tint
         guard tint == Self.red || tint == Self.yellow else { return read }
         let how = tint == Self.red ? "like your flare days" : "a bit like your flare days"
-        let names = reasons(at: t).prefix(2).map { $0.prefix(1).lowercased() + $0.dropFirst() }
+        let names = reasons(at: t, conditions: conditions).prefix(2).map { $0.prefix(1).lowercased() + $0.dropFirst() }
         guard !names.isEmpty else { return "\(when) looks \(how), though no single reading stands out." }
         let list = names.count == 2 ? "\(names[0]) and \(names[1])" : names[0]
         return "\(when): \(list), \(how)."
     }
 
-    /// What makes a time look like your flare days, strongest first, as nouns ("High ozone", "Heat").
-    private func reasons(at t: Date) -> [String] {
-        if forced == .learned, !(model.progress?.isMet ?? false) {
-            return AirProfile.demoPerson.axes.compactMap(\.lead).filter(\.gated)
-                .sorted { ($0.attackRate - $0.baselineRate) > ($1.attackRate - $1.baselineRate) }
-                .map { TheRead.noun($0.bin, $0.level) }
-        }
-        // Only what's a pattern (gated), and only the air: never the hour or the place.
-        let gated = Set(gatedRows.map(\.id))
-        if let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }) {
-            return w.drivers.filter { gated.contains($0.id) && !TheRead.personalBins.contains($0.bin) }
-                .sorted { $0.logLR > $1.logLR }.map { TheRead.noun($0.bin, $0.level) }
-        }
-        return []
+    /// What makes a time look like your flare days, strongest first, as nouns ("High ozone", "Heat"): only patterns
+    /// this time's own air actually matches, so the sentence never names a reading the sky contradicts (owner, Oct 23:
+    /// "ozone is mentioned as high, but it's low"). Nothing matches: the caller says no single reading stands out.
+    private func reasons(at t: Date, conditions: Conditions?) -> [String] {
+        shared(conditions, at: t).filter { !TheRead.personalBins.contains($0.bin) }.map { TheRead.noun($0.bin, $0.level) }
     }
 
     /// An event the forecast shows (a sharp drop, mold weather).
@@ -1130,7 +1147,7 @@ struct NowHomeView: View {
                                     fallF: h.conditions.tempFallF, shared: shared(h.conditions, at: h.date),
                                     notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true).map(\.clause),
                                     looksLikeFlare: tint == Self.red || tint == Self.yellow)
-        return explained(read, at: h.date, when: when)
+        return explained(read, at: h.date, when: when, conditions: h.conditions)
     }
 
     private var atHome: Bool { Self.knownPlace(here?.lat, here?.lon)?.name == "Home" }
@@ -1360,7 +1377,7 @@ struct NowHomeView: View {
         let id = mapID
         Task { _ = await MapSnapshots.image(id: id, latitude: p.lat, longitude: p.lon, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale) }
         // For a place that isn't here we have no live reading to carry forward.
-        hours = await NowHour.forecast(latitude: p.lat, longitude: p.lon, now: away == nil ? here?.conditions : nil)
+        forecastHours = await NowHour.forecast(latitude: p.lat, longitude: p.lon, now: away == nil ? here?.conditions : nil)
         await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here")
     }
 }
@@ -1924,6 +1941,12 @@ struct NowSky: View {
             let key = q.name == "Air" ? "PM2.5" : RailGroup.weather.items.contains(q.name) ? "Weather" : q.name
             q.yours = yours[key]
             p = q
+            // An elevated factor that's one of yours: a firm double tap as the finger arrives (owner, Oct 23).
+            if q.yours != nil && probe?.name != q.name {
+                let h = UIImpactFeedbackGenerator(style: .heavy)
+                h.impactOccurred(intensity: 1)
+                Task { try? await Task.sleep(for: .milliseconds(110)); h.impactOccurred(intensity: 0.8) }
+            }
         }
         if var probe = p, let h = history {
             switch probe.name {
@@ -1948,7 +1971,8 @@ struct NowSky: View {
             let heavy = UIImpactFeedbackGenerator(style: .heavy)
             soft.prepare(); rigid.prepare(); heavy.prepare()
             while !Task.isCancelled {
-                let x = probe?.intensity ?? 0
+                // Yours beats like a high level, whatever the amount: the hand feels what's yours.
+                let x = max(probe?.intensity ?? 0, (probe?.yours).map { 0.7 + 0.3 * $0 } ?? 0)
                 switch x {
                 case ..<0.34: soft.impactOccurred(intensity: 0.55 + x)
                 case ..<0.67: rigid.impactOccurred(intensity: 0.6 + x * 0.4)

@@ -1052,9 +1052,38 @@ struct NowHomeView: View {
         let air = liveAir
         // No reading (every source failed, or offline): say so, never "nothing stands out".
         guard air.conditions?.input.hasAnyValue == true || liveEvent != nil else { return TheRead.noReading(.now) }
-        return TheRead.sentence(time: .now, learned: isLearned, event: liveEvent?.advice, fallF: air.conditions?.tempFallF,
-                                fires: fires, shared: shared(air.conditions, at: now),
-                                notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false).map(\.clause))
+        let read = TheRead.sentence(time: .now, learned: isLearned, event: liveEvent?.advice, fallF: air.conditions?.tempFallF,
+                                    fires: fires, shared: shared(air.conditions, at: now),
+                                    notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false).map(\.clause))
+        return explained(read, at: now, when: "Right now")
+    }
+
+    /// The pill says this time looks like your flare days, but the sentence found nothing to name: say what's behind
+    /// the verdict instead ("Tomorrow afternoon: high ozone and heat, like your flare days"), so the two agree.
+    /// The reasons are the forecast window's strongest matches with your pattern; in the staged demo, the demo
+    /// person's own patterns. Never a cause: "like your flare days", not "because".
+    private func explained(_ read: String, at t: Date, when: String) -> String {
+        guard read.contains("stands out") else { return read }
+        let tint = outlook(at: t).tint
+        guard tint == Self.red || tint == Self.yellow else { return read }
+        let how = tint == Self.red ? "like your flare days" : "a bit like your flare days"
+        let names = reasons(at: t).prefix(2).map { $0.prefix(1).lowercased() + $0.dropFirst() }
+        guard !names.isEmpty else { return "\(when) looks \(how), though no single reading stands out." }
+        let list = names.count == 2 ? "\(names[0]) and \(names[1])" : names[0]
+        return "\(when): \(list), \(how)."
+    }
+
+    /// What makes a time look like your flare days, strongest first, as nouns ("High ozone", "Heat").
+    private func reasons(at t: Date) -> [String] {
+        if forced == .learned, !(model.progress?.isMet ?? false) {
+            return AirProfile.demoPerson.axes.compactMap(\.lead).filter(\.gated)
+                .sorted { ($0.attackRate - $0.baselineRate) > ($1.attackRate - $1.baselineRate) }
+                .map { TheRead.noun($0.bin, $0.level) }
+        }
+        if let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }) {
+            return w.drivers.sorted { $0.logLR > $1.logLR }.map { TheRead.noun($0.bin, $0.level) }
+        }
+        return shared(liveAir.conditions, at: t).map { TheRead.noun($0.bin, $0.level) }
     }
 
     /// An event the forecast shows (a sharp drop, mold weather).
@@ -1066,10 +1095,12 @@ struct NowHomeView: View {
     /// `label` names the time ("Thursday afternoon"); the morning brief says "This afternoon" instead.
     private func aheadRead(_ h: NowHour, label: String? = nil) -> String {
         let tint = outlook(at: h.date).tint
-        return TheRead.sentence(time: .ahead(label ?? Self.when(h.date)), learned: isLearned, event: aheadEvent(h)?.advice,
-                                fallF: h.conditions.tempFallF, shared: shared(h.conditions, at: h.date),
-                                notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true).map(\.clause),
-                                looksLikeFlare: tint == Self.red || tint == Self.yellow)
+        let when = label ?? Self.when(h.date)
+        let read = TheRead.sentence(time: .ahead(when), learned: isLearned, event: aheadEvent(h)?.advice,
+                                    fallF: h.conditions.tempFallF, shared: shared(h.conditions, at: h.date),
+                                    notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true).map(\.clause),
+                                    looksLikeFlare: tint == Self.red || tint == Self.yellow)
+        return explained(read, at: h.date, when: when)
     }
 
     private var atHome: Bool { Self.knownPlace(here?.lat, here?.lon)?.name == "Home" }

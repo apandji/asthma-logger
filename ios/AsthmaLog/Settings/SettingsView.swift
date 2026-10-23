@@ -17,6 +17,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Demos, design reviews and testing, first for now (owner, Oct 23: MVP demos). Move back to the bottom
+                // before TestFlight.
+                Section {
+                    NavigationLink("Demo and development") { DeveloperSettings(close: { dismiss() }) }
+                } footer: {
+                    Text("Loadouts, data sets, design switches and prototypes. Not part of felt air.")
+                }
+
                 Section {
                     Toggle("After a press, ask what was going on", isOn: $quickRecord)
                         .onChange(of: quickRecord) { _, on in
@@ -86,12 +94,6 @@ struct SettingsView: View {
                     Text("felt air is a diary, not a medical device. It compares the outdoor air when you used your inhaler with your baseline moments. It can't see indoor air, doesn't diagnose, and never says a flare will happen.")
                 }
 
-                // Everything for demos, design reviews and testing: one row, at the very bottom.
-                Section {
-                    NavigationLink("Demo and development") { DeveloperSettings(close: { dismiss() }) }
-                } footer: {
-                    Text("Data sets, demo moments, design switches and prototypes. Not part of felt air.")
-                }
             }
             .tint(Theme.standard) // switches in the app's own blue (the neutral tint would be white-on-white)
             .navigationTitle("Settings")

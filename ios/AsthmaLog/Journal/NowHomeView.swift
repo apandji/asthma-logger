@@ -777,6 +777,7 @@ struct NowHomeView: View {
                       scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil,
                       patterns: scrubbing ? [] : RailGroup.marked(in: headerRead),
                       yours: scrubbing ? [:] : Self.yours(shared(s.conditions, at: s.date)),
+                      risk: verdictStrength(outlook(at: s.date).tint),
                       onRailOpen: { railOpen = $0 })
             .onTapGesture { s.onTap() }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { skyWidth = $0 }
@@ -1454,6 +1455,9 @@ struct NowSky: View {
     var patterns: Set<RailGroup> = []
     /// What's yours in this sky, and how strongly (`NowHomeView.yours`). Drives the orange of the dots and washes.
     var yours: [String: Double] = [:]
+    /// How much this time looks like your flare days: 0 like your baseline days, 0.5 a bit like, 1 like them; nil
+    /// while still learning. The whole screen warms toward orange with it, so the sky says what the pill says.
+    var risk: Double? = nil
     /// Told when the rail opens or closes (held, or pinned on Voice / Body), so what sits above it can step aside.
     var onRailOpen: ((Bool) -> Void)? = nil
     @State private var voice = VoiceSession()
@@ -1576,16 +1580,20 @@ struct NowSky: View {
                 // The dots: how much of each is in the air (size and count). Families in ink: plain ink, and orange
                 // for what's yours (paler for "sometimes"). Before learning nothing is yours, so it's all ink.
                 ParticleField(particles: stack.map { layer in
+                                  // How orange: a layer that's one of your patterns most of all, and every dot a little
+                                  // with the time's risk, so the screen warms as the hour looks more like your flare days.
+                                  let mine = yours[layer.name].map { 0.45 + 0.55 * $0 } ?? 0
+                                  let warmth = max(mine, 0.85 * (risk ?? 0))
+                                  let plain = light ? Color(white: 0.18) : Color.white.opacity(0.85)
                                   let ink: Color = !Crit.RiskColor.familiesInInk ? layer.color
-                                      : yours[layer.name].map { Color.white.mix(with: Verdict.red, by: 0.45 + 0.55 * $0) }
-                                      ?? (light ? Color(white: 0.18) : Color.white.opacity(0.85))
+                                      : warmth > 0 ? plain.mix(with: Verdict.red, by: warmth) : plain
                                   return (ink, layer.empty ? 0 : (Double(layer.level.rawValue) + max(0, min(1, layer.fraction))) / 3)
                               },
                               fragments: stack.map { event == .storm && $0.name.hasSuffix("pollen") },
                               selected: row == .header(.weather) || onWeatherItem ? -1 : selectedLayer(stack),
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
-                              rippleInk: rippleInk, scan: true, hollow: sketch,
+                              rippleInk: rippleInk, scan: true, hollow: sketch && (risk ?? 0) < 0.5,
                               breathes: !isPast,
                               reveal: sketch ? .soft : isPast ? .inward : .outward)
             }

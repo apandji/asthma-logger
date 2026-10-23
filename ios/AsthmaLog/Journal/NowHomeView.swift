@@ -773,6 +773,12 @@ struct NowHomeView: View {
         let learned = forced == .learned || (forced == .auto && (model.progress?.isMet ?? false))
         // The demo event is the presentation's story: with the demo person learned, now matches their flare days.
         if learned, demoEvent != .none, abs(t.timeIntervalSince(now)) < 30 * 60 { return ("Matches your flare days", Self.red) }
+        // Now: the air on screen decides too, so a day whose air matches your patterns says so.
+        if learned, abs(t.timeIntervalSince(now)) < 30 * 60 {
+            let n = shared(liveAir.conditions, at: now).filter { !TheRead.personalBins.contains($0.bin) }.count
+            if n >= 2 { return ("Matches your flare days", Self.red) }
+            if n == 1 { return ("A bit like your flare days", Self.yellow) }
+        }
         if learned {
             if forced == .learned, !(model.progress?.isMet ?? false) {
                 // Demo: the staged afternoon's air decides, by how many of the demo person's patterns it matches.

@@ -1,3 +1,4 @@
+import CoreMotion
 import RealityKit
 import SwiftUI
 import UIKit
@@ -22,107 +23,143 @@ struct AirCubeAir: Equatable {
 /// ozone shards hang, pollen floats as dandelion seeds, humidity is water pooling at the bottom. You are the sphere in the middle (rescue
 /// orange, standard blue, clear when nothing was logged); the particles bounce off you. The glass is clear, its
 /// edges and corners rounded, tinted by the temperature.
-/// Tap it to open it full screen; there, tap a particle and a fine line names it, scientific-figure style.
-struct AirCube: View {
+/// Tap it and you go into it: the camera flies into the cube, its edges grow past the screen and fade, and the
+/// phone's own edges become the cube's walls. Inside, tap a particle and a fine line names it. Close flies back out.
+/// One 3D view draws the cube, full screen, in a layer over the home (a second 3D view, for going inside, never
+/// drew). On the page, `AirCubeSlot` holds its place: the layer's camera frames the cube in the slot, following it
+/// as you scroll. Going in moves that camera into the cube.
+struct AirCubeSlot: View {
     let air: AirCubeAir
     let felt: MenusFelt
-    @State private var expanded = false
+    @Environment(\.airCubeWorld) private var world
+    @Environment(\.airCubeSlot) private var report
 
     var body: some View {
-        AirCubeStage(air: air, felt: felt, full: false)
-            .contentShape(Rectangle())
-            .onTapGesture { expanded = true }
-            .fullScreenCover(isPresented: $expanded) {
-                AirCubeFull(air: air, felt: felt, close: { expanded = false })
-            }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityHint("Opens the cube full screen")
-    }
-}
-
-/// Full screen: a bigger cube, and tap-to-annotate.
-private struct AirCubeFull: View {
-    let air: AirCubeAir
-    let felt: MenusFelt
-    let close: () -> Void
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 6) {
-                Text("The air, then").font(.title2.weight(.bold))
-                Text("Drag to spin. Tap a particle to see what it is.").font(.subheadline).foregroundStyle(.secondary)
-                AirCubeStage(air: air, felt: felt, full: true)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Text("Outdoor air, regional readings. Drawn, not to scale.")
-                    .font(.caption).foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 20).padding(.top, 60).padding(.bottom, 20)
-            Button(action: close) {
-                Image(systemName: "xmark").font(.body.weight(.semibold)).frame(width: 22, height: 22)
+        GeometryReader { g in
+            let r = (world?.screenRadius(in: g.size) ?? 100)
+            Ellipse().fill(Color.black.opacity(0.06)).frame(width: r * 1.7, height: r * 0.2).blur(radius: 12)
+                .position(x: g.size.width / 2, y: g.size.height / 2 + r * 1.25)
+                .opacity(Double(1 - (world?.zoom ?? 0)))
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { report?($0) }
+        .onDisappear { report?(.zero) }
+        .onChange(of: air, initial: true) { _, a in world?.setAir(a, felt: felt) }
+        .onChange(of: felt) { _, f in world?.setAir(air, felt: f) }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 4)
+                .onChanged { v in world?.drag(v.translation) }
+                .onEnded { v in world?.release(velocity: v.velocity) }
+        )
+        .simultaneousGesture(TapGesture().onEnded { world?.zoomIn() })
+        .overlay(alignment: .bottomTrailing) {
+            Button { world?.zoomIn() } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.footnote.weight(.semibold))
+                    .frame(width: 18, height: 18)
             }
             .buttonStyle(.glass).buttonBorderShape(.circle)
-            .padding(.trailing, 20).padding(.top, 8)
-            .accessibilityLabel("Close")
+            .padding(.trailing, 24).padding(.bottom, 8)
+            .accessibilityLabel("Go into the cube")
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("A glass cube of outdoor air")
+        .accessibilityValue(world?.summary(air) ?? "")
     }
 }
 
-/// The cube itself: the 3D layer, the drag to spin, and, full screen, the annotation.
-private struct AirCubeStage: View {
-    let air: AirCubeAir
-    let felt: MenusFelt
-    let full: Bool
-    @State private var world = CubeWorld()
+/// The layer over the home: the one 3D view, and, inside, the page fading to the cube, the title, the close button
+/// and the annotation. Out on the home it's see-through to touches (the slot takes them) and fades as the slot
+/// scrolls up under the timeline.
+struct AirCubeLayer: View {
+    let world: CubeWorld
+    let slot: CGRect
 
     var body: some View {
         GeometryReader { g in
             let size = g.size
-            let r = world.screenRadius(in: size)
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            ZStack {
-                // A soft shadow on the page, so it sits there.
-                Ellipse().fill(Color.black.opacity(0.07)).frame(width: r * 1.7, height: r * 0.2).blur(radius: 12)
-                    .position(x: center.x, y: center.y + r * 1.25)
+            let inside = world.zoom > 0.001
+            // Fade as the slot slides up under the sticky timeline; gone when there's no slot (another scale or tab).
+            let visible: Double = inside ? 1 : slot == .zero ? 0 : max(0, min(1, Double(slot.midY - 230) / 140))
+            ZStack(alignment: .topTrailing) {
+                Color(uiColor: .systemGroupedBackground).opacity(Double(world.zoom))
+                    .allowsHitTesting(inside)
                 RealityView { content in
                     content.camera = .virtual
-                    world.build(into: content, air: air, felt: felt)
+                    world.attach(content)
                 }
-                if full, let a = world.annotation { annotation(a, size: size, sphere: r) }
+                .opacity(visible)
+                .allowsHitTesting(false)
+                // The 3D view keeps touches to itself, so a clear SwiftUI layer over it takes the taps and drags.
+                if inside {
+                    Color.clear.contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 4)
+                                .onChanged { v in world.drag(v.translation) }
+                                .onEnded { v in world.release(velocity: v.velocity) }
+                        )
+                        .simultaneousGesture(SpatialTapGesture().onEnded { t in world.select(at: t.location) })
+                }
+                if world.zoom > 0.98, let a = world.annotation { annotation(a, size: size) }
+                if inside {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Inside the air").font(.title2.weight(.bold))
+                        Text("Tilt your phone and the water follows. Drag to stir the air. Tap a particle to see what it is.").font(.subheadline).foregroundStyle(.secondary)
+                        Spacer()
+                        Text("Outdoor air, regional readings. Drawn, not to scale.").font(.caption).foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 20).padding(.top, 70).padding(.bottom, 34)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .opacity(Double(max(0, world.zoom - 0.6) / 0.4))
+                    .allowsHitTesting(false)
+                    Button { world.leave() } label: {
+                        Image(systemName: "xmark").font(.body.weight(.semibold)).frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.glass).buttonBorderShape(.circle)
+                    .padding(.trailing, 20).padding(.top, 62)
+                    .opacity(Double(world.zoom))
+                    .accessibilityLabel("Close")
+                }
             }
-            .onAppear { world.viewSize = size }
-            .onChange(of: size) { _, s in world.viewSize = s }
-            .gesture(
-                DragGesture(minimumDistance: 4)
-                    .onChanged { v in world.drag(v.translation) }
-                    .onEnded { v in world.release(velocity: v.velocity) }
-            )
-            .simultaneousGesture(full ? SpatialTapGesture().onEnded { t in world.select(at: t.location) } : nil)
+            .onAppear { world.screen = size }
+            .onChange(of: size) { _, s in world.screen = s }
+            .onChange(of: slot, initial: true) { _, s in world.slot = s }
         }
-        .accessibilityElement()
-        .accessibilityLabel("A glass cube of outdoor air")
-        .accessibilityValue(world.summary(air))
+        .ignoresSafeArea()
     }
 
-    /// Scientific-figure annotation: a small ring on the particle, a hairline out to the side the particle isn't
-    /// on, a short horizontal run, and the label set against it. No card.
-    @ViewBuilder private func annotation(_ a: CubeWorld.Annotation, size: CGSize, sphere r: CGFloat) -> some View {
+    /// Scientific-figure annotation: a small ring on the particle, a hairline out to the side it isn't on, a short
+    /// horizontal run, and the label set against it. No card.
+    @ViewBuilder private func annotation(_ a: CubeWorld.Annotation, size: CGSize) -> some View {
         let p = a.point
         let right = p.x < size.width / 2
-        let elbow = CGPoint(x: right ? size.width / 2 + r * 0.9 : size.width / 2 - r * 0.9, y: max(40, min(size.height - 70, p.y - 50)))
-        let end = CGPoint(x: right ? size.width - 8 : 8, y: elbow.y)
+        let elbow = CGPoint(x: right ? size.width * 0.72 : size.width * 0.28, y: max(150, min(size.height - 140, p.y - 60)))
+        let end = CGPoint(x: right ? size.width - 16 : 16, y: elbow.y)
         Path { path in path.move(to: p); path.addLine(to: elbow); path.addLine(to: end) }
             .stroke(Color.primary.opacity(0.8), lineWidth: 0.75)
-        Circle().stroke(Color.primary, lineWidth: 0.75).frame(width: 18, height: 18).position(p)
-        Circle().fill(Color.primary).frame(width: 3, height: 3).position(elbow)
+            .allowsHitTesting(false)
+        Circle().stroke(Color.primary, lineWidth: 0.75).frame(width: 18, height: 18).position(p).allowsHitTesting(false)
+        Circle().fill(Color.primary).frame(width: 3, height: 3).position(elbow).allowsHitTesting(false)
         VStack(alignment: right ? .trailing : .leading, spacing: 2) {
             Text(a.title.uppercased()).font(.caption2.weight(.semibold)).tracking(0.8)
             if let v = a.value { Text(v).font(.title3.weight(.semibold).monospacedDigit()) }
             Text(a.detail).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(right ? .trailing : .leading)
         }
-        .frame(width: 150, alignment: right ? .trailing : .leading)
-        .position(x: right ? end.x - 75 : end.x + 75, y: elbow.y + 34)
+        .frame(width: 160, alignment: right ? .trailing : .leading)
+        .position(x: right ? end.x - 80 : end.x + 80, y: elbow.y + 44)
         .allowsHitTesting(false)
+    }
+}
+
+struct AirCubeWorldKey: EnvironmentKey { static let defaultValue: CubeWorld? = nil }
+struct AirCubeSlotKey: EnvironmentKey { static let defaultValue: ((CGRect) -> Void)? = nil }
+extension EnvironmentValues {
+    var airCubeWorld: CubeWorld? {
+        get { self[AirCubeWorldKey.self] }
+        set { self[AirCubeWorldKey.self] = newValue }
+    }
+    var airCubeSlot: ((CGRect) -> Void)? {
+        get { self[AirCubeSlotKey.self] }
+        set { self[AirCubeSlotKey.self] = newValue }
     }
 }
 
@@ -146,10 +183,29 @@ final class CubeWorld {
         let jitter: Float
         let r: Float
         let info: Info
+        /// The one of its kind that stays inside, grown to tap size; the rest fade.
+        let rep: Bool
     }
 
     var viewSize: CGSize = .zero
     private(set) var annotation: Annotation?
+    /// 0 on the home, 1 inside: eased, for the page's fade.
+    private(set) var zoom: Float = 0
+    /// The scene is inside (on the overlay); the home's cube is empty until it comes back.
+    private(set) var isAway = false
+    @ObservationIgnored private var zoomT: Float = 0
+    @ObservationIgnored private var zoomTarget: Float = 0
+    @ObservationIgnored private var zoomDone: (() -> Void)?
+    @ObservationIgnored private var inside = false
+    @ObservationIgnored private var insideCamera: PerspectiveCamera?
+    @ObservationIgnored private var insideSize: CGSize = .zero
+    @ObservationIgnored private var camStart = SIMD3<Float>(0, 0, 1)
+    @ObservationIgnored private var camEnd = SIMD3<Float>(0, 0.02, 0.06)
+    @ObservationIgnored private var insideUpdate: EventSubscription?
+    @ObservationIgnored private weak var homeScene: RealityKit.Scene?
+    @ObservationIgnored private let glass = Entity()
+    @ObservationIgnored private var built = false
+    private let insideFov: Float = 58
     @ObservationIgnored private let root = Entity()
     @ObservationIgnored private var floaters: [Floater] = []
     /// Each floater's drift direction, turning slowly.
@@ -173,9 +229,19 @@ final class CubeWorld {
     /// The sphere's radius and the camera, so the glass drawn on screen matches the 3D bounds.
     /// Half the cube's side, and how round its edges are.
     private let half: Float = 0.21
+    /// The walls' half-extents: the cube on the home, the screen's shape inside (they stretch between).
+    @ObservationIgnored private var ext = SIMD3<Float>(repeating: 0.21)
+    @ObservationIgnored private var drawnExt = SIMD3<Float>(repeating: 0)
+    @ObservationIgnored private var startOrientation = simd_quatf(angle: 0, axis: [0, 1, 0])
+    @ObservationIgnored private var tilt: Float = 0
+    /// Inside, gravity is the phone's own (Core Motion's gravity vector, no permission needed); the drag's tilt
+    /// stands in where there's no gyroscope (the simulator).
+    @ObservationIgnored private let motion = CMMotionManager()
+    /// Inside: the camera this far back, the walls on the screen's edges at the box's middle.
+    private let fullZ: Float = 1.0
     private let corner: Float = 0.06
     private var radius: Float { half }
-    private let distance: Float = 1.25
+    private let distance: Float = 1.12
     private let fov: Float = 40
     private static let gravity: Float = 9.8
 
@@ -190,75 +256,184 @@ final class CubeWorld {
         return CGFloat(k) * size.height / 2
     }
 
-    func build(into content: RealityViewCameraContent, air: AirCubeAir, felt: MenusFelt) {
+    /// Where the cube sits on the page (global), and the screen: the camera frames the cube in the slot.
+    var slot: CGRect = .zero
+    var screen: CGSize = .zero
+    @ObservationIgnored private var camera: PerspectiveCamera?
+    @ObservationIgnored private var airKey: String = ""
+
+    /// The one 3D view: camera, light, the scene, and the frame tick.
+    func attach(_ content: RealityViewCameraContent) {
         let camera = PerspectiveCamera()
-        camera.camera.fieldOfViewInDegrees = fov
-        camera.position = [0, 0, distance]
-        camera.look(at: .zero, from: [0, 0, distance], relativeTo: nil)
+        camera.camera.fieldOfViewInDegrees = insideFov
+        camera.position = [0, 0, 3]
         content.add(camera)
+        self.camera = camera
         for (dir, intensity) in [(SIMD3<Float>(-0.6, -1, -0.5), Float(2800)), (SIMD3<Float>(0.8, -0.2, 0.6), Float(1000))] {
             let light = DirectionalLight()
             light.light.intensity = intensity
             light.look(at: dir, from: .zero, relativeTo: nil)
             content.add(light)
         }
-        var sim = PhysicsSimulationComponent()
-        sim.gravity = [0, -Self.gravity, 0]
-        root.components.set(sim)
-        root.orientation = simd_quatf(angle: -0.55, axis: [0, 1, 0]) * simd_quatf(angle: 0.38, axis: [1, 0, 0])
+        if !built {
+            built = true
+            var sim = PhysicsSimulationComponent()
+            sim.gravity = [0, -Self.gravity, 0]
+            root.components.set(sim)
+            root.orientation = simd_quatf(angle: -0.55, axis: [0, 1, 0]) * simd_quatf(angle: 0.38, axis: [1, 0, 0])
+        }
         content.add(root)
-        addGlass(tint: air.tempF.map(Self.tempColor) ?? UIColor(white: 0.85, alpha: 1))
-        // The orb for you in the middle is off for now (April, Oct 30): it read wrong.
+        update = content.subscribe(to: SceneEvents.Update.self) { [weak self] (e: SceneEvents.Update) in
+            MainActor.assumeIsolated {
+                self?.tick(Float(e.deltaTime))
+                self?.frame(Float(e.deltaTime))
+            }
+        }
+    }
 
+    /// New air (another moment, or Now's readings arriving): refill the cube.
+    func setAir(_ air: AirCubeAir, felt: MenusFelt) {
+        let key = "\(air)\(felt)"
+        guard key != airKey else { return }
+        airKey = key
+        for c in Array(root.children) { c.removeFromParent() }
+        for c in Array(glass.children) { c.removeFromParent() }
+        floaters = []
+        wander = []
+        water = nil
+        drawnUp = .zero
+        ext = SIMD3<Float>(repeating: half)
+        annotation = nil
+        selected = nil
+        addGlass(tint: air.tempF.map(Self.tempColor) ?? UIColor(white: 0.85, alpha: 1))
         addWater(humidity: air.humidity)
         var rng = SystemRandomNumberGenerator()
         func count(_ v: Double, per: Double, cap: Int) -> Int { min(cap, Int((v / per).rounded())) }
         func level(_ l: Int) -> String { ["none", "low", "moderate", "high"][max(0, min(3, l))] }
         add(.pebble, n: count(air.pm10, per: 1.5, cap: 30), color: UIColor(red: 0.78, green: 0.66, blue: 0.46, alpha: 1),
-            info: Info(title: "PM10 · coarse particles", value: "\(Int(air.pm10.rounded())) µg/m³", detail: "Dust and grit. The heaviest here, they settle."), rng: &rng)
+            info: Info(title: "PM10 · coarse particles", value: "\(Int(air.pm10.rounded())) µg/m³", detail: "Dust and grit, the coarsest here."), rng: &rng)
         add(.mote, n: count(air.pm25, per: 0.5, cap: 46), color: UIColor(red: 0.36, green: 0.42, blue: 0.55, alpha: 1),
-            info: Info(title: "PM2.5 · fine particles", value: "\(Int(air.pm25.rounded())) µg/m³", detail: "Smoke and exhaust. Small enough to reach deep in the lungs; they hang and drift."), rng: &rng)
+            info: Info(title: "PM2.5 · fine particles", value: "\(Int(air.pm25.rounded())) µg/m³", detail: "Smoke and exhaust. Small enough to reach deep in the lungs."), rng: &rng)
         add(.mote, n: count(air.no2, per: 1.0, cap: 24), color: UIColor(red: 0.72, green: 0.33, blue: 0.22, alpha: 1),
             info: Info(title: "NO₂ · nitrogen dioxide", value: "\(Int(air.no2.rounded())) ppb", detail: "A gas from traffic and burning, drawn as specks."), rng: &rng)
         add(.shard, n: count(air.ozone, per: 2.0, cap: 26), color: UIColor(red: 0.65, green: 0.36, blue: 0.89, alpha: 1),
-            info: Info(title: "Ozone", value: "\(Int(air.ozone.rounded())) ppb", detail: "A gas that forms in sun and heat, drawn as shards. It barely falls."), rng: &rng)
+            info: Info(title: "Ozone", value: "\(Int(air.ozone.rounded())) ppb", detail: "A gas that forms in sun and heat, drawn as shards."), rng: &rng)
         for (name, l, color) in [("Tree", air.tree, UIColor(red: 0.55, green: 0.75, blue: 0.35, alpha: 1)),
                                  ("Grass", air.grass, UIColor(red: 0.95, green: 0.76, blue: 0.19, alpha: 1)),
                                  ("Weed", air.weed, UIColor(red: 0.79, green: 0.59, blue: 0.23, alpha: 1))] where l > 0 {
             add(.dandelion, n: l * 4, color: color,
-                info: Info(title: "\(name) pollen", value: level(l).capitalized, detail: "Light grains that ride the air, drawn as seeds. They float."), rng: &rng)
-        }
-
-        update = content.subscribe(to: SceneEvents.Update.self) { [weak self] (e: SceneEvents.Update) in
-            MainActor.assumeIsolated { self?.tick(Float(e.deltaTime)) }
+                info: Info(title: "\(name) pollen", value: level(l).capitalized, detail: "Light grains that ride the air, drawn as seeds."), rng: &rng)
         }
     }
 
+    /// Where the camera sits to show the cube in the slot at the size the home gave it (as if a 40° camera at
+    /// `distance` filled the slot's height), and over the slot's spot on screen.
+    private var slotPose: SIMD3<Float> {
+        guard slot.height > 1, screen.height > 1 else { return [0, 0, 3] }
+        let tIn = tan(insideFov / 2 * .pi / 180), tHome = tan(fov / 2 * .pi / 180)
+        let d0 = distance * Float(screen.height) * tHome / (Float(slot.height) * tIn)
+        let dx = Float(slot.midX - screen.width / 2), dy = Float(slot.midY - screen.height / 2)
+        let h = Float(screen.height) / 2
+        return [-(dx / h) * d0 * tIn, (dy / h) * d0 * tIn, d0]
+    }
+
+    func zoomIn() {
+        zoomTarget = 1
+        if motion.isDeviceMotionAvailable, !motion.isDeviceMotionActive {
+            motion.deviceMotionUpdateInterval = 1 / 60
+            motion.startDeviceMotionUpdates()
+        }
+    }
+
+    func leave() {
+        annotation = nil
+        selected = nil
+        zoomTarget = 0
+    }
+
+    /// Each frame: the camera on the slot, or on its way in or out (eased), the edges fading as they pass the screen.
+    private func frame(_ dt: Float) {
+        guard let camera else { return }
+        if zoomT != zoomTarget {
+            // Starting in: remember how the cube was turned, to turn it back on the way out.
+            if zoomT == 0, zoomTarget == 1 { startOrientation = root.orientation; spin = .zero }
+            let duration: Float = zoomTarget > zoomT ? 1.1 : 0.8
+            let step = min(dt, 1 / 30) / duration   // a long first frame doesn't skip the zoom
+            zoomT = zoomTarget > zoomT ? min(zoomTarget, zoomT + step) : max(zoomTarget, zoomT - step)
+        }
+        let e = zoomT * zoomT * (3 - 2 * zoomT)   // ease in and out
+        camera.position = slotPose + (SIMD3<Float>(0, 0, fullZ) - slotPose) * e
+        if zoomT > 0 || zoomTarget > 0 {
+            // The cube turns to face you and its walls stretch out to the screen's edges: inside, the screen is the box.
+            root.orientation = simd_slerp(startOrientation, simd_quatf(angle: 0, axis: [0, 1, 0]), e)
+            let tanHalf = tan(insideFov / 2 * .pi / 180)
+            let aspect = Float(max(1, screen.width) / max(1, screen.height))
+            let fy = fullZ * tanHalf * 0.98, full = SIMD3<Float>(fy * aspect, fy, 0.07)   // shallow: walls sit on the screen's edges
+            let cube = SIMD3<Float>(repeating: half)
+            let next = cube + (full - cube) * e
+            // The particles spread with the walls, so nothing jumps.
+            let k = next / ext
+            if simd_length(next - ext) > 1e-5 { for f in floaters { f.body.position *= k } }
+            ext = next
+            glass.scale = next / cube
+            if var sim = root.components[PhysicsSimulationComponent.self] {
+                // Inside, gravity is the phone's: tilt it and the water runs to the low side (the air floats).
+                // Until fully in (or with no gyroscope), the screen's down, leaned by a drag.
+                var g = root.orientation.inverse.act(SIMD3<Float>(sin(tilt), -cos(tilt), 0) * Self.gravity)
+                if zoomT >= 1, let dm = motion.deviceMotion {
+                    // Device axes (x right, y up, z out of the screen) are the box's axes inside.
+                    g = SIMD3<Float>(Float(dm.gravity.x), Float(dm.gravity.y), Float(dm.gravity.z)) * Self.gravity
+                }
+                sim.gravity = g
+                root.components.set(sim)
+            }
+            if zoomT == 0 {
+                tilt = 0
+                if motion.isDeviceMotionActive { motion.stopDeviceMotionUpdates() }
+            }
+        }
+        glass.components.set(OpacityComponent(opacity: max(0, 1 - e / 0.65)))
+        if zoomT > 0 || zoomTarget > 0 || zoom > 0 {
+            // Inside, one of each kind, big enough to tap (about 56 pt across); the crowd stays on the home.
+            let tanHalf = tan(insideFov / 2 * .pi / 180)
+            let tapRadius = 28 / Float(max(1, screen.height) / 2) * fullZ * tanHalf
+            for f in floaters {
+                if f.rep {
+                    f.body.scale = SIMD3<Float>(repeating: 1 + e * (max(1, tapRadius / f.r) - 1))
+                } else {
+                    f.body.components.set(OpacityComponent(opacity: 1 - e))
+                }
+            }
+        }
+        if zoom != e { zoom = e }
+        inside = e > 0.001
+        if let i = selected, i < floaters.count, annotation != nil { annotation?.point = project(floaters[i].body.position(relativeTo: nil)) }
+    }
+
+
     // MARK: Pieces
 
-    /// Clear glass, softly rounded: rounded rods with round corners for the edges, in the temperature's tint.
-    /// No frost, no panes.
+    /// The cube's edges as a halo: a fine grey line with a soft, light glow around it. Monochrome, quiet. No panes.
     private func addGlass(tint: UIColor) {
-        let s = 2 * half
-        // No face panes: RealityKit drew them opaque white over the contents. The rounded edges carry the cube.
-        _ = s
-        var edge = PhysicallyBasedMaterial()
-        edge.baseColor = .init(tint: tint.blended(with: .white, 0.15))
-        edge.roughness = 0.3
-        edge.blending = .transparent(opacity: .init(floatLiteral: 0.85))
-        let w: Float = 0.008, b = half - corner * 0.3
+        _ = tint
+        var core = UnlitMaterial(color: UIColor(white: 0.55, alpha: 1))
+        core.blending = .transparent(opacity: .init(floatLiteral: 0.45))
+        var halo = UnlitMaterial(color: .white)
+        halo.blending = .transparent(opacity: .init(floatLiteral: 0.4))
+        var glow = UnlitMaterial(color: .white)
+        glow.blending = .transparent(opacity: .init(floatLiteral: 0.18))
+        let b = half - corner * 0.3
         for a in [-b, b] { for c in [-b, b] {
-            for (pos, size) in [(SIMD3<Float>(0, a, c), SIMD3<Float>(2 * b, w, w)), (SIMD3<Float>(a, 0, c), SIMD3<Float>(w, 2 * b, w)), (SIMD3<Float>(a, c, 0), SIMD3<Float>(w, w, 2 * b))] {
-                let e = ModelEntity(mesh: .generateBox(size: size, cornerRadius: w / 2), materials: [edge])
-                e.position = pos
-                root.addChild(e)
+            for (pos, axis) in [(SIMD3<Float>(0, a, c), 0), (SIMD3<Float>(a, 0, c), 1), (SIMD3<Float>(a, c, 0), 2)] {
+                for (w, m) in [(Float(0.0022), core), (Float(0.008), halo), (Float(0.018), glow)] {
+                    var size = SIMD3<Float>(repeating: w); size[axis] = 2 * b + w
+                    let e = ModelEntity(mesh: .generateBox(size: size, cornerRadius: w / 2), materials: [m])
+                    e.position = pos
+                    glass.addChild(e)
+                }
             }
         } }
-        for x in [-b, b] { for y in [-b, b] { for z in [-b, b] {
-            let c = ModelEntity(mesh: .generateSphere(radius: w * 0.75), materials: [edge])
-            c.position = [x, y, z]
-            root.addChild(c)
-        } } }
+        root.addChild(glass)
     }
 
     private func addYou(_ felt: MenusFelt, label: String) {
@@ -297,7 +472,8 @@ final class CubeWorld {
         case water
 
         var radius: ClosedRange<Float> {
-            switch self { case .pebble: 0.013...0.019; case .mote: 0.006...0.009; case .shard: 0.008...0.012; case .dandelion: 0.028...0.034; case .water: 0.017...0.021 }
+            // Half the size they were (owner, Oct 30): small enough to see between, and to move among inside.
+            switch self { case .pebble: 0.0065...0.0095; case .mote: 0.003...0.0045; case .shard: 0.004...0.006; case .dandelion: 0.014...0.017; case .water: 0.0085...0.0105 }
         }
         var mass: Float { switch self { case .pebble: 0.02; case .mote: 0.004; case .shard: 0.003; case .dandelion: 0.002; case .water: 0.012 } }
         var damping: Float { switch self { case .pebble: 3; case .mote: 3.5; case .shard: 4; case .dandelion: 5; case .water: 0.9 } }
@@ -314,7 +490,7 @@ final class CubeWorld {
         m.baseColor = .init(tint: color)
         m.roughness = 0.7
         if kind == .water { m.blending = .transparent(opacity: .init(floatLiteral: 0.55)); m.roughness = 0.05 }
-        for _ in 0..<n {
+        for index in 0..<n {
             let r = Float.random(in: kind.radius, using: &rng)
             let body = ModelEntity()   // no mesh of its own: a physics body that can take forces
             // Somewhere inside the sphere, clear of you.
@@ -341,7 +517,7 @@ final class CubeWorld {
             body.components.set(PhysicsMotionComponent())
             body.addChild(Self.look(kind, r: r, material: m))
             root.addChild(body)
-            floaters.append(Floater(body: body, lift: kind.lift, jitter: kind.jitter, r: r, info: info))
+            floaters.append(Floater(body: body, lift: kind.lift, jitter: kind.jitter, r: r, info: info, rep: index == 0))
             wander.append(simd_normalize(SIMD3<Float>.random(in: -1...1, using: &rng) + 0.001))
         }
     }
@@ -424,24 +600,25 @@ final class CubeWorld {
             surfaceVel += (target - surfaceUp) * 70 * dt - surfaceVel * 5 * dt
             surfaceUp = simd_normalize(surfaceUp + surfaceVel * dt)
         }
-        guard simd_length(surfaceUp - drawnUp) > 0.0015 else { return }
+        guard simd_length(surfaceUp - drawnUp) > 0.0015 || simd_length(ext - drawnExt) > 0.0005 else { return }
         drawnUp = surfaceUp
-        let box = half - 0.022   // just inside the glass
-        surfaceH = Self.level(for: waterFill, n: surfaceUp, half: box)
-        let faces = Self.clippedBox(half: box, n: surfaceUp, h: surfaceH)
+        drawnExt = ext
+        let box = ext - SIMD3<Float>(repeating: 0.022)   // just inside the walls
+        surfaceH = Self.level(for: waterFill, n: surfaceUp, ext: box)
+        let faces = Self.clippedBox(ext: box, n: surfaceUp, h: surfaceH)
         if let mesh = Self.mesh(faces) { water.model?.mesh = mesh }
     }
 
     /// The faces of a cube (half-side `half`) cut by the plane p·n = h, keeping p·n ≤ h: each face clipped, plus the
     /// cap where the cut is. Outward winding.
-    static func clippedBox(half b: Float, n: SIMD3<Float>, h: Float) -> [[SIMD3<Float>]] {
+    static func clippedBox(ext e: SIMD3<Float>, n: SIMD3<Float>, h: Float) -> [[SIMD3<Float>]] {
         var faces: [[SIMD3<Float>]] = []
         var cut: [SIMD3<Float>] = []
         for axis in 0..<3 { for sign: Float in [-1, 1] {
             let u = (axis + 1) % 3, v = (axis + 2) % 3
             var quad: [SIMD3<Float>] = []
-            for (a, c) in [(-b, -b), (b, -b), (b, b), (-b, b)] {
-                var p = SIMD3<Float>(repeating: 0); p[axis] = sign * b; p[u] = a; p[v] = c; quad.append(p)
+            for (a, c) in [(Float(-1), Float(-1)), (1, -1), (1, 1), (-1, 1)] {
+                var p = SIMD3<Float>(repeating: 0); p[axis] = sign * e[axis]; p[u] = a * e[u]; p[v] = c * e[v]; quad.append(p)
             }
             var outward = SIMD3<Float>(repeating: 0); outward[axis] = sign
             if simd_dot(simd_cross(quad[1] - quad[0], quad[2] - quad[0]), outward) < 0 { quad.reverse() }
@@ -478,13 +655,13 @@ final class CubeWorld {
     }
 
     /// The height of the surface along n that holds `fill` of the cube.
-    static func level(for fill: Float, n: SIMD3<Float>, half b: Float) -> Float {
-        let target = fill * pow(2 * b, 3)
-        let reach = b * (abs(n.x) + abs(n.y) + abs(n.z))
+    static func level(for fill: Float, n: SIMD3<Float>, ext b: SIMD3<Float>) -> Float {
+        let target = fill * 8 * b.x * b.y * b.z
+        let reach = simd_dot(simd_abs(n), b)
         var lo = -reach, hi = reach
         for _ in 0..<22 {
             let mid = (lo + hi) / 2
-            if volume(clippedBox(half: b, n: n, h: mid)) < target { lo = mid } else { hi = mid }
+            if volume(clippedBox(ext: b, n: n, h: mid)) < target { lo = mid } else { hi = mid }
         }
         return (lo + hi) / 2
     }
@@ -520,14 +697,14 @@ final class CubeWorld {
             // The glass: a rounded box. Past it, back to the inside surface, and the outward part of the velocity
             // comes back softly.
             let pos = f.body.position
-            let inner = half - corner
-            let q = SIMD3<Float>(abs(pos.x), abs(pos.y), abs(pos.z)) - SIMD3<Float>(repeating: inner)
+            let inner = ext - SIMD3<Float>(repeating: corner)
+            let q = SIMD3<Float>(abs(pos.x), abs(pos.y), abs(pos.z)) - inner
             let o = simd_max(q, .zero), d = simd_length(o), limit = corner - f.r
             if d > limit, d > 0 {
                 let sign = SIMD3<Float>(pos.x < 0 ? -1 : 1, pos.y < 0 ? -1 : 1, pos.z < 0 ? -1 : 1)
                 let n = sign * o / d
                 var fixed = pos
-                for k in 0..<3 where q[k] > 0 { fixed[k] = sign[k] * (inner + o[k] / d * limit) }
+                for k in 0..<3 where q[k] > 0 { fixed[k] = sign[k] * (inner[k] + o[k] / d * limit) }
                 f.body.position = fixed
                 if var motion = f.body.components[PhysicsMotionComponent.self] {
                     let out = simd_dot(motion.linearVelocity, n)
@@ -562,12 +739,24 @@ final class CubeWorld {
         dragging = true
         let d = SIMD2<Float>(Float(translation.width - lastDrag.width), Float(translation.height - lastDrag.height))
         lastDrag = translation
-        rotate(by: d * 0.008)
+        if zoomTarget > 0 {
+            // Inside: the screen is the box, so it doesn't turn. A drag tilts the water and stirs the air its way.
+            tilt = max(-0.7, min(0.7, Float(translation.width) / 320))
+            for f in floaters where f.body.components[PhysicsBodyComponent.self]?.isAffectedByGravity == false {
+                if var motion = f.body.components[PhysicsMotionComponent.self] {
+                    motion.linearVelocity += SIMD3<Float>(d.x, -d.y, 0) * 0.0009
+                    f.body.components.set(motion)
+                }
+            }
+        } else {
+            rotate(by: d * 0.008)
+        }
     }
 
     func release(velocity: CGSize) {
         dragging = false
         lastDrag = .zero
+        if zoomTarget > 0 { tilt = 0; return }
         spin = SIMD2<Float>(Float(velocity.width), Float(velocity.height)) * 0.008
     }
 
@@ -580,32 +769,36 @@ final class CubeWorld {
         for f in floaters { f.body.addForce([0, 0, 0], relativeTo: root) }
     }
 
-    private func gravityInCube() -> SIMD3<Float> { root.orientation.inverse.act([0, -Self.gravity, 0]) }
+    private func gravityInCube() -> SIMD3<Float> {
+        root.components[PhysicsSimulationComponent.self]?.gravity ?? root.orientation.inverse.act([0, -Self.gravity, 0])
+    }
 
     // MARK: Picking
 
     /// Where a point in the scene lands on screen (the camera looks straight down −z from `distance`).
     private func project(_ w: SIMD3<Float>) -> CGPoint {
-        let tanHalf = tan(fov / 2 * .pi / 180)
-        let depth = max(0.01, distance - w.z)
-        let h = Float(viewSize.height) / 2
-        return CGPoint(x: CGFloat(Float(viewSize.width) / 2 + w.x / (depth * tanHalf) * h),
-                       y: CGFloat(h - w.y / (depth * tanHalf) * h))
+        let cam = camera?.position ?? [0, 0, 3]
+        let tanHalf = tan(insideFov / 2 * .pi / 180)
+        let rel = w - cam, depth = -rel.z
+        guard depth > 0.02 else { return CGPoint(x: -10_000, y: -10_000) }   // behind you
+        let h = Float(screen.height) / 2
+        return CGPoint(x: CGFloat(Float(screen.width) / 2 + rel.x / (depth * tanHalf) * h),
+                       y: CGFloat(h - rel.y / (depth * tanHalf) * h))
     }
 
     /// The particle nearest a tap (within reach), or you; a tap on nothing clears the label.
     func select(at point: CGPoint) {
         var best: (Int, CGFloat)?
-        for (i, f) in floaters.enumerated() {
+        for (i, f) in floaters.enumerated() where !(zoomTarget > 0 && !f.rep) {
             let p = project(f.body.position(relativeTo: nil))
             let d = hypot(p.x - point.x, p.y - point.y)
-            if d < 28, d < (best?.1 ?? .infinity) { best = (i, d) }
+            if d < 36, d < (best?.1 ?? .infinity) { best = (i, d) }
         }
         if best == nil, water != nil {
             // Nothing small under the finger: if it's on the water, name the water.
             let surfaceWorld = root.convert(position: surfaceUp * surfaceH, to: nil)
             let sp = project(surfaceWorld)
-            if point.y > sp.y - 10, abs(point.x - viewSize.width / 2) < screenRadius(in: viewSize) * 1.2 {
+            if point.y > sp.y - 10 {
                 selected = nil
                 annotation = Annotation(title: waterInfo.title, value: waterInfo.value, detail: waterInfo.detail, point: point)
                 UISelectionFeedbackGenerator().selectionChanged()

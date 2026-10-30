@@ -53,6 +53,9 @@ struct NowHomeView: View {
     @State private var menusTab = MenusTab.moments
     @State private var showSideMenu = false
     @State private var showDoctor = false
+    /// Menus look: the air cube's one 3D scene, and where its slot sits on the page.
+    @State private var cubeWorld = CubeWorld()
+    @State private var cubeSlot: CGRect = .zero
     /// The Menus look's shared time window: the strip and every chart below it.
     @State private var menusWindow = MenusWindow(center: .now, span: 3 * 86_400)
     @State private var showInsights = false
@@ -237,6 +240,13 @@ struct NowHomeView: View {
                 }
             }
             .sheet(isPresented: $showDoctor) { DoctorSheet(events: events) }
+            .environment(\.airCubeWorld, cubeWorld)
+            .environment(\.airCubeSlot) { cubeSlot = $0 }
+            .overlay {
+                if appLook == .menus, Crit.MenusSky.current == .cube, menusTab == .moments, menusScale == .timeline {
+                    AirCubeLayer(world: cubeWorld, slot: cubeSlot)
+                }
+            }
             .sheet(isPresented: $showInsights) {
                 // The sparkle grows into the page (a zoom from the button), and the page starts in this sky's colour
                 // before its own bloom comes through: the same page, turned.
@@ -739,7 +749,8 @@ struct NowHomeView: View {
                       scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil,
                       patterns: scrubbing ? [] : RailGroup.marked(in: headerRead),
                       onRailOpen: { railOpen = $0 })
-            .onTapGesture { s.onTap() }
+            // With the cube, a tap is the cube's (it goes in); the details are a tap on the timeline's moment.
+            .onTapGesture { if !(appLook == .menus && Crit.MenusSky.current == .cube) { s.onTap() } }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { skyWidth = $0 }
     }
 
@@ -1730,8 +1741,7 @@ struct NowSky: View {
             // Menus look: the air as a rounded glass cube in 3D, with physics; you in the middle.
             .overlay {
                 if Crit.AppLook.current == .menus, Crit.MenusSky.current == .cube {
-                    AirCube(air: cubeAir, felt: onMoment(.rescue) ? .rescue : onMoment(.maintenance) ? .standard : .nothing)
-                        .id("\(mapID)-\(date.timeIntervalSinceReferenceDate)")
+                    AirCubeSlot(air: cubeAir, felt: onMoment(.rescue) ? .rescue : onMoment(.maintenance) ? .standard : .nothing)
                 }
             }
             // The label sits beside the icon being read, never at a spot on the map.

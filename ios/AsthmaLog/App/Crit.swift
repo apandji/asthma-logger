@@ -140,6 +140,15 @@ enum Crit {
         static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? .feltAir }
     }
 
+    /// Menus look: the sky as a 3D rounded glass cube of air with physics, or the flat square with a circle.
+    enum MenusSky: String, CaseIterable, Identifiable {
+        case cube, square
+        var id: String { rawValue }
+        var title: String { self == .cube ? "Cube of air (3D)" : "Square and circle" }
+        static let key = "crit.menusSky"
+        static var current: MenusSky { UserDefaults.standard.string(forKey: key).flatMap(MenusSky.init) ?? .cube }
+    }
+
     /// The timeline's look: the original track (small dots, a pill for the time), or Apple Health's
     /// (the day as a title, a pointer, day labels above, each moment a pill (12 × 26 pt), twice as wide a day).
     enum TimelineLook: String, CaseIterable, Identifiable {

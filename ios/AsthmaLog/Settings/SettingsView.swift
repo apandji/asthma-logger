@@ -128,6 +128,7 @@ struct DeveloperSettings: View {
     @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.print
     @AppStorage(Crit.TimelineLook.key) private var critTimeline = Crit.TimelineLook.track
     @AppStorage(Crit.AppLook.key) private var critAppLook = Crit.AppLook.feltAir
+    @AppStorage(Crit.MenusSky.key) private var critMenusSky = Crit.MenusSky.cube
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false
@@ -202,6 +203,9 @@ struct DeveloperSettings: View {
                 }
                 Picker("App look", selection: $critAppLook) {
                     ForEach(Crit.AppLook.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Menus sky", selection: $critMenusSky) {
+                    ForEach(Crit.MenusSky.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("Timeline", selection: $critTimeline) {
                     ForEach(Crit.TimelineLook.allCases) { Text($0.title).tag($0) }

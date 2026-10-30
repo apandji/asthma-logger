@@ -960,7 +960,8 @@ struct NowHomeView: View {
             .environment(\.skyDent, skyDrag != nil && !reduceMotion ? SkyDent(point: skyDrag!.point, press: skyPress) : nil)
             // Menus look: the page scrolls, so the sideways scrub runs alongside it (it ignores vertical drags).
             .gesture(skyScrub, isEnabled: appLook != .menus)
-            .simultaneousGesture(skyScrub, isEnabled: appLook == .menus)
+            // Menus look: the page scrolls, so the scrub runs alongside it; with the cube, drags spin the cube instead.
+            .simultaneousGesture(skyScrub, isEnabled: appLook == .menus && Crit.MenusSky.current != .cube)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.top, 4)
     }
@@ -1570,6 +1571,24 @@ struct NowSky: View {
         if event == .storm { a.storm = true }
         return a
     }
+    /// Menus look's cube: this sky's readings, the demo pollen included.
+    private var cubeAir: AirCubeAir {
+        var a = AirCubeAir()
+        a.pm25 = conditions?.best(.pm25)?.value ?? 0
+        a.pm10 = conditions?.best(.pm10)?.value ?? 0
+        a.ozone = conditions?.best(.ozone)?.value ?? 0
+        a.no2 = conditions?.best(.no2)?.value ?? 0
+        a.humidity = conditions?.best(.humidity)?.value ?? 0
+        a.tempF = temperature
+        if let e = selfEvent, abs(e.loggedAt.timeIntervalSince(date)) < 60, e.moment == .rescue || e.moment == .maintenance {
+            a.feltLabel = "\(e.moment.title) at \(e.loggedAt.formatted(date: .omitted, time: .shortened))"
+        }
+        if let p = pollen ?? DemoPollen.from(conditions) {
+            func lv(_ k: PollenSample.Kind) -> Int { k.count == 0 ? 0 : k.level.rawValue + 1 }
+            a.tree = lv(p.tree); a.grass = lv(p.grass); a.weed = lv(p.weed)
+        }
+        return a
+    }
     /// Whether this sky is a moment of that kind (not Now, which only remembers the last one).
     private func onMoment(_ k: MomentKind) -> Bool {
         guard let e = selfEvent, e.moment == k else { return false }
@@ -1584,7 +1603,11 @@ struct NowSky: View {
             let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: showsSelf)
             let mids = RailRow.ys(rows, in: size.height).map { $0 + (expanded ? railShift : 0) }
             ZStack {
-                if Crit.AppLook.current == .menus {
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current == .cube {
+                    // Menus look: the cube is drawn over the sky (below), outside its flattening and shaders, which
+                    // a live 3D view can't be inside.
+                    Color.clear
+                } else if Crit.AppLook.current == .menus {
                     // Menus look: the environment as a square of the conditions' gradient, what you felt as a circle.
                     MenusSkySquare(felt: onMoment(.rescue) ? .rescue : onMoment(.maintenance) ? .standard : .nothing,
                                    noted: !(selfEvent.flatMap { abs($0.loggedAt.timeIntervalSince(date)) < 60 ? $0.voiceTranscript : nil } ?? "").isEmpty,
@@ -1695,13 +1718,20 @@ struct NowSky: View {
             .onChange(of: date) { _, _ in if settled { ripple() } }
             .onChange(of: settled) { _, s in if s { ripple() } }
             .mask {
-                // Menus look: the dial has its own edge, so no fade.
+                // Menus look: the sky has its own edge, so no fade.
                 if Crit.AppLook.current == .menus { Rectangle() } else {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),
                                    startRadiusFraction: 0, endRadiusFraction: 0.7)
                     .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.26),
                                                  .init(color: .black, location: 0.78), .init(color: .clear, location: 1)],
                                          startPoint: .top, endPoint: .bottom))
+                }
+            }
+            // Menus look: the air as a rounded glass cube in 3D, with physics; you in the middle.
+            .overlay {
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current == .cube {
+                    AirCube(air: cubeAir, felt: onMoment(.rescue) ? .rescue : onMoment(.maintenance) ? .standard : .nothing)
+                        .id("\(mapID)-\(date.timeIntervalSinceReferenceDate)")
                 }
             }
             // The label sits beside the icon being read, never at a spot on the map.

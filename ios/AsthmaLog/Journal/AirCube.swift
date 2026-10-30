@@ -152,11 +152,21 @@ final class CubeWorld {
     private(set) var annotation: Annotation?
     @ObservationIgnored private let root = Entity()
     @ObservationIgnored private var floaters: [Floater] = []
+    /// Each floater's drift direction, turning slowly.
+    @ObservationIgnored private var wander: [SIMD3<Float>] = []
     @ObservationIgnored private var selected: Int?
     @ObservationIgnored private var spin = SIMD2<Float>(0, 0)
     @ObservationIgnored private var lastDrag = CGSize.zero
     @ObservationIgnored private var dragging = false
     @ObservationIgnored private var update: EventSubscription?
+    // Water: one body, the cube's inside below a surface that tries to stay level and sloshes on the way.
+    @ObservationIgnored private var water: ModelEntity?
+    @ObservationIgnored private var waterFill: Float = 0
+    @ObservationIgnored private var surfaceUp = SIMD3<Float>(0, 1, 0)
+    @ObservationIgnored private var surfaceVel = SIMD3<Float>(0, 0, 0)
+    @ObservationIgnored private var surfaceH: Float = 0
+    @ObservationIgnored private var drawnUp = SIMD3<Float>(0, 0, 0)
+    @ObservationIgnored private var waterInfo = Info(title: "Humidity", value: nil, detail: "")
     @ObservationIgnored private var youInfo = Info(title: "You", value: nil, detail: "")
     @ObservationIgnored private var youEntity = Entity()
 
@@ -200,6 +210,7 @@ final class CubeWorld {
         addGlass(tint: air.tempF.map(Self.tempColor) ?? UIColor(white: 0.85, alpha: 1))
         // The orb for you in the middle is off for now (April, Oct 30): it read wrong.
 
+        addWater(humidity: air.humidity)
         var rng = SystemRandomNumberGenerator()
         func count(_ v: Double, per: Double, cap: Int) -> Int { min(cap, Int((v / per).rounded())) }
         func level(_ l: Int) -> String { ["none", "low", "moderate", "high"][max(0, min(3, l))] }
@@ -217,8 +228,6 @@ final class CubeWorld {
             add(.dandelion, n: l * 4, color: color,
                 info: Info(title: "\(name) pollen", value: level(l).capitalized, detail: "Light grains that ride the air, drawn as seeds. They float."), rng: &rng)
         }
-        add(.water, n: count(air.humidity, per: 1.4, cap: 70), color: UIColor(red: 0.36, green: 0.64, blue: 0.93, alpha: 1),
-            info: Info(title: "Humidity", value: "\(Int(air.humidity.rounded()))%", detail: "Water in the air, drawn as water. More humid, more water."), rng: &rng)
 
         update = content.subscribe(to: SceneEvents.Update.self) { [weak self] (e: SceneEvents.Update) in
             MainActor.assumeIsolated { self?.tick(Float(e.deltaTime)) }
@@ -227,16 +236,12 @@ final class CubeWorld {
 
     // MARK: Pieces
 
-    /// Clear glass, softly rounded: a faint rounded box for the faces, and rounded rods with round corners for
-    /// the edges, in the temperature's tint. No frost.
+    /// Clear glass, softly rounded: rounded rods with round corners for the edges, in the temperature's tint.
+    /// No frost, no panes.
     private func addGlass(tint: UIColor) {
         let s = 2 * half
-        var faces = PhysicallyBasedMaterial()
-        faces.baseColor = .init(tint: tint.blended(with: .white, 0.4))
-        faces.roughness = 0.05
-        faces.specular = 0.9
-        faces.blending = .transparent(opacity: .init(floatLiteral: 0.07))
-        root.addChild(ModelEntity(mesh: .generateBox(size: s, cornerRadius: corner), materials: [faces]))
+        // No face panes: RealityKit drew them opaque white over the contents. The rounded edges carry the cube.
+        _ = s
         var edge = PhysicallyBasedMaterial()
         edge.baseColor = .init(tint: tint.blended(with: .white, 0.15))
         edge.roughness = 0.3
@@ -295,11 +300,12 @@ final class CubeWorld {
             switch self { case .pebble: 0.013...0.019; case .mote: 0.006...0.009; case .shard: 0.008...0.012; case .dandelion: 0.028...0.034; case .water: 0.017...0.021 }
         }
         var mass: Float { switch self { case .pebble: 0.02; case .mote: 0.004; case .shard: 0.003; case .dandelion: 0.002; case .water: 0.012 } }
-        var damping: Float { switch self { case .pebble: 1.2; case .mote: 3.5; case .shard: 4; case .dandelion: 5; case .water: 0.9 } }
-        /// The share of gravity cancelled: 0 falls freely, 1 floats.
-        var lift: Float { switch self { case .pebble: 0; case .mote: 0.82; case .shard: 0.95; case .dandelion: 0.995; case .water: 0 } }
-        /// A gentle random nudge, as acceleration (m/s²), so it's the same feel whatever the weight.
-        var jitter: Float { switch self { case .pebble: 0.01; case .mote: 0.06; case .shard: 0.03; case .dandelion: 0.035; case .water: 0 } }
+        var damping: Float { switch self { case .pebble: 3; case .mote: 3.5; case .shard: 4; case .dandelion: 5; case .water: 0.9 } }
+        /// The share of gravity cancelled: 1 is weightless. Everything in the air floats, like dust or dandelion
+        /// fluff in still air (owner, Oct 30); only the water falls.
+        var lift: Float { switch self { case .water: 0; default: 1 } }
+        /// How hard it wanders (m/s²): a slow, smooth drift that turns little by little, not a jitter.
+        var jitter: Float { switch self { case .pebble: 0.04; case .mote: 0.07; case .shard: 0.05; case .dandelion: 0.08; case .water: 0 } }
     }
 
     private func add(_ kind: Kind, n: Int, color: UIColor, info: Info, rng: inout SystemRandomNumberGenerator) {
@@ -312,10 +318,12 @@ final class CubeWorld {
             let r = Float.random(in: kind.radius, using: &rng)
             let body = ModelEntity()   // no mesh of its own: a physics body that can take forces
             // Somewhere inside the sphere, clear of you.
-            var p = SIMD3<Float>.random(in: -1...1, using: &rng)
-            if simd_length(p) < 0.01 { p = [0, 1, 0] }
-            p = simd_normalize(p) * Float.random(in: 0.12...(half - r - 0.02), using: &rng)
-            if kind == .water { p.y = -abs(p.y) }
+            // Anywhere in the air: inside the cube and above the water's surface.
+            let room = half - r - 0.02
+            var p = SIMD3<Float>.random(in: -room...room, using: &rng)
+            for _ in 0..<40 where water != nil && simd_dot(p, surfaceUp) < surfaceH + r + 0.02 {
+                p = SIMD3<Float>.random(in: -room...room, using: &rng)
+            }
             body.position = p
             body.orientation = simd_quatf(angle: .random(in: 0...(2 * .pi), using: &rng), axis: simd_normalize(SIMD3<Float>.random(in: -1...1, using: &rng) + 0.001))
             // Fewer collisions: particles only meet you (and the glass); water drops also meet each other and the
@@ -327,12 +335,14 @@ final class CubeWorld {
             var phys = PhysicsBodyComponent(massProperties: .init(mass: kind.mass),
                                             material: .generate(friction: kind == .water ? 0 : 0.4, restitution: kind == .water ? 0.02 : 0.1), mode: .dynamic)
             phys.linearDamping = kind.damping
+            phys.isAffectedByGravity = kind.lift < 1   // weightless in the air
             phys.angularDamping = kind == .dandelion ? 1.5 : 0.6
             body.components.set(phys)
             body.components.set(PhysicsMotionComponent())
             body.addChild(Self.look(kind, r: r, material: m))
             root.addChild(body)
             floaters.append(Floater(body: body, lift: kind.lift, jitter: kind.jitter, r: r, info: info))
+            wander.append(simd_normalize(SIMD3<Float>.random(in: -1...1, using: &rng) + 0.001))
         }
     }
 
@@ -387,6 +397,115 @@ final class CubeWorld {
         }
     }
 
+    // MARK: Water
+
+    /// Humidity as a body of water: more humid, fuller (about 5% of the cube when dry, 45% at 100%).
+    private func addWater(humidity: Double) {
+        guard humidity > 0 else { return }
+        waterFill = Float(min(0.45, max(0.05, humidity / 100 * 0.45)))
+        var m = PhysicallyBasedMaterial()
+        m.baseColor = .init(tint: UIColor(red: 0.36, green: 0.64, blue: 0.93, alpha: 1))
+        m.roughness = 0.04
+        m.specular = 1.0
+        m.blending = .transparent(opacity: .init(floatLiteral: 0.42))
+        let w = ModelEntity()
+        w.model = ModelComponent(mesh: .generateBox(size: 0.001), materials: [m])
+        root.addChild(w)
+        water = w
+        waterInfo = Info(title: "Humidity", value: "\(Int(humidity.rounded()))%", detail: "Water in the air, drawn as water. More humid, fuller.")
+        surfaceUp = -gravityInCube() / Self.gravity
+        updateWater(target: surfaceUp, dt: 0)
+    }
+
+    /// The surface leans toward level on a spring, so it lags and wobbles as the cube turns, then settles.
+    private func updateWater(target: SIMD3<Float>, dt: Float) {
+        guard let water else { return }
+        if dt > 0 {
+            surfaceVel += (target - surfaceUp) * 70 * dt - surfaceVel * 5 * dt
+            surfaceUp = simd_normalize(surfaceUp + surfaceVel * dt)
+        }
+        guard simd_length(surfaceUp - drawnUp) > 0.0015 else { return }
+        drawnUp = surfaceUp
+        let box = half - 0.022   // just inside the glass
+        surfaceH = Self.level(for: waterFill, n: surfaceUp, half: box)
+        let faces = Self.clippedBox(half: box, n: surfaceUp, h: surfaceH)
+        if let mesh = Self.mesh(faces) { water.model?.mesh = mesh }
+    }
+
+    /// The faces of a cube (half-side `half`) cut by the plane p·n = h, keeping p·n ≤ h: each face clipped, plus the
+    /// cap where the cut is. Outward winding.
+    static func clippedBox(half b: Float, n: SIMD3<Float>, h: Float) -> [[SIMD3<Float>]] {
+        var faces: [[SIMD3<Float>]] = []
+        var cut: [SIMD3<Float>] = []
+        for axis in 0..<3 { for sign: Float in [-1, 1] {
+            let u = (axis + 1) % 3, v = (axis + 2) % 3
+            var quad: [SIMD3<Float>] = []
+            for (a, c) in [(-b, -b), (b, -b), (b, b), (-b, b)] {
+                var p = SIMD3<Float>(repeating: 0); p[axis] = sign * b; p[u] = a; p[v] = c; quad.append(p)
+            }
+            var outward = SIMD3<Float>(repeating: 0); outward[axis] = sign
+            if simd_dot(simd_cross(quad[1] - quad[0], quad[2] - quad[0]), outward) < 0 { quad.reverse() }
+            // Sutherland–Hodgman against the plane.
+            var out: [SIMD3<Float>] = []
+            for i in 0..<quad.count {
+                let a = quad[i], c = quad[(i + 1) % quad.count]
+                let da = simd_dot(a, n) - h, dc = simd_dot(c, n) - h
+                if da <= 0 { out.append(a) }
+                if (da < 0 && dc > 0) || (da > 0 && dc < 0) {
+                    let p = a + (c - a) * (da / (da - dc)); out.append(p); cut.append(p)
+                }
+            }
+            if out.count >= 3 { faces.append(out) }
+        } }
+        // The cap: the cut points, in order around the surface's normal.
+        var cap: [SIMD3<Float>] = []
+        for p in cut where !cap.contains(where: { simd_distance($0, p) < 1e-5 }) { cap.append(p) }
+        if cap.count >= 3 {
+            let c = cap.reduce(.zero, +) / Float(cap.count)
+            let e1 = simd_normalize(simd_cross(n, abs(n.x) < 0.9 ? SIMD3<Float>(1, 0, 0) : SIMD3<Float>(0, 1, 0)))
+            let e2 = simd_cross(n, e1)
+            cap.sort { atan2(simd_dot($0 - c, e2), simd_dot($0 - c, e1)) < atan2(simd_dot($1 - c, e2), simd_dot($1 - c, e1)) }
+            if simd_dot(simd_cross(cap[1] - cap[0], cap[2] - cap[0]), n) < 0 { cap.reverse() }
+            faces.append(cap)
+        }
+        return faces
+    }
+
+    static func volume(_ faces: [[SIMD3<Float>]]) -> Float {
+        var v: Float = 0
+        for f in faces where f.count >= 3 { for i in 1..<(f.count - 1) { v += simd_dot(f[0], simd_cross(f[i], f[i + 1])) / 6 } }
+        return v
+    }
+
+    /// The height of the surface along n that holds `fill` of the cube.
+    static func level(for fill: Float, n: SIMD3<Float>, half b: Float) -> Float {
+        let target = fill * pow(2 * b, 3)
+        let reach = b * (abs(n.x) + abs(n.y) + abs(n.z))
+        var lo = -reach, hi = reach
+        for _ in 0..<22 {
+            let mid = (lo + hi) / 2
+            if volume(clippedBox(half: b, n: n, h: mid)) < target { lo = mid } else { hi = mid }
+        }
+        return (lo + hi) / 2
+    }
+
+    /// Flat-shaded mesh for the water's faces.
+    static func mesh(_ faces: [[SIMD3<Float>]]) -> MeshResource? {
+        var positions: [SIMD3<Float>] = [], normals: [SIMD3<Float>] = [], indices: [UInt32] = []
+        for f in faces where f.count >= 3 {
+            let nrm = simd_normalize(simd_cross(f[1] - f[0], f[2] - f[0]))
+            for i in 1..<(f.count - 1) {
+                for p in [f[0], f[i], f[i + 1]] { positions.append(p); normals.append(nrm); indices.append(UInt32(indices.count)) }
+            }
+        }
+        guard !positions.isEmpty else { return nil }
+        var d = MeshDescriptor(name: "water")
+        d.positions = MeshBuffers.Positions(positions)
+        d.normals = MeshBuffers.Normals(normals)
+        d.primitives = .triangles(indices)
+        return try? MeshResource.generate(from: [d])
+    }
+
     // MARK: Motion
 
     private func tick(_ dt: Float) {
@@ -395,7 +514,9 @@ final class CubeWorld {
             spin *= max(0, 1 - 2.2 * dt)
         }
         let up = -gravityInCube() / Self.gravity
-        for f in floaters {
+        updateWater(target: up, dt: dt)
+        guard wander.count == floaters.count else { return }
+        for (i, f) in floaters.enumerated() {
             // The glass: a rounded box. Past it, back to the inside surface, and the outward part of the velocity
             // comes back softly.
             let pos = f.body.position
@@ -415,8 +536,19 @@ final class CubeWorld {
                 }
             }
             guard let mass = f.body.components[PhysicsBodyComponent.self]?.massProperties.mass else { continue }
-            var force = up * Self.gravity * mass * f.lift
-            if f.jitter > 0 { force += SIMD3<Float>.random(in: -1...1) * f.jitter * mass }
+            var force = SIMD3<Float>.zero   // weightless: no gravity to cancel (isAffectedByGravity is off)
+            _ = up
+            // Touching the water: it slows and rises back into the air (the particles live in the air, above it).
+            if water != nil, simd_dot(f.body.position, surfaceUp) < surfaceH + f.r, var motion = f.body.components[PhysicsMotionComponent.self] {
+                motion.linearVelocity *= max(0, 1 - 4 * dt)
+                f.body.components.set(motion)
+                force += surfaceUp * mass * 0.6
+                wander[i] = simd_normalize(wander[i] + surfaceUp * 0.5)
+            }
+            if f.jitter > 0 {
+                wander[i] = simd_normalize(wander[i] + SIMD3<Float>.random(in: -1...1) * 0.8 * dt)
+                force += wander[i] * f.jitter * mass
+            }
             f.body.addForce(force, relativeTo: root)
         }
         // Keep the annotation on its particle as it moves.
@@ -468,6 +600,17 @@ final class CubeWorld {
             let p = project(f.body.position(relativeTo: nil))
             let d = hypot(p.x - point.x, p.y - point.y)
             if d < 28, d < (best?.1 ?? .infinity) { best = (i, d) }
+        }
+        if best == nil, water != nil {
+            // Nothing small under the finger: if it's on the water, name the water.
+            let surfaceWorld = root.convert(position: surfaceUp * surfaceH, to: nil)
+            let sp = project(surfaceWorld)
+            if point.y > sp.y - 10, abs(point.x - viewSize.width / 2) < screenRadius(in: viewSize) * 1.2 {
+                selected = nil
+                annotation = Annotation(title: waterInfo.title, value: waterInfo.value, detail: waterInfo.detail, point: point)
+                UISelectionFeedbackGenerator().selectionChanged()
+                return
+            }
         }
         guard let (i, _) = best else { selected = nil; annotation = nil; return }
         selected = i

@@ -870,11 +870,13 @@ struct NowHomeView: View {
                     // and the charts share its window and columns.
                     ScrollView(.vertical) {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                            VStack(alignment: .leading, spacing: 0) {
+                            VStack(alignment: .leading, spacing: 20) {
                                 header
                                 skyArea
                             }
-                            .containerRelativeFrame(.vertical) { h, _ in h - 74 - 150 }
+                            .padding(.top, 8)
+                            .containerRelativeFrame(.vertical) { h, _ in h - 74 - 150 - 24 }
+                            Color.clear.frame(height: 24)
                             Section {
                                 MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle)
                                     .padding(.bottom, 120)   // clear of the tab bar and the +
@@ -1558,6 +1560,21 @@ struct NowSky: View {
     @AppStorage("sky.touched") private var touched = false
 
     private var temperature: Double? { scrubTemperature ?? conditions?.best(.temperature)?.value }
+    /// Menus look: this sky's air in the Sky dial's terms, the demo pollen and the air event included.
+    private var menusAir: MenusAir {
+        var a = MenusAir(conditions)
+        if let p = pollen {
+            func amount(_ k: PollenSample.Kind) -> Double { k.count == 0 ? 0 : Double(k.level.rawValue + 1) / 3 }
+            a.tree = max(a.tree, amount(p.tree)); a.grass = max(a.grass, amount(p.grass)); a.weed = max(a.weed, amount(p.weed))
+        }
+        if event == .storm { a.storm = true }
+        return a
+    }
+    /// Whether this sky is a moment of that kind (not Now, which only remembers the last one).
+    private func onMoment(_ k: MomentKind) -> Bool {
+        guard let e = selfEvent, e.moment == k else { return false }
+        return abs(e.loggedAt.timeIntervalSince(date)) < 60
+    }
     private var layers: AirLayers { AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: true) }
 
     var body: some View {
@@ -1567,7 +1584,15 @@ struct NowSky: View {
             let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: showsSelf)
             let mids = RailRow.ys(rows, in: size.height).map { $0 + (expanded ? railShift : 0) }
             ZStack {
-                if Crit.AppLook.current.healthLike {
+                if Crit.AppLook.current == .menus {
+                    // Menus look: the sky is the Timeline's Sky dial, large, with the place inside it.
+                    MenusSkyDial(air: menusAir, rescue: onMoment(.rescue), standard: onMoment(.maintenance), sketch: sketch) { s in
+                        if let (lat, lon) = coordinate {
+                            PlaceMap(id: mapID + "-light", latitude: lat, longitude: lon, dark: false)
+                                .frame(width: s.width, height: s.height)
+                        }
+                    }
+                } else if Crit.AppLook.current.healthLike {
                     // Apple Health look: the air is the gradient alone (the details page's field), with every
                     // pollutant and pollen colour in it: hue from the temperature, light from the hour, softness from
                     // the humidity, each layer's tint stronger as it rises. No particles.
@@ -1666,11 +1691,14 @@ struct NowSky: View {
             .onChange(of: date) { _, _ in if settled { ripple() } }
             .onChange(of: settled) { _, s in if s { ripple() } }
             .mask {
+                // Menus look: the dial has its own edge, so no fade.
+                if Crit.AppLook.current == .menus { Rectangle() } else {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),
                                    startRadiusFraction: 0, endRadiusFraction: 0.7)
                     .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.26),
                                                  .init(color: .black, location: 0.78), .init(color: .clear, location: 1)],
                                          startPoint: .top, endPoint: .bottom))
+                }
             }
             // The label sits beside the icon being read, never at a spot on the map.
             .overlay {

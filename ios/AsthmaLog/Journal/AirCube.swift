@@ -84,7 +84,8 @@ struct AirCubeLayer: View {
             // Fade as the slot slides up under the sticky timeline; gone when there's no slot (another scale or tab).
             let visible: Double = inside ? 1 : slot == .zero ? 0 : max(0, min(1, Double(slot.midY - 230) / 140))
             ZStack(alignment: .topTrailing) {
-                Color(uiColor: .systemGroupedBackground).opacity(Double(world.zoom))
+                // Inside, the page turns to cream paper with a fine grain, the ground the inks sit on.
+                PaperGrain().opacity(Double(world.zoom))
                     .allowsHitTesting(inside)
                 RealityView { content in
                     content.camera = .virtual
@@ -92,6 +93,44 @@ struct AirCubeLayer: View {
                 }
                 .opacity(visible)
                 .allowsHitTesting(inside)   // false stops it drawing; the clear layer above takes the touches anyway
+                // The particles, painted: airbrushed blots that follow the bodies the 3D view moves.
+                TimelineView(.animation) { tl in
+                    Canvas { ctx, _ in
+                        _ = tl.date   // read the frame's date, or the canvas never redraws
+                        if let (edges, fade) = world.edges() {
+                            // The cube: a faint halo line, white glow with a hairline in it. Soft, monochrome.
+                            ctx.drawLayer { l in
+                                l.addFilter(.blur(radius: 3))
+                                l.opacity = 0.9 * fade
+                                l.stroke(edges, with: .color(.white), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            }
+                            ctx.opacity = 0.14 * fade
+                            ctx.stroke(edges, with: .color(.primary), style: StrokeStyle(lineWidth: 0.6, lineCap: .round))
+                            ctx.opacity = 1
+                        }
+                        if let water = world.waterOutline() {
+                            // Humidity: a soft wash, periwinkle into lilac and pink, blurred at the edge, grainy.
+                            let b = water.boundingRect
+                            ctx.drawLayer { l in
+                                l.addFilter(.blur(radius: 10 + 24 * CGFloat(world.zoom)))
+                                l.opacity = 0.75
+                                l.fill(water, with: .linearGradient(
+                                    Gradient(colors: [Color(CubeWorld.Ink.lilac).opacity(0.55), Color(CubeWorld.Ink.periwinkle).opacity(0.75),
+                                                      Color(CubeWorld.Ink.sky).opacity(0.6)]),
+                                    startPoint: CGPoint(x: b.minX, y: b.minY), endPoint: CGPoint(x: b.maxX, y: b.maxY)))
+                                l.blendMode = .destinationOut
+                                l.opacity = 0.15
+                                l.fill(Path(b.insetBy(dx: -40, dy: -40)), with: .tiledImage(PaperGrain.speckle, scale: 0.5))
+                            }
+                        }
+                        for b in world.blots() {
+                            ctx.opacity = b.opacity
+                            ctx.draw(b.sprite, in: b.rect)
+                        }
+                    }
+                }
+                .opacity(visible)
+                .allowsHitTesting(false)
                 // The 3D view keeps touches to itself, so a clear SwiftUI layer over it takes the taps and drags.
                 if inside {
                     Color.clear.contentShape(Rectangle())
@@ -106,7 +145,7 @@ struct AirCubeLayer: View {
                 if inside {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Inside the air").font(.title2.weight(.bold))
-                        Text("Tilt your phone and the water follows. Drag to stir the air. Tap a particle to see what it is.").font(.subheadline).foregroundStyle(.secondary)
+                        Text("Tilt your phone and the steam drifts up. Drag to stir the air. Tap a haze to see what it is.").font(.subheadline).foregroundStyle(.secondary)
                         Spacer()
                         Text("Outdoor air, regional readings. Drawn, not to scale.").font(.caption).foregroundStyle(.tertiary)
                     }
@@ -155,6 +194,42 @@ struct AirCubeLayer: View {
     }
 }
 
+/// Cream paper with a fine, still grain (drawn once).
+private struct PaperGrain: View {
+    /// Specks to punch out of a wash, so it reads as sprayed, not flat.
+    static let speckle: Image = {
+        let n = 256
+        var rng = SystemRandomNumberGenerator()
+        let r = UIGraphicsImageRenderer(size: CGSize(width: n, height: n))
+        let img = r.image { c in
+            for _ in 0..<(n * n / 4) {
+                let x = CGFloat.random(in: 0..<CGFloat(n), using: &rng), y = CGFloat.random(in: 0..<CGFloat(n), using: &rng)
+                UIColor(white: 0, alpha: .random(in: 0.2...0.7, using: &rng)).setFill()
+                c.fill(CGRect(x: x, y: y, width: 1, height: 1), blendMode: .normal)
+            }
+        }
+        return Image(uiImage: img)
+    }()
+
+    private static let grain: UIImage = {
+        let n = 256
+        var rng = SystemRandomNumberGenerator()
+        let r = UIGraphicsImageRenderer(size: CGSize(width: n, height: n))
+        return r.image { c in
+            CubeWorld.Ink.paper.setFill()
+            c.fill(CGRect(x: 0, y: 0, width: n, height: n))   // copy: the paper is opaque
+            for _ in 0..<(n * n / 3) {
+                let x = CGFloat.random(in: 0..<CGFloat(n), using: &rng), y = CGFloat.random(in: 0..<CGFloat(n), using: &rng)
+                UIColor(white: Bool.random(using: &rng) ? 0.55 : 1, alpha: .random(in: 0.03...0.09, using: &rng)).setFill()
+                c.fill(CGRect(x: x, y: y, width: 0.6, height: 0.6), blendMode: .normal)   // over the paper, not through it
+            }
+        }
+    }()
+    var body: some View {
+        Image(uiImage: Self.grain).resizable(resizingMode: .tile)
+    }
+}
+
 struct AirCubeWorldKey: EnvironmentKey { static let defaultValue: CubeWorld? = nil }
 struct AirCubeSlotKey: EnvironmentKey { static let defaultValue: ((UUID, CGRect) -> Void)? = nil }
 extension EnvironmentValues {
@@ -190,6 +265,72 @@ final class CubeWorld {
         let info: Info
         /// The one of its kind that stays inside, grown to tap size; the rest fade.
         let rep: Bool
+        /// Its airbrushed blot, and the blot's size as a multiple of the body's radius (wider than the body, so the
+        /// edge can fade out).
+        let sprite: Image
+        let spriteSize: SIMD2<Float>
+    }
+
+    /// A blot to paint this frame: where, how big (points), how strong.
+    struct Blot {
+        let sprite: Image
+        let rect: CGRect
+        let opacity: Double
+    }
+
+    /// Every particle as a blot on screen, far ones first. RealityKit moves them; SwiftUI paints them, since soft
+    /// grainy edges composite cleanly there (in 3D they came out with a pale ring).
+    /// The water's outline on screen. The body is convex (a box cut by a plane), so it's the hull of its corners.
+    func waterOutline() -> Path? {
+        guard !waterFaces.isEmpty, screen.height > 1 else { return nil }
+        let corners: [SIMD3<Float>] = waterFaces.flatMap { $0 }
+        var pts: [CGPoint] = corners.map { (c: SIMD3<Float>) -> CGPoint in project(root.convert(position: c, to: nil)) }
+        pts.sort { (a: CGPoint, b: CGPoint) -> Bool in a.x == b.x ? a.y < b.y : a.x < b.x }
+        guard pts.count > 2 else { return nil }
+        func cross(_ o: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat { (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x) }
+        var lower: [CGPoint] = [], upper: [CGPoint] = []
+        for p in pts { while lower.count >= 2, cross(lower[lower.count - 2], lower[lower.count - 1], p) <= 0 { lower.removeLast() }; lower.append(p) }
+        for p in pts.reversed() { while upper.count >= 2, cross(upper[upper.count - 2], upper[upper.count - 1], p) <= 0 { upper.removeLast() }; upper.append(p) }
+        var path = Path()
+        let hull: [CGPoint] = Array(lower.dropLast()) + Array(upper.dropLast())
+        path.addLines(hull)
+        path.closeSubpath()
+        return path
+    }
+
+    /// The cube's twelve edges on screen, and how strongly to draw them (they fade as you go in).
+    func edges() -> (Path, Double)? {
+        guard screen.height > 1 else { return nil }
+        let fade = Double(max(0, 1 - zoom / 0.65))
+        guard fade > 0.01 else { return nil }
+        let e = ext * ((half - corner * 0.3) / half)
+        func p(_ x: Float, _ y: Float, _ z: Float) -> CGPoint { project(root.convert(position: [x * e.x, y * e.y, z * e.z], to: nil)) }
+        var path = Path()
+        for a: Float in [-1, 1] { for b: Float in [-1, 1] {
+            path.move(to: p(-1, a, b)); path.addLine(to: p(1, a, b))
+            path.move(to: p(a, -1, b)); path.addLine(to: p(a, 1, b))
+            path.move(to: p(a, b, -1)); path.addLine(to: p(a, b, 1))
+        } }
+        return (path, fade)
+    }
+
+    func blots() -> [Blot] {
+        guard screen.height > 1 else { return [] }
+        let cam = camera?.position ?? [0, 0, 3]
+        let tanHalf = tan(insideFov / 2 * .pi / 180), h = Float(screen.height) / 2
+        var out: [(Float, Blot)] = []
+        out.reserveCapacity(floaters.count)
+        for f in floaters {
+            let opacity = (f.rep ? 1 : Double(1 - zoom)) * 0.85
+            guard opacity > 0.01 else { continue }
+            let w = f.body.position(relativeTo: nil), depth = cam.z - w.z
+            guard depth > 0.02 else { continue }
+            let c = project(w), k = f.r * f.body.scale.x / (depth * tanHalf) * h
+            let size = CGSize(width: CGFloat(f.spriteSize.x * k), height: CGFloat(f.spriteSize.y * k))
+            out.append((depth, Blot(sprite: f.sprite, rect: CGRect(x: c.x - size.width / 2, y: c.y - size.height / 2,
+                                                                  width: size.width, height: size.height), opacity: opacity)))
+        }
+        return out.sorted { $0.0 > $1.0 }.map(\.1)
     }
 
     var viewSize: CGSize = .zero
@@ -226,6 +367,8 @@ final class CubeWorld {
     @ObservationIgnored private var surfaceUp = SIMD3<Float>(0, 1, 0)
     @ObservationIgnored private var surfaceVel = SIMD3<Float>(0, 0, 0)
     @ObservationIgnored private var surfaceH: Float = 0
+    /// The water's faces in the cube's space, for the painted layer.
+    @ObservationIgnored private var waterFaces: [[SIMD3<Float>]] = []
     @ObservationIgnored private var drawnUp = SIMD3<Float>(0, 0, 0)
     @ObservationIgnored private var waterInfo = Info(title: "Humidity", value: nil, detail: "")
     @ObservationIgnored private var youInfo = Info(title: "You", value: nil, detail: "")
@@ -306,28 +449,34 @@ final class CubeWorld {
         floaters = []
         wander = []
         water = nil
+        waterFaces = []
         drawnUp = .zero
         ext = SIMD3<Float>(repeating: half)
         annotation = nil
         selected = nil
         addGlass(tint: air.tempF.map(Self.tempColor) ?? UIColor(white: 0.85, alpha: 1))
-        addWater(humidity: air.humidity)
         var rng = SystemRandomNumberGenerator()
-        func count(_ v: Double, per: Double, cap: Int) -> Int { min(cap, Int((v / per).rounded())) }
+        // Humidity as steam: two white wisps that drift and rise, bigger when the air is more humid.
+        add(.steam, amount: Float(min(1, max(0, air.humidity / 100))), n: 2,
+            color: UIColor(white: 1, alpha: 1), glow: UIColor(red: 0.84, green: 0.85, blue: 0.93, alpha: 1),
+            info: Info(title: "Humidity", value: "\(Int(air.humidity.rounded()))%", detail: "Water in the air, drawn as steam. More humid, bigger."), rng: &rng)
+        // One haze per kind, its size set by how much there is (owner, Oct 30: "blobs, less quantity, size by
+        // quantity, gaseous"). The share of a high reading, square-rooted so a little still shows.
+        func share(_ v: Double, high: Double) -> Float { Float(min(1, max(0, v / high)).squareRoot()) }
         func level(_ l: Int) -> String { ["none", "low", "moderate", "high"][max(0, min(3, l))] }
-        add(.pebble, n: count(air.pm10, per: 1.5, cap: 30), color: UIColor(red: 0.78, green: 0.66, blue: 0.46, alpha: 1),
-            info: Info(title: "PM10 · coarse particles", value: "\(Int(air.pm10.rounded())) µg/m³", detail: "Dust and grit, the coarsest here."), rng: &rng)
-        add(.mote, n: count(air.pm25, per: 0.5, cap: 46), color: UIColor(red: 0.36, green: 0.42, blue: 0.55, alpha: 1),
+        add(.pebble, amount: share(air.pm10, high: 150), color: Ink.peach, glow: Ink.pink,
+            info: Info(title: "PM10 · coarse particles", value: "\(Int(air.pm10.rounded())) µg/m³", detail: "Dust and grit. The more there is, the bigger the haze."), rng: &rng)
+        add(.mote, amount: share(air.pm25, high: 35), color: Ink.periwinkle, glow: Ink.lilac,
             info: Info(title: "PM2.5 · fine particles", value: "\(Int(air.pm25.rounded())) µg/m³", detail: "Smoke and exhaust. Small enough to reach deep in the lungs."), rng: &rng)
-        add(.mote, n: count(air.no2, per: 1.0, cap: 24), color: UIColor(red: 0.72, green: 0.33, blue: 0.22, alpha: 1),
-            info: Info(title: "NO₂ · nitrogen dioxide", value: "\(Int(air.no2.rounded())) ppb", detail: "A gas from traffic and burning, drawn as specks."), rng: &rng)
-        add(.shard, n: count(air.ozone, per: 2.0, cap: 26), color: UIColor(red: 0.65, green: 0.36, blue: 0.89, alpha: 1),
-            info: Info(title: "Ozone", value: "\(Int(air.ozone.rounded())) ppb", detail: "A gas that forms in sun and heat, drawn as shards."), rng: &rng)
-        for (name, l, color) in [("Tree", air.tree, UIColor(red: 0.55, green: 0.75, blue: 0.35, alpha: 1)),
-                                 ("Grass", air.grass, UIColor(red: 0.95, green: 0.76, blue: 0.19, alpha: 1)),
-                                 ("Weed", air.weed, UIColor(red: 0.79, green: 0.59, blue: 0.23, alpha: 1))] where l > 0 {
-            add(.dandelion, n: l * 4, color: color,
-                info: Info(title: "\(name) pollen", value: level(l).capitalized, detail: "Light grains that ride the air, drawn as seeds."), rng: &rng)
+        add(.mote, amount: share(air.no2, high: 100), color: Ink.coral, glow: Ink.peach,
+            info: Info(title: "NO₂ · nitrogen dioxide", value: "\(Int(air.no2.rounded())) ppb", detail: "A gas from traffic and burning."), rng: &rng)
+        add(.shard, amount: share(air.ozone, high: 70), color: Ink.lilac, glow: Ink.sky,
+            info: Info(title: "Ozone", value: "\(Int(air.ozone.rounded())) ppb", detail: "A gas that forms in sun and heat."), rng: &rng)
+        for (name, l, color, glow) in [("Tree", air.tree, Ink.mint, Ink.butter),
+                                       ("Grass", air.grass, Ink.butter, Ink.peach),
+                                       ("Weed", air.weed, Ink.coral, Ink.pink)] where l > 0 {
+            add(.dandelion, amount: Float(l) / 3, color: color, glow: glow,
+                info: Info(title: "\(name) pollen", value: level(l).capitalized, detail: "Light grains that ride the air."), rng: &rng)
         }
     }
 
@@ -422,19 +571,18 @@ final class CubeWorld {
     private func addGlass(tint: UIColor) {
         _ = tint
         var core = UnlitMaterial(color: UIColor(white: 0.55, alpha: 1))
-        core.blending = .transparent(opacity: .init(floatLiteral: 0.45))
+        core.blending = .transparent(opacity: .init(floatLiteral: 0.16))
         var halo = UnlitMaterial(color: .white)
-        halo.blending = .transparent(opacity: .init(floatLiteral: 0.4))
+        halo.blending = .transparent(opacity: .init(floatLiteral: 0.16))
         var glow = UnlitMaterial(color: .white)
-        glow.blending = .transparent(opacity: .init(floatLiteral: 0.18))
+        glow.blending = .transparent(opacity: .init(floatLiteral: 0.06))
         let b = half - corner * 0.3
         for a in [-b, b] { for c in [-b, b] {
             for (pos, axis) in [(SIMD3<Float>(0, a, c), 0), (SIMD3<Float>(a, 0, c), 1), (SIMD3<Float>(a, c, 0), 2)] {
-                for (w, m) in [(Float(0.0022), core), (Float(0.008), halo), (Float(0.018), glow)] {
+                for (w, m) in [(Float(0.0016), core), (Float(0.005), halo), (Float(0.014), glow)] {
                     var size = SIMD3<Float>(repeating: w); size[axis] = 2 * b + w
-                    let e = ModelEntity(mesh: .generateBox(size: size, cornerRadius: w / 2), materials: [m])
-                    e.position = pos
-                    glass.addChild(e)
+                    // The edges are painted now (`edges()`): see-through 3D lines washed out to thick white bars.
+                    _ = (size, m, pos)
                 }
             }
         } }
@@ -473,30 +621,34 @@ final class CubeWorld {
         case shard
         /// Pollen: dandelion seeds, a core and a fan of fluff, all but weightless, wandering slowly.
         case dandelion
-        /// Humidity: water, drops that pool at the bottom and slosh as you turn the sphere.
-        case water
+        /// Humidity: steam, a white haze that floats and slowly rises (owner, Oct 30: "white gas, not water").
+        case steam
 
         var radius: ClosedRange<Float> {
             // Half the size they were (owner, Oct 30): small enough to see between, and to move among inside.
-            switch self { case .pebble: 0.0065...0.0095; case .mote: 0.003...0.0045; case .shard: 0.004...0.006; case .dandelion: 0.014...0.017; case .water: 0.0085...0.0105 }
+            switch self { case .pebble: 0.0065...0.0095; case .mote: 0.003...0.0045; case .shard: 0.004...0.006; case .dandelion: 0.014...0.017; case .steam: 0.03...0.1 }
         }
-        var mass: Float { switch self { case .pebble: 0.02; case .mote: 0.004; case .shard: 0.003; case .dandelion: 0.002; case .water: 0.012 } }
-        var damping: Float { switch self { case .pebble: 3; case .mote: 3.5; case .shard: 4; case .dandelion: 5; case .water: 0.9 } }
+        var mass: Float { switch self { case .pebble: 0.02; case .mote: 0.004; case .shard: 0.003; case .dandelion: 0.002; case .steam: 0.003 } }
+        var damping: Float { switch self { case .pebble: 3; case .mote: 3.5; case .shard: 4; case .dandelion: 5; case .steam: 4 } }
         /// The share of gravity cancelled: 1 is weightless. Everything in the air floats, like dust or dandelion
-        /// fluff in still air (owner, Oct 30); only the water falls.
-        var lift: Float { switch self { case .water: 0; default: 1 } }
+        /// fluff in still air (owner, Oct 30); steam rises a little on top of that (see `tick`).
+        var lift: Float { 1 }
         /// How hard it wanders (m/s²): a slow, smooth drift that turns little by little, not a jitter.
-        var jitter: Float { switch self { case .pebble: 0.04; case .mote: 0.07; case .shard: 0.05; case .dandelion: 0.08; case .water: 0 } }
+        var jitter: Float { switch self { case .pebble: 0.04; case .mote: 0.07; case .shard: 0.05; case .dandelion: 0.08; case .steam: 0.05 } }
     }
 
-    private func add(_ kind: Kind, n: Int, color: UIColor, info: Info, rng: inout SystemRandomNumberGenerator) {
-        guard n > 0 else { return }
-        var m = PhysicallyBasedMaterial()
-        m.baseColor = .init(tint: color)
-        m.roughness = 0.7
-        if kind == .water { m.blending = .transparent(opacity: .init(floatLiteral: 0.55)); m.roughness = 0.05 }
+    private func add(_ kind: Kind, amount: Float, n: Int = 1, color: UIColor, glow: UIColor, info: Info, rng: inout SystemRandomNumberGenerator) {
+        guard amount > 0.01 else { return }
+        let sprite = Image(decorative: Self.aura(kind, core: color, edge: glow), scale: 1)
+        let spriteSize: SIMD2<Float> = switch kind {
+        // Wider than the body, so the edge can fade to nothing.
+        case .shard: [3.9, 5.0]
+        case .pebble: [4.8, 4.3]
+        default: [4.6, 4.6]
+        }
         for index in 0..<n {
-            let r = Float.random(in: kind.radius, using: &rng)
+            _ = index
+            let r = 0.03 + 0.07 * amount   // the haze's radius: more in the air, bigger
             let body = ModelEntity()   // no mesh of its own: a physics body that can take forces
             // Somewhere inside the sphere, clear of you.
             // Anywhere in the air: inside the cube and above the water's surface.
@@ -509,73 +661,84 @@ final class CubeWorld {
             body.orientation = simd_quatf(angle: .random(in: 0...(2 * .pi), using: &rng), axis: simd_normalize(SIMD3<Float>.random(in: -1...1, using: &rng) + 0.001))
             // Fewer collisions: particles only meet you (and the glass); water drops also meet each other and the
             // pebbles, so they pool and the grit sinks into them.
-            let group: CollisionGroup = kind == .water ? gasG : solidG
-            let mask: CollisionGroup = kind == .water ? [gasG, youG, pebbleG] : kind == .pebble ? [youG, gasG] : [youG]
+            let group: CollisionGroup = kind == .steam ? gasG : solidG
+            let mask: CollisionGroup = kind == .steam ? [gasG, youG, pebbleG] : kind == .pebble ? [youG, gasG] : [youG]
             body.components.set(CollisionComponent(shapes: [.generateSphere(radius: kind == .dandelion ? r * 0.6 : r)],
                                                    filter: .init(group: kind == .pebble ? pebbleG : group, mask: mask)))
             var phys = PhysicsBodyComponent(massProperties: .init(mass: kind.mass),
-                                            material: .generate(friction: kind == .water ? 0 : 0.4, restitution: kind == .water ? 0.02 : 0.1), mode: .dynamic)
+                                            material: .generate(friction: kind == .steam ? 0 : 0.4, restitution: kind == .steam ? 0.02 : 0.1), mode: .dynamic)
             phys.linearDamping = kind.damping
             phys.isAffectedByGravity = kind.lift < 1   // weightless in the air
             phys.angularDamping = kind == .dandelion ? 1.5 : 0.6
             body.components.set(phys)
             body.components.set(PhysicsMotionComponent())
-            body.addChild(Self.look(kind, r: r, material: m))
             root.addChild(body)
-            floaters.append(Floater(body: body, lift: kind.lift, jitter: kind.jitter, r: r, info: info, rep: index == 0))
+            floaters.append(Floater(body: body, lift: kind.lift, jitter: kind.jitter, r: r, info: info, rep: index == 0,
+                                     sprite: sprite, spriteSize: spriteSize))
             wander.append(simd_normalize(SIMD3<Float>.random(in: -1...1, using: &rng) + 0.001))
         }
     }
 
-    /// The visible shape for a kind, at its size (the physics body stays unscaled).
-    private static func look(_ kind: Kind, r: Float, material: PhysicallyBasedMaterial) -> Entity {
-        switch kind {
-        case .dandelion:
-            // A seed: a small core, a short stalk, and a fan of fine spokes with soft tips, like a dandelion's pappus.
-            let seed = Entity()
-            let core = ModelEntity(mesh: lowPoly(subdivisions: 0), materials: [material])
-            core.scale = .init(repeating: r * 0.16)
-            core.position = [0, -r * 0.55, 0]
-            seed.addChild(core)
-            var fluff = PhysicallyBasedMaterial()
-            fluff.baseColor = material.baseColor
-            fluff.roughness = 1.0
-            fluff.blending = .transparent(opacity: .init(floatLiteral: 0.75))
-            let stalk = ModelEntity(mesh: .generateBox(size: [r * 0.04, r * 0.55, r * 0.04]), materials: [fluff])
-            stalk.position = [0, -r * 0.27, 0]
-            seed.addChild(stalk)
-            let spokes = 14
-            for i in 0..<spokes {
-                let yaw = Float(i) / Float(spokes) * 2 * .pi
-                let tilt = Float(i % 2 == 0 ? 0.55 : 0.9)
-                let dir = simd_normalize(SIMD3<Float>(cos(yaw) * sin(tilt), cos(tilt), sin(yaw) * sin(tilt)))
-                let spoke = ModelEntity(mesh: .generateBox(size: [r * 0.025, r * 0.8, r * 0.025]), materials: [fluff])
-                spoke.orientation = simd_quatf(from: [0, 1, 0], to: dir)
-                spoke.position = dir * r * 0.4
-                seed.addChild(spoke)
-                let tip = ModelEntity(mesh: lowPoly(subdivisions: 0), materials: [fluff])
-                tip.scale = .init(repeating: r * 0.07)
-                tip.position = dir * r * 0.82
-                seed.addChild(tip)
+    // MARK: Airbrush
+
+    /// The inks, from the owner's references (Oct 30): soft periwinkle, coral, peach, pink, lilac, mint and butter.
+    enum Ink {
+        static let periwinkle = UIColor(red: 0.45, green: 0.55, blue: 0.90, alpha: 1)
+        static let sky = UIColor(red: 0.55, green: 0.74, blue: 0.93, alpha: 1)
+        static let lilac = UIColor(red: 0.78, green: 0.70, blue: 0.94, alpha: 1)
+        static let pink = UIColor(red: 0.96, green: 0.70, blue: 0.78, alpha: 1)
+        static let coral = UIColor(red: 0.95, green: 0.49, blue: 0.36, alpha: 1)
+        static let peach = UIColor(red: 0.97, green: 0.71, blue: 0.52, alpha: 1)
+        static let mint = UIColor(red: 0.55, green: 0.80, blue: 0.76, alpha: 1)
+        static let butter = UIColor(red: 0.96, green: 0.87, blue: 0.52, alpha: 1)
+        static let paper = UIColor(red: 0.988, green: 0.969, blue: 0.937, alpha: 1)
+    }
+
+    private static var auraCache: [String: CGImage] = [:]
+
+    /// A blot of airbrushed ink: the core colour in the middle fading to the edge colour, then to nothing, with a
+    /// sandy grain that shows most where it thins out. Shape by kind: round, a long petal, a five-petal flower.
+    static func aura(_ kind: Kind, core: UIColor, edge: UIColor) -> CGImage {
+        let key = "\(kind)\(core)\(edge)"
+        if let m = auraCache[key] { return m }
+        let n = 320   // fine enough that the grain stays sand, not pixels, when a blot fills a third of the screen
+        var c0: (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0), c1 = c0
+        core.getRed(&c0.0, green: &c0.1, blue: &c0.2, alpha: &c0.3)
+        edge.getRed(&c1.0, green: &c1.1, blue: &c1.2, alpha: &c1.3)
+        var px = [UInt8](repeating: 0, count: n * n * 4)
+        var rng = SystemRandomNumberGenerator()
+        func smooth(_ a: Float, _ b: Float, _ x: Float) -> Float { let t = min(1, max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
+        for y in 0..<n {
+            for x in 0..<n {
+                let u = (Float(x) + 0.5) / Float(n) * 2 - 1, v = (Float(y) + 0.5) / Float(n) * 2 - 1
+                let d: Float
+                switch kind {
+                case .dandelion:
+                    let a = atan2(v, u), rr = 0.62 + 0.22 * cos(5 * a)
+                    d = (u * u + v * v).squareRoot() / rr
+                case .shard: d = (u * u + v * v).squareRoot() * (1 + 0.15 * v)   // a petal, fuller at the top
+                case .pebble: d = (u * u * 1.0 + (v * 1.08) * (v * 1.08)).squareRoot()
+                default: d = (u * u + v * v).squareRoot()
+                }
+                // A gas: dense in the middle, thinning out with no edge at all, and only a hint of grain.
+                let fall = 1 - smooth(0.0, 1.0, d)
+                var a = pow(fall, 1.6)
+                a *= 0.93 + 0.07 * Float.random(in: 0...1, using: &rng)
+                // The colour leans from core to edge outward, and a little from top to bottom, like light through paper.
+                let k = CGFloat(min(1, max(0, smooth(0.0, 0.8, d) * 0.8 + (v + 1) * 0.1)))
+                let r = c0.0 + (c1.0 - c0.0) * k, gg = c0.1 + (c1.1 - c0.1) * k, b = c0.2 + (c1.2 - c0.2) * k
+                let i = (y * n + x) * 4, al = CGFloat(a * 0.9)
+                px[i] = UInt8(max(0, min(255, r * al * 255)))   // premultiplied, as Core Graphics wants
+                px[i + 1] = UInt8(max(0, min(255, gg * al * 255)))
+                px[i + 2] = UInt8(max(0, min(255, b * al * 255)))
+                px[i + 3] = UInt8(max(0, min(255, al * 255)))
             }
-            return seed
-        case .shard:
-            let e = ModelEntity(mesh: lowPoly(subdivisions: 0), materials: [material])
-            e.scale = [r * 0.45, r * 1.4, r * 0.45]   // a thin, sharp shard
-            return e
-        case .pebble:
-            let e = ModelEntity(mesh: lowPoly(subdivisions: 0), materials: [material])
-            e.scale = [r, r * 0.75, r * 0.9]
-            return e
-        case .mote:
-            let e = ModelEntity(mesh: lowPoly(subdivisions: 0), materials: [material])
-            e.scale = .init(repeating: r)
-            return e
-        case .water:
-            let e = ModelEntity(mesh: lowPoly(subdivisions: 1), materials: [material])
-            e.scale = .init(repeating: r * 1.15)   // a little larger than its body, so drops merge into a pool
-            return e
         }
+        let ctx = CGContext(data: &px, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        let image = ctx.makeImage()!
+        auraCache[key] = image
+        return image
     }
 
     // MARK: Water
@@ -584,13 +747,9 @@ final class CubeWorld {
     private func addWater(humidity: Double) {
         guard humidity > 0 else { return }
         waterFill = Float(min(0.45, max(0.05, humidity / 100 * 0.45)))
-        var m = PhysicallyBasedMaterial()
-        m.baseColor = .init(tint: UIColor(red: 0.36, green: 0.64, blue: 0.93, alpha: 1))
-        m.roughness = 0.04
-        m.specular = 1.0
-        m.blending = .transparent(opacity: .init(floatLiteral: 0.42))
+        // A wash of periwinkle, flat and soft, like the stems in the references; no shine.
+        // The water is painted (see `waterOutline`), like the particles: in 3D it washed out white or went grey.
         let w = ModelEntity()
-        w.model = ModelComponent(mesh: .generateBox(size: 0.001), materials: [m])
         root.addChild(w)
         water = w
         waterInfo = Info(title: "Humidity", value: "\(Int(humidity.rounded()))%", detail: "Water in the air, drawn as water. More humid, fuller.")
@@ -611,7 +770,8 @@ final class CubeWorld {
         let box = ext - SIMD3<Float>(repeating: 0.022)   // just inside the walls
         surfaceH = Self.level(for: waterFill, n: surfaceUp, ext: box)
         let faces = Self.clippedBox(ext: box, n: surfaceUp, h: surfaceH)
-        if let mesh = Self.mesh(faces) { water.model?.mesh = mesh }
+        waterFaces = faces
+        _ = water
     }
 
     /// The faces of a cube (half-side `half`) cut by the plane p·n = h, keeping p·n ≤ h: each face clipped, plus the
@@ -727,6 +887,8 @@ final class CubeWorld {
                 force += surfaceUp * mass * 0.6
                 wander[i] = simd_normalize(wander[i] + surfaceUp * 0.5)
             }
+            // Steam rises, gently, toward whatever is up (the phone's, inside).
+            if f.lift >= 1, f.info.title == "Humidity" { force += up * mass * 0.06 }
             if f.jitter > 0 {
                 wander[i] = simd_normalize(wander[i] + SIMD3<Float>.random(in: -1...1) * 0.8 * dt)
                 force += wander[i] * f.jitter * mass

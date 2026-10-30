@@ -95,37 +95,59 @@ struct AirCubeLayer: View {
                 .allowsHitTesting(inside)   // false stops it drawing; the clear layer above takes the touches anyway
                 // The particles, painted: airbrushed blots that follow the bodies the 3D view moves.
                 TimelineView(.animation) { tl in
-                    Canvas { ctx, _ in
+                    Canvas { ctx, size in
                         _ = tl.date   // read the frame's date, or the canvas never redraws
-                        if let (edges, fade) = world.edges() {
-                            // The cube: a faint halo line, white glow with a hairline in it. Soft, monochrome.
-                            ctx.drawLayer { l in
-                                l.addFilter(.blur(radius: 3))
-                                l.opacity = 0.9 * fade
-                                l.stroke(edges, with: .color(.white), style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                            }
-                            ctx.opacity = 0.14 * fade
-                            ctx.stroke(edges, with: .color(.primary), style: StrokeStyle(lineWidth: 0.6, lineCap: .round))
+                        let glass = world.glassOnScreen()
+                        if let g = glass, g.fade > 0.01 {
+                            // A slightly darker pool under the cube, so its white edges stand out from the page.
+                            let r = g.body.boundingRect
+                            ctx.opacity = g.fade
+                            ctx.fill(Path(r.insetBy(dx: -r.width, dy: -r.height)),
+                                     with: .radialGradient(Gradient(colors: [Color.black.opacity(0.11), Color.black.opacity(0.05), .clear]),
+                                                           center: CGPoint(x: r.midX, y: r.midY), startRadius: 0, endRadius: max(r.width, r.height) * 0.75))
                             ctx.opacity = 1
-                        }
-                        if let water = world.waterOutline() {
-                            // Humidity: a soft wash, periwinkle into lilac and pink, blurred at the edge, grainy.
-                            let b = water.boundingRect
-                            ctx.drawLayer { l in
-                                l.addFilter(.blur(radius: 10 + 24 * CGFloat(world.zoom)))
-                                l.opacity = 0.75
-                                l.fill(water, with: .linearGradient(
-                                    Gradient(colors: [Color(CubeWorld.Ink.lilac).opacity(0.55), Color(CubeWorld.Ink.periwinkle).opacity(0.75),
-                                                      Color(CubeWorld.Ink.sky).opacity(0.6)]),
-                                    startPoint: CGPoint(x: b.minX, y: b.minY), endPoint: CGPoint(x: b.maxX, y: b.maxY)))
-                                l.blendMode = .destinationOut
-                                l.opacity = 0.15
-                                l.fill(Path(b.insetBy(dx: -40, dy: -40)), with: .tiledImage(PaperGrain.speckle, scale: 0.5))
-                            }
                         }
                         for b in world.blots() {
                             ctx.opacity = b.opacity
                             ctx.draw(b.sprite, in: b.rect)
+                        }
+                        if let g = glass {
+                            let fog = Double(world.humidity)
+                            if fog > 0.01 {
+                                // Fog on the panes, like a car window: white mist, thicker when humid. Inside, the
+                                // screen is the glass, so the mist covers it, lighter.
+                                let mist = world.zoom > 0.5 ? Path(CGRect(origin: .zero, size: size)) : g.body
+                                ctx.drawLayer { l in
+                                    l.addFilter(.blur(radius: 10))
+                                    l.opacity = (0.15 + 0.55 * fog) * (world.zoom > 0.5 ? 0.6 : 1)
+                                    l.fill(mist, with: .color(.white))
+                                    l.blendMode = .destinationOut
+                                    l.opacity = 0.25
+                                    l.fill(mist, with: .tiledImage(PaperGrain.speckle, scale: 0.5))
+                                }
+                                // Condensation: beads with a bright rim and a soft shadow.
+                                for d in g.drops {
+                                    ctx.opacity = 0.9 * g.fade + 0.6 * Double(world.zoom)
+                                    ctx.fill(Path(ellipseIn: d.offsetBy(dx: 0, dy: d.height * 0.18)), with: .color(.black.opacity(0.08)))
+                                    ctx.fill(Path(ellipseIn: d), with: .radialGradient(Gradient(colors: [.white.opacity(0.35), .white.opacity(0.95)]),
+                                                                                        center: CGPoint(x: d.midX - d.width * 0.2, y: d.midY - d.height * 0.2),
+                                                                                        startRadius: 0, endRadius: d.width * 0.6))
+                                }
+                                ctx.opacity = 1
+                            }
+                            if g.fade > 0.01 {
+                                // The rounded edges, white and glowing; the far ones faint through the glass.
+                                ctx.drawLayer { l in
+                                    l.addFilter(.blur(radius: 4))
+                                    l.opacity = g.fade
+                                    l.stroke(g.frontEdges, with: .color(.white), style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                                }
+                                ctx.opacity = 0.45 * g.fade
+                                ctx.stroke(g.backEdges, with: .color(.white), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                                ctx.opacity = g.fade
+                                ctx.stroke(g.frontEdges, with: .color(.white), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                                ctx.opacity = 1
+                            }
                         }
                     }
                 }
@@ -145,7 +167,7 @@ struct AirCubeLayer: View {
                 if inside {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Inside the air").font(.title2.weight(.bold))
-                        Text("Tilt your phone and the steam drifts up. Drag to stir the air. Tap a haze to see what it is.").font(.subheadline).foregroundStyle(.secondary)
+                        Text("Drag to stir the air. Tap a haze to see what it is. The mist is the humidity.").font(.subheadline).foregroundStyle(.secondary)
                         Spacer()
                         Text("Outdoor air, regional readings. Drawn, not to scale.").font(.caption).foregroundStyle(.tertiary)
                     }
@@ -287,31 +309,89 @@ final class CubeWorld {
         var pts: [CGPoint] = corners.map { (c: SIMD3<Float>) -> CGPoint in project(root.convert(position: c, to: nil)) }
         pts.sort { (a: CGPoint, b: CGPoint) -> Bool in a.x == b.x ? a.y < b.y : a.x < b.x }
         guard pts.count > 2 else { return nil }
-        func cross(_ o: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat { (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x) }
-        var lower: [CGPoint] = [], upper: [CGPoint] = []
-        for p in pts { while lower.count >= 2, cross(lower[lower.count - 2], lower[lower.count - 1], p) <= 0 { lower.removeLast() }; lower.append(p) }
-        for p in pts.reversed() { while upper.count >= 2, cross(upper[upper.count - 2], upper[upper.count - 1], p) <= 0 { upper.removeLast() }; upper.append(p) }
         var path = Path()
-        let hull: [CGPoint] = Array(lower.dropLast()) + Array(upper.dropLast())
-        path.addLines(hull)
+        path.addLines(Self.hull(pts))
         path.closeSubpath()
         return path
     }
 
-    /// The cube's twelve edges on screen, and how strongly to draw them (they fade as you go in).
-    func edges() -> (Path, Double)? {
+    /// The convex hull of points sorted by x then y (monotone chain).
+    static func hull(_ pts: [CGPoint]) -> [CGPoint] {
+        func cross(_ o: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat { (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x) }
+        var lower: [CGPoint] = [], upper: [CGPoint] = []
+        for p in pts { while lower.count >= 2, cross(lower[lower.count - 2], lower[lower.count - 1], p) <= 0 { lower.removeLast() }; lower.append(p) }
+        for p in pts.reversed() { while upper.count >= 2, cross(upper[upper.count - 2], upper[upper.count - 1], p) <= 0 { upper.removeLast() }; upper.append(p) }
+        return Array(lower.dropLast()) + Array(upper.dropLast())
+    }
+
+    /// The glass on screen: its rounded edges as white lines (the ones facing you brighter), the fogged panes, and the
+    /// condensation beads. Fades as you go in, except the fog, which stays as a light mist inside.
+    struct Glass {
+        let frontEdges: Path
+        let backEdges: Path
+        let body: Path
+        let drops: [CGRect]
+        let fade: Double
+    }
+
+    func glassOnScreen() -> Glass? {
         guard screen.height > 1 else { return nil }
         let fade = Double(max(0, 1 - zoom / 0.65))
-        guard fade > 0.01 else { return nil }
-        let e = ext * ((half - corner * 0.3) / half)
-        func p(_ x: Float, _ y: Float, _ z: Float) -> CGPoint { project(root.convert(position: [x * e.x, y * e.y, z * e.z], to: nil)) }
-        var path = Path()
-        for a: Float in [-1, 1] { for b: Float in [-1, 1] {
-            path.move(to: p(-1, a, b)); path.addLine(to: p(1, a, b))
-            path.move(to: p(a, -1, b)); path.addLine(to: p(a, 1, b))
-            path.move(to: p(a, b, -1)); path.addLine(to: p(a, b, 1))
+        let e = ext, R = min(corner * 1.1, e.min() * 0.5)
+        let cam = camera?.position ?? [0, 0, 3]
+        func sp(_ p: SIMD3<Float>) -> CGPoint { project(root.convert(position: p, to: nil)) }
+        // Which faces face you.
+        var front = [[Bool]](repeating: [false, false], count: 3)
+        for axis in 0..<3 { for (i, sign) in [Float(-1), 1].enumerated() {
+            var n = SIMD3<Float>(repeating: 0); n[axis] = sign
+            var c = SIMD3<Float>(repeating: 0); c[axis] = sign * e[axis]
+            front[axis][i] = simd_dot(root.convert(direction: n, to: nil), cam - root.convert(position: c, to: nil)) > 0
         } }
-        return (path, fade)
+        func isFront(_ axis: Int, _ sign: Float) -> Bool { front[axis][sign < 0 ? 0 : 1] }
+        var frontEdges = Path(), backEdges = Path()
+        // The twelve edges, each stopping short of the corners by R.
+        for a in 0..<3 {
+            let u = (a + 1) % 3, v = (a + 2) % 3
+            for su: Float in [-1, 1] { for sv: Float in [-1, 1] {
+                var p0 = SIMD3<Float>(repeating: 0), p1 = p0
+                p0[u] = su * e[u]; p0[v] = sv * e[v]; p1 = p0
+                p0[a] = -e[a] + R; p1[a] = e[a] - R
+                let f = isFront(u, su) || isFront(v, sv)
+                if f { frontEdges.move(to: sp(p0)); frontEdges.addLine(to: sp(p1)) } else { backEdges.move(to: sp(p0)); backEdges.addLine(to: sp(p1)) }
+            } }
+        }
+        // The rounded corners: where two edges meet, a curve through the corner.
+        for sx: Float in [-1, 1] { for sy: Float in [-1, 1] { for sz: Float in [-1, 1] {
+            let s = SIMD3<Float>(sx, sy, sz), c = s * e
+            for (i, j) in [(0, 1), (1, 2), (0, 2)] {
+                var pi = c; pi[i] -= s[i] * R
+                var pj = c; pj[j] -= s[j] * R
+                let k = 3 - i - j
+                let f = isFront(i, s[i]) || isFront(j, s[j]) || isFront(k, s[k])
+                if f { frontEdges.move(to: sp(pi)); frontEdges.addQuadCurve(to: sp(pj), control: sp(c)) }
+                else { backEdges.move(to: sp(pi)); backEdges.addQuadCurve(to: sp(pj), control: sp(c)) }
+            }
+        } } }
+        // The panes' silhouette, for the fog.
+        var corners: [CGPoint] = []
+        for x: Float in [-1, 1] { for y: Float in [-1, 1] { for z: Float in [-1, 1] { corners.append(sp([x * e.x, y * e.y, z * e.z])) } } }
+        corners.sort { (a: CGPoint, b: CGPoint) -> Bool in a.x == b.x ? a.y < b.y : a.x < b.x }
+        var body = Path()
+        body.addLines(Self.hull(corners))
+        body.closeSubpath()
+        // Droplets on the panes facing you.
+        let tanHalf = tan(insideFov / 2 * .pi / 180), h = Float(screen.height) / 2
+        var drops: [CGRect] = []
+        for d in droplets where isFront(d.axis, d.sign) {
+            let u = (d.axis + 1) % 3, v = (d.axis + 2) % 3
+            var p = SIMD3<Float>(repeating: 0)
+            p[d.axis] = d.sign * e[d.axis]; p[u] = d.u * (e[u] - R); p[v] = d.v * (e[v] - R)
+            let w = root.convert(position: p, to: nil), depth = cam.z - w.z
+            guard depth > 0.02 else { continue }
+            let c = project(w), rad = CGFloat(d.r / (depth * tanHalf) * h)
+            drops.append(CGRect(x: c.x - rad, y: c.y - rad, width: rad * 2, height: rad * 2))
+        }
+        return Glass(frontEdges: frontEdges, backEdges: backEdges, body: body, drops: drops, fade: fade)
     }
 
     func blots() -> [Blot] {
@@ -369,6 +449,12 @@ final class CubeWorld {
     @ObservationIgnored private var surfaceH: Float = 0
     /// The water's faces in the cube's space, for the painted layer.
     @ObservationIgnored private var waterFaces: [[SIMD3<Float>]] = []
+    /// Humidity, 0…1: how fogged the glass is.
+    @ObservationIgnored private(set) var humidity: Float = 0
+    @ObservationIgnored private var humidityInfo = Info(title: "Humidity", value: nil, detail: "")
+    /// Condensation beads on the panes, in face coordinates (−1…1), so they turn with the cube.
+    private struct Droplet { let axis: Int; let sign: Float; let u: Float; let v: Float; let r: Float }
+    @ObservationIgnored private var droplets: [Droplet] = []
     @ObservationIgnored private var drawnUp = SIMD3<Float>(0, 0, 0)
     @ObservationIgnored private var waterInfo = Info(title: "Humidity", value: nil, detail: "")
     @ObservationIgnored private var youInfo = Info(title: "You", value: nil, detail: "")
@@ -456,10 +542,15 @@ final class CubeWorld {
         selected = nil
         addGlass(tint: air.tempF.map(Self.tempColor) ?? UIColor(white: 0.85, alpha: 1))
         var rng = SystemRandomNumberGenerator()
-        // Humidity as steam: two white wisps that drift and rise, bigger when the air is more humid.
-        add(.steam, amount: Float(min(1, max(0, air.humidity / 100))), n: 2,
-            color: UIColor(white: 1, alpha: 1), glow: UIColor(red: 0.84, green: 0.85, blue: 0.93, alpha: 1),
-            info: Info(title: "Humidity", value: "\(Int(air.humidity.rounded()))%", detail: "Water in the air, drawn as steam. More humid, bigger."), rng: &rng)
+        // Humidity as condensation on the glass (owner, Oct 30: "a car window that gets foggy"): the more humid,
+        // the foggier the panes and the more droplets beaded on them.
+        humidity = Float(min(1, max(0, air.humidity / 100)))
+        humidityInfo = Info(title: "Humidity", value: "\(Int(air.humidity.rounded()))%", detail: "Water in the air, drawn as fog and droplets on the glass.")
+        droplets = (0..<Int(humidity * 90)).map { _ in
+            Droplet(axis: Int.random(in: 0..<3, using: &rng), sign: Bool.random(using: &rng) ? 1 : -1,
+                    u: .random(in: -0.92...0.92, using: &rng), v: .random(in: -0.92...0.92, using: &rng),
+                    r: .random(in: 0.0015...0.0055, using: &rng))
+        }
         // One haze per kind, its size set by how much there is (owner, Oct 30: "blobs, less quantity, size by
         // quantity, gaseous"). The share of a high reading, square-rooted so a little still shows.
         func share(_ v: Double, high: Double) -> Float { Float(min(1, max(0, v / high)).squareRoot()) }
@@ -691,7 +782,7 @@ final class CubeWorld {
         static let peach = UIColor(red: 0.97, green: 0.71, blue: 0.52, alpha: 1)
         static let mint = UIColor(red: 0.55, green: 0.80, blue: 0.76, alpha: 1)
         static let butter = UIColor(red: 0.96, green: 0.87, blue: 0.52, alpha: 1)
-        static let paper = UIColor(red: 0.988, green: 0.969, blue: 0.937, alpha: 1)
+        static let paper = UIColor(red: 0.961, green: 0.933, blue: 0.886, alpha: 1)   // warm beige, as in the references
     }
 
     private static var auraCache: [String: CGImage] = [:]

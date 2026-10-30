@@ -53,6 +53,8 @@ struct NowHomeView: View {
     @State private var menusTab = MenusTab.moments
     @State private var showSideMenu = false
     @State private var showDoctor = false
+    /// The Menus look's shared time window: the strip and every chart below it.
+    @State private var menusWindow = MenusWindow(center: .now, span: 3 * 86_400)
     @State private var showInsights = false
     /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
     /// top, the rail's icons, the + at the bottom, all on the same line.
@@ -864,21 +866,29 @@ struct NowHomeView: View {
                 case .timeline:
                     // The first screen is Now as before (the Apple Health look's header, sky and timeline);
                     // scrolling down opens the Environment and Body sections in detail.
+                    // The timeline is the section header, so it sticks to the top as the charts scroll under it,
+                    // and the charts share its window and columns.
                     ScrollView(.vertical) {
-                        VStack(spacing: 0) {
+                        LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                             VStack(alignment: .leading, spacing: 0) {
                                 header
                                 skyArea
-                                timeline
                             }
-                            .containerRelativeFrame(.vertical) { h, _ in h - 74 }
-                            MenusDetails(events: events, now: now)
-                                .padding(.top, 24)
-                                .padding(.bottom, 120)   // clear of the tab bar and the +
+                            .containerRelativeFrame(.vertical) { h, _ in h - 74 - 150 }
+                            Section {
+                                MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle)
+                                    .padding(.top, 16)
+                                    .padding(.bottom, 120)   // clear of the tab bar and the +
+                            } header: {
+                                MenusStrip(window: $menusWindow, moments: moments,
+                                           forecast: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
+                                           now: now, verdict: menusVerdict, limits: menusLimits, settle: menusSettle,
+                                           backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil })
+                            }
                         }
                     }
                     .scrollIndicators(.hidden)
-                    .scrollDisabled(scrubbing || probing)
+                    .scrollDisabled(probing)
                 case .month:
                     MenusMonthView(moments: moments, now: now)
                 case .year:
@@ -886,8 +896,49 @@ struct NowHomeView: View {
                 }
             }
         }
+        // The sky's sideways scrub moves the window too, and on Now it keeps up with the clock.
+        .onChange(of: focusTime) { _, t in
+            let target = t ?? now
+            if abs(menusWindow.center.timeIntervalSince(target)) > 1 { withAnimation(Theme.smooth) { menusWindow.center = target } }
+        }
+        .onChange(of: now) { _, n in if focusTime == nil { menusWindow.center = n } }
         // The scrolling Now page runs under the tab bar; the others stop above it.
         .padding(.bottom, menusTab == .moments && menusScale == .timeline ? 0 : 74)
+    }
+
+    /// How far the Menus window can go: the first moment (a week back at least) to the forecast's end.
+    private var menusLimits: ClosedRange<Date> {
+        let first = min(moments.first?.loggedAt ?? now, now.addingTimeInterval(-7 * 86_400))
+        return first...max(now, hours.last?.date ?? now)
+    }
+
+    /// The verdict for the window's middle (now and ahead).
+    private var menusVerdict: String? {
+        guard menusWindow.center >= now.addingTimeInterval(-60) else { return nil }
+        return outlook(at: menusWindow.center).text
+    }
+
+    /// A pan or zoom ended: land on a moment close to the playhead (behind now) or the nearest hour ahead, and
+    /// show its sky.
+    private func menusSettle() {
+        let c = menusWindow.center
+        let near = menusWindow.span * 0.03
+        if abs(c.timeIntervalSince(now)) < near {
+            withAnimation(Theme.smooth) { menusWindow.center = now }
+            focusTime = nil
+        } else if c < now {
+            if let m = moments.filter({ $0.moment != .note }).min(by: { abs($0.loggedAt.timeIntervalSince(c)) < abs($1.loggedAt.timeIntervalSince(c)) }),
+               abs(m.loggedAt.timeIntervalSince(c)) < near {
+                withAnimation(Theme.smooth) { menusWindow.center = m.loggedAt }
+                focusTime = m.loggedAt
+            } else {
+                focusTime = c
+            }
+        } else {
+            let h = NowTimeline.hour(c)
+            withAnimation(Theme.smooth) { menusWindow.center = h }
+            focusTime = h
+        }
     }
 
     /// "Felt something?": log a rescue, then a voice memo (listening) or written symptoms.

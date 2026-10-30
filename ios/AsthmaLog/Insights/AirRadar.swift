@@ -26,12 +26,22 @@ struct AirRadar: View {
     /// Blue), so the radar, the card and the page's wash agree. No pattern: neutral grey.
     static func ink(_ a: AirProfile.Axis) -> Color {
         guard a.status == .pattern || a.status == .early else { return Color(white: 0.55) }
+        if Crit.AppLook.current.healthLike { return ink(a.category) }
         if let r = a.lead, let c = WeatherColor.ink(bin: r.bin, level: r.level) { return c }
         return ink(a.category)
     }
 
     static func ink(_ c: AirProfile.Category) -> Color {
-        switch c {
+        if Crit.AppLook.current.healthLike {
+            // The air inks, as in the cube and the charts: one colour per family, always.
+            switch c {
+            case .weather: return Theme.airWeather.color
+            case .biologics: return Theme.airPollen.color.mix(with: Theme.airTree.color, by: 0.25)
+            case .particulates: return Theme.airPM25.color
+            case .exertion: return Theme.airNO2.color.mix(with: Theme.airPM10.color, by: 0.4)
+            }
+        }
+        return switch c {
         case .weather: WeatherColor.print ? WeatherColor.amber : WeatherColor.temperature(38)
         case .biologics: WeatherColor.pollen[2]
         case .particulates: WeatherColor.no2

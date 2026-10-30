@@ -555,17 +555,17 @@ final class CubeWorld {
         // quantity, gaseous"). The share of a high reading, square-rooted so a little still shows.
         func share(_ v: Double, high: Double) -> Float { Float(min(1, max(0, v / high)).squareRoot()) }
         func level(_ l: Int) -> String { ["none", "low", "moderate", "high"][max(0, min(3, l))] }
-        add(.pebble, amount: share(air.pm10, high: 150), color: Ink.peach, glow: Ink.pink,
+        add(.pebble, amount: share(air.pm10, high: 150), color: Theme.airPM10.core, glow: Theme.airPM10.glow,
             info: Info(title: "PM10 · coarse particles", value: "\(Int(air.pm10.rounded())) µg/m³", detail: "Dust and grit. The more there is, the bigger the haze."), rng: &rng)
-        add(.mote, amount: share(air.pm25, high: 35), color: Ink.periwinkle, glow: Ink.lilac,
+        add(.mote, amount: share(air.pm25, high: 35), color: Theme.airPM25.core, glow: Theme.airPM25.glow,
             info: Info(title: "PM2.5 · fine particles", value: "\(Int(air.pm25.rounded())) µg/m³", detail: "Smoke and exhaust. Small enough to reach deep in the lungs."), rng: &rng)
-        add(.mote, amount: share(air.no2, high: 100), color: Ink.coral, glow: Ink.peach,
+        add(.mote, amount: share(air.no2, high: 100), color: Theme.airNO2.core, glow: Theme.airNO2.glow,
             info: Info(title: "NO₂ · nitrogen dioxide", value: "\(Int(air.no2.rounded())) ppb", detail: "A gas from traffic and burning."), rng: &rng)
-        add(.shard, amount: share(air.ozone, high: 70), color: Ink.lilac, glow: Ink.sky,
+        add(.shard, amount: share(air.ozone, high: 70), color: Theme.airOzone.core, glow: Theme.airOzone.glow,
             info: Info(title: "Ozone", value: "\(Int(air.ozone.rounded())) ppb", detail: "A gas that forms in sun and heat."), rng: &rng)
-        for (name, l, color, glow) in [("Tree", air.tree, Ink.mint, Ink.butter),
-                                       ("Grass", air.grass, Ink.butter, Ink.peach),
-                                       ("Weed", air.weed, Ink.coral, Ink.pink)] where l > 0 {
+        for (name, l, color, glow) in [("Tree", air.tree, Theme.airTree.core, Theme.airTree.glow),
+                                       ("Grass", air.grass, Theme.airGrass.core, Theme.airGrass.glow),
+                                       ("Weed", air.weed, Theme.airWeed.core, Theme.airWeed.glow)] where l > 0 {
             add(.dandelion, amount: Float(l) / 3, color: color, glow: glow,
                 info: Info(title: "\(name) pollen", value: level(l).capitalized, detail: "Light grains that ride the air."), rng: &rng)
         }
@@ -773,17 +773,7 @@ final class CubeWorld {
     // MARK: Airbrush
 
     /// The inks, from the owner's references (Oct 30): soft periwinkle, coral, peach, pink, lilac, mint and butter.
-    enum Ink {
-        static let periwinkle = UIColor(red: 0.45, green: 0.55, blue: 0.90, alpha: 1)
-        static let sky = UIColor(red: 0.55, green: 0.74, blue: 0.93, alpha: 1)
-        static let lilac = UIColor(red: 0.78, green: 0.70, blue: 0.94, alpha: 1)
-        static let pink = UIColor(red: 0.96, green: 0.70, blue: 0.78, alpha: 1)
-        static let coral = UIColor(red: 0.95, green: 0.49, blue: 0.36, alpha: 1)
-        static let peach = UIColor(red: 0.97, green: 0.71, blue: 0.52, alpha: 1)
-        static let mint = UIColor(red: 0.55, green: 0.80, blue: 0.76, alpha: 1)
-        static let butter = UIColor(red: 0.96, green: 0.87, blue: 0.52, alpha: 1)
-        static let paper = UIColor(red: 0.961, green: 0.933, blue: 0.886, alpha: 1)   // warm beige, as in the references
-    }
+    typealias Ink = Theme.AirPalette   // the app's air inks, shared with the charts and lanes
 
     private static var auraCache: [String: CGImage] = [:]
 

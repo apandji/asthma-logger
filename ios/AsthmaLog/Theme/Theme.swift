@@ -25,6 +25,45 @@ enum Theme {
     static let laneStorm = Color(light: 0x5B6B8C, dark: 0x8A9BBE)
     static let laneCold = Color(light: 0x7FB2E5, dark: 0x93C2F0)
 
+    // The air's inks (owner's references, Oct 30): soft airbrush colours, one per reading, the same in the cube, the
+    // charts and the lanes. The cube's haze fades from `core` to `glow`; text and lines use `deep`, so they read.
+    enum AirPalette {
+        static let periwinkle = UIColor(red: 0.45, green: 0.55, blue: 0.90, alpha: 1)
+        static let sky = UIColor(red: 0.55, green: 0.74, blue: 0.93, alpha: 1)
+        static let lilac = UIColor(red: 0.78, green: 0.70, blue: 0.94, alpha: 1)
+        static let pink = UIColor(red: 0.96, green: 0.70, blue: 0.78, alpha: 1)
+        static let coral = UIColor(red: 0.95, green: 0.49, blue: 0.36, alpha: 1)
+        static let peach = UIColor(red: 0.97, green: 0.71, blue: 0.52, alpha: 1)
+        static let mint = UIColor(red: 0.55, green: 0.80, blue: 0.76, alpha: 1)
+        static let butter = UIColor(red: 0.96, green: 0.87, blue: 0.52, alpha: 1)
+        static let mist = UIColor(red: 0.72, green: 0.76, blue: 0.88, alpha: 1)
+        static let slate = UIColor(red: 0.42, green: 0.47, blue: 0.64, alpha: 1)
+        static let paper = UIColor(red: 0.961, green: 0.933, blue: 0.886, alpha: 1)   // warm beige
+    }
+
+    struct AirInk {
+        let core: UIColor
+        let glow: UIColor
+        var color: Color { Color(uiColor: core) }
+        var glowColor: Color { Color(uiColor: glow) }
+        /// For text and lines: the core, deepened.
+        var deep: Color { Color(uiColor: core).mix(with: .black, by: 0.3) }
+    }
+
+    static let airPM25 = AirInk(core: AirPalette.periwinkle, glow: AirPalette.lilac)
+    static let airPM10 = AirInk(core: AirPalette.peach, glow: AirPalette.pink)
+    static let airNO2 = AirInk(core: AirPalette.coral, glow: AirPalette.peach)
+    static let airOzone = AirInk(core: AirPalette.lilac, glow: AirPalette.sky)
+    static let airTree = AirInk(core: AirPalette.mint, glow: AirPalette.butter)
+    static let airGrass = AirInk(core: AirPalette.butter, glow: AirPalette.peach)
+    static let airWeed = AirInk(core: AirPalette.pink, glow: AirPalette.coral)
+    static let airPollen = AirInk(core: AirPalette.butter, glow: AirPalette.mint)
+    static let airWeather = AirInk(core: AirPalette.sky, glow: AirPalette.periwinkle)
+    static let airHumidity = AirInk(core: AirPalette.mist, glow: .white)
+    static let airStorm = AirInk(core: AirPalette.slate, glow: AirPalette.periwinkle)
+    static let airCold = AirInk(core: AirPalette.sky, glow: AirPalette.mint)
+    static let airIllness = AirInk(core: AirPalette.pink, glow: AirPalette.lilac)
+
     static let rescue = Color(light: 0xE8701F, dark: 0xFF8A3D)    // orange
     static let standard = Color(light: 0x2B8FD6, dark: 0x4FB0F5)  // blue
     /// The same two, softened: for the scan ripple, so they don't compete with the particles' inks.

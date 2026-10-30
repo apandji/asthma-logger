@@ -103,11 +103,11 @@ struct MenusAir {
 
     static func color(_ l: Lead) -> Color {
         switch l {
-        case .tree: Theme.laneTree
-        case .grass: Theme.laneGrass
-        case .weed: Theme.laneWeed
-        case .ozone: Theme.healthPurple
-        case .storm: Theme.laneStorm
+        case .tree: Theme.airTree.color
+        case .grass: Theme.airGrass.color
+        case .weed: Theme.airWeed.color
+        case .ozone: Theme.airOzone.color
+        case .storm: Theme.airStorm.color
         case .calm: Color(white: 0.8)
         }
     }
@@ -188,8 +188,8 @@ struct MenusLanes: View {
     private let cal = Calendar.current
 
     private static let lanes: [(String, (MenusAir) -> Double, Color)] = [
-        ("Tree", { $0.tree }, Theme.laneTree), ("Grass", { $0.grass }, Theme.laneGrass), ("Weed", { $0.weed }, Theme.laneWeed),
-        ("Ozone", { $0.ozone }, Theme.healthPurple), ("Storms", { $0.storm ? 1 : 0 }, Theme.laneStorm), ("Cold", { $0.cold ? 1 : 0 }, Theme.laneCold),
+        ("Tree", { $0.tree }, Theme.airTree.color), ("Grass", { $0.grass }, Theme.airGrass.color), ("Weed", { $0.weed }, Theme.airWeed.color),
+        ("Ozone", { $0.ozone }, Theme.airOzone.color), ("Storms", { $0.storm ? 1 : 0 }, Theme.airStorm.color), ("Cold", { $0.cold ? 1 : 0 }, Theme.airCold.color),
     ]
 
     private var dayAir: [(Date, MenusAir)] {
@@ -655,14 +655,15 @@ struct MenusDetails: View {
         VStack(alignment: .leading, spacing: 48) {
             section("Environment", "Outdoor, at your moments") {
                 VStack(spacing: 0) {
-                    row("Temperature", Theme.healthBlue, series(.temperature), unit: "°F")
-                    row("Humidity", Theme.healthBlue, series(.humidity), unit: "%")
-                    row("Wind", Theme.healthBlue, series(.windSpeed), unit: "mph")
-                    row("Pressure", Theme.healthBlue, [], unit: "")
-                    row("PM2.5", Theme.healthPurple, series(.pm25), unit: "µg")
-                    row("Ozone", Theme.healthPurple, series(.ozone), unit: "ppb")
-                    row("Pollen", Theme.healthYellow, pollen, unit: "")
-                    row("Flu and illness", Theme.healthYellow, [], unit: "")
+                    // The same inks as the cube's hazes, so a colour means one reading everywhere.
+                    row("Temperature", Theme.airWeather, series(.temperature), unit: "°F")
+                    row("Humidity", Theme.airHumidity, series(.humidity), unit: "%")
+                    row("Wind", Theme.airWeather, series(.windSpeed), unit: "mph")
+                    row("Pressure", Theme.airWeather, [], unit: "")
+                    row("PM2.5", Theme.airPM25, series(.pm25), unit: "µg")
+                    row("Ozone", Theme.airOzone, series(.ozone), unit: "ppb")
+                    row("Pollen", Theme.airPollen, pollen, unit: "")
+                    row("Flu and illness", Theme.airIllness, [], unit: "")
                 }
             }
             section("Body", "From your logs and Apple Health") {
@@ -738,8 +739,9 @@ struct MenusDetails: View {
 
     /// One condition on the window: a soft area in its colour, scaled to its own range (the rows compare shape
     /// and timing, not amounts), rescues as orange rules, the playhead as a dark one.
-    private func row(_ name: String, _ ink: Color, _ points: [(Date, Double)], unit: String) -> some View {
-        HStack(spacing: MenusColumns.gap) {
+    private func row(_ name: String, _ air: Theme.AirInk, _ points: [(Date, Double)], unit: String) -> some View {
+        let ink = air.deep
+        return HStack(spacing: MenusColumns.gap) {
             label(name, ink)
             if points.count >= 2 {
                 let lo = points.map(\.1).min()!, hi = points.map(\.1).max()!
@@ -751,7 +753,7 @@ struct MenusDetails: View {
                     ForEach(points, id: \.0) { p in
                         AreaMark(x: .value("Time", p.0), yStart: .value("Low", 0), yEnd: .value(name, y(p.1)))
                             .interpolationMethod(.catmullRom)
-                            .foregroundStyle(LinearGradient(colors: [ink.opacity(0.55), ink.opacity(0.12)], startPoint: .top, endPoint: .bottom))
+                            .foregroundStyle(LinearGradient(colors: [air.color.opacity(0.8), air.glowColor.opacity(0.15)], startPoint: .top, endPoint: .bottom))
                         LineMark(x: .value("Time", p.0), y: .value(name, y(p.1)))
                             .interpolationMethod(.catmullRom)
                             .foregroundStyle(ink).lineStyle(StrokeStyle(lineWidth: 1.5))

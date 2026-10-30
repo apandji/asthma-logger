@@ -501,7 +501,7 @@ struct GroupRail: View {
     private func groupInk(_ g: RailGroup) -> Color? {
         // Apple Health look: Health's blue, purple and yellow for weather, pollutants and allergens.
         if Crit.AppLook.current.healthLike {
-            return g == .weather ? Theme.healthBlue : g == .particles ? Theme.healthPurple : Theme.healthYellow
+            return g == .weather ? Theme.airWeather.deep : g == .particles ? Theme.airPM25.deep : Theme.airPollen.deep   // the air inks, as in the cube
         }
         if WeatherColor.print {
             let has: Double

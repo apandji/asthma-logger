@@ -889,9 +889,9 @@ struct NowHomeView: View {
                     .scrollIndicators(.hidden)
                     .scrollDisabled(probing)
                 case .month:
-                    MenusMonthView(moments: moments, now: now)
+                    MenusMonthView(events: events, now: now)
                 case .year:
-                    MenusYearView(moments: moments, now: now)
+                    MenusYearView(events: events, now: now)
                 }
             }
         }

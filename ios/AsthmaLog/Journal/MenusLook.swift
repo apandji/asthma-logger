@@ -61,123 +61,237 @@ struct MenusTopBar: View {
     }
 }
 
-// MARK: Month and Year
+// MARK: The air's vocabulary (Sky dials and Season lanes, approved Oct 30)
 
-/// Month: the month's name, then a row of ticks per week (a tick every 6 hours, taller at each day's start).
-/// Moments sit on their row as small pills in the timeline's colours; NOW is a tall line with its label.
-struct MenusMonthView: View {
-    let moments: [LogEvent]
+/// The air at a moment or over a day, as amounts 0…1, from the readings stamped on your moments.
+struct MenusAir {
+    var temp: Double?
+    var tree = 0.0, grass = 0.0, weed = 0.0, ozone = 0.0
+    var storm = false
+    var cold = false
+
+    init() {}
+    init(_ c: Conditions?) {
+        temp = c?.best(.temperature)?.value
+        if let p = DemoPollen.from(c) {
+            func amount(_ k: PollenSample.Kind) -> Double { k.count == 0 ? 0 : Double(k.level.rawValue + 1) / 3 }
+            tree = amount(p.tree); grass = amount(p.grass); weed = amount(p.weed)
+        }
+        ozone = min(1, max(0, ((c?.best(.ozone)?.value ?? 0) - 20) / 60))
+        storm = c?.alerts.contains { $0.name.localizedCaseInsensitiveContains("storm") || $0.name.localizedCaseInsensitiveContains("thunder") } ?? false
+    }
+
+    /// A day: warmest reading's mean, the most of each layer, any storm.
+    static func day(_ events: [LogEvent]) -> MenusAir? {
+        let airs = events.compactMap { $0.conditions }.map { MenusAir($0) }
+        guard !airs.isEmpty else { return nil }
+        var d = MenusAir()
+        let temps = airs.compactMap(\.temp)
+        d.temp = temps.isEmpty ? nil : temps.reduce(0, +) / Double(temps.count)
+        d.tree = airs.map(\.tree).max()!; d.grass = airs.map(\.grass).max()!; d.weed = airs.map(\.weed).max()!
+        d.ozone = airs.map(\.ozone).max()!; d.storm = airs.contains { $0.storm }
+        return d
+    }
+
+    enum Lead { case tree, grass, weed, ozone, storm, calm }
+    /// What led the air, and how much.
+    var lead: (Lead, Double) {
+        let c: [(Lead, Double)] = [(.tree, tree), (.grass, grass), (.weed, weed), (.ozone, ozone * 0.9), (.storm, storm ? 0.75 : 0)]
+        let top = c.max { $0.1 < $1.1 }!
+        return top.1 > 0.25 ? top : (.calm, 0)
+    }
+
+    static func color(_ l: Lead) -> Color {
+        switch l {
+        case .tree: Theme.laneTree
+        case .grass: Theme.laneGrass
+        case .weed: Theme.laneWeed
+        case .ozone: Theme.healthPurple
+        case .storm: Theme.laneStorm
+        case .calm: Color(white: 0.8)
+        }
+    }
+
+    /// Temperature as colour: blue cold, green mild, gold warm, red hot.
+    static func tempColor(_ t: Double) -> Color {
+        let stops: [(Double, (Double, Double, Double))] = [(10, (62, 100, 200)), (35, (127, 178, 229)), (55, (207, 230, 200)),
+                                                         (72, (246, 211, 107)), (85, (242, 154, 74)), (98, (217, 87, 59))]
+        let x = min(98, max(10, t))
+        for i in 1..<stops.count where x <= stops[i].0 {
+            let (t0, c0) = stops[i - 1], (t1, c1) = stops[i], f = (x - t0) / (t1 - t0)
+            return Color(red: (c0.0 + (c1.0 - c0.0) * f) / 255, green: (c0.1 + (c1.1 - c0.1) * f) / 255, blue: (c0.2 + (c1.2 - c0.2) * f) / 255)
+        }
+        return .gray
+    }
+}
+
+/// A Sky dial (after Lupi's Weather Mood): bottom half the temperature, top half what led the air (dots for
+/// pollen in its colour, hatching for ozone, a zigzag for a storm), lines across the middle for how strong (0–3),
+/// an orange ring for a rescue, a blue tick on top for your standard inhaler, a dot beside it for a note.
+enum SkyDial {
+    static func draw(_ ctx: inout GraphicsContext, at p: CGPoint, r: CGFloat, air: MenusAir, rescue: Bool, standard: Bool, note: Bool) {
+        let circle = Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
+        var inner = ctx
+        inner.clip(to: circle)
+        inner.fill(circle, with: .color(.white))
+        inner.fill(Path(CGRect(x: p.x - r, y: p.y, width: 2 * r, height: r)),
+                   with: .color(air.temp.map(MenusAir.tempColor) ?? Color(white: 0.9)))
+        let (lead, v) = air.lead
+        let ink = MenusAir.color(lead)
+        switch lead {
+        case .tree, .grass, .weed:
+            let step = max(2.4, r / (2 + 4 * v))
+            var y = p.y - r + step / 2
+            while y < p.y {
+                var x = p.x - r + step / 2
+                while x < p.x + r { inner.fill(Path(ellipseIn: CGRect(x: x - r / 14 - 0.4, y: y - r / 14 - 0.4, width: r / 7 + 0.8, height: r / 7 + 0.8)), with: .color(ink)); x += step }
+                y += step
+            }
+        case .ozone:
+            let step = max(2.4, r / (2 + 3 * v))
+            var o = -2 * r
+            while o < 2 * r { var l = Path(); l.move(to: CGPoint(x: p.x + o, y: p.y)); l.addLine(to: CGPoint(x: p.x + o + r, y: p.y - r)); inner.stroke(l, with: .color(ink), lineWidth: max(0.7, r / 9)); o += step }
+        case .storm:
+            var z = Path(); z.move(to: CGPoint(x: p.x - r, y: p.y - r * 0.3))
+            for i in 1...6 { z.addLine(to: CGPoint(x: p.x - r + CGFloat(i) * r / 3, y: p.y - r * (i % 2 == 1 ? 0.75 : 0.3))) }
+            inner.stroke(z, with: .color(ink), lineWidth: max(1, r / 7))
+        case .calm: break
+        }
+        ctx.stroke(circle, with: .color(Color(white: 0.82)), lineWidth: 0.6)
+        let lines = Int((v * 3).rounded())
+        for i in 0..<lines {
+            let y = p.y - CGFloat(lines - 1) * r / 10 + CGFloat(i) * r / 5
+            var l = Path(); l.move(to: CGPoint(x: p.x - r * 0.45, y: y)); l.addLine(to: CGPoint(x: p.x + r * 0.45, y: y))
+            ctx.stroke(l, with: .color(.black), lineWidth: max(0.6, r / 14))
+        }
+        if rescue {
+            let w = max(1.6, r / 4)
+            ctx.stroke(Path(ellipseIn: CGRect(x: p.x - r - w / 2 - 0.5, y: p.y - r - w / 2 - 0.5, width: 2 * r + w + 1, height: 2 * r + w + 1)),
+                       with: .color(Theme.rescue), lineWidth: w)
+        }
+        if standard { ctx.fill(Path(CGRect(x: p.x - 0.8, y: p.y - r - max(3, r / 3) - 1.5, width: 1.6, height: max(3, r / 3))), with: .color(Theme.standard)) }
+        if note { ctx.fill(Path(ellipseIn: CGRect(x: p.x + r + 1.5, y: p.y - r * 0.7, width: 3, height: 3)), with: .color(.primary)) }
+    }
+}
+
+// MARK: Month and Year: Season lanes
+
+/// Month and Year as Season lanes (after Lupi's "My Past"): a lane per condition (tree, grass and weed pollen,
+/// ozone, storms, cold snaps), each a band that swells when it's high, day by day, from the readings stamped
+/// on your moments. Your moments run along the top: a filled orange square for a rescue, an open blue square
+/// for standard, a dot for a note. A day with no readings is empty in every lane, not "low".
+struct MenusLanes: View {
+    let title: String
+    let subtitle: String
+    let start: Date
+    let end: Date
+    let events: [LogEvent]
     let now: Date
+    /// Rescues only on the Year, where every standard moment would crowd the lane.
+    var rescuesOnly = false
     private let cal = Calendar.current
 
-    private var weeks: [Date] {
-        guard let month = cal.dateInterval(of: .month, for: now),
-              var start = cal.dateInterval(of: .weekOfYear, for: month.start)?.start else { return [] }
-        var out: [Date] = []
-        while start < month.end { out.append(start); start = cal.date(byAdding: .weekOfYear, value: 1, to: start)! }
+    private static let lanes: [(String, (MenusAir) -> Double, Color)] = [
+        ("Tree", { $0.tree }, Theme.laneTree), ("Grass", { $0.grass }, Theme.laneGrass), ("Weed", { $0.weed }, Theme.laneWeed),
+        ("Ozone", { $0.ozone }, Theme.healthPurple), ("Storms", { $0.storm ? 1 : 0 }, Theme.laneStorm), ("Cold", { $0.cold ? 1 : 0 }, Theme.laneCold),
+    ]
+
+    private var dayAir: [(Date, MenusAir)] {
+        let byDay = Dictionary(grouping: events.filter { $0.loggedAt >= start && $0.loggedAt < end }) { cal.startOfDay(for: $0.loggedAt) }
+        var out = byDay.compactMap { d, es in MenusAir.day(es).map { (d, $0) } }.sorted { $0.0 < $1.0 }
+        for i in out.indices.dropFirst() {
+            if let a = out[i - 1].1.temp, let b = out[i].1.temp, a - b > 13, cal.dateComponents([.day], from: out[i - 1].0, to: out[i].0).day == 1 { out[i].1.cold = true }
+        }
         return out
     }
 
     var body: some View {
-        let month = cal.dateInterval(of: .month, for: now)
-        VStack(spacing: 30) {
-            Text(now.formatted(.dateTime.month(.wide)))
-                .font(.title2.weight(.bold))
-                .padding(.top, 36)
-            ForEach(weeks, id: \.self) { week in
-                TickRow(start: week, end: cal.date(byAdding: .day, value: 7, to: week)!, slot: 6 * 3600,
-                        major: { cal.component(.hour, from: $0) == 0 },
-                        within: month, moments: moments, now: now)
-                    .frame(height: 40)
-            }
-            Spacer()
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.title2.weight(.bold))
+            Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+            Canvas { ctx, size in draw(&ctx, size) }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, 14)
+                .accessibilityLabel("Season lanes, \(title)")
         }
-        .padding(.horizontal, 20)
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20).padding(.top, 16)
+    }
+
+    private func draw(_ ctx: inout GraphicsContext, _ size: CGSize) {
+        let span = end.timeIntervalSince(start)
+        let lx: CGFloat = 54, lw = size.width - lx - 4
+        let x = { (d: Date) in lx + CGFloat(d.timeIntervalSince(start) / span) * lw }
+        let youY: CGFloat = 14
+        let laneH = min(54, (size.height - 70) / CGFloat(Self.lanes.count))
+        func text(_ s: String, _ p: CGPoint, bold: Bool = false, anchor: UnitPoint = .leading) {
+            ctx.draw(Text(s).font(.caption.weight(bold ? .semibold : .medium)).foregroundStyle(bold ? Color.primary : Color.secondary), at: p, anchor: anchor)
+        }
+        // You
+        text("You", CGPoint(x: 0, y: youY), bold: true)
+        ctx.fill(Path(CGRect(x: lx, y: youY - 0.4, width: lw, height: 0.8)), with: .color(Color.primary.opacity(0.12)))
+        for e in events where e.loggedAt >= start && e.loggedAt < end {
+            let mx = x(e.loggedAt)
+            switch e.moment {
+            case .rescue: ctx.fill(Path(CGRect(x: mx - 3.5, y: youY - 11, width: 7, height: 7)), with: .color(Theme.rescue))
+            case .maintenance where !rescuesOnly: ctx.stroke(Path(CGRect(x: mx - 2.5, y: youY + 4, width: 5, height: 5)), with: .color(Theme.standard), lineWidth: 1)
+            case .note where !rescuesOnly: ctx.fill(Path(ellipseIn: CGRect(x: mx - 1.5, y: youY + 13, width: 3, height: 3)), with: .color(.primary))
+            default: break
+            }
+        }
+        // Lanes
+        let air = dayAir
+        let dayW = max(1, lw * CGFloat(86_400 / span))
+        for (i, lane) in Self.lanes.enumerated() {
+            let cy = 48 + CGFloat(i) * laneH + laneH / 2
+            text(lane.0, CGPoint(x: 0, y: cy), bold: true)
+            ctx.fill(Path(CGRect(x: lx, y: cy - 0.4, width: lw, height: 0.8)), with: .color(Color.primary.opacity(0.08)))
+            for (d, a) in air {
+                let v = lane.1(a)
+                guard v > 0.04 else { continue }
+                let h = (laneH - 8) * CGFloat(min(1, v))
+                ctx.fill(Path(CGRect(x: x(d), y: cy - h / 2, width: dayW + 0.4, height: h)), with: .color(lane.2))
+            }
+        }
+        // Time axis: weeks on a month, months on a year; ahead of now is faint.
+        let bottom = 48 + CGFloat(Self.lanes.count) * laneH
+        let monthly = span > 40 * 86_400
+        var t = monthly ? cal.dateInterval(of: .month, for: start)!.start : start
+        while t < end {
+            if t >= start {
+                ctx.fill(Path(CGRect(x: x(t), y: 36, width: 0.6, height: bottom - 36)), with: .color(Color.primary.opacity(0.1)))
+                text(monthly ? String(t.formatted(.dateTime.month(.narrow))) : t.formatted(.dateTime.day()), CGPoint(x: x(t), y: bottom + 10), anchor: .center)
+            }
+            t = cal.date(byAdding: monthly ? .month : .day, value: monthly ? 1 : 7, to: t)!
+        }
+        if now >= start, now < end {
+            ctx.fill(Path(CGRect(x: x(now), y: x(now) > 0 ? 0 : 0, width: 1.5, height: bottom)), with: .color(.primary))
+            ctx.fill(Path(CGRect(x: x(now), y: 36, width: lx + lw - x(now), height: bottom - 36)), with: .color(Color(uiColor: .systemGroupedBackground).opacity(0.55)))
+            text("Now", CGPoint(x: x(now), y: bottom + 24), bold: true, anchor: .center)
+        }
     }
 }
 
-/// Year: the year, then a row per month with a tick per day (taller on Sundays), moments and NOW as in Month.
+/// Month: this month, day by day, as Season lanes.
+struct MenusMonthView: View {
+    let events: [LogEvent]
+    let now: Date
+    var body: some View {
+        let m = Calendar.current.dateInterval(of: .month, for: now)!
+        MenusLanes(title: now.formatted(.dateTime.month(.wide)), subtitle: now.formatted(.dateTime.year()),
+                   start: m.start, end: m.end, events: events, now: now)
+    }
+}
+
+/// Year: the past 12 months as Season lanes, so each season shows as its own band with a start and an end.
 struct MenusYearView: View {
-    let moments: [LogEvent]
+    let events: [LogEvent]
     let now: Date
-    private let cal = Calendar.current
-
     var body: some View {
-        let year = cal.dateInterval(of: .year, for: now)!
-        let months = (0..<12).compactMap { cal.date(byAdding: .month, value: $0, to: year.start) }
-        VStack(spacing: 10) {
-            Text(now.formatted(.dateTime.year()))
-                .font(.title2.weight(.bold))
-                .padding(.top, 20).padding(.bottom, 14)
-            ForEach(months, id: \.self) { m in
-                HStack(spacing: 10) {
-                    Text(m.formatted(.dateTime.month(.narrow)))
-                        .font(.caption2.weight(.semibold)).foregroundStyle(.secondary).frame(width: 12)
-                    TickRow(start: m, end: cal.date(byAdding: .month, value: 1, to: m)!, slot: 86_400,
-                            major: { cal.component(.weekday, from: $0) == cal.firstWeekday },
-                            within: nil, moments: moments, now: now, wholeDays: true)
-                }
-                .frame(height: 30)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .frame(maxWidth: .infinity)
-    }
-}
-
-/// One row of ticks from `start` to `end`, a tick per `slot`. Past ticks dark, ahead faint, outside `within`
-/// none. Moments are pills (rescue orange, standard pale blue); with `wholeDays` a day with any moment gets one
-/// pill, orange if any was a rescue. NOW, when it falls in the row, is a tall line with "NOW" above it.
-private struct TickRow: View {
-    let start: Date
-    let end: Date
-    let slot: TimeInterval
-    let major: (Date) -> Bool
-    let within: DateInterval?
-    let moments: [LogEvent]
-    let now: Date
-    var wholeDays = false
-
-    var body: some View {
-        Canvas { ctx, size in
-            let span = end.timeIntervalSince(start)
-            let x = { (d: Date) in CGFloat(d.timeIntervalSince(start) / span) * size.width }
-            let mid = size.height - 10
-            var t = start
-            while t < end {
-                if within.map({ $0.contains(t) }) ?? true {
-                    let h: CGFloat = major(t) ? 14 : 8
-                    var p = Path()
-                    p.move(to: CGPoint(x: x(t), y: mid - h / 2)); p.addLine(to: CGPoint(x: x(t), y: mid + h / 2))
-                    ctx.stroke(p, with: .color(Color.primary.opacity(t > now ? 0.2 : 0.55)), lineWidth: 1)
-                }
-                t = t.addingTimeInterval(slot)
-            }
-            let inRow = moments.filter { $0.loggedAt >= start && $0.loggedAt < end }
-            func pill(_ at: CGFloat, _ c: Color) {
-                ctx.fill(Path(roundedRect: CGRect(x: at - 2.5, y: mid - 8, width: 5, height: 16), cornerRadius: 2.5), with: .color(c))
-            }
-            if wholeDays {
-                let byDay = Dictionary(grouping: inRow) { Calendar.current.startOfDay(for: $0.loggedAt) }
-                for (day, ms) in byDay {
-                    pill(x(day), ms.contains { $0.moment == .rescue } ? Theme.rescue : Theme.standardSoft)
-                }
-            } else {
-                for m in inRow where m.moment == .rescue || m.moment == .maintenance {
-                    pill(x(m.loggedAt), m.moment == .rescue ? Theme.rescue : Theme.standardSoft)
-                }
-            }
-            if now >= start, now < end {
-                let nx = x(now)
-                var line = Path()
-                line.move(to: CGPoint(x: nx, y: mid - 14)); line.addLine(to: CGPoint(x: nx, y: mid + 8))
-                ctx.stroke(line, with: .color(.primary), lineWidth: 1.5)
-                ctx.draw(Text("Now").font(.caption2.weight(.semibold)), at: CGPoint(x: nx, y: mid - 22))
-            }
-        }
-        .accessibilityHidden(true)
+        let cal = Calendar.current
+        let end = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now))!
+        let start = cal.date(byAdding: .month, value: -12, to: end)!
+        MenusLanes(title: "Past 12 months", subtitle: "\(start.formatted(.dateTime.month(.abbreviated).year())) to \(now.formatted(.dateTime.month(.abbreviated).year()))",
+                   start: start, end: end, events: events, now: now, rescuesOnly: true)
     }
 }
 
@@ -480,11 +594,13 @@ struct MenusStrip: View {
                 let c: Color = v == nil ? ink.opacity(0.08) : (v! >= 1 ? Verdict.red : v! >= 0.5 ? Verdict.yellow : Verdict.green).opacity(0.7)
                 ctx.fill(Path(CGRect(x: x(d), y: mid - 4, width: max(1, slot - 1), height: 8)), with: .color(c))
             }
-            // Moments: pills, narrower as you zoom out.
-            let pw: CGFloat = min(10, max(4, w * CGFloat(3 * 3600 / window.span)))
-            for m in moments where m.loggedAt >= window.start && m.loggedAt <= window.end && (m.moment == .rescue || m.moment == .maintenance) {
-                let r = CGRect(x: x(m.loggedAt) - pw / 2, y: mid - 11, width: pw, height: 22)
-                ctx.fill(Path(roundedRect: r, cornerRadius: pw / 2), with: .color(m.moment == .rescue ? Theme.rescue : Theme.standardSoft))
+            // Moments: Sky dials, smaller as you zoom out. A note sits as a dot beside the moment it follows.
+            let r: CGFloat = min(10, max(5, w * CGFloat(2.5 * 3600 / window.span)))
+            let shown = moments.filter { $0.loggedAt >= window.start.addingTimeInterval(-3600) && $0.loggedAt <= window.end.addingTimeInterval(3600) }
+            for m in shown where m.moment == .rescue || m.moment == .maintenance {
+                let noted = !(m.voiceTranscript ?? "").isEmpty || shown.contains { $0.moment == .note && abs($0.loggedAt.timeIntervalSince(m.loggedAt)) < 3600 }
+                SkyDial.draw(&ctx, at: CGPoint(x: x(m.loggedAt), y: mid), r: r, air: MenusAir(m.conditions),
+                             rescue: m.moment == .rescue, standard: m.moment == .maintenance, note: noted)
             }
             // Now, and the playhead in the middle.
             if now >= window.start, now <= window.end {

@@ -18,6 +18,12 @@ enum Theme {
     static let healthBlue = Color(light: 0x2F7CF6, dark: 0x4A90FF)     // the ear
     static let healthPurple = Color(light: 0xA55BE3, dark: 0xBF7CF2)   // the figure
     static let healthYellow = Color(light: 0xF5A93A, dark: 0xFFBC4F)   // the arrows
+    // Season lanes and Sky dials (Menus look): one colour per condition.
+    static let laneTree = Color(light: 0x8DBF5A, dark: 0x9FD06A)
+    static let laneGrass = Color(light: 0xF2C230, dark: 0xF5CF52)
+    static let laneWeed = Color(light: 0xC9973A, dark: 0xDBAA4E)
+    static let laneStorm = Color(light: 0x5B6B8C, dark: 0x8A9BBE)
+    static let laneCold = Color(light: 0x7FB2E5, dark: 0x93C2F0)
 
     static let rescue = Color(light: 0xE8701F, dark: 0xFF8A3D)    // orange
     static let standard = Color(light: 0x2B8FD6, dark: 0x4FB0F5)  // blue

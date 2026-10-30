@@ -105,7 +105,7 @@ struct MomentTag: View {
     var text: String? = nil
 
     var body: some View {
-        if Crit.AppLook.current == .health, text == nil, moment == .rescue || moment == .maintenance {
+        if Crit.AppLook.current.healthLike, text == nil, moment == .rescue || moment == .maintenance {
             healthTag
         } else {
             feltAirTag

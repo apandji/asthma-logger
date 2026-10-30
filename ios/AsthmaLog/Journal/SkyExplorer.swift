@@ -500,7 +500,7 @@ struct GroupRail: View {
     /// Print: the key never changes hue. Each family's ink, full when something's in the air, faint when not.
     private func groupInk(_ g: RailGroup) -> Color? {
         // Apple Health look: Health's blue, purple and yellow for weather, pollutants and allergens.
-        if Crit.AppLook.current == .health {
+        if Crit.AppLook.current.healthLike {
             return g == .weather ? Theme.healthBlue : g == .particles ? Theme.healthPurple : Theme.healthYellow
         }
         if WeatherColor.print {

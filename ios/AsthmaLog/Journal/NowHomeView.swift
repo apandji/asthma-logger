@@ -47,7 +47,12 @@ struct NowHomeView: View {
     @State private var focusTime: Date?
     @AppStorage(Crit.TimelineLook.key) private var timelineLook = Crit.TimelineLook.track
     @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.feltAir
-    private var healthLook: Bool { appLook == .health }
+    private var healthLook: Bool { appLook.healthLike }
+    // Menus look (Oct 30 sketch).
+    @State private var menusScale = MenusScale.timeline
+    @State private var menusTab = MenusTab.moments
+    @State private var showSideMenu = false
+    @State private var showDoctor = false
     @State private var showInsights = false
     /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
     /// top, the rail's icons, the + at the bottom, all on the same line.
@@ -90,6 +95,8 @@ struct NowHomeView: View {
 
     var body: some View {
         NavigationStack {
+            Group {
+            if appLook == .menus { menusPage } else {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     // The top line leaves the corner to Insights and Settings.
@@ -114,26 +121,21 @@ struct NowHomeView: View {
                         .opacity(probing ? 0.4 : 1)
                         .transition(.opacity)
                 }
-                // One sky at a time; the next settles in with a breath, not a cut. Self slides the map away.
-                ZStack { sky.id(scrubbing ? "scrub" : focusKey).transition(.opacity) }
-                    .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
-                    // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
-                    // The dent is drawn by the sky itself (NowSky), so what sits on top (Self's glass cards) isn't
-                    // flattened into the shader.
-                    .environment(\.skyDent, skyDrag != nil && !reduceMotion ? SkyDent(point: skyDrag!.point, press: skyPress) : nil)
-                    .gesture(skyScrub)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.top, 4)
+                skyArea
                 // Baselines are the engine's, not the journal's: no ticks for them (owner, Oct 17).
                 timeline
                     // Apple Health look: the tab bar has its own row, so the timeline sits above it.
                     .padding(.bottom, healthLook ? 74 : 0)
             }
+            }
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             // Insights and Settings in the top corner, on the place line (owner, Oct 18), the way Weather and
             // Maps keep theirs: always there, never in the sky's way.
             .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
-                if healthLook {
+                if appLook == .menus {
+                    // Menus look: the top bar has the side menu and the scale menu; nothing in the corner.
+                } else if healthLook {
                     // Apple Health look: Insights lives in the tab bar, so the corner keeps Settings only.
                     Button { showSettings = true } label: {
                         Image(systemName: "slider.horizontal.3").font(.subheadline.weight(.semibold))
@@ -216,6 +218,23 @@ struct NowHomeView: View {
                     .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) { bottomBar }
+            // Menus look: the side menu slides in from the left over everything, a scrim behind it.
+            .overlay {
+                if showSideMenu {
+                    Color.black.opacity(0.25).ignoresSafeArea()
+                        .onTapGesture { withAnimation(Theme.smooth) { showSideMenu = false } }
+                        .transition(.opacity)
+                }
+            }
+            .overlay(alignment: .leading) {
+                if showSideMenu {
+                    MenusSideMenu(close: { withAnimation(Theme.smooth) { showSideMenu = false } },
+                                  settings: { showSettings = true }, doctor: { showDoctor = true })
+                        .ignoresSafeArea()
+                        .transition(.move(edge: .leading))
+                }
+            }
+            .sheet(isPresented: $showDoctor) { DoctorSheet(events: events) }
             .sheet(isPresented: $showInsights) {
                 // The sparkle grows into the page (a zoom from the button), and the page starts in this sky's colour
                 // before its own bloom comes through: the same page, turned.
@@ -815,7 +834,70 @@ struct NowHomeView: View {
     }
 
     /// The + (and Insights), and, just logged, the panel that rises over the timeline and the + like a toast.
-    private var bottomBar: some View {
+    @ViewBuilder private var bottomBar: some View {
+        if appLook == .menus {
+            MenusBottomBar(tab: $menusTab, firstLabel: menusScale == .timeline ? "Moments" : "Timeline", felt: felt)
+                .opacity(capture == nil && logged == nil ? 1 : 0)
+                .allowsHitTesting(capture == nil && logged == nil)
+                .overlay(alignment: .bottom) {
+                    if let e = logged, capture == nil {
+                        LoggedPanel(event: e, record: { closeLogged(); openCapture(e, listen: true) }, close: closeLogged)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+        } else {
+            feltAirBottomBar
+        }
+    }
+
+    // MARK: Menus look
+
+    /// The Oct 30 sketch: top bar, then the page for the chosen scale, or Insights in place.
+    private var menusPage: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            MenusTopBar(scale: $menusScale, openMenu: { withAnimation(Theme.smooth) { showSideMenu = true } })
+            if menusTab == .insights {
+                InsightsView(skyColor: skyColorNow)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                switch menusScale {
+                case .timeline:
+                    // The Apple Health look's header (tag, sentence, when · where): same visuals, new structure.
+                    header
+                    skyArea
+                    timeline
+                case .month:
+                    MenusMonthView(moments: moments, now: now)
+                case .year:
+                    MenusYearView(moments: moments, now: now)
+                }
+            }
+        }
+        .padding(.bottom, 74)
+    }
+
+    /// "Felt something?": log a rescue, then a voice memo (listening) or written symptoms.
+    private func felt(_ voice: Bool) {
+        Task {
+            let e = await services.press(.rescue, device: .phone, in: context).event
+            openCapture(e, listen: voice)
+        }
+    }
+
+    /// One sky at a time; the next settles in with a breath, not a cut. Self slides the map away.
+    private var skyArea: some View {
+        ZStack { sky.id(scrubbing ? "scrub" : focusKey).transition(.opacity) }
+            .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
+            // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
+            // The dent is drawn by the sky itself (NowSky), so what sits on top (Self's glass cards) isn't
+            // flattened into the shader.
+            .environment(\.skyDent, skyDrag != nil && !reduceMotion ? SkyDent(point: skyDrag!.point, press: skyPress) : nil)
+            .gesture(skyScrub)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, 4)
+    }
+
+    private var feltAirBottomBar: some View {
         ZStack(alignment: .bottom) {
             // No tips until onboarding is done: they'd pop over the first-run screens.
             CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
@@ -1419,7 +1501,7 @@ struct NowSky: View {
             let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: showsSelf)
             let mids = RailRow.ys(rows, in: size.height).map { $0 + (expanded ? railShift : 0) }
             ZStack {
-                if Crit.AppLook.current == .health {
+                if Crit.AppLook.current.healthLike {
                     // Apple Health look: the air is the gradient alone (the details page's field), with every
                     // pollutant and pollen colour in it: hue from the temperature, light from the hour, softness from
                     // the humidity, each layer's tint stronger as it rises. No particles.
@@ -1443,7 +1525,7 @@ struct NowSky: View {
                     AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
                 }
                 // Apple Health look: the map is drawn above, under the air's wash.
-                if Crit.AppLook.current != .health, let (lat, lon) = coordinate {
+                if !Crit.AppLook.current.healthLike, let (lat, lon) = coordinate {
                     // Pinned: the map never moves; the air is one regional reading, not a spot on a street.
                     PlaceMap(id: light ? mapID + "-light" : mapID, latitude: lat, longitude: lon, dark: !light)
                         .frame(width: size.width, height: size.height)
@@ -1488,7 +1570,7 @@ struct NowSky: View {
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
-                if Crit.AppLook.current != .health {
+                if !Crit.AppLook.current.healthLike {
                 ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
                               fragments: stack.map { event == .storm && $0.name.hasSuffix("pollen") },
                               selected: row == .header(.weather) ? -1 : selectedLayer(stack),
@@ -1508,7 +1590,7 @@ struct NowSky: View {
             // from the + (bottom corner). The particles' own ripple is off in this look, with the particles.
             .modifier(SkyRipple(trigger: rippleAt,
                                 origin: captureInk != nil ? CGPoint(x: railLeft ? 0 : size.width, y: size.height) : CGPoint(x: size.width / 2, y: size.height * 0.55),
-                                enabled: Crit.AppLook.current == .health && !reduceMotionEnv))
+                                enabled: Crit.AppLook.current.healthLike && !reduceMotionEnv))
             // Swiping the sky sideways dents the surface under the finger (set by NowHomeView).
             .distortionEffect(ShaderLibrary.dent(.float2(dent?.point ?? .zero), .float(170), .float(dent?.press ?? 0)),
                               maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: dent != nil)
@@ -1997,7 +2079,7 @@ struct VerdictHeader: View {
     private var hasMark: Bool { TheRead.Mark.allCases.contains { title.contains($0.rawValue) } }
 
     /// Apple Health look: what (the tag) on top, the sentence, then when and where together in one grey line.
-    private var health: Bool { Crit.AppLook.current == .health }
+    private var health: Bool { Crit.AppLook.current.healthLike }
     private var hasTag: Bool { tag != nil || tagText != nil }
 
     var body: some View {

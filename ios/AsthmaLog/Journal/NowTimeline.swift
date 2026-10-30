@@ -46,7 +46,7 @@ struct NowTimeline: View {
     /// Design crit › Timeline: the original track, or Apple Health's look (big circles, a day as a title).
     @AppStorage(Crit.TimelineLook.key) private var look = Crit.TimelineLook.track
     @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.feltAir
-    private var health: Bool { look == .health || appLook == .health }
+    private var health: Bool { look == .health || appLook.healthLike }
     /// Health's look is twice as wide a day, so its 35 pt circles crowd less.
     private var dayWidth: CGFloat { health ? 128 : 64 }
     /// Ahead of now the track is this many times wider (16 pt an hour): the forecast is read hour by hour,

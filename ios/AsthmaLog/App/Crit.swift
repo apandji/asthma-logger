@@ -125,9 +125,17 @@ enum Crit {
     /// a Health-style tab bar at the bottom (Insights, and a slot still to be decided) beside the +, and the
     /// timeline's Health look. felt air is today's look.
     enum AppLook: String, CaseIterable, Identifiable {
-        case feltAir, health
+        case feltAir, health, menus
         var id: String { rawValue }
-        var title: String { self == .feltAir ? "felt air" : "Apple Health" }
+        var title: String {
+            switch self {
+            case .feltAir: "felt air"
+            case .health: "Apple Health"
+            case .menus: "Menus (Oct 30 sketch)"
+            }
+        }
+        /// Menus is built on the Apple Health look (grey sky, pills, Health colours) with its own structure.
+        var healthLike: Bool { self != .feltAir }
         static let key = "crit.appLook"
         static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? .feltAir }
     }

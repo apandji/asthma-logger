@@ -80,7 +80,7 @@ struct InsightsView: View {
 
     private var paperBackground: some View {
         ZStack {
-            if Crit.AppLook.current == .health {
+            if Crit.AppLook.current.healthLike {
                 // Apple Health look: the system's grouped grey, no bloom, no grain.
                 Color(uiColor: .systemGroupedBackground)
             } else {
@@ -215,7 +215,7 @@ struct InsightsView: View {
                     demoLearned || history.count > 1 ? "Has shifted" : history.isEmpty ? "Starts once it's learned" : "Learned")
             }
             // Apple Health look: Your moments is its own tab, not a row here.
-            if Crit.AppLook.current != .health {
+            if !Crit.AppLook.current.healthLike {
                 NavigationLink(value: Page.moments) {
                     row("list.bullet", "Your moments", events.contains { $0.moment != .okay } ? "" : "None yet")
                 }
@@ -237,11 +237,11 @@ struct InsightsView: View {
         .padding(.horizontal, 16).padding(.vertical, 15)
         // Apple Health look: a plain grouped card (white on the grey), as Health's rows are; else glass.
         .background {
-            if Crit.AppLook.current == .health {
+            if Crit.AppLook.current.healthLike {
                 RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground))
             }
         }
-        .glassEffect(Crit.AppLook.current == .health ? .identity : .regular.interactive(), in: .rect(cornerRadius: 22))
+        .glassEffect(Crit.AppLook.current.healthLike ? .identity : .regular.interactive(), in: .rect(cornerRadius: 22))
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
@@ -325,7 +325,7 @@ struct LearningRing: View {
                     let drawn = fill * eased
                     let c = CGPoint(x: size.width / 2, y: size.height / 2), radius = size.width / 2 - 6
                     // Apple Health look: a solid ring, as Activity's, a grey track and the filled part in Health blue.
-                    if Crit.AppLook.current == .health {
+                    if Crit.AppLook.current.healthLike {
                         let track = Path(ellipseIn: CGRect(x: c.x - radius, y: c.y - radius, width: 2 * radius, height: 2 * radius))
                         ctx.stroke(track, with: .color(Color.primary.opacity(0.08)), lineWidth: 10)
                         if drawn > 0 {

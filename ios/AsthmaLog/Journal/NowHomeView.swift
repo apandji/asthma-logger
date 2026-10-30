@@ -56,6 +56,7 @@ struct NowHomeView: View {
     /// Menus look: the air cube's one 3D scene, and where its slot sits on the page.
     @State private var cubeWorld = CubeWorld()
     @State private var cubeSlot: CGRect = .zero
+    @State private var cubeSlotOwner: UUID?
     /// The Menus look's shared time window: the strip and every chart below it.
     @State private var menusWindow = MenusWindow(center: .now, span: 3 * 86_400)
     @State private var showInsights = false
@@ -241,7 +242,11 @@ struct NowHomeView: View {
             }
             .sheet(isPresented: $showDoctor) { DoctorSheet(events: events) }
             .environment(\.airCubeWorld, cubeWorld)
-            .environment(\.airCubeSlot) { cubeSlot = $0 }
+            .environment(\.airCubeSlot) { id, rect in
+                // Only the slot that last showed may say it's gone.
+                if rect == .zero { if id == cubeSlotOwner { cubeSlot = .zero; cubeSlotOwner = nil } }
+                else { cubeSlotOwner = id; cubeSlot = rect }
+            }
             .overlay {
                 if appLook == .menus, Crit.MenusSky.current == .cube, menusTab == .moments, menusScale == .timeline {
                     AirCubeLayer(world: cubeWorld, slot: cubeSlot)

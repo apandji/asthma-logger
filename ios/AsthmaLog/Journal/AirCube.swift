@@ -33,6 +33,9 @@ struct AirCubeSlot: View {
     let felt: MenusFelt
     @Environment(\.airCubeWorld) private var world
     @Environment(\.airCubeSlot) private var report
+    /// Which slot is reporting: switching moments builds a new slot before the old one goes, and the old one's
+    /// "gone" must not hide the new one.
+    @State private var id = UUID()
 
     var body: some View {
         GeometryReader { g in
@@ -41,8 +44,8 @@ struct AirCubeSlot: View {
                 .position(x: g.size.width / 2, y: g.size.height / 2 + r * 1.25)
                 .opacity(Double(1 - (world?.zoom ?? 0)))
         }
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { report?($0) }
-        .onDisappear { report?(.zero) }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { report?(id, $0) }
+        .onDisappear { report?(id, .zero) }
         .onChange(of: air, initial: true) { _, a in world?.setAir(a, felt: felt) }
         .onChange(of: felt) { _, f in world?.setAir(air, felt: f) }
         .contentShape(Rectangle())
@@ -88,7 +91,7 @@ struct AirCubeLayer: View {
                     world.attach(content)
                 }
                 .opacity(visible)
-                .allowsHitTesting(false)
+                .allowsHitTesting(inside)   // false stops it drawing; the clear layer above takes the touches anyway
                 // The 3D view keeps touches to itself, so a clear SwiftUI layer over it takes the taps and drags.
                 if inside {
                     Color.clear.contentShape(Rectangle())
@@ -132,8 +135,9 @@ struct AirCubeLayer: View {
     @ViewBuilder private func annotation(_ a: CubeWorld.Annotation, size: CGSize) -> some View {
         let p = a.point
         let right = p.x < size.width / 2
-        let elbow = CGPoint(x: right ? size.width * 0.72 : size.width * 0.28, y: max(150, min(size.height - 140, p.y - 60)))
+        let elbow = CGPoint(x: right ? size.width * 0.72 : size.width * 0.28, y: max(270, min(size.height - 60, p.y - 60)))   // the label clears the title
         let end = CGPoint(x: right ? size.width - 16 : 16, y: elbow.y)
+        let above = p.y >= elbow.y
         Path { path in path.move(to: p); path.addLine(to: elbow); path.addLine(to: end) }
             .stroke(Color.primary.opacity(0.8), lineWidth: 0.75)
             .allowsHitTesting(false)
@@ -144,20 +148,21 @@ struct AirCubeLayer: View {
             if let v = a.value { Text(v).font(.title3.weight(.semibold).monospacedDigit()) }
             Text(a.detail).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(right ? .trailing : .leading)
         }
-        .frame(width: 160, alignment: right ? .trailing : .leading)
-        .position(x: right ? end.x - 80 : end.x + 80, y: elbow.y + 44)
+        // The label sits on the horizontal run, like a figure caption, on the side the slanted line doesn't come from.
+        .frame(width: 160, height: 120, alignment: above ? (right ? .bottomTrailing : .bottomLeading) : (right ? .topTrailing : .topLeading))
+        .position(x: right ? end.x - 80 : end.x + 80, y: above ? elbow.y - 6 - 60 : elbow.y + 6 + 60)
         .allowsHitTesting(false)
     }
 }
 
 struct AirCubeWorldKey: EnvironmentKey { static let defaultValue: CubeWorld? = nil }
-struct AirCubeSlotKey: EnvironmentKey { static let defaultValue: ((CGRect) -> Void)? = nil }
+struct AirCubeSlotKey: EnvironmentKey { static let defaultValue: ((UUID, CGRect) -> Void)? = nil }
 extension EnvironmentValues {
     var airCubeWorld: CubeWorld? {
         get { self[AirCubeWorldKey.self] }
         set { self[AirCubeWorldKey.self] = newValue }
     }
-    var airCubeSlot: ((CGRect) -> Void)? {
+    var airCubeSlot: ((UUID, CGRect) -> Void)? {
         get { self[AirCubeSlotKey.self] }
         set { self[AirCubeSlotKey.self] = newValue }
     }
@@ -880,3 +885,4 @@ private extension UIColor {
         return UIColor(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t, alpha: 1)
     }
 }
+

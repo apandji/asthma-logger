@@ -129,48 +129,44 @@ struct MenusAir {
 /// pollen in its colour, hatching for ozone, a zigzag for a storm), lines across the middle for how strong (0–3),
 /// an orange ring for a rescue, a blue tick on top for your standard inhaler, a dot beside it for a note.
 enum SkyDial {
+    /// The strip's mark, the sky in small: a rounded square in the temperature's colour with the leading air's
+    /// pattern over it (pollen dots, ozone hatching, a storm zigzag), and a circle in the middle for what you
+    /// felt (rescue orange, standard blue). A dot at the corner for a note.
     static func draw(_ ctx: inout GraphicsContext, at p: CGPoint, r: CGFloat, air: MenusAir, rescue: Bool, standard: Bool, note: Bool) {
-        let circle = Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
+        let rect = CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)
+        let square = Path(roundedRect: rect, cornerRadius: r * 0.35, style: .continuous)
         var inner = ctx
-        inner.clip(to: circle)
-        inner.fill(circle, with: .color(.white))
-        inner.fill(Path(CGRect(x: p.x - r, y: p.y, width: 2 * r, height: r)),
-                   with: .color(air.temp.map(MenusAir.tempColor) ?? Color(white: 0.9)))
+        inner.clip(to: square)
+        inner.fill(square, with: .color(air.temp.map(MenusAir.tempColor) ?? Color(white: 0.9)))
         let (lead, v) = air.lead
         let ink = MenusAir.color(lead)
         switch lead {
         case .tree, .grass, .weed:
-            let step = max(2.4, r / (2 + 4 * v))
-            var y = p.y - r + step / 2
-            while y < p.y {
-                var x = p.x - r + step / 2
-                while x < p.x + r { inner.fill(Path(ellipseIn: CGRect(x: x - r / 14 - 0.4, y: y - r / 14 - 0.4, width: r / 7 + 0.8, height: r / 7 + 0.8)), with: .color(ink)); x += step }
+            let step = max(2.6, r / (1.5 + 2.5 * v))
+            var y = rect.minY + step / 2
+            while y < rect.maxY {
+                var x = rect.minX + step / 2
+                while x < rect.maxX { inner.fill(Path(ellipseIn: CGRect(x: x - 0.8, y: y - 0.8, width: 1.6, height: 1.6)), with: .color(ink)); x += step }
                 y += step
             }
         case .ozone:
-            let step = max(2.4, r / (2 + 3 * v))
+            let step = max(2.6, r / (1.5 + 2 * v))
             var o = -2 * r
-            while o < 2 * r { var l = Path(); l.move(to: CGPoint(x: p.x + o, y: p.y)); l.addLine(to: CGPoint(x: p.x + o + r, y: p.y - r)); inner.stroke(l, with: .color(ink), lineWidth: max(0.7, r / 9)); o += step }
+            while o < 2 * r { var l = Path(); l.move(to: CGPoint(x: p.x + o, y: rect.maxY)); l.addLine(to: CGPoint(x: p.x + o + 2 * r, y: rect.minY)); inner.stroke(l, with: .color(ink), lineWidth: 0.8); o += step }
         case .storm:
-            var z = Path(); z.move(to: CGPoint(x: p.x - r, y: p.y - r * 0.3))
-            for i in 1...6 { z.addLine(to: CGPoint(x: p.x - r + CGFloat(i) * r / 3, y: p.y - r * (i % 2 == 1 ? 0.75 : 0.3))) }
-            inner.stroke(z, with: .color(ink), lineWidth: max(1, r / 7))
+            var z = Path(); z.move(to: CGPoint(x: rect.minX, y: p.y))
+            for i in 1...6 { z.addLine(to: CGPoint(x: rect.minX + CGFloat(i) * r / 3, y: p.y + (i % 2 == 1 ? -r * 0.5 : r * 0.5))) }
+            inner.stroke(z, with: .color(ink), lineWidth: 1.2)
         case .calm: break
         }
-        ctx.stroke(circle, with: .color(Color(white: 0.82)), lineWidth: 0.6)
-        let lines = Int((v * 3).rounded())
-        for i in 0..<lines {
-            let y = p.y - CGFloat(lines - 1) * r / 10 + CGFloat(i) * r / 5
-            var l = Path(); l.move(to: CGPoint(x: p.x - r * 0.45, y: y)); l.addLine(to: CGPoint(x: p.x + r * 0.45, y: y))
-            ctx.stroke(l, with: .color(.black), lineWidth: max(0.6, r / 14))
+        ctx.stroke(square, with: .color(Color.primary.opacity(0.12)), lineWidth: 0.5)
+        if rescue || standard {
+            let c = r * 0.62
+            let circle = Path(ellipseIn: CGRect(x: p.x - c, y: p.y - c, width: 2 * c, height: 2 * c))
+            ctx.fill(circle, with: .color(rescue ? Theme.rescue : Theme.standardSoft))
+            ctx.stroke(circle, with: .color(.white), lineWidth: 1)
         }
-        if rescue {
-            let w = max(1.6, r / 4)
-            ctx.stroke(Path(ellipseIn: CGRect(x: p.x - r - w / 2 - 0.5, y: p.y - r - w / 2 - 0.5, width: 2 * r + w + 1, height: 2 * r + w + 1)),
-                       with: .color(Theme.rescue), lineWidth: w)
-        }
-        if standard { ctx.fill(Path(CGRect(x: p.x - 0.8, y: p.y - r - max(3, r / 3) - 1.5, width: 1.6, height: max(3, r / 3))), with: .color(Theme.standard)) }
-        if note { ctx.fill(Path(ellipseIn: CGRect(x: p.x + r + 1.5, y: p.y - r * 0.7, width: 3, height: 3)), with: .color(.primary)) }
+        if note { ctx.fill(Path(ellipseIn: CGRect(x: rect.maxX - 1.5, y: rect.minY - 1.5, width: 3.5, height: 3.5)), with: .color(.primary)) }
     }
 }
 
@@ -815,80 +811,59 @@ struct MenusDetails: View {
     }
 }
 
-// MARK: The sky as one large dial
+// MARK: The sky: the environment as a square, what you felt as a circle
 
-/// The Menus look's sky: the Timeline's Sky dial, large, with the place inside it. The map sits in the circle
-/// (grey); the bottom half is washed in the temperature, the top half carries what led the air in its pattern
-/// (pollen dots, ozone hatching, a storm zigzag), denser when stronger. An orange ring for a rescue moment, a
-/// blue tick on top for a standard one. Same reading as the dials on the strip, so one key serves both.
-struct MenusSkyDial<Map: View>: View {
-    let air: MenusAir
-    let rescue: Bool
-    let standard: Bool
-    /// Ahead of now: the dial is a sketch (lighter), as the forecast is elsewhere.
+/// What you felt at this time, for the circle in the middle.
+enum MenusFelt { case rescue, standard, nothing }
+
+/// The Menus look's sky: a square that is the environment, filled with the conditions' gradient (hue from the
+/// temperature, light from the hour, softness from the humidity, each pollutant and pollen tinting it as it
+/// rises) over a faint map of the place; and a circle in the middle that is you: rescue orange, standard blue,
+/// or an empty dashed ring when nothing was logged. A dot beside the circle when there's a note.
+struct MenusSkySquare<Field: View, Map: View>: View {
+    let felt: MenusFelt
+    var noted = false
+    /// Ahead of now: lighter, as the forecast is elsewhere.
     var sketch = false
+    @ViewBuilder let field: () -> Field
     @ViewBuilder let map: (CGSize) -> Map
 
     var body: some View {
         GeometryReader { g in
-            let d = min(g.size.width - 40, g.size.height - 24)
+            let d = min(g.size.width - 40, g.size.height - 16)
+            let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
             ZStack {
-                map(CGSize(width: d, height: d))
-                    .saturation(0).opacity(sketch ? 0.35 : 0.55)
-                    .frame(width: d, height: d)
-                Canvas { ctx, size in draw(&ctx, size) }
-                    .frame(width: d, height: d)
+                map(CGSize(width: d, height: d)).saturation(0).opacity(0.45).frame(width: d, height: d)
+                field().opacity(sketch ? 0.5 : 0.8).frame(width: d, height: d)
+                circle(d * 0.36)
             }
             .frame(width: d, height: d)
-            .clipShape(Circle())
-            .overlay { Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1) }
-            .overlay {
-                if rescue { Circle().strokeBorder(Theme.rescue, lineWidth: 7).padding(-10) }
-            }
-            .overlay(alignment: .top) {
-                if standard { Capsule().fill(Theme.standard).frame(width: 4, height: 16).offset(y: -26) }
-            }
+            .clipShape(shape)
+            .overlay { shape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 1) }
             .position(x: g.size.width / 2, y: g.size.height / 2)
-            .opacity(sketch ? 0.75 : 1)
         }
         .allowsHitTesting(false)
     }
 
-    private func draw(_ ctx: inout GraphicsContext, _ size: CGSize) {
-        let r = size.width / 2, c = CGPoint(x: r, y: r)
-        ctx.fill(Path(CGRect(x: 0, y: r, width: size.width, height: r)),
-                 with: .color((air.temp.map(MenusAir.tempColor) ?? Color(white: 0.85)).opacity(0.5)))
-        let (lead, v) = air.lead
-        let ink = MenusAir.color(lead).opacity(0.85)
-        switch lead {
-        case .tree, .grass, .weed:
-            let step = max(9, 22 - 12 * v)
-            var y = step / 2
-            while y < r {
-                var x = step / 2 + (Int(y / step) % 2 == 0 ? 0 : step / 2)
-                while x < size.width { ctx.fill(Path(ellipseIn: CGRect(x: x - 2.4, y: y - 2.4, width: 4.8, height: 4.8)), with: .color(ink)); x += step }
-                y += step
+    @ViewBuilder private func circle(_ c: CGFloat) -> some View {
+        ZStack {
+            switch felt {
+            case .rescue:
+                Circle().fill(Theme.rescue)
+                Image(systemName: "inhaler.fill").font(.system(size: c * 0.34, weight: .semibold)).foregroundStyle(.white)
+            case .standard:
+                Circle().fill(Theme.standardSoft)
+                Image(systemName: "inhaler.fill").font(.system(size: c * 0.34, weight: .semibold)).foregroundStyle(Theme.standard)
+            case .nothing:
+                Circle().fill(.white.opacity(0.35))
+                Circle().strokeBorder(.white, style: StrokeStyle(lineWidth: 2.5, dash: [6, 6]))
             }
-        case .ozone:
-            let step = max(8, 20 - 10 * v)
-            var o = -size.width
-            while o < size.width { var l = Path(); l.move(to: CGPoint(x: o, y: r)); l.addLine(to: CGPoint(x: o + r, y: 0)); ctx.stroke(l, with: .color(ink), lineWidth: 2); o += step }
-        case .storm:
-            var z = Path(); z.move(to: CGPoint(x: 0, y: r * 0.6))
-            for i in 1...12 { z.addLine(to: CGPoint(x: CGFloat(i) * size.width / 12, y: r * (i % 2 == 1 ? 0.3 : 0.6))) }
-            ctx.stroke(z, with: .color(ink), lineWidth: 4)
-        case .calm: break
         }
-        // How strong: up to three short lines across the middle, under the place's pin.
-        let lines = Int((v * 3).rounded())
-        for i in 0..<lines {
-            let y = c.y - CGFloat(lines - 1) * 6 + CGFloat(i) * 12
-            var l = Path(); l.move(to: CGPoint(x: c.x - r * 0.42, y: y)); l.addLine(to: CGPoint(x: c.x - r * 0.12, y: y))
-            l.move(to: CGPoint(x: c.x + r * 0.12, y: y)); l.addLine(to: CGPoint(x: c.x + r * 0.42, y: y))
-            ctx.stroke(l, with: .color(.primary.opacity(0.8)), lineWidth: 2.5)
+        .frame(width: c, height: c)
+        .shadow(color: .black.opacity(felt == .nothing ? 0 : 0.15), radius: 10, y: 3)
+        .overlay(alignment: .topTrailing) {
+            if noted { Circle().fill(Color.primary).frame(width: 9, height: 9).offset(x: 8, y: -2) }
         }
-        // You are here.
-        ctx.fill(Path(ellipseIn: CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10)), with: .color(Theme.healthBlue))
-        ctx.stroke(Path(ellipseIn: CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10)), with: .color(.white), lineWidth: 2)
+        .accessibilityLabel(felt == .rescue ? "Rescue" : felt == .standard ? "Standard" : "Nothing logged")
     }
 }

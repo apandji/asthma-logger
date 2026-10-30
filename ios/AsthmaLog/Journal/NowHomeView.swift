@@ -1585,8 +1585,12 @@ struct NowSky: View {
             let mids = RailRow.ys(rows, in: size.height).map { $0 + (expanded ? railShift : 0) }
             ZStack {
                 if Crit.AppLook.current == .menus {
-                    // Menus look: the sky is the Timeline's Sky dial, large, with the place inside it.
-                    MenusSkyDial(air: menusAir, rescue: onMoment(.rescue), standard: onMoment(.maintenance), sketch: sketch) { s in
+                    // Menus look: the environment as a square of the conditions' gradient, what you felt as a circle.
+                    MenusSkySquare(felt: onMoment(.rescue) ? .rescue : onMoment(.maintenance) ? .standard : .nothing,
+                                   noted: !(selfEvent.flatMap { abs($0.loggedAt.timeIntervalSince(date)) < 60 ? $0.voiceTranscript : nil } ?? "").isEmpty,
+                                   sketch: sketch) {
+                        AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: true)
+                    } map: { s in
                         if let (lat, lon) = coordinate {
                             PlaceMap(id: mapID + "-light", latitude: lat, longitude: lon, dark: false)
                                 .frame(width: s.width, height: s.height)

@@ -340,6 +340,11 @@ struct MenusWindow: Equatable {
     var end: Date { center.addingTimeInterval(span / 2) }
     var domain: ClosedRange<Date> { start...end }
     func x(_ d: Date, width: CGFloat) -> CGFloat { CGFloat(d.timeIntervalSince(start) / span) * width }
+
+    /// The playhead's colour: rescue orange on a rescue moment (like its pill), the ink otherwise.
+    func ink(_ moments: [LogEvent]) -> Color {
+        moments.contains { $0.moment == .rescue && abs($0.loggedAt.timeIntervalSince(center)) < 20 * 60 } ? Theme.rescue : .primary
+    }
 }
 
 /// Pan (sideways drag) and zoom (pinch) on the shared window. `settle` runs when a gesture ends.
@@ -420,7 +425,7 @@ struct MenusStrip: View {
             }
             .padding(.horizontal, MenusColumns.page + MenusColumns.card)
         }
-        .padding(.top, 8).padding(.bottom, 6)
+        .padding(.top, 8)
         .frame(maxWidth: .infinity)
         .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea(edges: .top))
         .sensoryFeedback(.selection, trigger: cal.startOfDay(for: window.center))
@@ -486,13 +491,14 @@ struct MenusStrip: View {
                 var n = Path(); n.move(to: CGPoint(x: x(now), y: mid - 16)); n.addLine(to: CGPoint(x: x(now), y: mid + 16))
                 ctx.stroke(n, with: .color(ink.opacity(0.7)), lineWidth: 1.5)
             }
-            var ph = Path(); ph.move(to: CGPoint(x: w / 2, y: mid - 18)); ph.addLine(to: CGPoint(x: w / 2, y: mid + 20))
-            ctx.stroke(ph, with: .color(ink), lineWidth: 2)
+            let head = window.ink(moments)
+            var ph = Path(); ph.move(to: CGPoint(x: w / 2, y: mid - 18)); ph.addLine(to: CGPoint(x: w / 2, y: size.height))
+            ctx.stroke(ph, with: .color(head), lineWidth: 2)
             // Health's pointer, on the playhead.
             var tri = Path()
             tri.move(to: CGPoint(x: w / 2 - 5, y: mid - 26)); tri.addLine(to: CGPoint(x: w / 2 + 5, y: mid - 26))
             tri.addLine(to: CGPoint(x: w / 2, y: mid - 20)); tri.closeSubpath()
-            ctx.fill(tri, with: .color(ink))
+            ctx.fill(tri, with: .color(head))
         }
         .frame(height: 60)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -559,6 +565,17 @@ struct MenusDetails: View {
             }
         }
         .padding(.horizontal, MenusColumns.page)
+        .padding(.top, 16)
+        // One playhead line through every row, continuing the strip's: in the chart column's middle.
+        .overlay(alignment: .topLeading) {
+            GeometryReader { g in
+                let x0 = MenusColumns.page + MenusColumns.card + MenusColumns.name + MenusColumns.gap
+                let w = g.size.width - 2 * (MenusColumns.page + MenusColumns.card) - MenusColumns.name - MenusColumns.value - 2 * MenusColumns.gap
+                Rectangle().fill(window.ink(events)).frame(width: 2, height: g.size.height)
+                    .offset(x: x0 + w / 2 - 1)
+            }
+            .allowsHitTesting(false)
+        }
         .modifier(MenusWindowGestures(window: $window, width: chartWidth, limits: limits, settle: settle))
     }
 
@@ -585,9 +602,9 @@ struct MenusDetails: View {
                 Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 4)
+            // No card: the rows sit on the page, inset to the same columns as the strip.
             content()
-                .padding(.vertical, 12).padding(.horizontal, MenusColumns.card)
-                .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
+                .padding(.vertical, 4).padding(.horizontal, MenusColumns.card)
         }
     }
 
@@ -627,7 +644,6 @@ struct MenusDetails: View {
                             .interpolationMethod(.catmullRom)
                             .foregroundStyle(ink).lineStyle(StrokeStyle(lineWidth: 1.5))
                     }
-                    RuleMark(x: .value("Playhead", window.center)).foregroundStyle(Color.primary).lineStyle(StrokeStyle(lineWidth: 1.5))
                 }
                 .chartXScale(domain: window.domain)
                 .chartYScale(domain: 0...1)
@@ -661,8 +677,6 @@ struct MenusDetails: View {
                         Circle().fill(m.1).frame(width: 9, height: 9)
                             .position(x: window.x(m.0, width: g.size.width), y: g.size.height / 2)
                     }
-                    Rectangle().fill(Color.primary).frame(width: 1.5, height: g.size.height)
-                        .position(x: g.size.width / 2, y: g.size.height / 2)
                 }
             }
             .frame(height: 28)

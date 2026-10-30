@@ -877,7 +877,6 @@ struct NowHomeView: View {
                             .containerRelativeFrame(.vertical) { h, _ in h - 74 - 150 }
                             Section {
                                 MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle)
-                                    .padding(.top, 16)
                                     .padding(.bottom, 120)   // clear of the tab bar and the +
                             } header: {
                                 MenusStrip(window: $menusWindow, moments: moments,

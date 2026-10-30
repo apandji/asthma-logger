@@ -1,4 +1,5 @@
 import AsthmaCore
+import Charts
 import SwiftUI
 
 // Design crit › App look › Menus (April's Oct 30 sketch): an information-architecture study on top of the
@@ -313,5 +314,181 @@ struct MenusSideMenu: View {
         }
         .foregroundStyle(action == nil ? Color.secondary : Color.primary)
         .disabled(action == nil)
+    }
+}
+
+// MARK: Below the fold
+
+/// Scroll down from Now: the conditions and your logs, broken down over the past week, on one time axis so
+/// they read against each other. Environment: a small area chart per condition, the Health look's category
+/// colours (weather blue, pollutants purple, allergens yellow), your rescue moments as faint orange rules
+/// through every row. Body: inhaler use, what you noted, and what Apple Health will add.
+/// Built from the readings stamped on your moments and baselines; a condition with none says so.
+struct MenusDetails: View {
+    let events: [LogEvent]
+    let now: Date
+    private let cal = Calendar.current
+    private var start: Date { cal.date(byAdding: .day, value: -6, to: cal.startOfDay(for: now))! }
+    private var inWeek: [LogEvent] { events.filter { $0.loggedAt >= start && $0.loggedAt <= now } }
+    private var rescues: [Date] { inWeek.filter { $0.moment == .rescue }.map(\.loggedAt) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            section("Environment", "Outdoor, the past 7 days") {
+                VStack(spacing: 0) {
+                    row("Temperature", Theme.healthBlue, series(.temperature), unit: "°F")
+                    row("Humidity", Theme.healthBlue, series(.humidity), unit: "%")
+                    row("Wind", Theme.healthBlue, series(.windSpeed), unit: "mph")
+                    row("Pressure", Theme.healthBlue, [], unit: "")
+                    row("PM2.5", Theme.healthPurple, series(.pm25), unit: "µg")
+                    row("Ozone", Theme.healthPurple, series(.ozone), unit: "ppb")
+                    row("Pollen", Theme.healthYellow, pollen, unit: "")
+                    row("Flu and illness", Theme.healthYellow, [], unit: "")
+                    axis
+                }
+            }
+            section("Body", "From your logs and Apple Health") {
+                VStack(spacing: 0) {
+                    dots("Inhaler use", inWeek.filter { $0.moment == .rescue || $0.moment == .maintenance }
+                        .map { ($0.loggedAt, $0.moment == .rescue ? Theme.rescue : Theme.standardSoft) })
+                    dots("Felt journal", inWeek.filter { $0.moment == .note || !($0.voiceTranscript ?? "").isEmpty }
+                        .map { ($0.loggedAt, Color.primary) })
+                    empty("Activity", "From Apple Health, not connected yet")
+                    empty("Heart and breathing", "Heart rate and respiratory rate, empty for now")
+                    axis
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    // MARK: Data
+
+    private func series(_ s: Signal) -> [(Date, Double)] {
+        inWeek.compactMap { e in e.conditions?.best(s).map { (e.loggedAt, $0.value) } }
+    }
+
+    /// The highest of tree, grass and weed pollen at each moment.
+    private var pollen: [(Date, Double)] {
+        inWeek.compactMap { e in
+            let v = [Signal.pollenTree, .pollenGrass, .pollenWeed].compactMap { e.conditions?.best($0)?.value }.max()
+            return v.map { (e.loggedAt, $0) }
+        }
+    }
+
+    // MARK: Pieces
+
+    private func section(_ title: String, _ subtitle: String, @ViewBuilder _ content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.title2.weight(.bold))
+                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 4)
+            content()
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
+        }
+    }
+
+    private func label(_ name: String, _ ink: Color?) -> some View {
+        Text(name).font(.subheadline.weight(.semibold)).foregroundStyle(ink ?? .primary)
+            .frame(width: 92, alignment: .leading).lineLimit(2).minimumScaleFactor(0.8)
+    }
+
+    /// One condition: its name, then its week as a soft area in its colour, scaled to its own range (the rows
+    /// compare shapes and timing, not amounts). The latest reading on the right.
+    private func row(_ name: String, _ ink: Color, _ points: [(Date, Double)], unit: String) -> some View {
+        HStack(spacing: 8) {
+            label(name, ink)
+            if points.count >= 2 {
+                let lo = points.map(\.1).min()!, hi = points.map(\.1).max()!
+                Chart {
+                    ForEach(rescues, id: \.self) { r in
+                        RuleMark(x: .value("Rescue", r)).foregroundStyle(Theme.rescue.opacity(0.35)).lineStyle(StrokeStyle(lineWidth: 1))
+                    }
+                    ForEach(points, id: \.0) { p in
+                        AreaMark(x: .value("Time", p.0), yStart: .value("Low", 0), yEnd: .value(name, hi > lo ? (p.1 - lo) / (hi - lo) * 0.8 + 0.2 : 0.5))
+                            .interpolationMethod(.catmullRom)
+                            .foregroundStyle(LinearGradient(colors: [ink.opacity(0.55), ink.opacity(0.12)], startPoint: .top, endPoint: .bottom))
+                        LineMark(x: .value("Time", p.0), y: .value(name, hi > lo ? (p.1 - lo) / (hi - lo) * 0.8 + 0.2 : 0.5))
+                            .interpolationMethod(.catmullRom)
+                            .foregroundStyle(ink).lineStyle(StrokeStyle(lineWidth: 1.5))
+                    }
+                }
+                .chartXScale(domain: start...now)
+                .chartYScale(domain: 0...1)
+                .chartXAxis(.hidden).chartYAxis(.hidden)
+                .frame(height: 36)
+                if let last = points.last {
+                    Text("\(Int(last.1.rounded()))\(unit.isEmpty ? "" : " ")\(unit)")
+                        .font(.caption.weight(.medium).monospacedDigit()).foregroundStyle(.secondary)
+                        .frame(width: 54, alignment: .trailing)
+                }
+            } else {
+                Text(name == "Pressure" || name == "Flu and illness" ? "Not tracked yet" : "No readings this week")
+                    .font(.caption).foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: 36)
+                Color.clear.frame(width: 54, height: 1)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(points.count >= 2 ? "\(name), the past week, latest \(Int(points.last!.1.rounded())) \(unit)" : "\(name), no readings")
+    }
+
+    /// Dots on the week's axis: one per log, in its colour.
+    private func dots(_ name: String, _ marks: [(Date, Color)]) -> some View {
+        HStack(spacing: 8) {
+            label(name, nil)
+            GeometryReader { g in
+                let span = now.timeIntervalSince(start)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.06)).frame(height: 2)
+                    ForEach(Array(marks.enumerated()), id: \.offset) { _, m in
+                        Circle().fill(m.1).frame(width: 9, height: 9)
+                            .offset(x: CGFloat(m.0.timeIntervalSince(start) / span) * (g.size.width - 9))
+                    }
+                }
+                .frame(maxHeight: .infinity)
+            }
+            .frame(height: 28)
+            // The same right margin as the charts' latest readings, so every row shares one time axis.
+            Text(marks.isEmpty ? "None" : "\(marks.count)").font(.caption.weight(.medium).monospacedDigit())
+                .foregroundStyle(marks.isEmpty ? .tertiary : .secondary)
+                .frame(width: 54, alignment: .trailing)
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(name), \(marks.count) this week")
+    }
+
+    private func empty(_ name: String, _ note: String) -> some View {
+        HStack(spacing: 8) {
+            label(name, nil)
+            Text(note).font(.caption).foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Color.clear.frame(width: 54, height: 1)
+        }
+        .padding(.vertical, 10)
+    }
+
+    /// The shared time axis: a day letter under each day.
+    private var axis: some View {
+        HStack(spacing: 8) {
+            Color.clear.frame(width: 92, height: 1)
+            HStack(spacing: 0) {
+                ForEach(0..<7, id: \.self) { i in
+                    let d = cal.date(byAdding: .day, value: i, to: start)!
+                    Text(d.formatted(.dateTime.weekday(.narrow)))
+                        .font(.caption2.weight(cal.isDateInToday(d) ? .bold : .medium))
+                        .foregroundStyle(cal.isDateInToday(d) ? Color.primary : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            Color.clear.frame(width: 54, height: 1)
+        }
+        .padding(.top, 6)
     }
 }

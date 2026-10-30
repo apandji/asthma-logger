@@ -862,10 +862,23 @@ struct NowHomeView: View {
             } else {
                 switch menusScale {
                 case .timeline:
-                    // The Apple Health look's header (tag, sentence, when · where): same visuals, new structure.
-                    header
-                    skyArea
-                    timeline
+                    // The first screen is Now as before (the Apple Health look's header, sky and timeline);
+                    // scrolling down opens the Environment and Body sections in detail.
+                    ScrollView(.vertical) {
+                        VStack(spacing: 0) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                header
+                                skyArea
+                                timeline
+                            }
+                            .containerRelativeFrame(.vertical) { h, _ in h - 74 }
+                            MenusDetails(events: events, now: now)
+                                .padding(.top, 24)
+                                .padding(.bottom, 120)   // clear of the tab bar and the +
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                    .scrollDisabled(scrubbing || probing)
                 case .month:
                     MenusMonthView(moments: moments, now: now)
                 case .year:
@@ -873,7 +886,8 @@ struct NowHomeView: View {
                 }
             }
         }
-        .padding(.bottom, 74)
+        // The scrolling Now page runs under the tab bar; the others stop above it.
+        .padding(.bottom, menusTab == .moments && menusScale == .timeline ? 0 : 74)
     }
 
     /// "Felt something?": log a rescue, then a voice memo (listening) or written symptoms.
@@ -892,7 +906,9 @@ struct NowHomeView: View {
             // The dent is drawn by the sky itself (NowSky), so what sits on top (Self's glass cards) isn't
             // flattened into the shader.
             .environment(\.skyDent, skyDrag != nil && !reduceMotion ? SkyDent(point: skyDrag!.point, press: skyPress) : nil)
-            .gesture(skyScrub)
+            // Menus look: the page scrolls, so the sideways scrub runs alongside it (it ignores vertical drags).
+            .gesture(skyScrub, isEnabled: appLook != .menus)
+            .simultaneousGesture(skyScrub, isEnabled: appLook == .menus)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.top, 4)
     }
@@ -1684,8 +1700,9 @@ struct NowSky: View {
                     // of each other: the rail steps out instead.
                     // Judged on the folded rail: held open, its items are small dots and the stops squeeze to fit
                     // (RailRow.ys), so a short sky (an advice card open) must not hide it mid-touch.
-                    .opacity(railFits(size) ? 1 : 0)
-                    .allowsHitTesting(railFits(size))
+                    // Menus look: the rail gives way to the Environment and Body sections below the fold.
+                    .opacity(railFits(size) && Crit.AppLook.current != .menus ? 1 : 0)
+                    .allowsHitTesting(railFits(size) && Crit.AppLook.current != .menus)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Weather, particles and gases, biologics" + (showsSelf ? ", your voice and your body" : ""))
                     .accessibilityAdjustableAction { dir in

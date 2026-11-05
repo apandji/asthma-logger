@@ -660,7 +660,7 @@ struct MenusDetails: View {
                     row("Humidity", Theme.airHumidity, series(.humidity), unit: "%")
                     row("Wind", Theme.airWeather, series(.windSpeed), unit: "mph")
                     row("Pressure", Theme.airWeather, [], unit: "")
-                    row("PM2.5", Theme.airPM25, series(.pm25), unit: "µg")
+                    row("PM2.5", Theme.airPM25, series(.pm25), unit: "µg/m³")
                     row("Ozone", Theme.airOzone, series(.ozone), unit: "ppb")
                     row("Pollen", Theme.airPollen, pollen, unit: "")
                     row("Flu and illness", Theme.airIllness, [], unit: "")
@@ -729,7 +729,18 @@ struct MenusDetails: View {
     private func valueText(_ s: String, dim: Bool = false) -> some View {
         Text(s).font(.caption.weight(.medium).monospacedDigit())
             .foregroundStyle(dim ? .tertiary : .secondary)
+            .lineLimit(1).minimumScaleFactor(0.7)
             .frame(width: MenusColumns.value, alignment: .trailing)
+    }
+
+    /// How often, in words: counts stay in the data, never on screen.
+    static func howOften(_ n: Int) -> String {
+        switch n {
+        case 0: "None"
+        case 1: "Once"
+        case 2...3: "A few"
+        default: "Often"
+        }
     }
 
     /// The reading nearest the playhead, so the value follows you as you move.
@@ -795,11 +806,11 @@ struct MenusDetails: View {
             }
             .frame(height: 28)
             .clipped()
-            valueText(inView.isEmpty ? "None" : "\(inView.count)", dim: inView.isEmpty)
+            valueText(Self.howOften(inView.count), dim: inView.isEmpty)
         }
         .padding(.vertical, 6)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(name), \(inView.count) in view")
+        .accessibilityLabel("\(name), \(Self.howOften(inView.count).lowercased()) in view")
     }
 
     private func empty(_ name: String, _ note: String) -> some View {

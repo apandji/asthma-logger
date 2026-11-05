@@ -45,6 +45,12 @@ final class LogEvent {
     var tagsReviewed: Bool = false
     /// Active in the hour before (Health workouts, Motion, steps; `Exertion`). Nil: Health and Motion couldn't say.
     var exerted: Bool?
+    /// Which signal said active (`ExertionSource.rawValue`: "workout.walk", "motion.running", "steps"), so the
+    /// moment can say what it came from. Nil when not active, unknown, or stamped before this was kept.
+    var exertedByRaw: String?
+    /// Later, not MVP (`Infection`, `InfectionStamp`): flu-like illness around that day, as
+    /// `InfectionLevel.rawValue`. Nil until stamped: missing, not "low".
+    var infectionRaw: String?
     /// File name of this moment's voice note in Documents/VoiceNotes (audio stays on the phone).
     var voiceNoteFile: String?
     /// "University City, MO", looked up once from the coordinates.
@@ -91,6 +97,16 @@ final class LogEvent {
         indoorConfirmedRaw.flatMap(IndoorOutdoor.init(rawValue:)) ?? indoorGuess
     }
 
+    var exertedBy: ExertionSource? {
+        get { exertedByRaw.flatMap(ExertionSource.init(rawValue:)) }
+        set { exertedByRaw = newValue?.rawValue }
+    }
+
+    var infection: InfectionLevel? {
+        get { infectionRaw.flatMap(InfectionLevel.init(rawValue:)) }
+        set { infectionRaw = newValue?.rawValue }
+    }
+
     var tags: Set<JournalTag> {
         get { Set(TagExtraction.sanitize(tagsRaw)) }
         set { tagsRaw = newValue.sorted().map(\.rawValue) }
@@ -116,7 +132,8 @@ final class LogEvent {
         guard !isDemo, moment.frameKind != nil, let c = conditions, c.input.hasAnyValue else { return nil }
         return FrameBuilder.frame(
             id: id.uuidString, kind: kind, date: loggedAt, calendar: calendar, conditions: c.input,
-            place: nil, indoorOutdoor: indoorOutdoor, tags: tags, tagsReviewed: tagsReviewed, exerted: exerted
+            place: nil, indoorOutdoor: indoorOutdoor, tags: tags, tagsReviewed: tagsReviewed, exerted: exerted,
+            infection: infection
         )
     }
 }

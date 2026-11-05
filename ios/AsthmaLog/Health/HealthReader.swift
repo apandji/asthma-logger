@@ -1,3 +1,4 @@
+import AsthmaCore
 import Foundation
 import HealthKit
 
@@ -65,21 +66,50 @@ final class HealthReader {
     /// For the exertion bin (Exertion): a workout overlapping the hour before, and steps in the 30 minutes
     /// before. iOS never says whether reads were allowed, so "no data at all in the six hours before" reads
     /// as unknown (nil), not "not active".
-    func activity(before date: Date) async -> (workout: Bool?, steps: Int?) {
-        guard isAvailable, !(await shouldAsk()) else { return (nil, nil) }
+    /// `kind` is the workout's kind, for the moment's line ("a walk"); `note` says what came back, for
+    /// Settings › Exertion check.
+    func activity(before date: Date) async -> (workout: Bool?, kind: ExertionSource.WorkoutKind?, steps: Int?, note: String) {
+        guard isAvailable else { return (nil, nil, nil, "Health isn't available on this device.") }
+        guard !(await shouldAsk()) else { return (nil, nil, nil, "Health hasn't been asked yet.") }
         let hour = HKQuery.predicateForSamples(withStart: date.addingTimeInterval(-3600), end: date)
-        let w = HKSampleQueryDescriptor(predicates: [.workout(hour)], sortDescriptors: [], limit: 1)
-        let workout = ((try? await w.result(for: store)) ?? []).isEmpty == false
+        let w = HKSampleQueryDescriptor(predicates: [.workout(hour)], sortDescriptors: [SortDescriptor(\.endDate, order: .reverse)], limit: 1)
+        let found = (try? await w.result(for: store))?.first
+        let workout = found != nil
         let six = HKQuery.predicateForSamples(withStart: date.addingTimeInterval(-6 * 3600), end: date)
         let any = HKSampleQueryDescriptor(predicates: [.quantitySample(type: HKQuantityType(.stepCount), predicate: six)],
                                           sortDescriptors: [], limit: 1)
         let hasSteps = ((try? await any.result(for: store)) ?? []).isEmpty == false
-        guard hasSteps || workout else { return (nil, nil) }
+        guard hasSteps || workout else {
+            return (nil, nil, nil, "No steps or workouts in the 6 hours before (not shared, or no data), so Health can't say.")
+        }
         let half = HKQuery.predicateForSamples(withStart: date.addingTimeInterval(-1800), end: date)
         let sum = HKStatisticsQueryDescriptor(predicate: .quantitySample(type: HKQuantityType(.stepCount), predicate: half),
                                               options: .cumulativeSum)
-        let steps = (try? await sum.result(for: store))?.sumQuantity()?.doubleValue(for: .count()) ?? 0
-        return (workout, Int(steps))
+        let steps = Int((try? await sum.result(for: store))?.sumQuantity()?.doubleValue(for: .count()) ?? 0)
+        let kind = found.map { Self.kind($0.workoutActivityType) }
+        var note = "\(steps) steps in the 30 min before."
+        if let found {
+            let t = found.startDate.formatted(date: .omitted, time: .shortened) + "–" + found.endDate.formatted(date: .omitted, time: .shortened)
+            note += " Workout \(t): \(kind?.words ?? "a workout") (\(Int(found.duration / 60)) min)."
+        } else {
+            note += " No workout in the hour before."
+        }
+        return (workout, kind, steps, note)
+    }
+
+    static func kind(_ t: HKWorkoutActivityType) -> ExertionSource.WorkoutKind {
+        switch t {
+        case .running: .run
+        case .walking: .walk
+        case .hiking: .hike
+        case .cycling: .bikeRide
+        case .swimming: .swim
+        case .soccer, .basketball, .americanFootball, .tennis, .hockey, .rugby: .game
+        case .traditionalStrengthTraining, .functionalStrengthTraining, .highIntensityIntervalTraining, .crossTraining: .strength
+        case .yoga, .pilates: .classSession
+        case .stairClimbing, .stairs: .stairs
+        default: .other
+        }
     }
 
     /// A workout that ended in the two hours before, by kind and length, in words.

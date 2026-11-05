@@ -42,6 +42,8 @@ public enum TheRead {
         case ("heat_alert", "yes"): "A heat alert"
         case ("temp_drop", "yes"): "A sharp temperature drop"
         case ("exertion", "yes"): "Being active"
+        case ("ili", "high"): "Flu-like illness going around"
+        case ("ili", "moderate"): "Some flu-like illness around"
         case ("hour", let part): "The \(part)"
         case ("indoor_outdoor", let io): io == "indoor" ? "Being indoors" : "Being outdoors"
         case (let b, _) where b.hasPrefix("tag_"): Bins.label(b)
@@ -156,6 +158,12 @@ public enum TheRead {
         return out
     }
 
+    /// The bin a factor's name came from ("Heat" → "temp"), so a tip can open its family in Insights.
+    public static func bin(ofFactor name: String) -> String? {
+        if name == noun("temp_drop", "yes") { return "temp_drop" }
+        return markable.first { noun($0.0, $0.1) == name }?.0
+    }
+
     /// The first marked thing in a sentence. Nil when the sentence isn't one of ours.
     public static func factor(in sentence: String) -> String? { factors(in: sentence).first?.factor }
 
@@ -169,16 +177,27 @@ public enum TheRead {
     /// What the sentence had no room for, plainly: "Fine particles and tree pollen were high too." Nil when
     /// there's nothing more. Never marked: a third pattern still has its dot on the rail and its row in Insights.
     public static func tooLine(_ clauses: [Clause], time: Time) -> String? {
-        let rest = clauses.dropFirst(2).map { subject(of: $0.text) }
-        guard !rest.isEmpty else { return nil }
-        let list = rest.count == 1 ? rest[0] : rest.dropLast().joined(separator: ", ") + " and " + rest.last!
-        let plural = rest.count > 1 || list.hasSuffix("particles")
-        let verb: String = switch time {
-        case .back: plural ? "were" : "was"
-        case .now: plural ? "are" : "is"
-        case .ahead: plural ? "look" : "looks"
+        let all = clauses.dropFirst(2).map { subject(of: $0.text) }
+        guard !all.isEmpty else { return nil }
+        // An alert isn't "high": it's there or not. "There was also a heat alert."
+        let events = all.filter { $0.hasPrefix("a ") || $0.hasPrefix("an ") }
+        let rest = all.filter { !events.contains($0) }
+        let join = { (xs: [String]) in xs.count == 1 ? xs[0] : xs.dropLast().joined(separator: ", ") + " and " + xs.last! }
+        var out: [String] = []
+        if !rest.isEmpty {
+            let list = join(rest)
+            let plural = rest.count > 1 || list.hasSuffix("particles")
+            let verb: String = switch time {
+            case .back: plural ? "were" : "was"
+            case .now: plural ? "are" : "is"
+            case .ahead: plural ? "look" : "looks"
+            }
+            out.append(list.prefix(1).uppercased() + list.dropFirst() + " \(verb) high too.")
         }
-        return list.prefix(1).uppercased() + list.dropFirst() + " \(verb) high too."
+        if !events.isEmpty {
+            out.append((time == .back ? "There was also " : "There's also ") + join(events) + ".")
+        }
+        return out.joined(separator: " ")
     }
 
     /// "Fine particles were high." → "fine particles"; "It was hot." → "heat".
@@ -253,7 +272,8 @@ public enum TheRead {
     /// The sentence for Now or Ahead.
     /// - `shared`: from `shared(_:rows:)` (empty before felt air has learned).
     /// - `notable`: what's at a high level, as present-tense clauses ("weed pollen is high"), for before it has learned.
-    /// - `looksLikeFlare`: unused since the verdict moved to the pill alone (kept so callers needn't change).
+    /// - `looksLikeFlare`: the pill says this hour looks like your flare days. The sentence still never repeats
+    ///   it, but it mustn't contradict it either: with nothing to name, it says no single reading stands out.
     public static func sentence(time: Time, learned: Bool, event: AirAdvice.Event?, fallF: Double?, fires: WildfiresNearby? = nil,
                                 shared: [LiftRow], notable: [String], looksLikeFlare: Bool = false) -> String {
         var parts: [String] = []
@@ -286,7 +306,7 @@ public enum TheRead {
             } else if event == nil, let n = notable.first {
                 parts.append("\(when): \(n).")
             } else if event == nil {
-                parts.append("\(when): nothing in the forecast stands out.")
+                parts.append(looksLikeFlare ? "\(when): no single reading stands out." : "\(when): nothing in the forecast stands out.")
             }
         }
         return parts.joined(separator: " ")

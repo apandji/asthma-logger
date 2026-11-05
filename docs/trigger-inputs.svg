@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900">
+  <!-- What a press collects, and where it goes. Updated Oct 23, 2026 from the old "trigger + API + personal" slide. -->
+  <style>
+    .bg { fill: #000; }
+    .box { fill: #000; stroke: #fff; stroke-width: 1.5; }
+    .tab { fill: #fff; }
+    .head { font: 600 24px "SF Mono", Menlo, monospace; fill: #000; letter-spacing: 1px; }
+    .item { font: 30px -apple-system, "Helvetica Neue", Helvetica, sans-serif; fill: #fff; }
+    .src { font: 18px "SF Mono", Menlo, monospace; fill: #8a8a8a; }
+    .later { font: 26px -apple-system, "Helvetica Neue", Helvetica, sans-serif; fill: #6b6b6b; }
+    .note { font: 20px -apple-system, "Helvetica Neue", Helvetica, sans-serif; fill: #8a8a8a; }
+    .sym { font: 300 64px -apple-system, Helvetica, sans-serif; fill: #fff; }
+    .arrow { stroke: #fff; stroke-width: 2.5; fill: none; }
+    .yours { fill: #C46016; }
+  </style>
+  <rect class="bg" width="1600" height="900"/>
+  <defs>
+    <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#fff"/>
+    </marker>
+  </defs>
+
+  <!-- PRESS: the three ways to log -->
+  <g transform="translate(60 150)">
+    <rect class="box" width="300" height="250" rx="22"/>
+    <path class="tab" d="M22 0 H278 A22 22 0 0 1 300 22 V56 H0 V22 A22 22 0 0 1 22 0 Z"/>
+    <text class="head" x="26" y="38">PRESS</text>
+    <text class="item" x="26" y="106">felt button</text>
+    <text class="item" x="26" y="156">Apple Watch</text>
+    <text class="item" x="26" y="206">+ in the app</text>
+    <text class="src" x="0" y="290">Rescue or Standard</text>
+  </g>
+
+  <path class="arrow" d="M372 275 H418" marker-end="url(#head)"/>
+
+  <!-- TRIGGER: stamped on every press -->
+  <g transform="translate(430 150)">
+    <rect class="box" width="290" height="250" rx="22"/>
+    <path class="tab" d="M22 0 H268 A22 22 0 0 1 290 22 V56 H0 V22 A22 22 0 0 1 22 0 Z"/>
+    <text class="head" x="26" y="38">TRIGGER</text>
+    <text class="item" x="26" y="106">time</text>
+    <text class="item" x="26" y="156">place</text>
+    <text class="item" x="26" y="206">indoors / out</text>
+    <text class="src" x="0" y="290">home, work, places you go</text>
+  </g>
+
+  <text class="sym" x="752" y="296">+</text>
+
+  <!-- API: the outdoor air, stamped automatically -->
+  <g transform="translate(830 70)">
+    <rect class="box" width="360" height="420" rx="22"/>
+    <path class="tab" d="M22 0 H338 A22 22 0 0 1 360 22 V56 H0 V22 A22 22 0 0 1 22 0 Z"/>
+    <text class="head" x="26" y="38">OUTDOOR AIR</text>
+    <text class="item" x="26" y="106">air quality</text>
+    <text class="src" x="26" y="132">OpenAQ · AirNow</text>
+    <text class="item" x="26" y="180">weather</text>
+    <text class="src" x="26" y="206">WeatherKit</text>
+    <text class="item" x="26" y="254">humidity · cold snap</text>
+    <text class="item" x="26" y="310">pollen</text>
+    <text class="src" x="26" y="336">Ambee (coming)</text>
+    <text class="item" x="26" y="384">smoke · heat alerts</text>
+  </g>
+  <text class="later" x="856" y="530">later: mold, colds and flu</text>
+
+  <!-- PERSONAL: what only you or your phone know -->
+  <g transform="translate(830 580)">
+    <rect class="box" width="360" height="230" rx="22"/>
+    <path class="tab" d="M22 0 H338 A22 22 0 0 1 360 22 V56 H0 V22 A22 22 0 0 1 22 0 Z"/>
+    <text class="head" x="26" y="38">PERSONAL</text>
+    <text class="item" x="26" y="106">activity</text>
+    <text class="src" x="26" y="132">Health · Motion</text>
+    <text class="item" x="26" y="180">voice note</text>
+    <text class="src" x="26" y="206">tags you confirm</text>
+  </g>
+  <text class="later" x="856" y="850">later: photos of the day</text>
+
+  <path class="arrow" d="M1206 440 H1262" marker-end="url(#head)"/>
+
+  <!-- OUT: compared with normal days, gives your pattern and a heads-up -->
+  <g transform="translate(1274 250)">
+    <rect class="box" width="290" height="380" rx="22"/>
+    <path class="tab" d="M22 0 H268 A22 22 0 0 1 290 22 V56 H0 V22 A22 22 0 0 1 22 0 Z"/>
+    <text class="head" x="26" y="38">FELT AIR</text>
+    <text class="src" x="26" y="96">compared with</text>
+    <text class="item" x="26" y="136">normal days</text>
+    <line x1="26" y1="170" x2="264" y2="170" stroke="#444" stroke-width="1.5"/>
+    <rect class="yours" x="20" y="196" width="196" height="44" rx="4" opacity="0.85"/>
+    <text class="item" x="26" y="230">your pattern</text>
+    <text class="item" x="26" y="290">heads-up</text>
+    <text class="src" x="26" y="316">8 am, days that look</text>
+    <text class="src" x="26" y="340">like your flare days</text>
+  </g>
+  <text class="note" x="1274" y="670">Your logs stay on your phone.</text>
+  <text class="note" x="1274" y="698">Not medical advice.</text>
+</svg>

@@ -12,6 +12,8 @@ struct CategoryCard: View {
     let starred: Set<String>
     let selected: Bool
     let expanded: Bool
+    /// The bin a pattern tip opened Insights on: its row is marked so the eye lands on it.
+    var highlight: String? = nil
     let toggle: () -> Void
     /// The starred one first, whatever its strength word says.
     private var ordered: [AirProfile.Trigger] {
@@ -58,11 +60,11 @@ struct CategoryCard: View {
                 HStack(spacing: 5) {
                     if let r = t.row, starred.contains(r.id) {
                         Image(systemName: "star.fill").font(.caption2)
-                            .foregroundStyle(WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
+                            .foregroundStyle(Crit.RiskColor.familiesInInk ? Verdict.red : WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
                             .accessibilityLabel("Leads your profile")
                     } else if let r = t.row, t.strength == .strong || t.strength == .some {
                         // Your pattern, in the same ink as the page's wash and the radar.
-                        Circle().fill(WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
+                        Circle().fill(Crit.RiskColor.familiesInInk ? Verdict.red : WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
                             .frame(width: 8, height: 8).accessibilityHidden(true)
                     }
                     Text(t.name).font(.subheadline)
@@ -74,6 +76,12 @@ struct CategoryCard: View {
                 .foregroundStyle(t.strength == .strong || t.strength == .some ? Color.primary : Theme.secondaryText)
         }
         .padding(.leading, 20)
+        .padding(.vertical, highlight != nil && t.row?.bin == highlight ? 6 : 0)
+        .background {
+            if let h = highlight, t.row?.bin == h {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.08)).padding(.leading, 8)
+            }
+        }
     }
 }
 
@@ -167,7 +175,7 @@ struct ProfileHistoryView: View {
                 .frame(width: 72, height: 72)
             VStack(alignment: .leading, spacing: 3) {
                 Text(label).font(.caption).foregroundStyle(Theme.secondaryText)
-                Text(Archetype.name(s.kind)).font(.body.weight(.medium))
+                Text(s.title).font(.body.weight(.medium))
             }
             Spacer(minLength: 0)
         }

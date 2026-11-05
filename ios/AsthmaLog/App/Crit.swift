@@ -120,6 +120,60 @@ enum Crit {
         static let key = "crit.inks"
     }
 
+    /// Weather on the rail (docs/design/weather-grouping.md): one stop, or three items by what the weather does
+    /// (cold, dry air; heat and humidity; sudden change), all in Weather's ink.
+    enum WeatherRail: String, CaseIterable, Identifiable {
+        case oneStop, facets
+        var id: String { rawValue }
+        var title: String { self == .oneStop ? "One stop" : "By what it does (three items)" }
+        static let key = "crit.weatherRail"
+        static var byFacet: Bool { UserDefaults.standard.string(forKey: key) == WeatherRail.facets.rawValue }
+    }
+
+    /// How risk ("looks like your flare days") is coloured (docs/design/risk-color.md): today's green, gold and
+    /// red; A one warm ink (graphite → orange → bright orange) and nothing else warm; A + D the warm ink with the
+    /// driving family's mark shape on the forecast; C no hue, a grey-to-white ramp and more marks per hour; E cool
+    /// hues for the families and a warm status scale for risk.
+    enum RiskColor: String, CaseIterable, Identifiable {
+        case today, warmInk, warmTexture, coverage, twoPalettes
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .today: "Today: green, gold, red"
+            case .warmInk: "A · One warm ink"
+            case .warmTexture: "A + D · Warm ink + texture"
+            case .coverage: "C · Coverage, no hue"
+            case .twoPalettes: "E · Two palettes"
+            }
+        }
+        static let key = "crit.riskColor"
+        // The default since Oct 21 (owner): one warm ink, with the family's mark shape on the forecast.
+        static let proposal = RiskColor.warmTexture
+        static var current: RiskColor { UserDefaults.standard.string(forKey: key).flatMap(RiskColor.init) ?? proposal }
+        /// A or A + D: orange is risk and nothing else is warm.
+        static var warm: Bool { current == .warmInk || current == .warmTexture }
+        /// Air levels (good / OK / not good) lose their colour and read in white: A, A + D and C.
+        static var levelsInWhite: Bool { warm || current == .coverage }
+        /// Families say *which* with icons, names and texture, not hue (A, A + D, C): the rail, the cards, the radar,
+        /// moment details. The sky's particles keep their inks.
+        static var familiesInInk: Bool { warm || current == .coverage }
+    }
+
+    /// How Insights says where cold (or heat) starts for you (docs/design/risk-color.md): a sentence with the number, words
+    /// only, or the dots it came from. A crit for the "no numbers on screen" rule.
+    enum PersonalEdgeStyle: String, CaseIterable, Identifiable {
+        case sentence, words, dots
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .sentence: "Sentence with the number"
+            case .words: "Words only"
+            case .dots: "The dots it came from"
+            }
+        }
+        static let key = "crit.personalEdge"
+    }
+
     /// The page: black (ink on night) or linen, a warm off-white paper that suits the riso grain.
     /// The whole app dressed as an Apple Health feature: grouped grey background, SF type (bold sentence),
     /// a Health-style tab bar at the bottom (Insights, and a slot still to be decided) beside the +, and the

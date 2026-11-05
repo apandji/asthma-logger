@@ -27,11 +27,26 @@ struct SkyProbe: Equatable {
     /// The 48 hours before, as lines: temperature and humidity for Weather, the pollutant's own hours
     /// for PM2.5 and ozone. Filled in by the sky once its history has loaded.
     var lines: [SparkSeries] = []
+    /// How much this reading is one of yours right now (1 often, 0.65 sometimes), nil when it isn't or nothing is
+    /// learned yet. With families in ink it decides the colour: orange when yours, ink when not.
+    var yours: Double? = nil
+
+    /// The colour to draw this reading with: the risk highlight when it's yours (paler for "sometimes"), plain ink
+    /// otherwise, when families are in ink; the layer's own ink under the older palettes.
+    var ink: Color {
+        guard Crit.RiskColor.familiesInInk else { return color }
+        // A concrete ink, not `.primary`, which glass mutes to grey.
+        let plain = Color(uiColor: .label)
+        guard let y = yours else { return plain }
+        return plain.mix(with: Verdict.red, by: 0.55 + 0.45 * y)
+    }
 
     /// What the highlight is tinted with: the level, in the same three colors as the verdict line
     /// (good green, OK yellow, not good red). The layer's own ink stays in the sky; its name is in the label.
     var levelInk: Color {
-        switch level {
+        // With the warm risk ink, amounts are white: orange means "like your flare days" and nothing else.
+        if Crit.RiskColor.levelsInWhite { return .white }
+        return switch level {
         case .low?: Verdict.green
         case .medium?: Verdict.yellow
         case .high?: Verdict.red
@@ -44,12 +59,49 @@ struct SkyProbe: Equatable {
 enum Verdict {
     // Riso: Green, a gold-orange (not yellow: that's pollen's), Bright Red. On linen each prints a step deeper,
     // like the three air inks, so the set holds at one weight on either paper (owner, Oct 18).
-    static var green: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0x1E8E52 : 0x00A95C) : Color(red: 0.36, green: 0.80, blue: 0.47) }
-    static var yellow: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xE39A2A : 0xF2A93B) : Color(red: 0.98, green: 0.80, blue: 0.25) }
-    static var red: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xD63B4C : 0xF15060) : Color(red: 1.0, green: 0.36, blue: 0.32) }
+    // Risk colour crit: one warm ink. Baseline-like is graphite (no ink), then orange, then bright orange
+    // (validated ordinal ramp, docs/design/risk-color.md).
+    // C: no hue, a grey ramp to paper white. E: a warm status scale (grey, amber, red) beside cool family hues.
+    static var green: Color {
+        switch Crit.RiskColor.current {
+        case .warmInk, .warmTexture: WeatherColor.hex(WeatherColor.onLinen ? 0xD8CFC2 : 0x3A332C)
+        case .coverage: WeatherColor.hex(WeatherColor.onLinen ? 0xCFCAC2 : 0x3A3833)
+        case .twoPalettes: WeatherColor.hex(0x5E5A54)
+        case .today: todayGreen
+        }
+    }
+    static var yellow: Color {
+        switch Crit.RiskColor.current {
+        case .warmInk, .warmTexture: WeatherColor.hex(0xC46016)
+        case .coverage: WeatherColor.hex(0x8E8A82)
+        case .twoPalettes: WeatherColor.hex(0xE39A2A)
+        case .today: todayYellow
+        }
+    }
+    static var red: Color {
+        switch Crit.RiskColor.current {
+        case .warmInk, .warmTexture: WeatherColor.hex(WeatherColor.onLinen ? 0xE0791F : 0xFF9D36)
+        case .coverage: WeatherColor.hex(WeatherColor.onLinen ? 0x1E1A16 : 0xF5F2EC)
+        case .twoPalettes: WeatherColor.hex(0xD63B4C)
+        case .today: todayRed
+        }
+    }
+    /// A connection or "learned" dot: a status, not risk, so it never follows the risk ink.
+    static var connected: Color { todayGreen }
+
+    private static var todayGreen: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0x1E8E52 : 0x00A95C) : Color(red: 0.36, green: 0.80, blue: 0.47) }
+    private static var todayYellow: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xE39A2A : 0xF2A93B) : Color(red: 0.98, green: 0.80, blue: 0.25) }
+    private static var todayRed: Color { WeatherColor.riso ? WeatherColor.hex(WeatherColor.onLinen ? 0xD63B4C : 0xF15060) : Color(red: 1.0, green: 0.36, blue: 0.32) }
 
     /// The ink to write on a verdict with: white on green and red (black fails on both), black on the gold.
-    static func text(on tint: Color) -> Color { tint == yellow ? .black : .white }
+    /// With the warm ink: black on bright orange, white on orange; graphite takes white (linen's pale one, black).
+    static func text(on tint: Color) -> Color {
+        switch Crit.RiskColor.current {
+        case .warmInk, .warmTexture: return tint == red || (tint == green && WeatherColor.onLinen) ? .black : .white
+        case .coverage: return WeatherColor.onLinen ? (tint == red ? .white : .black) : (tint == red ? .black : .white)
+        case .twoPalettes, .today: return tint == yellow ? .black : .white
+        }
+    }
 }
 
 enum SkyExplorer {
@@ -139,6 +191,28 @@ enum SkyExplorer {
         var p = SkyProbe(name: name, kind: kind(name, pollen), value: v, unit: unit,
                          level: layer.level, note: note(name), color: layer.color, intensity: position)
         p.before = lookBack(name, conditions)
+        return p
+    }
+
+    /// One of Weather's three items (Design crit › Weather on the rail), by its title. The word says which way
+    /// the weather is pushing; the large reading is the temperature, or the fall for Sudden change. No level:
+    /// weather gets plain words, never Good / OK / Not good.
+    static func facetProbe(_ title: String, conditions: Conditions?, temperatureF: Double?) -> SkyProbe? {
+        guard let facet = WeatherFacet.allCases.first(where: { $0.title == title }) else { return nil }
+        let h = conditions?.best(.humidity)?.value, fall = conditions?.tempFallF
+        let word = facet.word(temperatureF: temperatureF, humidityPct: h, tempFallF: fall)
+        let amount = facet.amount(temperatureF: temperatureF, humidityPct: h, tempFallF: fall)
+        let humidity = h.map { "\(Int($0.rounded()))% humidity." }
+        let (value, unit, note): (String, String, String?) = switch facet {
+        case .change:
+            (fall.map { "\(Int(max(0, $0).rounded()))" } ?? "–", "°F fell in 3 h", "Fronts and storms will join this when they're read.")
+        case .coldDry, .heatHumid:
+            (temperatureF.map { "\(Int($0.rounded()))" } ?? "–", "°F", humidity)
+        }
+        var p = SkyProbe(name: facet.title, kind: word, value: value, unit: unit, level: nil, note: note ?? "",
+                         color: WeatherColor.weatherInk, intensity: amount,
+                         symbol: facet == .change ? Icons.tempDrop : facet == .coldDry ? "thermometer.snowflake" : "thermometer.sun")
+        p.before = facet == .change ? lookBack("Weather", conditions) : []
         return p
     }
 
@@ -247,14 +321,14 @@ struct SkyProbeOverlay: View {
             if showsGlow, let band {
                 // One regional reading: the layer lights up edge to edge, not a spot.
                 Rectangle()
-                    .fill(LinearGradient(colors: [.clear, probe.color.opacity(0.4), probe.color.opacity(0.4), .clear],
+                    .fill(LinearGradient(colors: [.clear, probe.ink.opacity(0.4), probe.ink.opacity(0.4), .clear],
                                          startPoint: .top, endPoint: .bottom))
                     .frame(width: width, height: band.upperBound - band.lowerBound)
                     .blur(radius: 8)
                     .position(x: width / 2, y: (band.lowerBound + band.upperBound) / 2)
             } else if showsGlow {
             Circle()
-                .fill(RadialGradient(colors: [probe.color.opacity(0.5), probe.color.opacity(0.15), .clear],
+                .fill(RadialGradient(colors: [probe.ink.opacity(0.5), probe.ink.opacity(0.15), .clear],
                                      center: .center, startRadius: 0, endRadius: 80))
                 .frame(width: 160, height: 160)
                 .blur(radius: 6)
@@ -284,7 +358,7 @@ struct SkyProbeOverlay: View {
                     Text(probe.name)
                 } icon: {
                     // The connection to the field: this is the ink of the particles you're reading.
-                    Image(systemName: probe.symbol ?? SkyExplorer.icon(probe.name)).foregroundStyle(probe.level == nil ? .primary : probe.color)
+                    Image(systemName: probe.symbol ?? SkyExplorer.icon(probe.name)).foregroundStyle(probe.level == nil ? .primary : probe.ink)
                 }
                 .font(.subheadline.weight(.semibold))
                 Text(probe.kind).font(.caption).foregroundStyle(Theme.secondaryText)
@@ -296,7 +370,7 @@ struct SkyProbeOverlay: View {
                 Spacer(minLength: 8)
                 if let level = probe.level {
                     VStack(alignment: .trailing, spacing: 4) {
-                        AmountDots(level: level, ink: probe.color)
+                        AmountDots(level: level, ink: probe.ink)
                         Text(Tier(level).word).font(.caption2.weight(.semibold))
                     }
                 }
@@ -381,7 +455,8 @@ enum RailGroup: String, CaseIterable {
     /// The sky's layers inside the group, in a fixed order.
     var items: [String] {
         switch self {
-        case .weather: []
+        // Design crit › Weather on the rail: three items by what the weather does (weather-grouping.md).
+        case .weather: Crit.WeatherRail.byFacet ? WeatherFacet.allCases.map(\.title) : []
         case .particles: ["PM2.5", "PM10", "Ozone", "NO₂"]
         case .biologics: ["Tree pollen", "Grass pollen", "Weed pollen"]
         }
@@ -404,7 +479,8 @@ enum RailRow: Hashable {
         var out: [RailRow] = []
         for g in RailGroup.allCases {
             out.append(.header(g))
-            if expanded { out += g.items.filter(present.contains).map { .item($0) } }
+            // Weather's items read the weather itself, so they're always there.
+            if expanded { out += g.items.filter { g == .weather || present.contains($0) }.map { .item($0) } }
         }
         if includesSelf { out += [.voice, .body] }
         return out
@@ -424,6 +500,8 @@ enum RailRow: Hashable {
     /// height: the stops stay put as the header grows and shrinks above. Only when the sky is shorter than
     /// the reference, the rail keeps its size and draws over what's above (no longer compressed).
     static let reference: CGFloat = 520
+    /// From the sky's bottom edge to the lowest stop.
+    static let bottomGap: CGFloat = 70
 
     /// Row centres in points, bottom-anchored.
     static func ys(_ rows: [RailRow], in height: CGFloat) -> [CGFloat] { ys(count: rows.count, in: height) }
@@ -432,8 +510,10 @@ enum RailRow: Hashable {
         // Never compressed (owner, Oct 18: "it should stay consistent and on top of everything"): the column is
         // the same size, the same distance from the bottom, whatever the sky's height. A short sky (a long
         // sentence, a card) lets the top of the rail rise over the header instead of squeezing it.
-        let base = reference
-        return mids(count: count).map { height - (1 - CGFloat($0)) * base }
+        // The last stop sits a fixed gap above the sky's bottom (owner, Oct 23: anchor it low so it never fights
+        // the cards above); the column grows upward from there.
+        let base = reference, m = mids(count: count), last = CGFloat(m.last ?? 0.5)
+        return m.map { height - bottomGap - (last - CGFloat($0)) * base }
     }
 
     /// The name tag beside the thumb.
@@ -449,7 +529,7 @@ enum RailRow: Hashable {
     /// Whether this row has a reading to show (group headers only name themselves).
     var reads: Bool {
         switch self {
-        case .header(let g): g.items.isEmpty   // Weather reads; Pollutants and Allergens just name.
+        case .header(let g): g == .weather || g.items.isEmpty   // Weather reads; Pollutants and Allergens just name.
         case .item, .voice, .body: true
         }
     }
@@ -467,6 +547,8 @@ struct GroupRail: View {
     var weatherInk: Color? = nil
     /// Print: how far the weather is from mild (0…1), for the Weather stop's fill.
     var weatherAmount: Double = 0
+    /// Design crit › Weather on the rail: each of Weather's items (by title) and how much of it there is (0…1).
+    var weatherFacets: [String: Double] = [:]
     /// The moment wants a note: Voice wears a small dot.
     var voiceBadge = false
     /// Families the read marks as patterns: their icon wears a small dot (the sentence's underline, here).
@@ -493,23 +575,28 @@ struct GroupRail: View {
     }
 
     private func amount(_ name: String) -> Double {
+        if let f = weatherFacets[name] { return f }
         guard let l = layers.readable.first(where: { ($0.name == "Air" ? "PM2.5" : $0.name) == name }), !l.empty else { return 0 }
         return (Double(l.level.rawValue) + l.fraction) / 3
     }
 
     /// Print: the key never changes hue. Each family's ink, full when something's in the air, faint when not.
     private func groupInk(_ g: RailGroup) -> Color? {
-        // Apple Health look: Health's blue, purple and yellow for weather, pollutants and allergens.
+        // Health-based looks: the air inks, as in the cube.
         if Crit.AppLook.current.healthLike {
             return g == .weather ? Theme.airWeather.deep : g == .particles ? Theme.airPM25.deep : Theme.airPollen.deep   // the air inks, as in the cube
+        }
+        if Crit.RiskColor.familiesInInk {
+            let has = g == .weather ? max(weatherAmount, weatherFacets.values.max() ?? 0) : (g.items.map(amount).max() ?? 0)
+            return Color.primary.opacity(has > 0 ? 1 : 0.38)
         }
         if WeatherColor.print {
             let has: Double
             switch g {
-            case .weather: has = weatherAmount
+            case .weather: has = max(weatherAmount, weatherFacets.values.max() ?? 0)
             default: has = g.items.map(amount).max() ?? 0
             }
-            let ink: Color = g == .weather ? WeatherColor.amber : g == .particles ? WeatherColor.aqua : WeatherColor.gold
+            let ink: Color = g == .weather ? WeatherColor.weatherInk : g == .particles ? WeatherColor.aqua : WeatherColor.gold
             return ink.opacity(has > 0 ? 1 : 0.38)
         }
         if g == .weather { return weatherInk.map(legible) }
@@ -535,14 +622,16 @@ struct GroupRail: View {
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.5) } }
                 .overlay(alignment: .topTrailing) {
                     if patterns.contains(g) && !on {
-                        Circle().fill(Color.primary.opacity(0.85)).frame(width: 6, height: 6).offset(x: -1, y: 3)
+                        // One of your patterns: the risk highlight, where families are in ink.
+                        Circle().fill(Crit.RiskColor.familiesInInk ? Verdict.red : Color.primary.opacity(0.85)).frame(width: 6, height: 6).offset(x: -1, y: 3)
                     }
                 }
                 .accessibilityLabel(patterns.contains(g) ? "\(g.title), often on your flare days" : g.title)
         case .item(let name):
             // A dot: bigger when there's more of it.
             let d = 5 + 7 * CGFloat(amount(name))
-            Circle().fill(amount(name) > 0 ? legible(WeatherColor.ink(for: name)) : Color.primary.opacity(on ? 0.95 : 0.4))
+            let ink = Crit.RiskColor.familiesInInk ? Color.primary : weatherFacets[name] != nil ? WeatherColor.weatherInk : legible(WeatherColor.ink(for: name))
+            Circle().fill(amount(name) > 0 ? ink : Color.primary.opacity(on ? 0.95 : 0.4))
                 .frame(width: on ? d + 3 : d, height: on ? d + 3 : d)
                 .frame(width: 30, height: 18)
                 .background { if on { Circle().strokeBorder(Color.primary.opacity(0.8), lineWidth: 1.2).frame(width: 20, height: 20) } }
@@ -613,25 +702,41 @@ struct StrataScale: View {
 struct GroupSummary: View {
     let group: RailGroup
     let layers: AirLayers
+    /// What's yours right now, by layer name (`NowHomeView.yours`): those rows light up orange.
+    var yours: [String: Double] = [:]
+    @Environment(\.colorScheme) private var scheme
+
+    /// Glass mutes `.primary` to a grey, so the dots and icons take an explicit ink: paper white on black,
+    /// near-black on linen; the risk orange when it's one of yours (paler for "sometimes").
+    private func ink(_ name: String, _ layer: AirLayers.Layer?) -> Color {
+        guard let layer else { return Theme.secondaryText }
+        guard Crit.RiskColor.familiesInInk else { return layer.color }
+        let plain: Color = scheme == .dark ? .white : Color(white: 0.12)
+        return yours[name].map { plain.mix(with: Verdict.red, by: 0.55 + 0.45 * $0) } ?? plain
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(group.title, systemImage: group.icon).font(.subheadline.weight(.semibold))
             ForEach(group.items, id: \.self) { name in
                 let layer = layers.readable.first { ($0.name == "Air" ? "PM2.5" : $0.name) == name }
+                let mine = yours[name] != nil
                 HStack(spacing: 8) {
                     Image(systemName: Icons.layer(name)).font(.caption)
-                        .foregroundStyle(layer?.color ?? Theme.secondaryText).frame(width: 18)
-                    Text(name).font(.subheadline)
+                        .foregroundStyle(ink(name, layer)).frame(width: 18)
+                    Text(name).font(.subheadline).lineLimit(1).minimumScaleFactor(0.85).layoutPriority(1)
                         .foregroundStyle(layer == nil ? Theme.secondaryText : .primary)
                     Spacer(minLength: 6)
                     if let layer {
-                        AmountDots(level: layer.level, ink: layer.color)
-                        Text(Tier(layer.level).word).font(.caption2.weight(.semibold)).frame(width: 52, alignment: .trailing)
+                        AmountDots(level: layer.level, ink: ink(name, layer))
+                        Text(Tier(layer.level).word).font(.caption2.weight(.semibold))
+                            .foregroundStyle(mine && Crit.RiskColor.familiesInInk ? AnyShapeStyle(Verdict.red) : AnyShapeStyle(.primary))
+                            .frame(width: 52, alignment: .trailing)
                     } else {
                         Text("No reading").font(.caption2).foregroundStyle(Theme.secondaryText)
                     }
                 }
+                .accessibilityLabel(mine ? "\(name), often on your flare days" : name)
             }
         }
         .padding(12)

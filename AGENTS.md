@@ -61,6 +61,7 @@ Each one comes from the docs. Follow the link before you change anything in that
 | Morning look-ahead | 8 am notification with the day's look-ahead (on by default, Settings › Logging). Opening it renews the Lock Screen card and fills in baselines | Scheduled each time the app is open: tomorrow specific, six more plain |
 | Insight voice | **Dropped** (owner, Oct 17): one plain voice. No slider, no model toggle | The sentence keeps the plain Recursive axes |
 | Baseline samples (ordinary moments, no inhaler) | Automatic only, no button. **Filled in afterwards** (Oct 17): a day later, ~3 hours per day (morning, afternoon, evening), clear of inhaler use, placed where you were (visits, with Always location asked in Settings) or at home, with that hour's air from history (`BaselineBackfill`, `BaselineFiller`). Back to the first moment, 60 days at most. The app-open sample is retired. On screen: **Baseline**, never "I'm okay" | Visits stay on the phone |
+| Infections (flu-like illness around) | **Later, not MVP** (owner, Oct 21). Hook-ups only: `Infection` / `InfectionSource` in core, `FeatureFrame.infection`, `LogEvent.infectionRaw`, `InfectionStamp` (off), the `ili` bin in `Bins.later` | Planned source: Ambee ILI (weekly, US metro, no history). Plan: [docs/research/trigger-lens.md](docs/research/trigger-lens.md) |
 | Pollen until Ambee | None. The bin reads `unknown` and Insights says "Pollen not included yet" | |
 | Photos | Later, opt-in, on-device only. Not in the first build | |
 

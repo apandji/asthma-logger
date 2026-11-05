@@ -38,9 +38,44 @@ struct NowHomeView: View {
     @State private var here: NowReading?
     /// The forecast's place when you've picked one (Home, Work, an address); nil means here.
     @State private var away: NowReading?
-    @State private var hours: [NowHour] = [] {
+    @State private var forecastHours: [NowHour] = [] {
         // Only for where you are, not a forecast place you picked.
-        didSet { if !hours.isEmpty, chosen == nil { scheduleMorningBrief() } }
+        didSet { if !forecastHours.isEmpty, chosen == nil { scheduleMorningBrief() } }
+    }
+    /// The forecast as shown: real, or in the staged demo (Insights ring forced to learned) with an exaggerated
+    /// afternoon whose air matches the demo person's patterns, so the air drives the verdict, the sentence, the
+    /// dots and the readings alike (owner, Oct 23: "I want the air dataset to drive this").
+    private var hours: [NowHour] { isStagedDemo ? forecastHours.map(Self.staged) : forecastHours }
+    private var isStagedDemo: Bool { forced == .learned && !(model.progress?.isMet ?? false) }
+
+    /// A rough afternoon in the air itself: 2–5 PM high ozone, high weed pollen and heat (both of the demo
+    /// person's patterns); 11 AM–1 PM and 6–7 PM high ozone only (one pattern). Readings, so they're binned.
+    /// Pollen for a forecast hour: the demo season's sample, or in the staged demo the staged weed pollen, so the
+    /// Allergens panel shows what the sentence names.
+    private func hourPollen(_ h: NowHour) -> PollenSample? {
+        if isStagedDemo, let w = h.conditions.best(.pollenWeed), w.category == "High" {
+            let base = DemoPollen.sample(at: h.date, season: pollenSeason)
+            return PollenSample(tree: base?.tree ?? .init(name: "Tree", species: "", count: 0, level: .low),
+                                grass: base?.grass ?? .init(name: "Grass", species: "", count: 0, level: .low),
+                                weed: .init(name: "Weed", species: "Ragweed", count: Int(w.value), level: .high))
+        }
+        return DemoPollen.sample(at: h.date, season: pollenSeason)
+    }
+
+    static func staged(_ h: NowHour) -> NowHour {
+        let hour = Calendar.current.component(.hour, from: h.date)
+        let peak = (14...17).contains(hour), shoulder = (11...13).contains(hour) || (18...19).contains(hour)
+        guard peak || shoulder else { return h }
+        var c = h.conditions
+        func obs(_ s: Signal, _ v: Double, _ unit: String, _ cat: String? = nil) -> EnvObservation {
+            EnvObservation(signal: s, value: v, unit: unit, asOf: h.date, source: NowHour.source, spatialScale: .region,
+                           category: cat)
+        }
+        var add = [obs(.ozone, peak ? 96 : 84, "ppb")]
+        if peak { add += [obs(.pollenWeed, 190, "grains/m³", "High"), obs(.temperature, 93, "°F")] }
+        c.observations.removeAll { o in add.contains { $0.signal == o.signal } }
+        c.observations.insert(contentsOf: add, at: 0)
+        return NowHour(date: h.date, conditions: c, airCarried: h.airCarried)
     }
     @State private var model = InsightsModel()
     /// Where the playhead is. Nil means now.
@@ -60,6 +95,10 @@ struct NowHomeView: View {
     /// The Menus look's shared time window: the strip and every chart below it.
     @State private var menusWindow = MenusWindow(center: .now, span: 3 * 86_400)
     @State private var showInsights = false
+    /// Bumps each time the patterns are re-learned, so a loadout's landing can wait for the new person's.
+    @State private var rebuilt = 0
+    /// A loadout's landing (Settings › Demo and development › Loadouts): an hour tomorrow, or Insights.
+    @AppStorage(Loadout.pendingKey) private var pendingLoadout = ""
     /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
     /// top, the rail's icons, the + at the bottom, all on the same line.
     static let column: CGFloat = 36
@@ -67,6 +106,8 @@ struct NowHomeView: View {
     @State private var noticed = 0
     /// A tapped underline's tip, said by the Insights ring (owner, Oct 18: patterns live in Insights).
     @State private var patternTip: PatternTip?
+    /// The bin a tip's "See in Insights" opens on; cleared when Insights closes.
+    @State private var insightsFocus: String?
     @Namespace private var hero
     /// The rail is open (held or pinned): the pill above it steps aside.
     @State private var railOpen = false
@@ -200,6 +241,14 @@ struct NowHomeView: View {
                         if let e = all.last(where: { $0.moment != .okay }) { QuickRecordLive.shared.begin(for: e) }
                     }
                 }
+                if ProcessInfo.processInfo.arguments.contains("-openDetails") {
+                    // Screenshots: the latest rescue's details, as a tap on its sky opens them.
+                    Task {
+                        try? await Task.sleep(for: .seconds(3))
+                        let all = (try? context.fetch(FetchDescriptor<LogEvent>(sortBy: [SortDescriptor(\.loggedAt)]))) ?? []
+                        pinDetails = all.last { $0.moment == .rescue }
+                    }
+                }
                 guard ProcessInfo.processInfo.arguments.contains("-quickRecord") else { return }
                 Task {
                     try? await Task.sleep(for: .seconds(2))
@@ -220,7 +269,8 @@ struct NowHomeView: View {
                 openCapture(e)
             }
             .sheet(item: $pinDetails) { e in
-                NavigationStack { MomentDetailsView(event: e) }
+                // The sentence you were reading carries over as the details' title.
+                NavigationStack { MomentDetailsView(event: e, read: detailsRead(e)) }
                     .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) { bottomBar }
@@ -252,10 +302,44 @@ struct NowHomeView: View {
                     AirCubeLayer(world: cubeWorld, slot: cubeSlot)
                 }
             }
-            .sheet(isPresented: $showInsights) {
+            .onChange(of: pendingLoadout, initial: true) { _, v in
+                guard !v.isEmpty else { return }
+                let start = rebuilt
+                Task { @MainActor in
+                    // After the Settings sheet has gone, or the Insights sheet can't present.
+                    try? await Task.sleep(for: .milliseconds(800))
+                    let parts = v.split(separator: ";")
+                    if let f = parts.first(where: { $0.hasPrefix("focus=") }), let h = Int(f.dropFirst(6)) {
+                        let t = Loadout.tomorrow(at: h)
+                        // The forecast hours arrive a moment after a data set loads: wait for tomorrow to exist.
+                        for _ in 0..<40 where (hours.last?.date ?? .distantPast) < t { try? await Task.sleep(for: .milliseconds(250)) }
+                        guard pendingLoadout == v else { return }
+                        withAnimation(Theme.smooth) { focusTime = min(t, hours.last?.date ?? t) }
+                    }
+                    if parts.contains("focus=last") {
+                        // The latest rescue moment, once the data set's moments have arrived.
+                        for _ in 0..<40 where !moments.contains(where: { $0.moment == .rescue }) { try? await Task.sleep(for: .milliseconds(250)) }
+                        // Wait for felt air to have re-learned this person (not the one before), or every rescue ties.
+                        for _ in 0..<60 where rebuilt == start || gatedRows.isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+                        guard pendingLoadout == v else { return }   // another loadout took over meanwhile
+                        // The latest rescue that shares the most with their pattern: a good example, not a mild day,
+                        // and at least an hour back so it reads as looking back, not as now.
+                        let rescues = moments.filter { $0.moment == .rescue && $0.loggedAt < now.addingTimeInterval(-3600) }
+                        let best = rescues.max { a, b in
+                            let x = shared(a.conditions, at: a.loggedAt).count, y = shared(b.conditions, at: b.loggedAt).count
+                            return x != y ? x < y : a.loggedAt < b.loggedAt
+                        }
+                        if let m = best { withAnimation(Theme.smooth) { focusTime = m.loggedAt } }
+                    }
+                    if parts.contains("open=insights") { showInsights = true }
+                    pendingLoadout = ""
+                }
+            }
+            .sheet(isPresented: $showInsights, onDismiss: { insightsFocus = nil }) {
                 // The sparkle grows into the page (a zoom from the button), and the page starts in this sky's colour
                 // before its own bloom comes through: the same page, turned.
-                InsightsView(skyColor: skyColorNow)
+                InsightsView(skyColor: skyColorNow, focus: insightsFocus.flatMap { AirProfile.Category.of(bin: $0) },
+                             focusBin: insightsFocus)
                     .navigationTransition(.zoom(sourceID: "insights", in: hero))
                     .presentationDragIndicator(.visible)
                     .presentationBackground(healthLook ? Color(uiColor: .systemGroupedBackground) : Theme.paper(paper))
@@ -269,7 +353,7 @@ struct NowHomeView: View {
             .sheet(isPresented: $showPlaces) { PlacePicker(chosen: $chosen).presentationDetents([.medium, .large]) }
             .onChange(of: chosen) { _, new in
                 away = new.map { NowReading(lat: $0.lat, lon: $0.lon, place: $0.name, conditions: Conditions()) }
-                hours = []
+                forecastHours = []
                 Task { await loadForecastPlace() }
             }
 
@@ -303,10 +387,12 @@ struct NowHomeView: View {
                 }
             }
 
-            .task(id: events.count) {
+            // Re-learn when moments change, and when a loadout lands (a reload can keep the same count).
+            .task(id: "\(events.count)|\(pendingLoadout)") {
                 try? await Task.sleep(for: .seconds(1.2))
                 guard !Task.isCancelled else { return }
                 model.rebuild(events: events, demo: demo)
+                rebuilt += 1
                 model.narrate()
                 if let p = away ?? here { await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here") }
             }
@@ -418,14 +504,27 @@ struct NowHomeView: View {
     /// slate for a storm, ochre for smoke, ice for a temperature drop.
     private var pageTop: Color {
         if case .now = focus, let e = liveEvent {
+            // Families in ink: an event darkens the page to graphite for everyone, and warms it with the risk ink
+            // only when it's one of yours (smoke if smoky air is, a drop or a storm if that weather is).
+            if Crit.RiskColor.familiesInInk {
+                let paper = WeatherColor.hex(0x3A3833)
+                let mine = Self.yours(shared(liveAir.conditions, at: now))
+                let s: Double? = switch e {
+                case .smoke: mine["Smoke"] ?? mine["PM2.5"]
+                case .tempDrop: mine["Drop"] ?? mine["Weather"]
+                case .storm, .mold: mine["Weather"]
+                }
+                let base = e == .storm ? paper.mix(with: .black, by: 0.35) : paper
+                return s.map { base.mix(with: Verdict.red, by: 0.25 + 0.3 * $0) } ?? base
+            }
             // Print: an event takes its family's ink (owner, Oct 18). Storm, a sharp drop and mold weather are
             // weather, so magenta; smoke is fine particles, so aqua. No colour of its own for any event.
             if WeatherColor.print {
                 let paper = WeatherColor.paperTone.mix(with: .black, by: 0.22)
                 switch e {
-                case .storm: return paper.mix(with: WeatherColor.amber, by: 0.5).mix(with: .black, by: 0.35)
-                case .tempDrop: return paper.mix(with: WeatherColor.amber, by: 0.6)
-                case .mold: return paper.mix(with: WeatherColor.amber, by: 0.35)
+                case .storm: return paper.mix(with: WeatherColor.weatherInk, by: 0.5).mix(with: .black, by: 0.35)
+                case .tempDrop: return paper.mix(with: WeatherColor.weatherInk, by: 0.6)
+                case .mold: return paper.mix(with: WeatherColor.weatherInk, by: 0.35)
                 case .smoke: return paper.mix(with: WeatherColor.aqua, by: 0.55)
                 }
             }
@@ -440,6 +539,18 @@ struct NowHomeView: View {
         case .now: (liveAir.conditions?.best(.temperature)?.value, now)
         case .moment(let m): (m.conditions?.best(.temperature)?.value, m.loggedAt)
         case .hour(let h): (h.conditions.best(.temperature)?.value, h.date)
+        }
+        // Families in ink: the page is graphite paper, warmed with the risk ink when the weather then is one of
+        // yours (heat, a cold snap, muggy air), never tinted by the temperature's own hue.
+        if Crit.RiskColor.familiesInInk {
+            let air: Conditions? = switch focus {
+            case .now: liveAir.conditions
+            case .moment(let m): m.conditions
+            case .hour(let h): h.conditions
+            }
+            let paper = WeatherColor.hex(0x2E2C29)
+            let c = Self.yours(shared(air, at: d))["Weather"].map { paper.mix(with: Verdict.red, by: 0.18 + 0.22 * $0) } ?? paper
+            return inFuture ? c.mix(with: Color(white: 0.2), by: 0.45) : c
         }
         let c = WeatherColor.light(WeatherColor.temperature(t ?? 62), at: d).mix(with: .black, by: 0.22)
         return inFuture ? c.mix(with: Color(white: 0.2), by: 0.45) : c
@@ -536,6 +647,7 @@ struct NowHomeView: View {
         .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
             if let tip = patternTip, held == nil {
                 RingSays(tip: tip, towardLeading: !railLeft, below: true) {
+                    insightsFocus = TheRead.bin(ofFactor: tip.factor)
                     patternTip = nil
                     showInsights = true
                 }
@@ -683,6 +795,17 @@ struct NowHomeView: View {
     }
 
     /// The verdict as a strength for the rail (nil while still learning).
+    /// How much the time on screen looks like your flare days, for the sky's field: the verdict where there is one
+    /// (now, the forecast), and for a past moment how strongly its air matched your patterns, so a risky moment is
+    /// orange at a glance, past or ahead. Nil while still learning.
+    private func fieldRisk(_ c: Conditions?, at t: Date) -> Double? {
+        guard isLearned else { return nil }
+        // A past moment has no verdict of its own: how strongly its air matched your patterns. Now and ahead follow
+        // the pill exactly, so the field and the pill never disagree.
+        if t < now.addingTimeInterval(-30 * 60) { return Self.yours(shared(c, at: t)).values.max() ?? 0 }
+        return verdictStrength(outlook(at: t).tint) ?? 0
+    }
+
     private func verdictStrength(_ tint: Color?) -> Double? {
         switch tint {
         case Verdict.green?: 0
@@ -692,16 +815,37 @@ struct NowHomeView: View {
         }
     }
 
+    /// The family behind a forecast hour: the window's strongest driver. In the demo's rough afternoon, the
+    /// heat (weather) leads and ozone (pollutants) takes the evening.
+    private func driver(at t: Date) -> AirProfile.Category? {
+        if forced == .learned, !(model.progress?.isMet ?? false) {
+            let h = Calendar.current.component(.hour, from: t)
+            return (11...17).contains(h) ? .weather : (18...19).contains(h) ? .particulates : nil
+        }
+        guard let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }),
+              let top = w.drivers.max(by: { $0.logLR < $1.logLR }) else { return nil }
+        return AirProfile.Category.of(bin: top.bin)
+    }
+
     private func outlook(at t: Date) -> (text: String, tint: Color?) {
         let learned = forced == .learned || (forced == .auto && (model.progress?.isMet ?? false))
         // The demo event is the presentation's story: with the demo person learned, now matches their flare days.
         if learned, demoEvent != .none, abs(t.timeIntervalSince(now)) < 30 * 60 { return ("Matches your flare days", Self.red) }
+        // Now: the air on screen decides too, so a day whose air matches your patterns says so.
+        if learned, abs(t.timeIntervalSince(now)) < 30 * 60 {
+            let n = shared(liveAir.conditions, at: now).filter { !TheRead.personalBins.contains($0.bin) }.count
+            if n >= 2 { return ("Matches your flare days", Self.red) }
+            if n == 1 { return ("A bit like your flare days", Self.yellow) }
+        }
         if learned {
             if forced == .learned, !(model.progress?.isMet ?? false) {
-                // Demo: a rough afternoon, so every color can be seen on the track.
-                let h = Calendar.current.component(.hour, from: t)
-                if (14...17).contains(h) { return ("Matches your flare days", Self.red) }
-                if (11...13).contains(h) || (18...19).contains(h) { return ("A bit like your flare days", Self.yellow) }
+                // Demo: the staged afternoon's air decides, by how many of the demo person's patterns it matches.
+                let air = t > now.addingTimeInterval(30 * 60)
+                    ? hours.min(by: { abs($0.date.timeIntervalSince(t)) < abs($1.date.timeIntervalSince(t)) })?.conditions
+                    : liveAir.conditions
+                let n = shared(air, at: t).filter { !TheRead.personalBins.contains($0.bin) }.count
+                if n >= 2 { return ("Matches your flare days", Self.red) }
+                if n == 1 { return ("A bit like your flare days", Self.yellow) }
                 return ("Looks like your baseline days", Self.green)
             }
             if let w = model.days.flatMap(\.windows).first(where: { $0.start <= t && t < $0.end }) {
@@ -717,7 +861,10 @@ struct NowHomeView: View {
         return (sentence, nil)
     }
 
-    private static let green = Verdict.green, yellow = Verdict.yellow, red = Verdict.red
+    // Read each time: the Risk colour crit (or a loadout) can change them while the app runs.
+    private static var green: Color { Verdict.green }
+    private static var yellow: Color { Verdict.yellow }
+    private static var red: Color { Verdict.red }
 
     /// Before felt air has learned. Not a countdown: you're not a number (owner, Oct 17).
     private var sentence: String { "Still learning" }
@@ -732,6 +879,11 @@ struct NowHomeView: View {
     }
 
     // MARK: Sky
+
+    /// The read a moment's details open with: the same sentence the header shows for it.
+    private func detailsRead(_ e: LogEvent) -> String {
+        e.modelContext == nil || e.id == justNow?.id ? nowRead : backRead(e)
+    }
 
     /// The header's read for the playhead, marks and all (what VerdictHeader shows as its title).
     private var headerRead: String {
@@ -753,6 +905,8 @@ struct NowHomeView: View {
                       onRecord: { openCapture($0) }, makeNote: s.makeNote,
                       scrubTemperature: scrubbing ? focusTime.flatMap(temperature(at:)) : nil,
                       patterns: scrubbing ? [] : RailGroup.marked(in: headerRead),
+                      yours: scrubbing ? [:] : Self.yours(shared(s.conditions, at: s.date)),
+                      risk: fieldRisk(s.conditions, at: s.date),
                       onRailOpen: { railOpen = $0 })
             // With the cube, a tap is the cube's (it goes in); the details are a tap on the timeline's moment.
             .onTapGesture { if !(appLook == .menus && Crit.MenusSky.current == .cube) { s.onTap() } }
@@ -804,18 +958,19 @@ struct NowHomeView: View {
                              mapNamespace: mapZoom, onPin: { pinDetails = m }, showsSelf: true, selfEvent: m, onTap: { pinDetails = m })
         case .hour(let h):
             return SkyInputs(conditions: h.conditions, weave: h.weave, date: h.date,
-                             pollen: DemoPollen.sample(at: h.date, season: pollenSeason),
+                             pollen: hourPollen(h),
                              mapID: mapID, coordinate: forecastCoordinate, sketch: true)
         }
     }
 
     private var timeline: some View {
         let tints: [(Date, Double?)] = hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) }
+        let drivers = Dictionary(hours.compactMap { h in driver(at: h.date).map { (h.date, $0) } }, uniquingKeysWith: { a, _ in a })
         let fadeIn: CGFloat = railLeft ? 0.2 : 0.08
         let fadeOut: CGFloat = railLeft ? 0.92 : 0.8
         return NowTimeline(moments: moments, baselines: [],
                            tint: { airTint($0.weave) },
-                           forecastTints: tints, verdictTint: playheadTint, verdictText: playheadVerdict,
+                           forecastTints: tints, forecastDrivers: drivers, verdictTint: playheadTint, verdictText: playheadVerdict,
                            hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
             .frame(height: timelineLook == .health || healthLook ? 122 : 104)
             // Full width; the + floats over its end, which fades out beneath it. The other end just softens.
@@ -1107,6 +1262,29 @@ struct NowHomeView: View {
         return model.report?.gatedRows ?? []
     }
 
+    /// What in this sky is one of yours, by the sky's names ("PM2.5", "Weed pollen", "Weather", "Smoke", "Drop"),
+    /// 1 when it shows up often on your flare days, 0.65 sometimes. Empty before felt air has learned: then the
+    /// dots and washes are plain ink, sized by how much is in the air.
+    static func yours(_ rows: [LiftRow]) -> [String: Double] {
+        var out: [String: Double] = [:]
+        for r in rows {
+            let s = AirProfile.Strength.of(r) == .strong ? 1.0 : 0.65
+            let names: [String] = switch r.bin {
+            case "pm25": ["PM2.5"]
+            case "ozone": ["Ozone"]
+            case "pollen_weed": ["Weed pollen"]
+            case "pollen_tree": ["Tree pollen"]
+            case "pollen_grass": ["Grass pollen"]
+            case "smoke_at_point": ["Smoke", "PM2.5"]
+            case "temp_drop": ["Drop", "Weather"]
+            case "temp", "humidity", "heat_alert": ["Weather"]
+            default: []
+            }
+            for n in names { out[n] = max(out[n] ?? 0, s) }
+        }
+        return out
+    }
+
     private func shared(_ c: Conditions?, at d: Date) -> [LiftRow] {
         guard let c, c.input.hasAnyValue else { return [] }
         return TheRead.shared(FrameBuilder.frame(id: "read", kind: .baseline, date: d, conditions: c.input), rows: gatedRows)
@@ -1134,9 +1312,32 @@ struct NowHomeView: View {
         let air = liveAir
         // No reading (every source failed, or offline): say so, never "nothing stands out".
         guard air.conditions?.input.hasAnyValue == true || liveEvent != nil else { return TheRead.noReading(.now) }
-        return TheRead.sentence(time: .now, learned: isLearned, event: liveEvent?.advice, fallF: air.conditions?.tempFallF,
-                                fires: fires, shared: shared(air.conditions, at: now),
-                                notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false).map(\.clause))
+        let read = TheRead.sentence(time: .now, learned: isLearned, event: liveEvent?.advice, fallF: air.conditions?.tempFallF,
+                                    fires: fires, shared: shared(air.conditions, at: now),
+                                    notable: notable(air.conditions, weave: air.weave, pollen: air.pollen, ahead: false).map(\.clause))
+        return explained(read, at: now, when: "Right now", conditions: air.conditions)
+    }
+
+    /// The pill says this time looks like your flare days, but the sentence found nothing to name: say what's behind
+    /// the verdict instead ("Tomorrow afternoon: high ozone and heat, like your flare days"), so the two agree.
+    /// The reasons are the forecast window's strongest matches with your pattern; in the staged demo, the demo
+    /// person's own patterns. Never a cause: "like your flare days", not "because".
+    private func explained(_ read: String, at t: Date, when: String, conditions: Conditions?) -> String {
+        guard read.contains("stands out") else { return read }
+        let tint = outlook(at: t).tint
+        guard tint == Self.red || tint == Self.yellow else { return read }
+        let how = tint == Self.red ? "like your flare days" : "a bit like your flare days"
+        let names = reasons(at: t, conditions: conditions).prefix(2).map { $0.prefix(1).lowercased() + $0.dropFirst() }
+        guard !names.isEmpty else { return "\(when) looks \(how), though no single reading stands out." }
+        let list = names.count == 2 ? "\(names[0]) and \(names[1])" : names[0]
+        return "\(when): \(list), \(how)."
+    }
+
+    /// What makes a time look like your flare days, strongest first, as nouns ("High ozone", "Heat"): only patterns
+    /// this time's own air actually matches, so the sentence never names a reading the sky contradicts (owner, Oct 23:
+    /// "ozone is mentioned as high, but it's low"). Nothing matches: the caller says no single reading stands out.
+    private func reasons(at t: Date, conditions: Conditions?) -> [String] {
+        shared(conditions, at: t).filter { !TheRead.personalBins.contains($0.bin) }.map { TheRead.noun($0.bin, $0.level) }
     }
 
     /// An event the forecast shows (a sharp drop, mold weather).
@@ -1148,10 +1349,12 @@ struct NowHomeView: View {
     /// `label` names the time ("Thursday afternoon"); the morning brief says "This afternoon" instead.
     private func aheadRead(_ h: NowHour, label: String? = nil) -> String {
         let tint = outlook(at: h.date).tint
-        return TheRead.sentence(time: .ahead(label ?? Self.when(h.date)), learned: isLearned, event: aheadEvent(h)?.advice,
-                                fallF: h.conditions.tempFallF, shared: shared(h.conditions, at: h.date),
-                                notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true).map(\.clause),
-                                looksLikeFlare: tint == Self.red || tint == Self.yellow)
+        let when = label ?? Self.when(h.date)
+        let read = TheRead.sentence(time: .ahead(when), learned: isLearned, event: aheadEvent(h)?.advice,
+                                    fallF: h.conditions.tempFallF, shared: shared(h.conditions, at: h.date),
+                                    notable: notable(h.conditions, weave: h.weave, pollen: hourPollen(h), ahead: true).map(\.clause),
+                                    looksLikeFlare: tint == Self.red || tint == Self.yellow)
+        return explained(read, at: h.date, when: when, conditions: h.conditions)
     }
 
     private var atHome: Bool { Self.knownPlace(here?.lat, here?.lon)?.name == "Home" }
@@ -1196,7 +1399,7 @@ struct NowHomeView: View {
             return []
         case .hour(let h):
             return adviceDeck(event: aheadEvent(h), fallF: h.conditions.tempFallF,
-                              notable: notable(h.conditions, weave: h.weave, pollen: DemoPollen.sample(at: h.date, season: pollenSeason), ahead: true),
+                              notable: notable(h.conditions, weave: h.weave, pollen: hourPollen(h), ahead: true),
                               home: forecastAtHome, ahead: true)
         }
     }
@@ -1381,7 +1584,7 @@ struct NowHomeView: View {
         let id = mapID
         Task { _ = await MapSnapshots.image(id: id, latitude: p.lat, longitude: p.lon, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale) }
         // For a place that isn't here we have no live reading to carry forward.
-        hours = await NowHour.forecast(latitude: p.lat, longitude: p.lon, now: away == nil ? here?.conditions : nil)
+        forecastHours = await NowHour.forecast(latitude: p.lat, longitude: p.lon, now: away == nil ? here?.conditions : nil)
         await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here")
     }
 }
@@ -1535,6 +1738,11 @@ struct NowSky: View {
     var scrubTemperature: Double? = nil
     /// Families the header's read marks as patterns, badged on the rail.
     var patterns: Set<RailGroup> = []
+    /// What's yours in this sky, and how strongly (`NowHomeView.yours`). Drives the orange of the dots and washes.
+    var yours: [String: Double] = [:]
+    /// How much this time looks like your flare days: 0 like your baseline days, 0.5 a bit like, 1 like them; nil
+    /// while still learning. The whole screen warms toward orange with it, so the sky says what the pill says.
+    var risk: Double? = nil
     /// Told when the rail opens or closes (held, or pinned on Voice / Body), so what sits above it can step aside.
     var onRailOpen: ((Bool) -> Void)? = nil
     @State private var voice = VoiceSession()
@@ -1611,6 +1819,19 @@ struct NowSky: View {
         return abs(e.loggedAt.timeIntervalSince(date)) < 60
     }
     private var layers: AirLayers { AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: true) }
+    /// Design crit › Weather on the rail: Weather's three items and their amounts (empty when the switch is off).
+    private var weatherFacets: [String: Double] {
+        guard Crit.WeatherRail.byFacet else { return [:] }
+        let h = conditions?.best(.humidity)?.value, fall = conditions?.tempFallF
+        return Dictionary(uniqueKeysWithValues: WeatherFacet.allCases.map {
+            ($0.title, $0.amount(temperatureF: temperature, humidityPct: h, tempFallF: fall))
+        })
+    }
+    /// One of Weather's items is being read (or left open): the sky shows Weather's ink, as for the stop.
+    private var onWeatherItem: Bool {
+        guard case .item(let n)? = row ?? pinned else { return false }
+        return RailGroup.weather.items.contains(n)
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -1684,11 +1905,18 @@ struct NowSky: View {
                             }
                     }
                 }
-                if event == .smoke {
+                if event == .smoke, Crit.RiskColor.familiesInInk {
+                    // Smoke: a grey haze for everyone; orange when smoky air is one of yours.
+                    (yours["Smoke"] ?? yours["PM2.5"]).map { Verdict.red.opacity(0.14 + 0.16 * $0) } ?? Color.gray.opacity(0.28)
+                } else if event == .smoke {
                     (WeatherColor.print ? WeatherColor.aqua : Color(red: 0.62, green: 0.46, blue: 0.32)).opacity(WeatherColor.print ? 0.22 : 0.32).allowsHitTesting(false)
                 }
-                if event == .tempDrop {
-                    LinearGradient(colors: [(WeatherColor.print ? WeatherColor.amber : Color(red: 0.55, green: 0.75, blue: 1)).opacity(0.38), .clear], startPoint: .top, endPoint: .center)
+                if event == .tempDrop, Crit.RiskColor.familiesInInk {
+                    LinearGradient(colors: [(yours["Drop"].map { Verdict.red.opacity(0.22 + 0.2 * $0) } ?? Color.white.opacity(0.22)), .clear],
+                                   startPoint: .top, endPoint: .center)
+                        .allowsHitTesting(false)
+                } else if event == .tempDrop {
+                    LinearGradient(colors: [(WeatherColor.print ? WeatherColor.weatherInk : Color(red: 0.55, green: 0.75, blue: 1)).opacity(0.38), .clear], startPoint: .top, endPoint: .center)
                         .allowsHitTesting(false)
                 }
                 if event == .storm {
@@ -1697,21 +1925,42 @@ struct NowSky: View {
                 }
                 // Weather held on the rail: its ink comes up over the whole sky and the particles step back, so
                 // the colour you're reading is the colour that's named (owner, Oct 18).
-                if row == .header(.weather) || (pinned == .header(.weather) && row == nil) {
+                if row == .header(.weather) || (pinned == .header(.weather) && row == nil) || onWeatherItem {
                     let t = temperature ?? WeatherColor.fallbackTemp(weave)
-                    (WeatherColor.print ? WeatherColor.amber : WeatherColor.light(WeatherColor.temperature(t), at: date))
-                        .opacity(WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
+                    // Families in ink: plain ink for how far from mild; orange when this weather is one of yours.
+                    let mine = yours["Weather"]
+                    (Crit.RiskColor.familiesInInk ? (mine == nil ? Color.white : Verdict.red) : WeatherColor.print ? WeatherColor.weatherInk : WeatherColor.light(WeatherColor.temperature(t), at: date))
+                        .opacity(Crit.RiskColor.familiesInInk ? (mine.map { 0.14 + 0.3 * $0 } ?? 0.08 + 0.2 * WeatherColor.weatherAmount(t)) : WeatherColor.print ? 0.2 + 0.4 * WeatherColor.weatherAmount(t) : 0.45)
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
+                // The field: the whole sky washes orange with how much this time looks like your flare days, behind
+                // the dots, so a risky moment, past or ahead, reads at a glance. Nothing while still learning.
+                if Crit.RiskColor.familiesInInk, let r = risk, r > 0 {
+                    RadialGradient(colors: [Verdict.red.opacity(0.10 + 0.28 * r), Verdict.red.opacity(0.04 + 0.12 * r)],
+                                   center: .center, startRadius: 0, endRadius: size.width * 0.9)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+                // The dots: how much of each is in the air (size and count). Families in ink: plain ink, and orange
+                // for what's yours (paler for "sometimes"). Before learning nothing is yours, so it's all ink.
                 if !Crit.AppLook.current.healthLike {
-                ParticleField(particles: stack.map { ($0.color, $0.empty ? 0 : (Double($0.level.rawValue) + max(0, min(1, $0.fraction))) / 3) },
+                ParticleField(particles: stack.map { layer in
+                                  // How orange: a layer that's one of your patterns most of all, and every dot a little
+                                  // with the time's risk, so the screen warms as the hour looks more like your flare days.
+                                  let mine = yours[layer.name == "Air" ? "PM2.5" : layer.name].map { 0.45 + 0.55 * $0 } ?? 0
+                                  let warmth = max(mine, 0.85 * (risk ?? 0))
+                                  let plain = light ? Color(white: 0.18) : Color.white.opacity(0.85)
+                                  let ink: Color = !Crit.RiskColor.familiesInInk ? layer.color
+                                      : warmth > 0 ? plain.mix(with: Verdict.red, by: warmth) : plain
+                                  return (ink, layer.empty ? 0 : (Double(layer.level.rawValue) + max(0, min(1, layer.fraction))) / 3)
+                              },
                               fragments: stack.map { event == .storm && $0.name.hasSuffix("pollen") },
-                              selected: row == .header(.weather) ? -1 : selectedLayer(stack),
+                              selected: row == .header(.weather) || onWeatherItem ? -1 : selectedLayer(stack),
                               animated: texture == .dots,
                               rippleAt: rippleAt, inviting: !touched && rippleInk == .white,
-                              rippleInk: rippleInk, scan: true, hollow: sketch,
-                              breathes: !isPast, drift: sketch ? 1 + 2 * farness : 0,
+                              rippleInk: rippleInk, scan: true, hollow: sketch && (risk ?? 0) < 0.5,
+                              breathes: !isPast,
                               reveal: sketch ? .soft : isPast ? .inward : .outward)
                 }
             }
@@ -1765,8 +2014,8 @@ struct NowSky: View {
                 if let shown = row ?? pinned, let i = rows.firstIndex(of: shown) {
                     let x = railLeft ? 64 + 130 : size.width - 64 - 130, y = min(max(mids[i], 110), size.height - 110)
                     switch shown {
-                    case .header(let g) where !g.items.isEmpty:
-                        GroupSummary(group: g, layers: layers)
+                    case .header(let g) where !g.items.isEmpty && g != .weather:
+                        GroupSummary(group: g, layers: layers, yours: yours)
                             .frame(width: 224)
                             .position(x: railLeft ? 64 + 118 : size.width - 64 - 118, y: min(max(mids[i], 90), size.height - 90))
                             .allowsHitTesting(false)
@@ -1780,7 +2029,7 @@ struct NowSky: View {
                         })
                         .frame(width: 260).position(x: x, y: y).transition(.opacity)
                     case .body:
-                        BodyPanel(date: selfEvent?.loggedAt ?? date, interactive: !probing)
+                        BodyPanel(date: selfEvent?.loggedAt ?? date, interactive: !probing, event: selfEvent)
                             .frame(width: 248).position(x: x, y: y).transition(.opacity)
                     default:
                         if let probe {
@@ -1804,6 +2053,7 @@ struct NowSky: View {
                 GroupRail(layers: layers, rows: rows, mids: mids, selected: row ?? pinned, weatherSymbol: SkyExplorer.weatherIcon(conditions),
                          weatherInk: WeatherColor.temperature(temperature ?? WeatherColor.fallbackTemp(weave)),
                          weatherAmount: WeatherColor.weatherAmount(temperature ?? WeatherColor.fallbackTemp(weave)),
+                         weatherFacets: weatherFacets,
                          voiceBadge: selfEvent?.wantsNote ?? false, patterns: patterns, fingerY: railFinger)
                     // The stops sit in one glass well, the same material as the controls above and the + below.
                     .background {
@@ -1978,18 +2228,31 @@ struct NowSky: View {
                 p = q
             }
         case .item(let n):
-            p = SkyExplorer.layerProbe(n, layers: layers, conditions: conditions, pollen: pollen)
+            p = SkyExplorer.facetProbe(n, conditions: conditions, temperatureF: temperature)
+                ?? SkyExplorer.layerProbe(n, layers: layers, conditions: conditions, pollen: pollen)
         case .voice, .body:
             p = nil   // Self's panels read themselves.
+        }
+        if var q = p {
+            let key = q.name == "Air" ? "PM2.5" : RailGroup.weather.items.contains(q.name) ? "Weather" : q.name
+            q.yours = yours[key]
+            p = q
+            // An elevated factor that's one of yours: a firm double tap as the finger arrives (owner, Oct 23).
+            if q.yours != nil && probe?.name != q.name {
+                let h = UIImpactFeedbackGenerator(style: .heavy)
+                h.impactOccurred(intensity: 1)
+                Task { try? await Task.sleep(for: .milliseconds(110)); h.impactOccurred(intensity: 0.8) }
+            }
         }
         if var probe = p, let h = history {
             switch probe.name {
             case "Weather":
+                let inInk = Crit.RiskColor.familiesInInk
                 probe.lines = [SparkSeries(name: "Temperature", unit: "°", points: h.temperature, ink: .white),
-                               SparkSeries(name: "Humidity", unit: "%", points: h.humidity, ink: Color(red: 0.55, green: 0.7, blue: 0.95))]
+                               SparkSeries(name: "Humidity", unit: "%", points: h.humidity, ink: inInk ? Color.white.opacity(0.6) : Color(red: 0.55, green: 0.7, blue: 0.95))]
                     .filter { $0.points.count > 1 }
             case "PM2.5", "Air":
-                probe.lines = h.pm25.count > 1 ? [SparkSeries(name: "PM2.5", unit: "", points: h.pm25, ink: WeatherColor.pm25)] : []
+                probe.lines = h.pm25.count > 1 ? [SparkSeries(name: "PM2.5", unit: "", points: h.pm25, ink: Crit.RiskColor.familiesInInk ? probe.ink : WeatherColor.pm25)] : []
             default: break
             }
             p = probe
@@ -2004,7 +2267,8 @@ struct NowSky: View {
             let heavy = UIImpactFeedbackGenerator(style: .heavy)
             soft.prepare(); rigid.prepare(); heavy.prepare()
             while !Task.isCancelled {
-                let x = probe?.intensity ?? 0
+                // Yours beats like a high level, whatever the amount: the hand feels what's yours.
+                let x = max(probe?.intensity ?? 0, (probe?.yours).map { 0.7 + 0.3 * $0 } ?? 0)
                 switch x {
                 case ..<0.34: soft.impactOccurred(intensity: 0.55 + x)
                 case ..<0.67: rigid.impactOccurred(intensity: 0.6 + x * 0.4)
@@ -2018,10 +2282,11 @@ struct NowSky: View {
     private func stopPulse() { pulse?.cancel(); pulse = nil }
 }
 
-/// The air as particles: every cell of a fine grid gets at most one dot, given to a layer by a fixed
-/// hash with odds that rise with that layer's amount, so each layer is an even sprinkle over the whole
-/// place in its own ink. More of it means more dots and bigger ones. The layer being read stays lit and
-/// the rest fade back. A ripple runs through the dots when a sky appears.
+/// The air as a halftone screen laid over the map (owner, Oct 21: scattered dots read as "it's over here"):
+/// dots on an even grid turned 12°, like a riso screen, every cell the same distance apart. Present layers take
+/// turns cell by cell, so each is an even share of the screen, and how much of it there is is the dot's size,
+/// never where the dots fall. The layer being read stays lit and the rest fade back. A ripple runs through the
+/// dots when a sky appears.
 struct ParticleField: View {
     /// Each layer's ink and amount (0 none … 1 high), in reading order.
     let particles: [(Color, Double)]
@@ -2039,15 +2304,13 @@ struct ParticleField: View {
     var hollow = false
     /// Now breathes; the past is still.
     var breathes = true
-    /// The future drifts, more the further out: 0 still … 3 restless.
-    var drift: CGFloat = 0
     /// How the reveal moves: the past closes in onto the pin (it happened, it settles), now rings out from
     /// it, the future washes in wide and soft (not yet known).
     enum Reveal { case inward, outward, soft }
     var reveal: Reveal = .outward
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let spacing: CGFloat = 8
+    private let spacing: CGFloat = 13
     private let rippleSeconds = 1.6
     private let rippleEvery = 5.0
 
@@ -2071,30 +2334,24 @@ struct ParticleField: View {
 
         let clock = (animated && !reduceMotion) ? time.timeIntervalSinceReferenceDate : 0
         let breath = breathes ? clock : 0
-        // Odds per layer: a floor so any present layer shows, rising with amount; capped so the map shows.
-        var weights = particles.map { $0.1 > 0 ? 0.012 + 0.09 * $0.1 : 0 }
-        let total = weights.reduce(0, +)
-        if total > 0.3 { weights = weights.map { $0 * 0.3 / total } }
-        let cumulative = weights.reduce(into: [Double]()) { $0.append(($0.last ?? 0) + $1) }
         return Canvas(rendersAsynchronously: true) { ctx, size in
             // Every ripple starts at the pin: the place, then the air around it.
             let centre = CGPoint(x: size.width / 2, y: size.height / 2)
             let reach = hypot(size.width, size.height) * 0.6
             let radius = wave.map { reveal == .inward ? reach * (1 - CGFloat($0)) : CGFloat($0) * reach }
             let fade = wave.map { scan && firstPass ? 1 : 1 - $0 } ?? 0
-            let cols = Int(size.width / spacing) + 1, rows = Int(size.height / spacing) + 1
-            for i in 0..<cols {
-                for j in 0..<rows {
-                    var h = UInt32(truncatingIfNeeded: i &* 73856093 ^ j &* 19349663)
-                    h = (h ^ (h >> 13)) &* 1274126177
-                    let u = Double(h & 0xFFFF) / 65535, jx = Double((h >> 16) & 0xFF) / 255, jy = Double((h >> 24) & 0xFF) / 255
-                    var x = (CGFloat(i) + 0.2 + 0.6 * jx) * spacing, y = (CGFloat(j) + 0.2 + 0.6 * jy) * spacing
-                    if drift > 0, clock > 0 {
-                        // Not yet settled: each dot wanders on its own slow path.
-                        x += drift * 1.6 * CGFloat(sin(clock * 0.5 + jx * 6.3))
-                        y += drift * 1.6 * CGFloat(cos(clock * 0.43 + jy * 6.3))
-                    }
-                    let k = cumulative.firstIndex { u < $0 }
+            // A hex screen turned 12° about the pin, filling the frame.
+            let angle = 12 * Double.pi / 180, ca = CGFloat(cos(angle)), sa = CGFloat(sin(angle))
+            let rowH = spacing * 0.866
+            let n = Int(hypot(size.width, size.height) / 2 / rowH) + 2
+            let present = particles.indices.filter { particles[$0].1 > 0 }
+            for j in -n...n {
+                for i in -n...n {
+                    let gx = (CGFloat(i) + (j & 1 == 0 ? 0 : 0.5)) * spacing, gy = CGFloat(j) * rowH
+                    let x = centre.x + gx * ca - gy * sa, y = centre.y + gx * sa + gy * ca
+                    guard x > -6, x < size.width + 6, y > -6, y < size.height + 6 else { continue }
+                    // Layers take turns, evenly: no layer gathers anywhere.
+                    let k: Int? = present.isEmpty ? nil : present[((i + 2 * j) % present.count + present.count) % present.count]
                     let dist = hypot(x - centre.x, y - centre.y)
                     // The scan: nothing exists ahead of the ring yet.
                     // The ring runs ahead over bare grain; inside it, the air fills in, growing up just behind the front.
@@ -2109,9 +2366,9 @@ struct ParticleField: View {
                     var r: CGFloat, color: Color
                     if let k {
                         let amount = CGFloat(particles[k].1)
-                        r = 0.8 + 2.6 * amount
+                        r = 0.6 + 2.0 * amount
                         let dim = selected != nil && selected != k
-                        color = particles[k].0.opacity(dim ? 0.15 : 0.9)
+                        color = particles[k].0.opacity(dim ? 0.12 : 0.6)
                         if selected == k { r *= 1.6 }
                         r *= CGFloat(emerge)
                         color = color.opacity(emerge)
@@ -2791,11 +3048,21 @@ struct CardStack<Content: View>: View {
                     // 0 = in front, 1 = next, 2 = the one behind that.
                     let k = (i - front + n) % n
                     let depth = min(k, 2)
+                    // Only the front card shows its words. The ones behind are blank sheets that peek out above it:
+                    // glass is see-through, so their text would read through the front card.
                     content(c)
+                        .opacity(k == 0 ? 1 : 0)
+                        .background(alignment: .top) {
+                            if k != 0 {
+                                RoundedRectangle(cornerRadius: 26, style: .continuous)
+                                    .fill(Color.primary.opacity(0.07))
+                                    .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.primary.opacity(0.18), lineWidth: 1))
+                            }
+                        }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                         .scaleEffect(1 - 0.05 * CGFloat(depth), anchor: .top)
                         .offset(y: -10 * CGFloat(depth) + (k == 0 ? drag * 0.3 : 0))
-                        .opacity(depth == 0 ? 1 : depth == 1 ? 0.55 : 0.3)
+                        .opacity(depth == 0 ? 1 : depth == 1 ? 0.8 : 0.5)
                         .zIndex(Double(n - k))
                         .allowsHitTesting(k == 0)
                         .accessibilityHidden(k != 0)

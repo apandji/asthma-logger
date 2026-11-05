@@ -13,26 +13,41 @@ enum OnboardingCopy {
     static let welcomeTop = "Your inhaler, and the air around it."
 
     // MARK: Where you are
-    static let hereTitle = "The air where you are"
+    static let hereTitle = "Where you are"
     static let hereBody = "felt air checks the air right where you are each time you log. Weather and air services get the location, never who you are, and never your history."
     static let hereNoLocation = "Turn on location in Settings to add the air to each moment."
     static let hereWaiting = "Look for the location prompt."
     static let next = "Next"
+    /// The top of the screen once you're found: the air isn't read yet, the first press brings it in.
+    static let hereFoundTop = "Your first press brings in the air here."
+    static let hereLocatingTop = "Finding you…"
+    static let hereNoLocationTop = "You can still log without it."
+    static let noLocation = "No location"
 
-    // MARK: Your felt button
-    static let buttonTitle = "Add your felt button"
-    static let buttonHint = "Orange cap is Rescue, teal is Standard. This first press only pairs the button."
-    static let buttonSkip = "I don't have a button"
-    static let buttonListening = "Listening. Keep the button close to your iPhone."
+    // MARK: Pair your inhaler
+    static let pairTitle = "Pair your inhaler"
+    static let buttonHint = "Orange cap is Rescue, teal is Standard. This first press is a test, not a rescue."
+    static let buttonSkip = "I don't have a felt button"
+    static let buttonListening = "Press the felt button on your inhaler. Keep it close to your iPhone."
     static let buttonConnecting = "Connecting…"
     static let buttonConnected = "Connected. Press either cap."
     static let buttonBluetoothOff = "Turn on Bluetooth to connect."
     static let buttonNotAllowed = "Bluetooth is off for felt air. Turn it on in Settings › felt air."
+    /// Without a felt button: the cap on screen.
+    static let softBody = "Press the cap, the way you'd press your inhaler."
+    static let softFine = "This first press is a test, not a rescue."
+    static let softHaveButton = "I have a felt button"
+    static let capLabel = "Inhaler cap"
+    static let capHint = "Press to take a test press."
+    static let capWaitingLabel = "Waiting for a press on your felt button"
+    /// Between the press and the readings landing.
+    static let fetchingTop = "Checking the air here…"
+    static let fetchingBody = "Saving the air where you are."
 
     // MARK: Your first moment
     static let firstTitle = "Your first moment"
-    static let firstBodyButton = "That press saved the air, here, right now. Every press from now on saves a moment like it."
-    static let firstBodyApp = "This is the air, here, right now. Every time you log with the +, felt air saves a moment like it."
+    static let firstBodyButton = "That press saved the air here, right now. It's a test, so it's kept as your first moment, not a rescue."
+    static let firstBodyApp = "That press saved the air here, right now. It's a test, so it's kept as your first moment, not a rescue. From now on, log with the +."
     static let firstTag = "First moment"
 
     // MARK: Inhalers

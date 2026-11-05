@@ -251,18 +251,20 @@ enum WeatherColor {
     static var flat: Bool { print || simple }
     /// Weather's ink: Fluorescent Pink, a hue with no hot-or-cold meaning (amber said "hot"; blue said "cold"),
     /// and the one free region of the wheel next to aqua, violet and the verdict's green / yellow / red.
-    static var amber: Color { onLinen ? hex(0xF03C9E) : hex(0xFF48B0) }
+    static var weatherInk: Color { coolFamilies ? hex(0x359BD9) : onLinen ? hex(0xF03C9E) : hex(0xFF48B0) }
+    /// Risk colour crit E: families move to cool hues so they never meet the warm risk scale.
+    static var coolFamilies: Bool { Crit.RiskColor.current == .twoPalettes }
     static let paperTone = Color(red: 0x8C / 255, green: 0x8A / 255, blue: 0x86 / 255)
     /// 0 at mild (57–73°F), 1 by 32°F or 98°F.
     static func weatherAmount(_ f: Double) -> Double { max(0, min(1, (abs(f - 65) - 8) / 25)) }
     /// Linen paper (light mode): the three inks print a step deeper so they sit at one weight on the page.
     static var onLinen: Bool { UserDefaults.standard.string(forKey: Crit.Paper.key) == Crit.Paper.linen.rawValue }
-    static var aqua: Color { onLinen ? hex(0x1FA7CE) : hex(0x5EC8E5) }
+    static var aqua: Color { coolFamilies ? hex(0x08B6AF) : onLinen ? hex(0x1FA7CE) : hex(0x5EC8E5) }
     static let violet = Color(red: 0x9D / 255, green: 0x7A / 255, blue: 0xD2 / 255)
     /// Allergens' ink: bright Yellow (riso Yellow). Pollen is yellow, and it sits a third of the wheel from
     /// pink and aqua. The verdict's middle step is a gold-orange so the two never meet.
     /// On linen the same ink prints deeper (an ochre yellow): bright yellow has no contrast on light paper.
-    static var gold: Color { onLinen ? hex(0xDBA300) : hex(0xFFE800) }
+    static var gold: Color { coolFamilies ? hex(0x69C27E) : onLinen ? hex(0xDBA300) : hex(0xFFE800) }
 
     static func hex(_ v: UInt32) -> Color {
         Color(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
@@ -296,7 +298,7 @@ enum WeatherColor {
     /// Heat is the hot end of the temperature scale, cold the cold end; pollutants and pollen their layer inks.
     /// Nil for what isn't the air (journal tags, time, place): the family's own ink stands in.
     static func ink(bin: String, level: String) -> Color? {
-        if print, ["temp", "temp_drop", "heat_alert", "humidity"].contains(bin) { return amber }
+        if print, ["temp", "temp_drop", "heat_alert", "humidity"].contains(bin) { return weatherInk }
         let c: Color? = switch bin {
         case "temp": temperature(level == "hot" ? 88 : level == "cold" ? 30 : 62)
         case "temp_drop": temperature(32)
@@ -383,8 +385,11 @@ enum WeatherColor {
     }
 
     static func temperature(_ f: Double) -> Color {
+        // Families in ink (Risk colour A, A + D, C): the sky's base is plain paper. Temperature is in the words and
+        // the reading, and only what's yours takes colour (the risk ink, drawn on top).
+        if Crit.RiskColor.familiesInInk { return paperTone }
         // Print: paper, with Amber laid on as the temperature leaves mild, in either direction.
-        if print { return paperTone.mix(with: amber, by: 0.7 * weatherAmount(f)) }
+        if print { return paperTone.mix(with: weatherInk, by: 0.7 * weatherAmount(f)) }
         guard let first = stops.first, let last = stops.last else { return .gray }
         if f <= first.f { return first.color }
         if f >= last.f { return last.color }

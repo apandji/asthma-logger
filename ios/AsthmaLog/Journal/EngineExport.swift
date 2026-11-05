@@ -60,7 +60,7 @@ enum EngineExport {
             "lookback_ozone_level", "lookback_ozone_now_worst", "lookback_ozone_earlier_worst",
             "lookback_temp_drop_level", "lookback_pm25_station", "lookback_ozone_station",
         ] + readingCols + ["in_patterns", "bin_spec_version"] + binCols + [
-            "tags", "tags_reviewed", "voice_transcript", "voice_note_file", "health_sample_id", "note",
+            "tags", "tags_reviewed", "voice_transcript", "voice_note_file", "health_sample_id", "note", "exerted_by",
         ]]
         for e in events.sorted(by: { $0.loggedAt < $1.loggedAt }) {
             let c = e.conditions
@@ -89,7 +89,8 @@ enum EngineExport {
             row += [frame == nil ? "no" : "yes", String(BinSpec.version)]
             row += Bins.all.map { def in frame.flatMap { def.levelOf($0) } ?? "" }
             row += [e.tags.sorted().map(\.rawValue).joined(separator: "; "), e.tagsReviewed ? "yes" : "no",
-                    e.voiceTranscript ?? "", e.voiceNoteFile ?? "", e.healthSampleID?.uuidString ?? "", e.note ?? ""]
+                    e.voiceTranscript ?? "", e.voiceNoteFile ?? "", e.healthSampleID?.uuidString ?? "", e.note ?? "",
+                    e.exertedByRaw ?? ""]
             rows.append(row)
         }
         return rows

@@ -243,12 +243,15 @@ enum VoicePrompts {
 struct BodyPanel: View {
     let date: Date
     let interactive: Bool
+    /// The moment it's about: its stamped "active in the hour before" leads, when there is one.
+    var event: LogEvent? = nil
     @State private var activity: String?
     @State private var health: HealthReader.Words?
     @State private var askHealth = false
 
     var body: some View {
         RailPanel(title: "Your body", icon: Icons.body) {
+            if let event { ExertionLine(event: event, card: false) }
             BodyLine(name: "Activity", text: activity ?? "…")
             if let h = health {
                 if let v = h.sleep { BodyLine(name: "Sleep", text: v) }

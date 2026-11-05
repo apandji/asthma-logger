@@ -17,6 +17,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Demos, design reviews and testing, first for now (owner, Oct 23: MVP demos). Move back to the bottom
+                // before TestFlight.
+                Section {
+                    NavigationLink("Demo and development") { DeveloperSettings(close: { dismiss() }) }
+                } footer: {
+                    Text("Loadouts, data sets, design switches and prototypes. Not part of felt air.")
+                }
+
                 Section {
                     Toggle("After a press, ask what was going on", isOn: $quickRecord)
                         .onChange(of: quickRecord) { _, on in
@@ -86,12 +94,6 @@ struct SettingsView: View {
                     Text("felt air is a diary, not a medical device. It compares the outdoor air when you used your inhaler with your baseline moments. It can't see indoor air, doesn't diagnose, and never says a flare will happen.")
                 }
 
-                // Everything for demos, design reviews and testing: one row, at the very bottom.
-                Section {
-                    NavigationLink("Demo and development") { DeveloperSettings(close: { dismiss() }) }
-                } footer: {
-                    Text("Data sets, demo moments, design switches and prototypes. Not part of felt air.")
-                }
             }
             .tint(Theme.standard) // switches in the app's own blue (the neutral tint would be white-on-white)
             .navigationTitle("Settings")
@@ -136,6 +138,16 @@ struct DeveloperSettings: View {
 
     var body: some View {
         Form {
+            LoadoutsSection(close: close)
+
+            // Every open design question in one place, grouped by screen (docs/design/ab-tests.md). In every build,
+            // so a TestFlight session can be set up on the phone.
+            Section {
+                NavigationLink("What we’re testing") { ABTestsView() }
+            } footer: {
+                Text("Each open design question, by screen: what it asks, the options, and which one is on. Colour, Now, Insights, Logging, Words.")
+            }
+
             Section {
                 LabeledContent("Showing", value: activeDataSet ?? "Your own data")
                 NavigationLink("Load a data set") { DataSetsView() }
@@ -172,27 +184,9 @@ struct DeveloperSettings: View {
                     demoNote = n == 0 ? nil : "Removed \(n) demo moments."
                 }
                 Toggle("Show demo data in Insights", isOn: $demo)
-                Button("Play onboarding") {
-                    close()
-                    // Let the sheet finish closing, or SwiftUI drops the full-screen onboarding.
-                    Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
-                }
-            } header: {
-                Text("Demo moments")
-            } footer: {
-                Text(demoNote ?? "Made-up moments for showing the Journal. They don't count toward your patterns.")
-            }
-
-            #if DEBUG
-            Section {
-                Toggle("Performance readout", isOn: $perfHUD)
-                Button("Replay tutorial") {
-                    UserDefaults.standard.set(true, forKey: AppTips.resetKey)
-                    tutorialNote = "Close felt air (swipe it away) and open it again to see the tutorial."
-                }
-                if let tutorialNote { Text(tutorialNote).font(.footnote).foregroundStyle(Theme.secondaryText) }
+                #if DEBUG
                 // One switch for the air of a day worth showing (it sets pollen and the air event underneath).
-                Picker("Demo scenario", selection: $demoScenario) {
+                Picker("Air on Now", selection: $demoScenario) {
                     ForEach(DemoScenario.allCases) { Text($0.title).tag($0) }
                 }
                 .onChange(of: demoScenario) { _, s in s.choose() }
@@ -213,16 +207,6 @@ struct DeveloperSettings: View {
                 Picker("Insights state", selection: $critInsightsState) {
                     ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
                 }
-            } header: {
-                Text("Demo")
-            } footer: {
-                Text("\(demoScenario.shows) Made up, on Now and on moments logged while it's on, never used for patterns. Insights state forces the ring.")
-            }
-            #endif
-
-            #if DEBUG
-            // Things that only happen under conditions, on cue for a demo.
-            Section {
                 Picker("Rescue-use check", selection: $demoCare) {
                     Text("Off (real moments)").tag("")
                     Text("Again within 4 hours").tag("again")
@@ -230,49 +214,38 @@ struct DeveloperSettings: View {
                 }
                 Toggle("Presses look like test sprays", isOn: $demoPriming)
                 Toggle("New moments count as active", isOn: $demoActive)
+                #endif
             } header: {
-                Text("Demo triggers")
+                Text("Staged for a demo")
             } footer: {
-                Text("Rescue-use check: the card on Now. Test sprays: the logged panel asks \"Were those test sprays?\" on any press. Active: new moments are stamped active (the exertion pattern). Also staged elsewhere: Demo scenario (smoke, storm, cold snap, pollen day: the header, air chips, advice card and the journal's exposure question), Demo calendar (what's on, beside the air), data sets (underlined patterns and the Insights ring's bubble).")
-            }
-            #endif
-
-            // The open design decisions, set per session with people (docs/design/ab-tests.md). In every build,
-            // so a TestFlight session can be set up on the phone.
-            Section {
-                NavigationLink("A/B tests") { ABTestsView() }
-            } footer: {
-                Text(ABTest.all.map { "\($0.id) \($0.get())" }.joined(separator: " · "))
+                Text(demoNote ?? "Made up for showing felt air, never used for patterns. Demo moments fill the Journal. Air on Now stages a day (smoke, a storm, a cold snap, a pollen day). Insights ring forces learning or learned. Rescue-use check shows the card on Now. Test sprays makes the logged panel ask. Active stamps new moments as after a walk.")
             }
 
             #if DEBUG
-
             Section {
+                Button("Play onboarding") {
+                    close()
+                    // Let the sheet finish closing, or SwiftUI drops the full-screen onboarding.
+                    Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
+                }
+                Button("Replay tutorial") {
+                    UserDefaults.standard.set(true, forKey: AppTips.resetKey)
+                    tutorialNote = "Close felt air (swipe it away) and open it again to see the tutorial."
+                }
+                if let tutorialNote { Text(tutorialNote).font(.footnote).foregroundStyle(Theme.secondaryText) }
                 Button("Reset onboarding and button", role: .destructive) {
                     button.resetForOnboarding()
                     UserDefaults.standard.set(true, forKey: AppTips.resetKey)
                     close()
                     Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
                 }
+                NavigationLink("Exertion check") { ExertionCheckView() }
+                Toggle("Performance readout", isOn: $perfHUD)
+                NavigationLink("Prototypes") { PrototypesView() }
             } header: {
-                Text("Onboarding")
+                Text("Tools")
             } footer: {
-                Text("Forgets the paired button, starts onboarding again and brings the tips back. Your moments stay.")
-            }
-
-            Section {
-                NavigationLink("Voice effect") { VoiceOrbPrototype() }
-                prototypeLink("Strand", "The week as a necklace: spikier beads for worse air, flowers for pollen.") { StrandPrototype() }
-                prototypeLink("Bouquet", "Each day's pollen as a bouquet; haze and sway for pollution.") { BouquetPrototype() }
-                prototypeLink("Airways v2 · horizon", "You're the breathing line; the air is the sky above.") { BreathHorizonPrototype() }
-                prototypeLink("Aura", "One day as a clock, you in the middle, air in rings around you.") { AuraPrototype() }
-                prototypeLink("Sampler", "The week as cross-stitch: denser where the air was higher.") { SamplerPrototype() }
-                prototypeLink("Overprint", "Three riso inks as hills through the week.") { OverprintPrototype() }
-                prototypeLink("Airways v1 · tubes", "April's first sketch: one tube per day.") { AirwaysPrototype() }
-            } header: {
-                Text("Prototypes")
-            } footer: {
-                Text("Debug builds only.")
+                Text("Reset forgets the paired button and brings the tips back; your moments stay. Exertion check shows what Health and Motion return. Prototypes are early sketches, not the app. Debug builds only.")
             }
             #endif
         }
@@ -281,8 +254,31 @@ struct DeveloperSettings: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    #if DEBUG
-    private func prototypeLink<D: View>(_ title: String, _ note: String, @ViewBuilder _ destination: @escaping () -> D) -> some View {
+}
+
+#if DEBUG
+/// Settings › Demo and development › Tools › Prototypes: early sketches kept for reference.
+struct PrototypesView: View {
+    var body: some View {
+        Form {
+            Section {
+                NavigationLink("Voice effect") { VoiceOrbPrototype() }
+                link("Strand", "The week as a necklace: spikier beads for worse air, flowers for pollen.") { StrandPrototype() }
+                link("Bouquet", "Each day's pollen as a bouquet; haze and sway for pollution.") { BouquetPrototype() }
+                link("Airways v2 · horizon", "You're the breathing line; the air is the sky above.") { BreathHorizonPrototype() }
+                link("Aura", "One day as a clock, you in the middle, air in rings around you.") { AuraPrototype() }
+                link("Sampler", "The week as cross-stitch: denser where the air was higher.") { SamplerPrototype() }
+                link("Overprint", "Three riso inks as hills through the week.") { OverprintPrototype() }
+                link("Airways v1 · tubes", "April's first sketch: one tube per day.") { AirwaysPrototype() }
+            } footer: {
+                Text("Early sketches, not the app.")
+            }
+        }
+        .navigationTitle("Prototypes")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func link<D: View>(_ title: String, _ note: String, @ViewBuilder _ destination: @escaping () -> D) -> some View {
         NavigationLink(destination: destination) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -290,8 +286,8 @@ struct DeveloperSettings: View {
             }
         }
     }
-    #endif
 }
+#endif
 
 private struct SettingsToolbar: ViewModifier {
     @State private var isShowing = false

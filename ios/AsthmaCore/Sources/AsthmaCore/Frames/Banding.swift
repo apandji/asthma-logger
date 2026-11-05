@@ -156,7 +156,8 @@ public enum FrameBuilder {
         indoorOutdoor: IndoorOutdoor? = nil,
         tags: Set<JournalTag> = [],
         tagsReviewed: Bool = false,
-        exerted: Bool? = nil
+        exerted: Bool? = nil,
+        infection: InfectionLevel? = nil
     ) -> FeatureFrame {
         FeatureFrame(
             id: id,
@@ -175,7 +176,8 @@ public enum FrameBuilder {
             indoorOutdoor: indoorOutdoor == .unknown ? nil : indoorOutdoor,
             tags: tags,
             tagsReviewed: tagsReviewed,
-            exerted: exerted
+            exerted: exerted,
+            infection: infection
         )
     }
 
@@ -190,13 +192,14 @@ public enum FrameBuilder {
         indoorOutdoor: IndoorOutdoor? = nil,
         tags: Set<JournalTag> = [],
         tagsReviewed: Bool = false,
-        exerted: Bool? = nil
+        exerted: Bool? = nil,
+        infection: InfectionLevel? = nil
     ) -> FeatureFrame {
         let parts = calendar.dateComponents([.hour, .month], from: date)
         return frame(
             id: id, kind: kind, hourOfDay: parts.hour ?? 12, month: parts.month ?? 1,
             conditions: conditions, place: place, indoorOutdoor: indoorOutdoor, tags: tags,
-            tagsReviewed: tagsReviewed, exerted: exerted
+            tagsReviewed: tagsReviewed, exerted: exerted, infection: infection
         )
     }
 }

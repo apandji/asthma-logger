@@ -8,6 +8,10 @@ import SwiftUI
 struct InsightsView: View {
     /// The home sky's colour at the moment the page opened: the bloom starts from it.
     var skyColor: Color? = nil
+    /// Opened from a pattern tip: that family's card opens, selected, and the page scrolls to it.
+    var focus: AirProfile.Category? = nil
+    /// The factor's bin within it, for the row's highlight.
+    var focusBin: String? = nil
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
     @AppStorage(Prefs.useDemoData) private var demo = false
     @State private var model = InsightsModel()
@@ -26,6 +30,7 @@ struct InsightsView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 24) {
                     // SF for the page's name; the one Recursive line on the page is your archetype.
@@ -56,6 +61,14 @@ struct InsightsView: View {
                 .opacity(shown ? 1 : 0)
             }
             .scrollIndicators(.hidden)
+            .task {
+                guard let focus else { return }
+                open = [focus]
+                picked = focus
+                try? await Task.sleep(for: .milliseconds(700))   // after the page has arrived
+                withAnimation(Theme.smooth) { proxy.scrollTo(focus, anchor: .center) }
+            }
+            }
             .background(paperBackground)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Page.self) { page in
@@ -105,6 +118,12 @@ struct InsightsView: View {
     /// The inks of what shows up most on your flare days, strongest first: the page is drawn from you.
     /// Before felt air has learned, a quiet blend of the weather's blues.
     private var factorColors: [Color] {
+        // Families in ink: the page is warm graphite, with the risk ink when something is yours.
+        if Crit.RiskColor.familiesInInk {
+            let yours = demoLearned || !(model.report?.gatedRows ?? []).isEmpty
+            return yours ? [Verdict.yellow, WeatherColor.hex(0x3A332C), WeatherColor.hex(0x1C1A17)]
+                         : [WeatherColor.hex(0x3A3833), WeatherColor.hex(0x2A2724), WeatherColor.hex(0x1C1A17)]
+        }
         if demoLearned { return [WeatherColor.pollen[2], WeatherColor.pollen[1], WeatherColor.ozone] }
         let rows = (model.report?.gatedRows ?? []).sorted { $0.lift > $1.lift }
         // The same inks as the radar and the cards (WeatherColor.ink(bin:level:)).
@@ -121,12 +140,17 @@ struct InsightsView: View {
     private func archetypeBlock(_ a: Archetype) -> some View {
         // Three steps only: the name (Recursive), what it means (body), the evidence (one grey line).
         VStack(spacing: 10) {
-            Text(a.name).font(Theme.serifTitleLarge).kerning(Theme.serifKerning).multilineTextAlignment(.center)
-            Text(a.line).font(.body).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            // Nothing passes the general bins, but felt air found where cold (or heat) starts for you: say that, not
+            // "nothing stands out" above a card that says the opposite.
+            let edge = a.kind == .noClearTrigger ? tempEdge?.edge : nil
+            let name = edge.map { $0.side == .below ? "Cold-sensitive, your way" : "Heat-sensitive, your way" } ?? a.name
+            let line = edge.map { $0.side == .below ? ($0.isGeneral ? "Your flare days come on freezing days, more than your usual ones do." : "Your flare days come on days colder than most of your usual ones, before it’s freezing.") : "Your flare days come on days warmer than most of your usual ones." } ?? a.line
+            Text(name).font(Theme.serifTitleLarge).kerning(Theme.serifKerning).multilineTextAlignment(.center)
+            Text(line).font(.body).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             // Learned, not a score. It can move: felt air keeps learning, and seasons change what's in the air.
             Button { path.append(Page.history) } label: {
                 HStack(spacing: 6) {
-                    Circle().fill(Verdict.green).frame(width: 7, height: 7)
+                    Circle().fill(Verdict.connected).frame(width: 7, height: 7)
                     Text("Learned · may shift with the seasons").lineLimit(1)
                     Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6)
                 }
@@ -164,18 +188,39 @@ struct InsightsView: View {
             let lead = arch.categories.first ?? axes.first?.category
             let opened = open ?? Set([lead].compactMap { $0 })
             ForEach(axes) { a in
-                CategoryCard(axis: a, triggers: report.map { AirProfile.triggers(a.category, report: $0) } ?? [],
-                             starred: Set(arch.leads.map(\.id)), selected: picked == a.category,
-                             expanded: opened.contains(a.category)) {
-                    withAnimation(Theme.snap) {
-                        var next = opened
-                        if next.contains(a.category) { next.remove(a.category) } else { next.insert(a.category) }
-                        open = next
-                        picked = next.contains(a.category) ? a.category : nil
-                    }
-                }
+                card(a, arch: arch, opened: opened).id(a.category)
             }
         }
+    }
+
+    private func card(_ a: AirProfile.Axis, arch: Archetype, opened: Set<AirProfile.Category>) -> some View {
+        let triggers: [AirProfile.Trigger] = report.map { AirProfile.triggers(a.category, report: $0) } ?? []
+        let starred = Set(arch.leads.map(\.id))
+        let mark: String? = focus == a.category ? focusBin : nil
+        return VStack(spacing: 10) {
+          CategoryCard(axis: a, triggers: triggers, starred: starred, selected: picked == a.category,
+                            expanded: opened.contains(a.category), highlight: mark) {
+            withAnimation(Theme.snap) {
+                var next = opened
+                if next.contains(a.category) { next.remove(a.category) } else { next.insert(a.category) }
+                open = next
+                picked = next.contains(a.category) ? a.category : nil
+            }
+          }
+          if a.category == .weather, let e = tempEdge {
+              PersonalEdgeCard(edge: e.edge, flare: e.flare, baseline: e.baseline)
+          }
+        }
+    }
+
+    /// Your own temperature edge, cold side first (`PersonalEdge`): rescue vs baseline moments' temperatures.
+    private var tempEdge: (edge: PersonalEdge, flare: [Double], baseline: [Double])? {
+        let real = events.filter { !$0.isDemo }
+        let t = { (k: MomentKind) in real.filter { $0.moment == k }.compactMap { $0.conditions?.input.temperatureF } }
+        let flare = t(.rescue), baseline = t(.okay)
+        if let e = PersonalEdge.find(flare: flare, baseline: baseline, side: .below, general: 32) { return (e, flare, baseline) }
+        if let e = PersonalEdge.find(flare: flare, baseline: baseline, side: .above, general: 90) { return (e, flare, baseline) }
+        return nil
     }
 
     // MARK: When and where

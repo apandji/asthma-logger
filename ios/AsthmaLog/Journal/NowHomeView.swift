@@ -299,7 +299,11 @@ struct NowHomeView: View {
             }
             .overlay {
                 if appLook == .menus, Crit.MenusSky.current == .cube, menusTab == .moments, menusScale == .timeline {
+                    // Above everything so it can fill the screen from inside; it steps back for the capture card
+                    // and the side menu, which sit lower in the stack.
                     AirCubeLayer(world: cubeWorld, slot: cubeSlot)
+                        .opacity(capture == nil && !showSideMenu ? 1 : 0)
+                        .animation(Theme.smooth, value: capture == nil && !showSideMenu)
                 }
             }
             .onChange(of: pendingLoadout, initial: true) { _, v in

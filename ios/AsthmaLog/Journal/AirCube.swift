@@ -594,6 +594,9 @@ final class CubeWorld {
         annotation = nil
         selected = nil
         zoomTarget = 0
+        // Gravity only reads the phone fully inside, so the gyroscope can stop as soon as you head out.
+        if motion.isDeviceMotionActive { motion.stopDeviceMotionUpdates() }
+        tilt = 0
     }
 
     /// Each frame: the camera on the slot, or on its way in or out (eased), the edges fading as they pass the screen.
@@ -631,10 +634,6 @@ final class CubeWorld {
                 }
                 sim.gravity = g
                 root.components.set(sim)
-            }
-            if zoomT == 0 {
-                tilt = 0
-                if motion.isDeviceMotionActive { motion.stopDeviceMotionUpdates() }
             }
         }
         glass.components.set(OpacityComponent(opacity: max(0, 1 - e / 0.65)))

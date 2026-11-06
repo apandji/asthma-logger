@@ -523,17 +523,13 @@ struct MenusStrip: View {
             }
             .buttonStyle(PressStyle())
             .disabled(atNow)
-            Text([atNow ? "Now" : window.center.formatted(.dateTime.hour().minute()), window.center >= now.addingTimeInterval(-60) ? verdict : nil]
+            Text([atNow ? "Now" : window.center.formatted(.dateTime.hour().minute()), window.center >= now.addingTimeInterval(-60) ? verdict : nil, spanLabel]
                 .compactMap { $0 }.joined(separator: " · "))
                 .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                 .monospacedDigit()
-            HStack(spacing: MenusColumns.gap) {
-                Text(spanLabel).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                    .frame(width: MenusColumns.name, alignment: .leading)
-                track
-                Color.clear.frame(width: MenusColumns.value, height: 1)
-            }
-            .padding(.horizontal, MenusColumns.page + MenusColumns.card)
+            // The whole width is the timeline (owner, Nov 6): the span sits in the line above.
+            track
+                .padding(.horizontal, MenusColumns.page + MenusColumns.card)
         }
         .padding(.top, 8)
         .frame(maxWidth: .infinity)
@@ -596,7 +592,7 @@ struct MenusStrip: View {
             let shown = moments.filter { $0.loggedAt >= window.start.addingTimeInterval(-3600) && $0.loggedAt <= window.end.addingTimeInterval(3600) }
             for m in shown where m.moment == .rescue || m.moment == .maintenance {
                 let noted = !(m.voiceTranscript ?? "").isEmpty || shown.contains { $0.moment == .note && abs($0.loggedAt.timeIntervalSince(m.loggedAt)) < 3600 }
-                let cx = x(m.loggedAt), pw = r * 1.1, ph = r * 2.8
+                let cx = x(m.loggedAt), pw = min(r, 7) * 1.1, ph = min(r, 7) * 2.8
                 let pill = Path(roundedRect: CGRect(x: cx - pw / 2, y: mid - ph / 2, width: pw, height: ph), cornerRadius: pw / 2)
                 ctx.fill(pill, with: .color(m.moment == .rescue ? Theme.rescue : Theme.standard))
                 if noted {
@@ -687,8 +683,8 @@ struct MenusDetails: View {
         // One playhead line through every row, continuing the strip's: in the chart column's middle.
         .overlay(alignment: .topLeading) {
             GeometryReader { g in
-                let x0 = MenusColumns.page + MenusColumns.card + MenusColumns.name + MenusColumns.gap
-                let w = g.size.width - 2 * (MenusColumns.page + MenusColumns.card) - MenusColumns.name - MenusColumns.value - 2 * MenusColumns.gap
+                let x0 = MenusColumns.page + MenusColumns.card
+                let w = g.size.width - 2 * (MenusColumns.page + MenusColumns.card)
                 Rectangle().fill(window.ink(events)).frame(width: 2, height: g.size.height)
                     .offset(x: x0 + w / 2 - 1)
             }
@@ -727,14 +723,12 @@ struct MenusDetails: View {
     }
 
     private func label(_ name: String, _ ink: Color?) -> some View {
-        Text(name).font(.subheadline.weight(.semibold)).foregroundStyle(ink ?? .primary)
-            .frame(width: MenusColumns.name, alignment: .leading).lineLimit(2).minimumScaleFactor(0.8)
+        Text(name).font(.subheadline.weight(.semibold)).foregroundStyle(ink ?? .primary).lineLimit(1)
     }
 
     private func valueText(_ s: String, dim: Bool = false) -> some View {
         Text(s).font(.caption.weight(.medium).monospacedDigit())
             .foregroundStyle(dim ? .tertiary : .secondary)
-            .frame(width: MenusColumns.value, alignment: .trailing)
     }
 
     /// The reading nearest the playhead, so the value follows you as you move.
@@ -746,8 +740,13 @@ struct MenusDetails: View {
     /// and timing, not amounts), rescues as orange rules, the playhead as a dark one.
     private func row(_ name: String, _ air: Theme.AirInk, _ points: [(Date, Double)], unit: String) -> some View {
         let ink = air.deep
-        return HStack(spacing: MenusColumns.gap) {
-            label(name, ink)
+        // Name and reading on one line, the chart the full width beneath, so every row shares the strip's axis.
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                label(name, ink)
+                Spacer()
+                if points.count >= 2, let r = reading(points) { valueText("\(Int(r.1.rounded()))\(unit.isEmpty ? "" : " ")\(unit)") }
+            }
             if points.count >= 2 {
                 let lo = points.map(\.1).min()!, hi = points.map(\.1).max()!
                 let y = { (v: Double) in hi > lo ? (v - lo) / (hi - lo) * 0.8 + 0.2 : 0.5 }
@@ -770,16 +769,13 @@ struct MenusDetails: View {
                 .chartPlotStyle { $0.clipped() }
                 .frame(height: 36)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { chartWidth = $0 }
-                if let r = reading(points) { valueText("\(Int(r.1.rounded()))\(unit.isEmpty ? "" : " ")\(unit)") }
             } else {
                 Text(name == "Pressure" || name == "Flu and illness" ? "Not tracked yet" : "No readings here")
                     .font(.caption).foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: 36)
-                Color.clear.frame(width: MenusColumns.value, height: 1)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(reading(points).map { "\(name), \(Int($0.1.rounded())) \(unit)" } ?? "\(name), no readings")
     }
@@ -787,8 +783,12 @@ struct MenusDetails: View {
     /// Dots on the window: one per log, in its colour; the playhead as a dark rule.
     private func dots(_ name: String, _ marks: [(Date, Color)]) -> some View {
         let inView = marks.filter { window.domain.contains($0.0) }
-        return HStack(spacing: MenusColumns.gap) {
-            label(name, nil)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                label(name, nil)
+                Spacer()
+                valueText(inView.isEmpty ? "None" : "\(inView.count)", dim: inView.isEmpty)
+            }
             GeometryReader { g in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.primary.opacity(0.06)).frame(height: 2)
@@ -800,21 +800,19 @@ struct MenusDetails: View {
             }
             .frame(height: 28)
             .clipped()
-            valueText(inView.isEmpty ? "None" : "\(inView.count)", dim: inView.isEmpty)
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(name), \(inView.count) in view")
     }
 
     private func empty(_ name: String, _ note: String) -> some View {
-        HStack(spacing: MenusColumns.gap) {
+        VStack(alignment: .leading, spacing: 4) {
             label(name, nil)
             Text(note).font(.caption).foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Color.clear.frame(width: MenusColumns.value, height: 1)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
     }
 }
 

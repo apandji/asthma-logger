@@ -39,6 +39,13 @@ struct MomentDetailsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 32) {
                 header
+                // Health-based looks: where it was, first, as Apple Health and Weather open a place.
+                if health, event.latitude != nil {
+                    MomentMap(event: event)
+                        .frame(height: 200)
+                        .clipShape(.rect(cornerRadius: 22, style: .continuous))
+                        .padding(.top, -12)
+                }
                 content
             }
             .padding(.horizontal, 20)
@@ -51,7 +58,18 @@ struct MomentDetailsView: View {
         .task { await loadAround() }
     }
 
-    private var paperBackground: some View {
+    /// The Health-based looks (Menus, Apple Health): grouped grey and white cards, as on Now. No paper, no grain.
+    private var health: Bool { Crit.AppLook.current.healthLike }
+
+    @ViewBuilder private var paperBackground: some View {
+        if health {
+            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+        } else {
+            paperField
+        }
+    }
+
+    private var paperField: some View {
         ZStack {
             Theme.paper(paper)
             SkyGrain(responds: false).opacity(0.5)
@@ -178,6 +196,14 @@ struct MomentDetailsView: View {
     // MARK: 2. The air
 
     private static func ink(_ f: ReadingFamily) -> Color {
+        if Crit.AppLook.current.healthLike {
+            // The air inks, as in Now's gradient and the charts.
+            return switch f {
+            case .weather: Theme.airWeather.deep
+            case .pollutants: Theme.airPM25.deep
+            case .allergens: Theme.airPollen.deep
+            }
+        }
         if Crit.RiskColor.familiesInInk { return .primary }
         return switch f {
         case .weather: WeatherColor.weatherInk
@@ -209,10 +235,18 @@ struct MomentDetailsView: View {
             }
             .font(.subheadline.weight(.semibold))
             .padding(.bottom, 10)
-            .overlay(alignment: .bottom) { Rectangle().fill(Self.ink(f)).frame(height: 1.5) }
-            ForEach(rows) { r in
-                row(r, ink: Self.ink(f))
-                if r.id != rows.last?.id { Rectangle().fill(Theme.secondaryText.opacity(0.18)).frame(height: 0.5).padding(.leading, 30) }
+            .overlay(alignment: .bottom) { if !health { Rectangle().fill(Self.ink(f)).frame(height: 1.5) } }
+            // Health-based looks: the rows in a white inset card, as in Apple Health.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(rows) { r in
+                    row(r, ink: Self.ink(f))
+                    if r.id != rows.last?.id { Rectangle().fill(Theme.secondaryText.opacity(0.18)).frame(height: 0.5).padding(.leading, 30) }
+                }
+            }
+            .padding(.horizontal, health ? 14 : 0)
+            .padding(.vertical, health ? 4 : 0)
+            .background {
+                if health { RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)) }
             }
             if f == .weather, let alerts = event.conditions?.alerts, !alerts.isEmpty {
                 ForEach(alerts, id: \.name) { a in
@@ -373,7 +407,7 @@ struct MomentDetailsView: View {
         if event.latitude != nil || event.placeName != nil {
             VStack(alignment: .leading, spacing: 12) {
                 sectionTitle("Where", "mappin.and.ellipse")
-                if mapNamespace == nil, event.latitude != nil {
+                if mapNamespace == nil, !health, event.latitude != nil {
                     MomentMap(event: event)
                         .frame(height: 150)
                         .clipShape(.rect(cornerRadius: 16, style: .continuous))

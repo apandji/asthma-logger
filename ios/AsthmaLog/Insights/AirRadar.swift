@@ -33,6 +33,7 @@ struct AirRadar: View {
     /// Blue), so the radar, the card and the page's wash agree. No pattern: neutral grey.
     static func ink(_ a: AirProfile.Axis) -> Color {
         guard a.status == .pattern || a.status == .early else { return Color(white: 0.55) }
+        if Crit.AppLook.current.healthLike { return ink(a.category) }
         // Families in ink: a pattern is yours, so it takes the risk highlight; leaning stays ink.
         if Crit.RiskColor.familiesInInk { return a.status == .pattern ? Verdict.red : .primary }
         if let r = a.lead, let c = WeatherColor.ink(bin: r.bin, level: r.level) { return c }
@@ -40,7 +41,17 @@ struct AirRadar: View {
     }
 
     static func ink(_ c: AirProfile.Category) -> Color {
-        switch c {
+        if Crit.AppLook.current.healthLike {
+            // The air inks, as in the cube and the charts: one colour per family, always.
+            switch c {
+            case .weather: return Theme.airWeather.color
+            case .biologics: return Theme.airPollen.color.mix(with: Theme.airTree.color, by: 0.25)
+            case .particulates: return Theme.airPM25.color
+            case .exertion: return Theme.airNO2.color.mix(with: Theme.airPM10.color, by: 0.4)
+            case .infections: return Theme.airIllness.color
+            }
+        }
+        return switch c {
         case .weather: WeatherColor.print ? WeatherColor.weatherInk : WeatherColor.temperature(38)
         case .biologics: WeatherColor.pollen[2]
         case .particulates: WeatherColor.no2
@@ -121,6 +132,11 @@ private struct RadarDots: View {
             }
             let inks = AirRadar.order.map { AirRadar.ink(profile.axis($0)) }
             let dirs = (0..<n).map(AirRadar.direction)
+            if Crit.AppLook.current.healthLike {
+                // Health-based looks: the shape as soft colour, like Now's air gradient (owner, Nov 6), on hairline rings.
+                Self.drawGradient(&ctx, c: c, R: R, dirs: dirs, reach: reach, inks: inks, selected: selected, profile: profile)
+                return
+            }
             let spacing: CGFloat = 7
             let m = Int(R / spacing) + 2
             for j in -m...m {
@@ -168,6 +184,49 @@ private struct RadarDots: View {
             }
         }
         .accessibilityHidden(true)
+    }
+
+    /// The gradient radar: hairline rings and spokes, then the shape filled wedge by wedge, each blending from one
+    /// family's ink to the next and fading toward the middle, softened, with a fine outline and the corners on top.
+    static func drawGradient(_ ctx: inout GraphicsContext, c: CGPoint, R: CGFloat, dirs: [CGPoint], reach: [CGFloat],
+                             inks: [Color], selected: AirProfile.Category?, profile: AirProfile) {
+        let n = dirs.count
+        func corner(_ k: Int, _ r: CGFloat) -> CGPoint { CGPoint(x: c.x + dirs[k].x * R * r, y: c.y + dirs[k].y * R * r) }
+        var grid = Path()
+        for ring in [1.0 / 3, 2.0 / 3, 1.0] {
+            grid.addLines((0..<n).map { corner($0, ring) }); grid.closeSubpath()
+        }
+        for k in 0..<n { grid.move(to: c); grid.addLine(to: corner(k, 1)) }
+        ctx.stroke(grid, with: .color(Color.primary.opacity(0.1)), lineWidth: 0.75)
+        let pts = (0..<n).map { corner($0, reach[$0]) }
+        ctx.drawLayer { l in
+            l.addFilter(.blur(radius: 4))
+            for a in 0..<n {
+                let b = (a + 1) % n
+                guard reach[a] > 0 || reach[b] > 0 else { continue }
+                var wedge = Path()
+                wedge.move(to: c); wedge.addLine(to: pts[a]); wedge.addLine(to: pts[b]); wedge.closeSubpath()
+                let dim: Double = selected.map { s in AirRadar.order[a] == s || AirRadar.order[b] == s ? 1 : 0.35 } ?? 1
+                l.opacity = dim
+                l.fill(wedge, with: .linearGradient(Gradient(colors: [inks[a], inks[b]]), startPoint: pts[a], endPoint: pts[b]))
+            }
+            // Lighter toward the middle, so the colour gathers at the corners that reach furthest.
+            l.opacity = 1
+            l.blendMode = .destinationOut
+            l.fill(Path(ellipseIn: CGRect(x: c.x - R * 0.35, y: c.y - R * 0.35, width: R * 0.7, height: R * 0.7)),
+                   with: .radialGradient(Gradient(colors: [.black.opacity(0.3), .clear]), center: c, startRadius: 0, endRadius: R * 0.35))
+        }
+        var outline = Path()
+        outline.addLines(pts); outline.closeSubpath()
+        ctx.stroke(outline, with: .color(Color.primary.opacity(0.35)), lineWidth: 1)
+        for (k, cat) in AirRadar.order.enumerated() {
+            let status = profile.axis(cat).status
+            guard status == .pattern || status == .early else { continue }
+            let p = pts[k], rr: CGFloat = 4.5
+            let dot = Path(ellipseIn: CGRect(x: p.x - rr, y: p.y - rr, width: 2 * rr, height: 2 * rr))
+            if status == .pattern { ctx.fill(dot, with: .color(inks[k])); ctx.stroke(dot, with: .color(.white), lineWidth: 1.5) }
+            else { ctx.stroke(dot, with: .color(inks[k]), lineWidth: 1.5) }
+        }
     }
 
     /// For a point, the two neighbouring corners whose wedge holds it, and how far it sits from the first toward

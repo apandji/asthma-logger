@@ -19,8 +19,36 @@ struct CaptureBar: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     /// The + follows the rail to the hand's side.
     @AppStorage(Prefs.railLeft) private var railLeft = false
+    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.feltAir
+    /// Apple Health look: Your moments has its own tab and page.
+    @State private var showMoments = false
+    @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
 
     var body: some View {
+        if appLook == .health {
+            // Apple Health look: the tab bar on the left, the + on the right, on one baseline.
+            HStack(alignment: .center) {
+                HealthTabBar(insights: { showInsights = true }, moments: { showMoments = true })
+                Spacer()
+                logControl
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
+            .sheet(isPresented: $showMoments) {
+                NavigationStack {
+                    MomentsLogView(events: events)
+                        .background(Color(uiColor: .systemGroupedBackground))
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) { Button("Done") { showMoments = false } }
+                        }
+                }
+            }
+        } else {
+            feltAirBar
+        }
+    }
+
+    private var feltAirBar: some View {
         HStack(alignment: .bottom, spacing: 12) {
             if railLeft { logControl; Spacer() }
             switch insightsEntry {
@@ -342,5 +370,35 @@ struct LoggedToast: View {
         .glassEffect(.regular, in: .capsule)
         .padding(.horizontal, 16)
         .transition(.move(edge: .top).combined(with: .opacity))
+    }
+}
+
+/// The Apple Health look's tab bar: a glass capsule with Insights (sparkle) and Your moments (the list that
+/// was a row on Insights), each opening its own page (Design crit › App look).
+struct HealthTabBar: View {
+    let insights: () -> Void
+    let moments: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: insights) { item("sparkles", "Insights") }
+                .buttonStyle(PressStyle())
+            Button(action: moments) { item("list.bullet", "Your moments") }
+                .buttonStyle(PressStyle())
+        }
+        .padding(.horizontal, 6)
+        .glassEffect(.regular, in: .capsule)
+    }
+
+    private func item(_ symbol: String, _ label: String) -> some View {
+        VStack(spacing: 4) {
+            // One icon height, so the labels share a baseline whatever the symbol's shape.
+            Image(systemName: symbol).font(.system(size: 22, weight: .semibold))
+                .frame(height: 28)
+            Text(label).font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(.primary)
+        .frame(width: 96, height: 56)
+        .contentShape(Rectangle())
     }
 }

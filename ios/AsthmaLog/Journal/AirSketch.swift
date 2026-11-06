@@ -17,7 +17,8 @@ struct AirSketch: View {
     @State private var lastX: CGFloat = 0
     @State private var pokes = 0
 
-    static let ink = Color(red: 0.19, green: 0.17, blue: 0.82)
+    static let ink = Color(white: 0.28)
+    static let goodInk = Color(red: 0.24, green: 0.5, blue: 0.24)
 
     var body: some View {
         GeometryReader { geo in
@@ -60,6 +61,20 @@ struct AirSketch: View {
                 .allowsHitTesting(false)
             }
         }
+        // On a calm-air day, a kind note in handwriting.
+        .overlay(alignment: .bottom) {
+            if let n = model.note {
+                Text(n)
+                    .font(.custom("Bradley Hand", size: 19, relativeTo: .body))
+                    .foregroundStyle(Self.goodInk)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 2)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.smooth(duration: 0.6), value: model.note)
         .animation(.smooth(duration: 0.3), value: model.selected)
         .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.5), trigger: pokes)
         .onAppear { model.setAir(air) }
@@ -77,10 +92,14 @@ final class SketchModel {
 
     private(set) var selected: Info?
     private(set) var summary = ""
+    /// A kind note on calm-air days ("Could be a nice day for a picnic").
+    private(set) var note: String?
+    static let notes = ["Calm air. Could be a nice day for a picnic.", "Calm air. Nice for a walk outside.",
+                        "Soft air. Maybe open a window.", "Calm air. A good one for the park."]
     @ObservationIgnored private(set) var dragging = false
 
     // Targets from the air (0…1) and where the drawing is on its way there.
-    private struct Levels { var pollution = 0.0, warmth = 0.5, humidity = 0.0, tree = 0.0, grass = 0.0, weed = 0.0 }
+    private struct Levels { var pollution = 0.0, warmth = 0.5, humidity = 0.0, tree = 0.0, grass = 0.0, weed = 0.0, good = 0.0 }
     @ObservationIgnored private var target = Levels()
     @ObservationIgnored private var now = Levels()
     @ObservationIgnored private var infos: [Part: Info] = [:]
@@ -111,6 +130,13 @@ final class SketchModel {
         target.tree = Double(a.tree) / 3
         target.grass = Double(a.grass) / 3
         target.weed = Double(a.weed) / 3
+        // A calm-air day: every pollutant in the EPA's "Good" range, pollen no more than low, mild, not muggy. Said kindly,
+        // and only about the air (never about breathing or attacks).
+        let mild = a.tempF.map { (50...85).contains($0) } ?? false
+        let cleanAir = a.pm25 <= 12 && a.pm10 <= 54 && a.ozone <= 54 && a.no2 <= 53
+        let calm = cleanAir && a.tree <= 1 && a.grass <= 1 && a.weed <= 1 && mild && (a.humidity == 0 || a.humidity < 70)
+        target.good = calm ? 1 : 0
+        note = calm ? Self.notes[abs(Int(a.pm25 * 7 + (a.tempF ?? 0))) % Self.notes.count] : nil
         let temp = a.tempF.map { t in "\(Int(t.rounded()))°F, " + (t < 45 ? "cold" : t < 60 ? "cool" : t < 75 ? "mild" : t < 85 ? "warm" : "hot") } ?? "No reading"
         infos = [
             .cloud: Info(title: "Cloud · pollution", detail: dirt.isEmpty ? "No reading" : dirt.joined(separator: " · ")),
@@ -160,6 +186,7 @@ final class SketchModel {
         now.tree += (target.tree - now.tree) * k
         now.grass += (target.grass - now.grass) * k
         now.weed += (target.weed - now.weed) * k
+        now.good += (target.good - now.good) * (1 - exp(-dt * 1.5))
         for (p, s) in springs {
             let v = s.v + (-160 * s.x - 9 * s.v) * dt
             springs[p] = (s.x + v * dt, v)
@@ -202,8 +229,15 @@ final class SketchModel {
         let scale = min(size.width / 3.1, size.height / 2.6)
         let v = View3D(yaw: yaw, scale: scale, origin: CGPoint(x: size.width / 2, y: size.height * 0.66))
         let frame = Int(time * 7)   // line boil: a fresh wobble seven times a second
-        let ink = AirSketch.ink
         let paper = Color(uiColor: .systemGroupedBackground)
+        // Charcoal on ordinary and harder days; coloured pencil when the air is calm (owner, Nov 6).
+        let good = now.good
+        let graphite = Color(white: 0.28)
+        func pencil(_ hex: UInt32) -> Color {
+            let c = Color(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+            return graphite.mix(with: c, by: good)
+        }
+        var pen = graphite
         anchors = []
 
         /// Straight lines, drawn by hand: each edge split into short steps that wobble a little.
@@ -220,9 +254,19 @@ final class SketchModel {
             }
             var path = Path()
             path.addLines(q)
+            // Pencil: a second, lighter pass just off the first, like a sketch line gone over twice.
+            let q2 = pts.enumerated().map { i, p in
+                CGPoint(x: p.x + Self.noise(seed &+ i &+ 5003, frame) * 1.6, y: p.y + Self.noise(seed &+ i &+ 6011, frame) * 1.6)
+            }
+            path.addLines(q2)
             return path
         }
         func wobbly(_ pts: [CGPoint], seed: Int, closed: Bool = false, amount: Double = 1.1) -> Path {
+            var path = curve(pts, seed: seed, closed: closed, amount: amount)
+            path.addPath(curve(pts, seed: seed &+ 5003, closed: closed, amount: amount * 1.7))   // pencil: gone over twice
+            return path
+        }
+        func curve(_ pts: [CGPoint], seed: Int, closed: Bool, amount: Double) -> Path {
             let q = pts.enumerated().map { i, p in
                 CGPoint(x: p.x + Self.noise(seed &+ i, frame) * amount, y: p.y + Self.noise(seed &+ i &+ 977, frame) * amount)
             }
@@ -239,7 +283,12 @@ final class SketchModel {
             return path
         }
         func stroke(_ p: Path, _ w: Double = 2) {
-            ctx.stroke(p, with: .color(ink), style: StrokeStyle(lineWidth: w, lineCap: .round, lineJoin: .round))
+            ctx.stroke(p, with: .color(pen.opacity(0.85)), style: StrokeStyle(lineWidth: w * 0.7, lineCap: .round, lineJoin: .round))
+        }
+        /// Paper behind a shape (so it hides what's behind it), with a light coloured-pencil wash on good days.
+        func fillPaper(_ p: Path) {
+            ctx.fill(p, with: .color(paper))
+            if good > 0.02 { ctx.fill(p, with: .color(pen.opacity(0.16 * good))) }
         }
         /// A local drawing (unit coordinates, y up) placed at a 3D point, facing you.
         func local(_ pts: [CGPoint], at base: CGPoint, size s: Double) -> [CGPoint] {
@@ -249,28 +298,26 @@ final class SketchModel {
         // Things to draw, back to front.
         var items: [(depth: Double, draw: () -> Void)] = []
 
-        // Ground: the tile's top edge all round, and its sides where they face you.
-        let half = 0.95, low = -0.22
-        let corners: [SIMD3<Double>] = [[-half, 0, -half], [half, 0, -half], [half, 0, half], [-half, 0, half]]
+        // Ground: a round mound, like the owner's drawing: the top's edge, and a curve underneath.
         items.append((-10, {
-            stroke(shaky(corners.map(v.point), seed: 11, closed: true), 2.2)
-            for i in 0..<4 {
-                let a = corners[i], b = corners[(i + 1) % 4]
-                // A side faces you when its middle is nearer than the tile's centre.
-                let mid = (a + b) / 2
-                guard v.depth(mid) > 0.05 else { continue }
-                let a2 = SIMD3<Double>(a.x, low, a.z), b2 = SIMD3<Double>(b.x, low, b.z)
-                stroke(shaky([v.point(a), v.point(a2)], seed: 30 + i), 1.8)
-                stroke(shaky([v.point(b), v.point(b2)], seed: 40 + i), 1.8)
-                stroke(shaky([v.point(a2), v.point(b2)], seed: 50 + i), 1.8)
-                // Earth: a few short strokes down the side.
-                for j in 1..<5 {
-                    let t = Double(j) / 5
-                    let p = a + (b - a) * t
-                    let top = v.point([p.x, -0.06, p.z]), bot = v.point([p.x, -0.13 - 0.04 * Self.noise(i, j), p.z])
-                    stroke(wobbly([top, bot], seed: 60 + i * 9 + j, amount: 0.6), 1.2)
-                }
+            pen = pencil(0x6BA34F)
+            let rim = (0..<44).map { k -> CGPoint in
+                let a = Double(k) / 44 * 2 * .pi
+                let r = 0.98 * (1 + 0.03 * sin(5 * a))
+                return v.point([cos(a) * r, 0, sin(a) * r])
             }
+            let top = wobbly(rim, seed: 11, closed: true)
+            fillPaper(top)
+            stroke(top, 2.4)
+            let left = rim.min { $0.x < $1.x }!, right = rim.max { $0.x < $1.x }!
+            let bottom = CGPoint(x: (left.x + right.x) / 2, y: max(left.y, right.y) + v.scale * 0.42)
+            let under = (0...16).map { k -> CGPoint in
+                let t = Double(k) / 16
+                let x = left.x + (right.x - left.x) * t
+                let y = left.y + (right.y - left.y) * t + (bottom.y - (left.y + right.y) / 2) * sin(t * .pi)
+                return CGPoint(x: x, y: y)
+            }
+            stroke(wobbly(under, seed: 20), 2.2)
         }))
 
         // Grass: little squiggles on the ground, taller with grass pollen; seed ticks when there's pollen.
@@ -279,6 +326,7 @@ final class SketchModel {
             let x = Self.noise(i, 1) * 0.78, z = Self.noise(i, 2) * 0.78
             let base = SIMD3<Double>(x, 0, z)
             items.append((v.depth(base), {
+                pen = pencil(0x5E9E3E)
                 let p = v.point(base)
                 let h = 0.06 + 0.07 * self.now.grass
                 let sway = sin(self.time * 1.4 + Double(i)) * (0.012 + g * 0.03)
@@ -294,7 +342,7 @@ final class SketchModel {
                     for k in [1, 3, 5] {
                         let tip = local([CGPoint(x: Double(k) * 0.03 - 0.09 + sway, y: h - droop)], at: p, size: v.scale)[0]
                         let r = 2.2 * self.now.grass + 0.6
-                        ctx.fill(Path(ellipseIn: CGRect(x: tip.x - r, y: tip.y - r * 1.6, width: r * 2, height: r * 2.4)), with: .color(ink))
+                        ctx.fill(Path(ellipseIn: CGRect(x: tip.x - r, y: tip.y - r * 1.6, width: r * 2, height: r * 2.4)), with: .color(pen))
                     }
                 }
             }))
@@ -304,13 +352,14 @@ final class SketchModel {
         // Rocks.
         for (i, r) in [SIMD3<Double>(-0.45, 0, -0.6), [0.65, 0, 0.2], [0.2, 0, 0.7]].enumerated() {
             items.append((v.depth(r), {
+                pen = pencil(0x8C8C8C)
                 let c = v.point(r)
                 let pts = (0..<10).map { k -> CGPoint in
                     let a = Double(k) / 10 * 2 * .pi
                     return CGPoint(x: cos(a) * 0.07 * (1 + 0.15 * Self.noise(i, k)), y: max(0, sin(a)) * 0.05)
                 }
                 let path = wobbly(local(pts, at: c, size: v.scale), seed: 300 + i * 11, closed: true)
-                ctx.fill(path, with: .color(paper))
+                fillPaper(path)
                 stroke(path, 1.6)
             }))
         }
@@ -319,6 +368,7 @@ final class SketchModel {
         let treeBase = SIMD3<Double>(-0.1, 0, 0.05)
         let tw = spring(.tree)
         items.append((v.depth(treeBase), {
+            pen = pencil(0x8B5A3C)
             let b = v.point(treeBase)
             let s = v.scale
             stroke(wobbly(local([CGPoint(x: -0.035, y: 0), CGPoint(x: -0.03, y: 0.3), CGPoint(x: -0.025, y: 0.62)], at: b, size: s), seed: 400), 2)
@@ -330,8 +380,9 @@ final class SketchModel {
                 let r = 0.34 * (1 + 0.09 * sin(7 * a + 1.3) + 0.04 * sin(13 * a)) * (1 + tw * 0.06)
                 return CGPoint(x: cos(a) * r * 1.08 + wob, y: 0.9 + sin(a) * r)
             }
+            pen = pencil(0x4E9A3A)
             let path = wobbly(local(canopy, at: b, size: s), seed: 430, closed: true)
-            ctx.fill(path, with: .color(paper))
+            fillPaper(path)
             stroke(path, 2.2)
             // A few leaf marks inside.
             for k in 0..<5 {
@@ -346,14 +397,16 @@ final class SketchModel {
             let r = 0.42 + 0.2 * abs(Self.noise(i, 4))
             let p3 = treeBase + SIMD3<Double>(cos(a) * r, 0.75 + 0.35 * Self.noise(i, 5) + sin(time * 0.7 + Double(i)) * 0.05, sin(a) * r)
             items.append((v.depth(p3), {
+                pen = pencil(0xD9A520)
                 let p = v.point(p3)
-                ctx.fill(Path(ellipseIn: CGRect(x: p.x - 2, y: p.y - 2, width: 4, height: 4)), with: .color(ink))
+                ctx.fill(Path(ellipseIn: CGRect(x: p.x - 2, y: p.y - 2, width: 4, height: 4)), with: .color(pen))
             }))
         }
 
         // Pines: stacked zigzag triangles.
         for (i, (p3, h)) in [(SIMD3<Double>(0.6, 0, -0.55), 0.8), ([-0.62, 0, -0.45], 0.6)].enumerated() {
             items.append((v.depth(p3), {
+                pen = pencil(0x2F7D4A)
                 let b = v.point(p3)
                 stroke(wobbly(local([CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 0.12 * h)], at: b, size: v.scale), seed: 500 + i), 1.8)
                 for k in 0..<3 {
@@ -361,7 +414,7 @@ final class SketchModel {
                     let w = (0.22 - kf * 0.05) * h, y0 = (0.12 + kf * 0.2) * h, y1 = y0 + 0.36 * h
                     let tri = [CGPoint(x: -w, y: y0), CGPoint(x: 0, y: y1), CGPoint(x: w, y: y0)]
                     let path = shaky(local(tri, at: b, size: v.scale), seed: 510 + i * 13 + k, closed: true)
-                    ctx.fill(path, with: .color(paper))
+                    fillPaper(path)
                     stroke(path, 1.9)
                 }
             }))
@@ -373,6 +426,7 @@ final class SketchModel {
         for i in 0..<flowerCount {
             let p3 = SIMD3<Double>(Self.noise(i, 21) * 0.7, 0, Self.noise(i, 22) * 0.7)
             items.append((v.depth(p3), {
+                pen = pencil(0xE0559A)
                 let b = v.point(p3)
                 let s = v.scale * (0.9 + w * 0.15)
                 let top = CGPoint(x: sin(self.time * 1.1 + Double(i)) * 0.01, y: 0.2)
@@ -389,7 +443,7 @@ final class SketchModel {
                     stroke(wobbly(local(petal, at: b, size: s), seed: 620 + i * 31 + k * 3), 1.4)
                 }
                 let c = local([top], at: b, size: s)[0]
-                ctx.stroke(Path(ellipseIn: CGRect(x: c.x - 3, y: c.y - 3, width: 6, height: 6)), with: .color(ink), lineWidth: 1.4)
+                ctx.stroke(Path(ellipseIn: CGRect(x: c.x - 3, y: c.y - 3, width: 6, height: 6)), with: .color(pen), lineWidth: 1.4)
             }))
             if i == 0 { anchors.append((.blooms, v.point(p3 + [0, 0.2, 0]))) }
         }
@@ -402,6 +456,7 @@ final class SketchModel {
             let r = 0.5 + 0.45 * abs(Self.noise(i, 7))
             let p3 = SIMD3<Double>(cos(a) * r, 0.55 + 0.75 * abs(Self.noise(i, 8)) + sin(time * 0.4 + Double(i)) * 0.04, sin(a) * r)
             items.append((v.depth(p3), {
+                pen = pencil(0x7FB0D8)
                 let c = v.point(p3)
                 let pts = (0..<9).map { k -> CGPoint in
                     let x = Double(k) / 8 * 0.26 - 0.13
@@ -416,6 +471,7 @@ final class SketchModel {
         let cl = spring(.cloud)
         let cloud3 = SIMD3<Double>(0.5 + sin(time * 0.11) * 0.1, 1.2 + sin(time * 0.37) * 0.04, -0.2)
         items.append((v.depth(cloud3) + 5, {
+            pen = pencil(0x4A8FD8)
             let c = v.point(cloud3)
             let s = v.scale * 0.85 * (1 + cl * 0.08)
             let bumps: [(Double, Double, Double)] = [(-0.36, 0.1, 0.14), (-0.16, 0.22, 0.17), (0.08, 0.27, 0.2), (0.28, 0.18, 0.14), (0.4, 0.08, 0.1)]
@@ -430,7 +486,7 @@ final class SketchModel {
             let path = wobbly(outline, seed: 800)
             var shape = path
             shape.closeSubpath()
-            ctx.fill(shape, with: .color(paper))
+            fillPaper(shape)
             // Hatching: denser as pollution rises; crossed when it's high.
             let p = self.now.pollution
             if p > 0.04 {
@@ -442,7 +498,7 @@ final class SketchModel {
                     var n = 0
                     while x < rect.maxX {
                         let line = wobbly([CGPoint(x: x, y: rect.maxY), CGPoint(x: x + rect.height, y: rect.minY)], seed: 900 + n, amount: 0.7)
-                        l.stroke(line, with: .color(ink.opacity(0.75)), style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
+                        l.stroke(line, with: .color(pen.opacity(0.75)), style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
                         x += gap
                         n += 1
                     }
@@ -450,7 +506,7 @@ final class SketchModel {
                         x = rect.minX
                         while x < rect.maxX + rect.height {
                             let line = wobbly([CGPoint(x: x, y: rect.maxY), CGPoint(x: x - rect.height, y: rect.minY)], seed: 1000 + n, amount: 0.7)
-                            l.stroke(line, with: .color(ink.opacity(0.6)), style: StrokeStyle(lineWidth: 1, lineCap: .round))
+                            l.stroke(line, with: .color(pen.opacity(0.6)), style: StrokeStyle(lineWidth: 1, lineCap: .round))
                             x += gap * 1.3
                             n += 1
                         }
@@ -464,13 +520,17 @@ final class SketchModel {
         // Sun: fixed in the sky; its rays are the temperature.
         let sw = spring(.sun)
         items.append((-100, {
+            pen = pencil(0xF0B020)
             let c = CGPoint(x: size.width * 0.2, y: size.height * 0.16)
             let r = 15.0 * (1 + sw * 0.15)
             let circle = (0..<18).map { k -> CGPoint in
                 let a = Double(k) / 18 * 2 * .pi
                 return CGPoint(x: c.x + cos(a) * r, y: c.y + sin(a) * r)
             }
-            stroke(wobbly(circle, seed: 1100, closed: true), 2)
+            let disc = wobbly(circle, seed: 1100, closed: true)
+            fillPaper(disc)
+            if good > 0.02 { ctx.fill(disc, with: .color(pen.opacity(0.3 * good))) }
+            stroke(disc, 2)
             let warm = self.now.warmth
             if warm > 0.25 {
                 let len = 6 + 16 * (warm - 0.25) / 0.75

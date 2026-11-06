@@ -1813,20 +1813,42 @@ struct NowSky: View {
         }
         return a
     }
-    /// The air card's readings: each with its value, its level in words, its ink and how much of a high reading it is.
+    /// The air card's three bands (owner, Nov 6: "pollution, weather and allergens, not the PM types"): each with
+    /// what's in it, its ink and how much of a high reading it is. The readings themselves are below, in Environment.
     private var airCardItems: [MenusAirCard.Item] {
-        let a = cubeAir, l = layers
+        let a = cubeAir
         func share(_ v: Double, _ high: Double) -> Double { min(1, max(0, v / high)).squareRoot() }
-        func tier(_ layer: AirLayers.Layer?) -> Int? { layer.map { $0.level.rawValue } }
-        func pollen(_ n: Int) -> String { ["None", "Low", "Moderate", "High"][max(0, min(3, n))] }
+        func pollen(_ n: Int) -> String { ["none", "low", "moderate", "high"][max(0, min(3, n))] }
         var out: [MenusAirCard.Item] = []
-        if a.pm25 > 0 { out.append(.init(name: "PM2.5", value: "\(Int(a.pm25.rounded())) µg/m³", tier: tier(l.pm25), ink: Theme.airPM25, share: share(a.pm25, 35))) }
-        if a.pm10 > 0 { out.append(.init(name: "PM10", value: "\(Int(a.pm10.rounded())) µg/m³", tier: tier(l.pm10), ink: Theme.airPM10, share: share(a.pm10, 150))) }
-        if a.ozone > 0 { out.append(.init(name: "Ozone", value: "\(Int(a.ozone.rounded())) ppb", tier: tier(l.ozone), ink: Theme.airOzone, share: share(a.ozone, 70))) }
-        if a.no2 > 0 { out.append(.init(name: "NO₂", value: "\(Int(a.no2.rounded())) ppb", tier: tier(l.no2), ink: Theme.airNO2, share: share(a.no2, 100))) }
-        if a.tree > 0 { out.append(.init(name: "Tree pollen", value: pollen(a.tree), tier: tier(l.tree), ink: Theme.airTree, share: Double(a.tree) / 3)) }
-        if a.grass > 0 { out.append(.init(name: "Grass pollen", value: pollen(a.grass), tier: tier(l.grass), ink: Theme.airGrass, share: Double(a.grass) / 3)) }
-        if a.weed > 0 { out.append(.init(name: "Weed pollen", value: pollen(a.weed), tier: tier(l.weed), ink: Theme.airWeed, share: Double(a.weed) / 3)) }
+        // Pollution: the most of any one pollutant, against its high edge.
+        var dirt: [(String, Double)] = []
+        if a.pm25 > 0 { dirt.append(("PM2.5 \(Int(a.pm25.rounded())) µg/m³", share(a.pm25, 35))) }
+        if a.pm10 > 0 { dirt.append(("PM10 \(Int(a.pm10.rounded())) µg/m³", share(a.pm10, 150))) }
+        if a.ozone > 0 { dirt.append(("Ozone \(Int(a.ozone.rounded())) ppb", share(a.ozone, 70))) }
+        if a.no2 > 0 { dirt.append(("NO₂ \(Int(a.no2.rounded())) ppb", share(a.no2, 100))) }
+        if !dirt.isEmpty {
+            out.append(.init(name: "Pollution", value: dirt.map(\.0).joined(separator: " · "),
+                             ink: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac),
+                             share: dirt.map(\.1).max() ?? 0))
+        }
+        // Weather: the strongest of cold/dry, heat/humid and a sudden drop; always a little, so it's there to tap.
+        let h = conditions?.best(.humidity)?.value, fall = conditions?.tempFallF
+        if temperature != nil || h != nil {
+            let most = WeatherFacet.allCases.map { $0.amount(temperatureF: temperature, humidityPct: h, tempFallF: fall) }.max() ?? 0
+            var bits: [String] = []
+            if let t = temperature { bits.append("\(Int(t.rounded()))°") }
+            if let h { bits.append("humidity \(Int(h.rounded()))%") }
+            out.append(.init(name: "Weather", value: bits.joined(separator: " · "), ink: Theme.airWeather, share: max(0.15, most)))
+        }
+        // Allergens: the highest pollen level.
+        var pol: [(String, Int)] = []
+        if a.tree > 0 { pol.append(("tree \(pollen(a.tree))", a.tree)) }
+        if a.grass > 0 { pol.append(("grass \(pollen(a.grass))", a.grass)) }
+        if a.weed > 0 { pol.append(("weed \(pollen(a.weed))", a.weed)) }
+        if !pol.isEmpty {
+            out.append(.init(name: "Allergens", value: "Pollen: " + pol.map(\.0).joined(separator: ", "),
+                             ink: Theme.airPollen, share: Double(pol.map(\.1).max() ?? 0) / 3))
+        }
         return out
     }
     /// Whether this sky is a moment of that kind (not Now, which only remembers the last one).
@@ -2019,7 +2041,6 @@ struct NowSky: View {
                 if Crit.AppLook.current == .menus, Crit.MenusSky.current == .card {
                     MenusAirCard(items: airCardItems)
                         .padding(.horizontal, -16)
-                        .allowsHitTesting(false)
                 }
             }
             // The label sits beside the icon being read, never at a spot on the map.

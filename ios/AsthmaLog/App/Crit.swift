@@ -196,10 +196,11 @@ enum Crit {
 
     /// Menus look: the sky as a 3D rounded glass cube of air with physics, or the flat square with a circle.
     enum MenusSky: String, CaseIterable, Identifiable {
-        case island, card, cube, square
+        case sketch, island, card, cube, square
         var id: String { rawValue }
         var title: String {
             switch self {
+            case .sketch: "Line drawing (3D, hand-drawn)"
             case .island: "Air island (low-poly 3D)"
             case .card: "Air gradient (Apple Card style)"
             case .cube: "Cube of air (3D)"
@@ -207,7 +208,7 @@ enum Crit {
             }
         }
         static let key = "crit.menusSky"
-        static var current: MenusSky { UserDefaults.standard.string(forKey: key).flatMap(MenusSky.init) ?? .island }
+        static var current: MenusSky { UserDefaults.standard.string(forKey: key).flatMap(MenusSky.init) ?? .sketch }
     }
 
     /// The timeline's look: the original track (small dots, a pill for the time), or Apple Health's

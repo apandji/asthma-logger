@@ -364,16 +364,18 @@ final class IslandWorld {
         let stir = spring(.island)
         for v in fog {
             let a = v.angle + time * v.speed * (1 + abs(stir) * 4)
-            v.e.position = [cos(a) * v.radius, v.y + sin(time * 0.3 + v.phase) * 0.05, sin(a) * v.radius]
+            v.e.position = [cos(a) * v.radius, v.y + sin(time * 0.3 + v.phase) * 0.08, sin(a) * v.radius]
             let breathe = 0.75 + 0.25 * sin(time * 0.25 + v.phase)
-            v.e.components.set(OpacityComponent(opacity: min(0.85, now.humidity * 0.8 * breathe)))
+            v.e.components.set(OpacityComponent(opacity: min(0.5, now.humidity * 0.55 * breathe)))
         }
     }
 
     // MARK: Build
 
     /// A soft round puff for the steam: white, fading to nothing at its edge.
+    private static var puffTexture: TextureResource?
     static func puff() -> TextureResource? {
+        if let t = puffTexture { return t }
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         let image = UIGraphicsImageRenderer(size: CGSize(width: 64, height: 64), format: format).image { ctx in
@@ -383,13 +385,17 @@ final class IslandWorld {
             ctx.cgContext.drawRadialGradient(g, startCenter: CGPoint(x: 32, y: 32), startRadius: 0, endCenter: CGPoint(x: 32, y: 32), endRadius: 32, options: [])
         }
         guard let cg = image.cgImage else { return nil }
-        return try? TextureResource(image: cg, options: .init(semantic: .color))
+        puffTexture = try? TextureResource(image: cg, options: .init(semantic: .color))
+        return puffTexture
     }
 
-    static func makeCamera() -> PerspectiveCamera {
-        let camera = PerspectiveCamera()
-        camera.camera.fieldOfViewInDegrees = 30
-        camera.look(at: [0, 0.5, 0], from: [0, 1.35, 6.0], relativeTo: nil)
+    /// Isometric, no perspective (owner, Nov 6: "2.5D, isometric… like Untitled Goose Game").
+    static func makeCamera() -> Entity {
+        let camera = Entity()
+        var ortho = OrthographicCameraComponent()
+        ortho.scale = 1.42
+        camera.components.set(ortho)
+        camera.look(at: [0, 0.6, 0], from: [0, 4.2, 5.4], relativeTo: nil)
         return camera
     }
 
@@ -398,13 +404,13 @@ final class IslandWorld {
         var rng = IslandRNG(seed: 7)
 
 
-        sunLight.light.intensity = 2200
+        sunLight.light.intensity = 2600
         sunLight.light.color = Self.lightColor(0.5)
         sunLight.shadow = DirectionalLightComponent.Shadow(maximumDistance: 6, depthBias: 1.5)
         sunLight.look(at: [0, 0.3, 0], from: [-2.2, 4, 2.4], relativeTo: nil)
         scene.addChild(sunLight)
         let fill = DirectionalLight()
-        fill.light.intensity = 1600
+        fill.light.intensity = 500
         fill.light.color = UIColor(red: 0.85, green: 0.9, blue: 1, alpha: 1)
         fill.look(at: [0, 0.3, 0], from: [2.5, 1.2, 3], relativeTo: nil)
         scene.addChild(fill)
@@ -426,7 +432,7 @@ final class IslandWorld {
         tileTop = tile
         tile.orientation = simd_quatf(angle: .pi / 4, axis: [0, 1, 0])
         let sides = ModelEntity(mesh: LowPoly.column(rings: [(-0.02, 1.322), (-0.3, 1.322)], sides: 4, jitter: 0, rng: &rng),
-                                materials: [Self.matte(Self.hex(0x4F9446))])
+                                materials: [Self.matte(Self.hex(0xC98B5A))])
         sides.orientation = tile.orientation
         island.addChild(tile)
         island.addChild(sides)
@@ -434,7 +440,7 @@ final class IslandWorld {
         for (p, r) in [(SIMD3<Float>(-0.4, 0.02, -0.62), Float(0.08)), (SIMD3<Float>(0.7, 0.02, 0.15), 0.06), (SIMD3<Float>(0.15, 0.02, 0.7), 0.05),
                        (SIMD3<Float>(-0.72, 0.02, -0.1), 0.045)] {
             let rock = ModelEntity(mesh: LowPoly.blob(radius: r, subdiv: 0, lump: 0.18, squash: [1.3, 0.7, 1], rng: &rng),
-                                   materials: [Self.matte(Self.hex(0xB9B0DE))])
+                                   materials: [Self.matte(Self.hex(0xBDB9AE))])
             rock.position = p
             island.addChild(rock)
         }
@@ -443,14 +449,15 @@ final class IslandWorld {
 
         // Tree: a brown trunk and a faceted lime canopy.
         tree = Entity()
-        let bark = Self.matte(Self.hex(0x8A5A3C))
-        tree.addChild(ModelEntity(mesh: LowPoly.column(rings: [(0.62, 0.035), (0, 0.06)], sides: 6, jitter: 0, rng: &rng), materials: [bark]))
+        let bark = Self.matte(Self.hex(0xA9744F))
+        tree.addChild(ModelEntity(mesh: LowPoly.column(rings: [(0.62, 0.05), (0.08, 0.07), (0, 0.1)], sides: 10, jitter: 0, smooth: true, rng: &rng), materials: [bark]))
         let branch = ModelEntity(mesh: LowPoly.column(rings: [(0.22, 0.012), (0, 0.025)], sides: 5, jitter: 0, rng: &rng), materials: [bark])
         branch.position = [0, 0.32, 0]
         branch.orientation = simd_quatf(angle: -0.7, axis: [0, 0, 1])
         tree.addChild(branch)
-        for (p, r, c) in [(SIMD3<Float>(0, 0.88, 0), Float(0.34), UInt32(0xB5DE6A)), ([0.2, 0.68, 0.05], 0.2, 0xA6D460)] {
-            let leaf = ModelEntity(mesh: LowPoly.blob(radius: r, subdiv: 1, lump: 0.12, squash: [1, 1.1, 1], rng: &rng),
+        // A chunky, rounded canopy: one big crown and two smaller clumps on top.
+        for (p, r, c) in [(SIMD3<Float>(0, 0.86, 0), Float(0.36), UInt32(0x6FAE62)), ([-0.14, 1.1, 0.04], 0.22, 0x7DBA6A), ([0.16, 1.05, -0.06], 0.21, 0x63A35A)] {
+            let leaf = ModelEntity(mesh: LowPoly.blob(radius: r, subdiv: 2, lump: 0.06, squash: [1.1, 0.95, 1.1], rng: &rng),
                                    materials: [Self.matte(Self.hex(c))])
             leaf.position = p
             tree.addChild(leaf)
@@ -460,14 +467,14 @@ final class IslandWorld {
         body.addChild(tree)
 
         // Pines: stacked cones round the edge.
-        for (p, h, c) in [(SIMD3<Float>(0.62, 0, -0.55), Float(0.95), UInt32(0x6FB86A)), ([-0.65, 0, -0.5], 0.7, 0x8DCB5E), ([0.68, 0, 0.55], 0.55, 0x5FAE66)] {
+        for (p, h, c) in [(SIMD3<Float>(0.62, 0, -0.55), Float(0.95), UInt32(0x4F8F5A)), ([-0.65, 0, -0.5], 0.7, 0x5E9E62), ([0.68, 0, 0.55], 0.55, 0x477F52)] {
             let pine = Entity()
             pine.addChild(ModelEntity(mesh: LowPoly.column(rings: [(0.16 * h, 0.022), (0, 0.035)], sides: 5, jitter: 0, rng: &rng), materials: [bark]))
             let green = Self.matte(Self.hex(c))
             for k in 0..<3 {
                 let kf = Float(k)
                 let r = (0.3 - kf * 0.07) * h
-                let cone = ModelEntity(mesh: LowPoly.column(rings: [((0.42 - kf * 0.04) * h, 0), (0, r)], sides: 7, jitter: 0.06, rng: &rng),
+                let cone = ModelEntity(mesh: LowPoly.column(rings: [((0.42 - kf * 0.04) * h, 0), (0, r)], sides: 12, jitter: 0.03, smooth: true, rng: &rng),
                                        materials: [green])
                 cone.position = [0, (0.14 + kf * 0.24) * h, 0]
                 pine.addChild(cone)
@@ -478,8 +485,8 @@ final class IslandWorld {
         }
 
         // Bushes: small faceted mounds.
-        for (p, r, c) in [(SIMD3<Float>(-0.55, 0.06, 0.4), Float(0.13), UInt32(0x5FA85A)), ([0.35, 0.05, -0.75], 0.1, 0x6BB55E), ([-0.25, 0.05, 0.72], 0.09, 0x5FA85A)] {
-            let bush = ModelEntity(mesh: LowPoly.blob(radius: r, subdiv: 1, lump: 0.1, squash: [1.2, 0.8, 1.1], rng: &rng),
+        for (p, r, c) in [(SIMD3<Float>(-0.55, 0.06, 0.4), Float(0.13), UInt32(0x5E9E5A)), ([0.35, 0.05, -0.75], 0.1, 0x6FAE62), ([-0.25, 0.05, 0.72], 0.09, 0x5E9E5A)] {
+            let bush = ModelEntity(mesh: LowPoly.blob(radius: r, subdiv: 2, lump: 0.06, squash: [1.2, 0.8, 1.1], rng: &rng),
                                    materials: [Self.matte(Self.hex(c))])
             bush.position = p
             tappable(bush, .grass)
@@ -545,22 +552,24 @@ final class IslandWorld {
         var veil = UnlitMaterial()
         if let t = Self.puff() { veil.color = .init(tint: UIColor(red: 0.97, green: 0.98, blue: 1, alpha: 1), texture: .init(t)) }
         veil.blending = .transparent(opacity: .init(floatLiteral: 1))
+        veil.writesDepth = false
         for i in 0..<10 {
-            let w = Float.random(in: 1.0...1.6, using: &rng)
-            let card = ModelEntity(mesh: .generatePlane(width: w, height: w * 0.38), materials: [veil])
+            let w = Float.random(in: 0.6...1.0, using: &rng)
+            let card = ModelEntity(mesh: .generatePlane(width: w, height: w * 0.32), materials: [veil])
             card.components.set(BillboardComponent())
             card.components.set(OpacityComponent(opacity: 0))
             body.addChild(card)
-            fog.append(Veil(e: card, angle: Float(i) / 10 * 2 * .pi, radius: Float.random(in: 0.7...1.25, using: &rng),
-                            y: Float.random(in: -0.05...0.3, using: &rng), speed: Float.random(in: 0.03...0.07, using: &rng),
+            fog.append(Veil(e: card, angle: Float(i) / 10 * 2 * .pi, radius: Float.random(in: 0.3...1.0, using: &rng),
+                            y: Float.random(in: 0.55...1.35, using: &rng), speed: Float.random(in: 0.03...0.07, using: &rng),
                             phase: Float.random(in: 0...6, using: &rng)))
         }
 
-        // Cloud: lumpy puffs, lit from within a little (like a cloud lamp).
+        // Cloud: four soft puffs, flat underneath, tinted by the pollution (like a cloud lamp).
         cloud = Entity()
         let puffs: [(SIMD3<Float>, Float)] = [([0, 0.02, 0], 0.24), ([-0.26, -0.03, 0.02], 0.19), ([0.27, -0.03, 0], 0.18), ([0.05, -0.05, 0.08], 0.2)]
         for (p, r) in puffs {
-            let puff = ModelEntity(mesh: LowPoly.blob(radius: r, subdiv: 1, lump: 0.1, squash: [1.4, 0.65, 1.05], rng: &rng), materials: [Self.cloudMaterial(Self.cloudColor(0))])
+            let puff = ModelEntity(mesh: LowPoly.blob(radius: r, subdiv: 2, lump: 0.05, squash: [1.4, 0.65, 1.05], rng: &rng),
+                                   materials: [Self.cloudMaterial(Self.cloudColor(0))])
             puff.position = p
             cloud.addChild(puff)
             cloudPuffs.append(puff)
@@ -603,13 +612,13 @@ final class IslandWorld {
 
     /// The grass by temperature: cool sage (cold), fresh green (mild), dry straw (hot). Three shades for variety.
     static func grassColor(_ w: Float, shade: Int) -> UIColor {
-        let cold = [hex(0x8DB8A0), hex(0x7AAA94), hex(0xA2C7B2)], mild = [hex(0x5FB04E), hex(0x7CC456), hex(0x4C9E48)]
+        let cold = [hex(0x8DB8A0), hex(0x7AAA94), hex(0xA2C7B2)], mild = [hex(0x6FA45E), hex(0x7DB268), hex(0x5E9452)]
         let hot = [hex(0xC8B85A), hex(0xB5A64C), hex(0xD8C870)]
         return w < 0.5 ? mix(cold[shade], mild[shade], w / 0.5) : mix(mild[shade], hot[shade], (w - 0.5) / 0.5)
     }
 
     static func groundColor(_ w: Float) -> UIColor {
-        w < 0.5 ? mix(hex(0x8DB59E), hex(0x74B85C), w / 0.5) : mix(hex(0x74B85C), hex(0xB9B25E), (w - 0.5) / 0.5)
+        w < 0.5 ? mix(hex(0x96B89E), hex(0x86BC6E), w / 0.5) : mix(hex(0x86BC6E), hex(0xBFB66A), (w - 0.5) / 0.5)
     }
 
     /// Cold: a pale blue sun; mild: soft butter; hot: deep gold.
@@ -627,7 +636,7 @@ final class IslandWorld {
     /// Frutiger Aero (owner, Nov 6): each shape a soft gradient, light at the top to its colour at the bottom,
     /// glossy and a little see-through.
     static func matte(_ c: UIColor, opacity: Float = 1) -> PhysicallyBasedMaterial {
-        aero([mix(c, .white, 0.15), c], tint: .white, opacity: opacity)
+        aero([mix(c, .white, 0.05), c], tint: .white, opacity: opacity)
     }
 
     /// A gradient that shifts hue top to bottom (owner's references, Nov 6: soft multi-colour gradients).
@@ -649,7 +658,7 @@ final class IslandWorld {
         m.specular = .init(floatLiteral: 0)
         if let tex = gradient(stops) {
             m.emissiveColor = .init(color: tint, texture: .init(tex))
-            m.emissiveIntensity = 0.12
+            m.emissiveIntensity = 0.25
         }
         m.blending = .transparent(opacity: .init(floatLiteral: opacity))
         return m
@@ -708,7 +717,9 @@ enum LowPoly {
                 // Smooth: shaded as a round shape (soft), though the outline stays low poly.
                 let o = inside(v, i / 3)
                 let capped = abs(o.x) < 1e-6 && abs(o.z) < 1e-6 && abs(o.y - v.y) > 0.5   // a column's cap
-                nor.append(smooth && !capped ? simd_normalize(v - o) : n)
+                let out = v - o
+                // A point on the axis (a cone's tip) has no "outward": use the face's own normal there.
+                nor.append(smooth && !capped && simd_length(out) > 1e-5 ? simd_normalize(out) : n)
             }
         }
         // Texture runs bottom to top, so each shape carries its own soft vertical gradient.
@@ -748,11 +759,11 @@ enum LowPoly {
             f = next
         }
         let p = v.map { $0 * radius * (1 + Float.random(in: -lump...max(lump, 0.0001), using: &rng)) * squash }
-        return mesh(p, f) { _, _ in .zero }
+        return mesh(p, f, smooth: true) { _, _ in .zero }
     }
 
     /// Rings from top to bottom (height, radius) round the y axis, capped at both ends. A radius of 0 is a point.
-    static func column(rings: [(Float, Float)], sides: Int, jitter: Float, rng: inout IslandRNG) -> MeshResource {
+    static func column(rings: [(Float, Float)], sides: Int, jitter: Float, smooth: Bool = false, rng: inout IslandRNG) -> MeshResource {
         var p: [SIMD3<Float>] = []
         for (y, r) in rings {
             for s in 0..<sides {
@@ -778,7 +789,7 @@ enum LowPoly {
         p.append([0, rings[rings.count - 1].0, 0])
         for s in 0..<n { f += [bottom, last + (s + 1) % n, last + s] }
         let topY = rings[0].0, bottomY = rings[rings.count - 1].0
-        return mesh(p, f) { c, tri in
+        return mesh(p, f, smooth: smooth) { c, tri in
             if tri < sideTris { return [0, c.y, 0] }   // per vertex in smooth mode: straight out from the axis
             return tri < sideTris + sides ? [0, topY - 1, 0] : [0, bottomY + 1, 0]
         }

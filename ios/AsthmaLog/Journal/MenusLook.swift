@@ -679,7 +679,7 @@ struct MenusDetails: View {
             }
         }
         .padding(.horizontal, MenusColumns.page)
-        .padding(.top, 36)   // inside the playhead's overlay, so the line runs unbroken from the strip
+        .padding(.top, 64)   // room under the strip (owner, Nov 6); inside the playhead's overlay, so the line runs unbroken from the strip
         // One playhead line through every row, continuing the strip's: in the chart column's middle.
         .overlay(alignment: .topLeading) {
             GeometryReader { g in

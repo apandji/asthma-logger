@@ -909,7 +909,7 @@ struct NowHomeView: View {
                       risk: fieldRisk(s.conditions, at: s.date),
                       onRailOpen: { railOpen = $0 })
             // With the cube, a tap is the cube's (it goes in); the details are a tap on the timeline's moment.
-            .onTapGesture { if !(appLook == .menus && Crit.MenusSky.current == .cube) { s.onTap() } }
+            .onTapGesture { if !(appLook == .menus && [.cube, .island].contains(Crit.MenusSky.current)) { s.onTap() } }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { skyWidth = $0 }
     }
 
@@ -1132,7 +1132,7 @@ struct NowHomeView: View {
             // Menus look: the page scrolls, so the sideways scrub runs alongside it (it ignores vertical drags).
             .gesture(skyScrub, isEnabled: appLook != .menus)
             // Menus look: the page scrolls, so the scrub runs alongside it; with the cube, drags spin the cube instead.
-            .simultaneousGesture(skyScrub, isEnabled: appLook == .menus && Crit.MenusSky.current != .cube)
+            .simultaneousGesture(skyScrub, isEnabled: appLook == .menus && ![.cube, .island].contains(Crit.MenusSky.current))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.top, 4)
     }
@@ -2034,6 +2034,13 @@ struct NowSky: View {
             .overlay {
                 if Crit.AppLook.current == .menus, Crit.MenusSky.current == .cube {
                     AirCubeSlot(air: cubeAir, felt: onMoment(.rescue) ? .rescue : onMoment(.maintenance) ? .standard : .nothing)
+                }
+            }
+            // Menus look: the air as a little low-poly island you can spin; each part is one thing in the air.
+            .overlay {
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current == .island {
+                    AirIsland(air: cubeAir)
+                        .padding(.horizontal, -16)
                 }
             }
             // Menus look: the air as one soft gradient by share (Apple Card's spending colours), edge to edge.

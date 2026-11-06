@@ -1813,6 +1813,22 @@ struct NowSky: View {
         }
         return a
     }
+    /// The air card's readings: each with its value, its level in words, its ink and how much of a high reading it is.
+    private var airCardItems: [MenusAirCard.Item] {
+        let a = cubeAir, l = layers
+        func share(_ v: Double, _ high: Double) -> Double { min(1, max(0, v / high)).squareRoot() }
+        func tier(_ layer: AirLayers.Layer?) -> Int? { layer.map { $0.level.rawValue } }
+        func pollen(_ n: Int) -> String { ["None", "Low", "Moderate", "High"][max(0, min(3, n))] }
+        var out: [MenusAirCard.Item] = []
+        if a.pm25 > 0 { out.append(.init(name: "PM2.5", value: "\(Int(a.pm25.rounded())) µg/m³", tier: tier(l.pm25), ink: Theme.airPM25, share: share(a.pm25, 35))) }
+        if a.pm10 > 0 { out.append(.init(name: "PM10", value: "\(Int(a.pm10.rounded())) µg/m³", tier: tier(l.pm10), ink: Theme.airPM10, share: share(a.pm10, 150))) }
+        if a.ozone > 0 { out.append(.init(name: "Ozone", value: "\(Int(a.ozone.rounded())) ppb", tier: tier(l.ozone), ink: Theme.airOzone, share: share(a.ozone, 70))) }
+        if a.no2 > 0 { out.append(.init(name: "NO₂", value: "\(Int(a.no2.rounded())) ppb", tier: tier(l.no2), ink: Theme.airNO2, share: share(a.no2, 100))) }
+        if a.tree > 0 { out.append(.init(name: "Tree pollen", value: pollen(a.tree), tier: tier(l.tree), ink: Theme.airTree, share: Double(a.tree) / 3)) }
+        if a.grass > 0 { out.append(.init(name: "Grass pollen", value: pollen(a.grass), tier: tier(l.grass), ink: Theme.airGrass, share: Double(a.grass) / 3)) }
+        if a.weed > 0 { out.append(.init(name: "Weed pollen", value: pollen(a.weed), tier: tier(l.weed), ink: Theme.airWeed, share: Double(a.weed) / 3)) }
+        return out
+    }
     /// Whether this sky is a moment of that kind (not Now, which only remembers the last one).
     private func onMoment(_ k: MomentKind) -> Bool {
         guard let e = selfEvent, e.moment == k else { return false }
@@ -1840,9 +1856,9 @@ struct NowSky: View {
             let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: showsSelf)
             let mids = RailRow.ys(rows, in: size.height).map { $0 + (expanded ? railShift : 0) }
             ZStack {
-                if Crit.AppLook.current == .menus, Crit.MenusSky.current == .cube {
-                    // Menus look: the cube is drawn over the sky (below), outside its flattening and shaders, which
-                    // a live 3D view can't be inside.
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current != .square {
+                    // Menus look: the cube or the air card is drawn over the sky (below), outside its flattening and
+                    // shaders (a live 3D view can't be inside them, and text shouldn't bend with the dent).
                     Color.clear
                 } else if Crit.AppLook.current == .menus {
                     // Menus look: the environment as a square of the conditions' gradient, what you felt as a circle.
@@ -1936,7 +1952,7 @@ struct NowSky: View {
                 }
                 // The field: the whole sky washes orange with how much this time looks like your flare days, behind
                 // the dots, so a risky moment, past or ahead, reads at a glance. Nothing while still learning.
-                if Crit.RiskColor.familiesInInk, let r = risk, r > 0 {
+                if Crit.RiskColor.familiesInInk, Crit.AppLook.current != .menus, let r = risk, r > 0 {   // Menus: the air gradient alone
                     RadialGradient(colors: [Verdict.red.opacity(0.10 + 0.28 * r), Verdict.red.opacity(0.04 + 0.12 * r)],
                                    center: .center, startRadius: 0, endRadius: size.width * 0.9)
                         .allowsHitTesting(false)
@@ -1996,6 +2012,14 @@ struct NowSky: View {
             .overlay {
                 if Crit.AppLook.current == .menus, Crit.MenusSky.current == .cube {
                     AirCubeSlot(air: cubeAir, felt: onMoment(.rescue) ? .rescue : onMoment(.maintenance) ? .standard : .nothing)
+                }
+            }
+            // Menus look: the air as one soft gradient by share (Apple Card's spending colours), edge to edge.
+            .overlay {
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current == .card {
+                    MenusAirCard(items: airCardItems)
+                        .padding(.horizontal, -16)
+                        .allowsHitTesting(false)
                 }
             }
             // The label sits beside the icon being read, never at a spot on the map.

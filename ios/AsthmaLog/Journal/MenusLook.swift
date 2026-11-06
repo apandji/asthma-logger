@@ -590,13 +590,18 @@ struct MenusStrip: View {
                 let c: Color = v == nil ? ink.opacity(0.08) : (v! >= 1 ? Verdict.red : v! >= 0.5 ? Verdict.yellow : Verdict.green).opacity(0.7)
                 ctx.fill(Path(CGRect(x: x(d), y: mid - 4, width: max(1, slot - 1), height: 8)), with: .color(c))
             }
-            // Moments: Sky dials, smaller as you zoom out. A note sits as a dot beside the moment it follows.
+            // Moments: inhaler use as upright pills, rescue orange, standard blue (owner, Nov 6), narrower as you
+            // zoom out. A note sits as a small dot beside the moment it follows.
             let r: CGFloat = min(10, max(5, w * CGFloat(2.5 * 3600 / window.span)))
             let shown = moments.filter { $0.loggedAt >= window.start.addingTimeInterval(-3600) && $0.loggedAt <= window.end.addingTimeInterval(3600) }
             for m in shown where m.moment == .rescue || m.moment == .maintenance {
                 let noted = !(m.voiceTranscript ?? "").isEmpty || shown.contains { $0.moment == .note && abs($0.loggedAt.timeIntervalSince(m.loggedAt)) < 3600 }
-                SkyDial.draw(&ctx, at: CGPoint(x: x(m.loggedAt), y: mid), r: r, air: MenusAir(m.conditions),
-                             rescue: m.moment == .rescue, standard: m.moment == .maintenance, note: noted)
+                let cx = x(m.loggedAt), pw = r * 1.1, ph = r * 2.8
+                let pill = Path(roundedRect: CGRect(x: cx - pw / 2, y: mid - ph / 2, width: pw, height: ph), cornerRadius: pw / 2)
+                ctx.fill(pill, with: .color(m.moment == .rescue ? Theme.rescue : Theme.standard))
+                if noted {
+                    ctx.fill(Path(ellipseIn: CGRect(x: cx + pw / 2 + 2, y: mid - ph / 2, width: 4, height: 4)), with: .color(ink.opacity(0.45)))
+                }
             }
             // Now, and the playhead in the middle.
             if now >= window.start, now <= window.end {

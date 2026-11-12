@@ -127,6 +127,10 @@ struct DeveloperSettings: View {
     @AppStorage(Crit.DemoEvent.key) private var critEvent = Crit.DemoEvent.none
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
+    @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.print
+    @AppStorage(Crit.TimelineLook.key) private var critTimeline = Crit.TimelineLook.track
+    @AppStorage(Crit.AppLook.key) private var critAppLook = Crit.AppLook.feltAir
+    @AppStorage(Crit.MenusSky.key) private var critMenusSky = Crit.MenusSky.sketch
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false
@@ -186,8 +190,21 @@ struct DeveloperSettings: View {
                     ForEach(DemoScenario.allCases) { Text($0.title).tag($0) }
                 }
                 .onChange(of: demoScenario) { _, s in s.choose() }
-                Toggle("Calendar beside the air", isOn: $demoCalendar)
-                Picker("Insights ring", selection: $critInsightsState) {
+                // A stand-in week for "what was on" and "what you'll be doing" (the real thing is your calendar).
+                Toggle("Demo calendar", isOn: $demoCalendar)
+                Picker("Inks", selection: $critInks) {
+                    ForEach(Crit.Inks.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("App look", selection: $critAppLook) {
+                    ForEach(Crit.AppLook.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Menus sky", selection: $critMenusSky) {
+                    ForEach(Crit.MenusSky.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Timeline", selection: $critTimeline) {
+                    ForEach(Crit.TimelineLook.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Insights state", selection: $critInsightsState) {
                     ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("Rescue-use check", selection: $demoCare) {

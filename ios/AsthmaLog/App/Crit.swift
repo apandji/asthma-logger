@@ -175,6 +175,51 @@ enum Crit {
     }
 
     /// The page: black (ink on night) or linen, a warm off-white paper that suits the riso grain.
+    /// The whole app dressed as an Apple Health feature: grouped grey background, SF type (bold sentence),
+    /// a Health-style tab bar at the bottom (Insights, and a slot still to be decided) beside the +, and the
+    /// timeline's Health look. felt air is today's look.
+    enum AppLook: String, CaseIterable, Identifiable {
+        case feltAir, health, menus
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .feltAir: "felt air"
+            case .health: "Apple Health"
+            case .menus: "Menus (Oct 30 sketch)"
+            }
+        }
+        /// Menus is built on the Apple Health look (grey sky, pills, Health colours) with its own structure.
+        var healthLike: Bool { self != .feltAir }
+        static let key = "crit.appLook"
+        static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? .feltAir }
+    }
+
+    /// Menus look: the sky as a 3D rounded glass cube of air with physics, or the flat square with a circle.
+    enum MenusSky: String, CaseIterable, Identifiable {
+        case sketch, island, card, cube, square
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .sketch: "Line drawing (3D, hand-drawn)"
+            case .island: "Air island (low-poly 3D)"
+            case .card: "Air gradient (Apple Card style)"
+            case .cube: "Cube of air (3D)"
+            case .square: "Square and circle"
+            }
+        }
+        static let key = "crit.menusSky"
+        static var current: MenusSky { UserDefaults.standard.string(forKey: key).flatMap(MenusSky.init) ?? .sketch }
+    }
+
+    /// The timeline's look: the original track (small dots, a pill for the time), or Apple Health's
+    /// (the day as a title, a pointer, day labels above, each moment a pill (12 × 26 pt), twice as wide a day).
+    enum TimelineLook: String, CaseIterable, Identifiable {
+        case track, health
+        var id: String { rawValue }
+        var title: String { self == .track ? "Track" : "Health (big circles)" }
+        static let key = "crit.timelineLook"
+    }
+
     enum Paper: String, CaseIterable, Identifiable {
         case black, linen
         var id: String { rawValue }

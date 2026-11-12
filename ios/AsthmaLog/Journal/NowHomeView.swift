@@ -80,6 +80,20 @@ struct NowHomeView: View {
     @State private var model = InsightsModel()
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
+    @AppStorage(Crit.TimelineLook.key) private var timelineLook = Crit.TimelineLook.track
+    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.feltAir
+    private var healthLook: Bool { appLook.healthLike }
+    // Menus look (Oct 30 sketch).
+    @State private var menusScale = MenusScale.timeline
+    @State private var menusTab = MenusTab.moments
+    @State private var showSideMenu = false
+    @State private var showDoctor = false
+    /// Menus look: the air cube's one 3D scene, and where its slot sits on the page.
+    @State private var cubeWorld = CubeWorld()
+    @State private var cubeSlot: CGRect = .zero
+    @State private var cubeSlotOwner: UUID?
+    /// The Menus look's shared time window: the strip and every chart below it.
+    @State private var menusWindow = MenusWindow(center: .now, span: 3 * 86_400)
     @State private var showInsights = false
     /// Bumps each time the patterns are re-learned, so a loadout's landing can wait for the new person's.
     @State private var rebuilt = 0
@@ -128,6 +142,8 @@ struct NowHomeView: View {
 
     var body: some View {
         NavigationStack {
+            Group {
+            if appLook == .menus { menusPage } else {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     // The top line leaves the corner to Insights and Settings.
@@ -152,34 +168,46 @@ struct NowHomeView: View {
                         .opacity(probing ? 0.4 : 1)
                         .transition(.opacity)
                 }
-                // One sky at a time; the next settles in with a breath, not a cut. Self slides the map away.
-                ZStack { sky.id(scrubbing ? "scrub" : focusKey).transition(.opacity) }
-                    .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
-                    // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
-                    // The dent is drawn by the sky itself (NowSky), so what sits on top (Self's glass cards) isn't
-                    // flattened into the shader.
-                    .environment(\.skyDent, skyDrag != nil && !reduceMotion ? SkyDent(point: skyDrag!.point, press: skyPress) : nil)
-                    .gesture(skyScrub)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.top, 4)
+                skyArea
                 // Baselines are the engine's, not the journal's: no ticks for them (owner, Oct 17).
                 timeline
+                    // Apple Health look: the tab bar has its own row, so the timeline sits above it.
+                    .padding(.bottom, healthLook ? 74 : 0)
+            }
+            }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             // Insights and Settings in the top corner, on the place line (owner, Oct 18), the way Weather and
             // Maps keep theirs: always there, never in the sky's way.
             .overlay(alignment: railLeft ? .topLeading : .topTrailing) {
+                if appLook == .menus {
+                    // Menus look: the top bar has the side menu and the scale menu; nothing in the corner.
+                } else if healthLook {
+                    // Apple Health look: Insights lives in the tab bar, so the corner keeps Settings only.
+                    Button { showSettings = true } label: {
+                        Image(systemName: "slider.horizontal.3").font(.subheadline.weight(.semibold))
+                            .frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .padding(railLeft ? .leading : .trailing, 20)
+                    .accessibilityLabel("Settings")
+                } else {
                 learningButton
                     // On the header's 20 pt margin, centred on the place line.
                     .padding(railLeft ? .leading : .trailing, 20)
                     .offset(y: 3)
+                }
             }
             .background {
                 // The page takes the weather's colour, as in Apple Weather: hue from the temperature, light from
                 // the hour (rose dawn, blue day, amber dusk, indigo night), deepening to black at the bottom.
                 // The forecast is the same, quieter. The grain runs over all of it.
                 ZStack {
-                    if paper == .linen {
+                    if healthLook {
+                        // Apple Health look: the system's grouped grey, no weather wash, no grain.
+                        Color(uiColor: .systemGroupedBackground)
+                    } else if paper == .linen {
                         // Light: the weather's colour printed on warm paper, a pale wash that settles into the
                         // paper at the bottom (riso on uncoated stock), never into black.
                         LinearGradient(colors: [pageTop.mix(with: Theme.linen, by: 0.72), pageTop.mix(with: Theme.linen, by: 0.88),
@@ -189,14 +217,14 @@ struct NowHomeView: View {
                         LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), pageBottom],
                                        startPoint: .top, endPoint: .bottom)
                     }
-                    SkyGrain(responds: false).opacity(0.5)
+                    SkyGrain(responds: false).opacity(healthLook ? 0 : 0.5)
                 }
                 .ignoresSafeArea()
                 .animation(scrubbing ? nil : .easeInOut(duration: 0.5), value: focusKey)
             }
             // Linen is a light page whatever the system says; black is a dark one.
             // Black paper, or linen when chosen; the forecast shifts the paper to warm graphite (above).
-            .environment(\.colorScheme, paper == .linen ? .light : .dark)
+            .environment(\.colorScheme, healthLook || paper == .linen ? .light : .dark)
             .fullScreenCover(item: $recording) { e in QuickRecordView(event: e) }
             // The capture card, grown (Crit.CaptureStyle chat / journal).
             .overlay { captureOverlay }
@@ -246,6 +274,34 @@ struct NowHomeView: View {
                     .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) { bottomBar }
+            // Menus look: the side menu slides in from the left over everything, a scrim behind it.
+            .overlay {
+                if showSideMenu {
+                    Color.black.opacity(0.25).ignoresSafeArea()
+                        .onTapGesture { withAnimation(Theme.smooth) { showSideMenu = false } }
+                        .transition(.opacity)
+                }
+            }
+            .overlay(alignment: .leading) {
+                if showSideMenu {
+                    MenusSideMenu(close: { withAnimation(Theme.smooth) { showSideMenu = false } },
+                                  settings: { showSettings = true }, doctor: { showDoctor = true })
+                        .ignoresSafeArea()
+                        .transition(.move(edge: .leading))
+                }
+            }
+            .sheet(isPresented: $showDoctor) { DoctorSheet(events: events) }
+            .environment(\.airCubeWorld, cubeWorld)
+            .environment(\.airCubeSlot) { id, rect in
+                // Only the slot that last showed may say it's gone.
+                if rect == .zero { if id == cubeSlotOwner { cubeSlot = .zero; cubeSlotOwner = nil } }
+                else { cubeSlotOwner = id; cubeSlot = rect }
+            }
+            .overlay {
+                if appLook == .menus, Crit.MenusSky.current == .cube, menusTab == .moments, menusScale == .timeline {
+                    AirCubeLayer(world: cubeWorld, slot: cubeSlot)
+                }
+            }
             .onChange(of: pendingLoadout, initial: true) { _, v in
                 guard !v.isEmpty else { return }
                 let start = rebuilt
@@ -285,7 +341,9 @@ struct NowHomeView: View {
                 InsightsView(skyColor: skyColorNow, focus: insightsFocus.flatMap { AirProfile.Category.of(bin: $0) },
                              focusBin: insightsFocus)
                     .navigationTransition(.zoom(sourceID: "insights", in: hero))
-                    .presentationDragIndicator(.visible).presentationBackground(Theme.paper(paper)).presentationCornerRadius(32)
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(healthLook ? Color(uiColor: .systemGroupedBackground) : Theme.paper(paper))
+                    .presentationCornerRadius(32)
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
             .onChange(of: focusKey) { _, _ in if !scrubbing, hasMark { noticed += 1 } }
@@ -638,7 +696,7 @@ struct NowHomeView: View {
                     // No verdict while it's happening.
                     VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place)),
                                   title: here == nil ? AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions) : nowRead,
-                                  verdict: nil, tint: nil)
+                                  verdict: nil, tint: nil, isNow: true)
                     // The air arriving for this moment: shimmering while it's fetched, then each reading lands.
                     AirReadings(conditions: j.conditions, weave: j.weave, pollen: nil, pending: j.envStatus == .pending)
                         .padding(.top, 6)
@@ -646,19 +704,19 @@ struct NowHomeView: View {
                     // The verdict is on the timeline's chip now (playheadVerdict), not a pill up here.
                     VerdictHeader(place: AnyView(placeLabel(here?.lat, here?.lon, here?.place, current: true)),
                                   title: here == nil ? "Checking the air near you…" : nowRead,
-                                  verdict: nil, tint: nil)
+                                  verdict: nil, tint: nil, isNow: true)
                 }
             case .moment(let m):
                 VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
                               title: backRead(m), verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()),
-                              around: CalendarReader.shared.around(m.loggedAt)?.line)
+                              around: CalendarReader.shared.around(m.loggedAt)?.line, whenDate: m.loggedAt)
             case .hour(let h):
                 // No "Forecast" tag and no verdict pill: the dashed chip on the timeline says it's ahead, and
                 // carries the verdict (playheadVerdict).
                 // What you'll be doing then, beside the air for it (EventKit; the demo calendar in demos).
                 VerdictHeader(place: AnyView(placeField), title: aheadRead(h), verdict: nil, tint: nil,
-                              around: CalendarReader.shared.event(at: h.date)?.line)
+                              around: CalendarReader.shared.event(at: h.date)?.line, whenDate: h.date)
             }
         }
         .padding(.top, 2)
@@ -850,7 +908,8 @@ struct NowHomeView: View {
                       yours: scrubbing ? [:] : Self.yours(shared(s.conditions, at: s.date)),
                       risk: fieldRisk(s.conditions, at: s.date),
                       onRailOpen: { railOpen = $0 })
-            .onTapGesture { s.onTap() }
+            // With the cube, a tap is the cube's (it goes in); the details are a tap on the timeline's moment.
+            .onTapGesture { if !(appLook == .menus && [.cube, .island, .sketch].contains(Crit.MenusSky.current)) { s.onTap() } }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { skyWidth = $0 }
     }
 
@@ -913,7 +972,7 @@ struct NowHomeView: View {
                            tint: { airTint($0.weave) },
                            forecastTints: tints, forecastDrivers: drivers, verdictTint: playheadTint, verdictText: playheadVerdict,
                            hours: hours, now: now, focusTime: $focusTime, scrubbing: $scrubbing, onPastEnd: { showInsights = true })
-            .frame(height: 104)
+            .frame(height: timelineLook == .health || healthLook ? 122 : 104)
             // Full width; the + floats over its end, which fades out beneath it. The other end just softens.
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: fadeIn),
                                          .init(color: .black, location: fadeOut), .init(color: .clear, location: 1)],
@@ -948,7 +1007,137 @@ struct NowHomeView: View {
     }
 
     /// The + (and Insights), and, just logged, the panel that rises over the timeline and the + like a toast.
-    private var bottomBar: some View {
+    @ViewBuilder private var bottomBar: some View {
+        if appLook == .menus {
+            MenusBottomBar(tab: $menusTab, firstLabel: menusScale == .timeline ? "Moments" : "Timeline", felt: felt)
+                .opacity(capture == nil && logged == nil ? 1 : 0)
+                .allowsHitTesting(capture == nil && logged == nil)
+                .overlay(alignment: .bottom) {
+                    if let e = logged, capture == nil {
+                        LoggedPanel(event: e, record: { closeLogged(); openCapture(e, listen: true) }, close: closeLogged)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+        } else {
+            feltAirBottomBar
+        }
+    }
+
+    // MARK: Menus look
+
+    /// The Oct 30 sketch: top bar, then the page for the chosen scale, or Insights in place.
+    private var menusPage: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            MenusTopBar(scale: $menusScale, openMenu: { withAnimation(Theme.smooth) { showSideMenu = true } })
+            if menusTab == .insights {
+                InsightsView(skyColor: skyColorNow)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                switch menusScale {
+                case .timeline:
+                    // The first screen is Now as before (the Apple Health look's header, sky and timeline);
+                    // scrolling down opens the Environment and Body sections in detail.
+                    // The timeline is the section header, so it sticks to the top as the charts scroll under it,
+                    // and the charts share its window and columns.
+                    ScrollView(.vertical) {
+                        LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                            VStack(alignment: .leading, spacing: 20) {
+                                header
+                                skyArea
+                            }
+                            .padding(.top, 8)
+                            .containerRelativeFrame(.vertical) { h, _ in h - 74 - 150 - 24 }
+                            Color.clear.frame(height: 24)
+                            Section {
+                                MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle)
+                                    .padding(.bottom, 120)   // clear of the tab bar and the +
+                            } header: {
+                                MenusStrip(window: $menusWindow, moments: moments,
+                                           forecast: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
+                                           now: now, verdict: menusVerdict, limits: menusLimits, settle: menusSettle,
+                                           backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil })
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                    .scrollDisabled(probing)
+                case .month:
+                    MenusMonthView(events: events, now: now)
+                case .year:
+                    MenusYearView(events: events, now: now)
+                }
+            }
+        }
+        // The sky's sideways scrub moves the window too, and on Now it keeps up with the clock.
+        .onChange(of: focusTime) { _, t in
+            let target = t ?? now
+            if abs(menusWindow.center.timeIntervalSince(target)) > 1 { withAnimation(Theme.smooth) { menusWindow.center = target } }
+        }
+        .onChange(of: now) { _, n in if focusTime == nil { menusWindow.center = n } }
+        // The scrolling Now page runs under the tab bar; the others stop above it.
+        .padding(.bottom, menusTab == .moments && menusScale == .timeline ? 0 : 74)
+    }
+
+    /// How far the Menus window can go: the first moment (a week back at least) to the forecast's end.
+    private var menusLimits: ClosedRange<Date> {
+        let first = min(moments.first?.loggedAt ?? now, now.addingTimeInterval(-7 * 86_400))
+        return first...max(now, hours.last?.date ?? now)
+    }
+
+    /// The verdict for the window's middle (now and ahead).
+    private var menusVerdict: String? {
+        guard menusWindow.center >= now.addingTimeInterval(-60) else { return nil }
+        return outlook(at: menusWindow.center).text
+    }
+
+    /// A pan or zoom ended: land on a moment close to the playhead (behind now) or the nearest hour ahead, and
+    /// show its sky.
+    private func menusSettle() {
+        let c = menusWindow.center
+        let near = menusWindow.span * 0.03
+        if abs(c.timeIntervalSince(now)) < near {
+            withAnimation(Theme.smooth) { menusWindow.center = now }
+            focusTime = nil
+        } else if c < now {
+            if let m = moments.filter({ $0.moment != .note }).min(by: { abs($0.loggedAt.timeIntervalSince(c)) < abs($1.loggedAt.timeIntervalSince(c)) }),
+               abs(m.loggedAt.timeIntervalSince(c)) < near {
+                withAnimation(Theme.smooth) { menusWindow.center = m.loggedAt }
+                focusTime = m.loggedAt
+            } else {
+                focusTime = c
+            }
+        } else {
+            let h = NowTimeline.hour(c)
+            withAnimation(Theme.smooth) { menusWindow.center = h }
+            focusTime = h
+        }
+    }
+
+    /// "Felt something?": log a rescue, then a voice memo (listening) or written symptoms.
+    private func felt(_ voice: Bool) {
+        Task {
+            let e = await services.press(.rescue, device: .phone, in: context).event
+            openCapture(e, listen: voice)
+        }
+    }
+
+    /// One sky at a time; the next settles in with a breath, not a cut. Self slides the map away.
+    private var skyArea: some View {
+        ZStack { sky.id(scrubbing ? "scrub" : focusKey).transition(.opacity) }
+            .animation(scrubbing ? nil : .easeInOut(duration: 0.25), value: focusKey)
+            // Swiping the sky sideways scrubs time, and the surface dents under the finger as it goes.
+            // The dent is drawn by the sky itself (NowSky), so what sits on top (Self's glass cards) isn't
+            // flattened into the shader.
+            .environment(\.skyDent, skyDrag != nil && !reduceMotion ? SkyDent(point: skyDrag!.point, press: skyPress) : nil)
+            // Menus look: the page scrolls, so the sideways scrub runs alongside it (it ignores vertical drags).
+            .gesture(skyScrub, isEnabled: appLook != .menus)
+            // Menus look: the page scrolls, so the scrub runs alongside it; with the cube, drags spin the cube instead.
+            .simultaneousGesture(skyScrub, isEnabled: appLook == .menus && ![.cube, .island, .sketch].contains(Crit.MenusSky.current))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, 4)
+    }
+
+    private var feltAirBottomBar: some View {
         ZStack(alignment: .bottom) {
             // No tips until onboarding is done: they'd pop over the first-run screens.
             CaptureBar(showInsights: $showInsights, tip: didOnboard ? tips.currentTip as? PullToLogTip : nil, toast: $toast)
@@ -1596,6 +1785,77 @@ struct NowSky: View {
     @AppStorage("sky.touched") private var touched = false
 
     private var temperature: Double? { scrubTemperature ?? conditions?.best(.temperature)?.value }
+    /// Menus look: this sky's air in the Sky dial's terms, the demo pollen and the air event included.
+    private var menusAir: MenusAir {
+        var a = MenusAir(conditions)
+        if let p = pollen {
+            func amount(_ k: PollenSample.Kind) -> Double { k.count == 0 ? 0 : Double(k.level.rawValue + 1) / 3 }
+            a.tree = max(a.tree, amount(p.tree)); a.grass = max(a.grass, amount(p.grass)); a.weed = max(a.weed, amount(p.weed))
+        }
+        if event == .storm { a.storm = true }
+        return a
+    }
+    /// Menus look's cube: this sky's readings, the demo pollen included.
+    private var cubeAir: AirCubeAir {
+        var a = AirCubeAir()
+        a.pm25 = conditions?.best(.pm25)?.value ?? 0
+        a.pm10 = conditions?.best(.pm10)?.value ?? 0
+        a.ozone = conditions?.best(.ozone)?.value ?? 0
+        a.no2 = conditions?.best(.no2)?.value ?? 0
+        a.humidity = conditions?.best(.humidity)?.value ?? 0
+        a.tempF = temperature
+        if let e = selfEvent, abs(e.loggedAt.timeIntervalSince(date)) < 60, e.moment == .rescue || e.moment == .maintenance {
+            a.feltLabel = "\(e.moment.title) at \(e.loggedAt.formatted(date: .omitted, time: .shortened))"
+        }
+        if let p = pollen ?? DemoPollen.from(conditions) {
+            func lv(_ k: PollenSample.Kind) -> Int { k.count == 0 ? 0 : k.level.rawValue + 1 }
+            a.tree = lv(p.tree); a.grass = lv(p.grass); a.weed = lv(p.weed)
+        }
+        return a
+    }
+    /// The air card's three bands (owner, Nov 6: "pollution, weather and allergens, not the PM types"): each with
+    /// what's in it, its ink and how much of a high reading it is. The readings themselves are below, in Environment.
+    private var airCardItems: [MenusAirCard.Item] {
+        let a = cubeAir
+        func share(_ v: Double, _ high: Double) -> Double { min(1, max(0, v / high)).squareRoot() }
+        func pollen(_ n: Int) -> String { ["none", "low", "moderate", "high"][max(0, min(3, n))] }
+        var out: [MenusAirCard.Item] = []
+        // Pollution: the most of any one pollutant, against its high edge.
+        var dirt: [(String, Double)] = []
+        if a.pm25 > 0 { dirt.append(("PM2.5 \(Int(a.pm25.rounded())) µg/m³", share(a.pm25, 35))) }
+        if a.pm10 > 0 { dirt.append(("PM10 \(Int(a.pm10.rounded())) µg/m³", share(a.pm10, 150))) }
+        if a.ozone > 0 { dirt.append(("Ozone \(Int(a.ozone.rounded())) ppb", share(a.ozone, 70))) }
+        if a.no2 > 0 { dirt.append(("NO₂ \(Int(a.no2.rounded())) ppb", share(a.no2, 100))) }
+        if !dirt.isEmpty {
+            out.append(.init(name: "Pollution", value: dirt.map(\.0).joined(separator: " · "),
+                             ink: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac),
+                             share: dirt.map(\.1).max() ?? 0))
+        }
+        // Weather: the strongest of cold/dry, heat/humid and a sudden drop; always a little, so it's there to tap.
+        let h = conditions?.best(.humidity)?.value, fall = conditions?.tempFallF
+        if temperature != nil || h != nil {
+            let most = WeatherFacet.allCases.map { $0.amount(temperatureF: temperature, humidityPct: h, tempFallF: fall) }.max() ?? 0
+            var bits: [String] = []
+            if let t = temperature { bits.append("\(Int(t.rounded()))°") }
+            if let h { bits.append("humidity \(Int(h.rounded()))%") }
+            out.append(.init(name: "Weather", value: bits.joined(separator: " · "), ink: Theme.airWeather, share: max(0.15, most)))
+        }
+        // Allergens: the highest pollen level.
+        var pol: [(String, Int)] = []
+        if a.tree > 0 { pol.append(("tree \(pollen(a.tree))", a.tree)) }
+        if a.grass > 0 { pol.append(("grass \(pollen(a.grass))", a.grass)) }
+        if a.weed > 0 { pol.append(("weed \(pollen(a.weed))", a.weed)) }
+        if !pol.isEmpty {
+            out.append(.init(name: "Allergens", value: "Pollen: " + pol.map(\.0).joined(separator: ", "),
+                             ink: Theme.airPollen, share: Double(pol.map(\.1).max() ?? 0) / 3))
+        }
+        return out
+    }
+    /// Whether this sky is a moment of that kind (not Now, which only remembers the last one).
+    private func onMoment(_ k: MomentKind) -> Bool {
+        guard let e = selfEvent, e.moment == k else { return false }
+        return abs(e.loggedAt.timeIntervalSince(date)) < 60
+    }
     private var layers: AirLayers { AirLayers(conditions: conditions, weave: weave, pollen: pollen, smooth: true) }
     /// Design crit › Weather on the rail: Weather's three items and their amounts (empty when the switch is off).
     private var weatherFacets: [String: Double] {
@@ -1618,8 +1878,47 @@ struct NowSky: View {
             let rows = RailRow.rows(expanded: expanded, layers: layers, includesSelf: showsSelf)
             let mids = RailRow.ys(rows, in: size.height).map { $0 + (expanded ? railShift : 0) }
             ZStack {
-                AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
-                if let (lat, lon) = coordinate {
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current != .square {
+                    // Menus look: the cube or the air card is drawn over the sky (below), outside its flattening and
+                    // shaders (a live 3D view can't be inside them, and text shouldn't bend with the dent).
+                    Color.clear
+                } else if Crit.AppLook.current == .menus {
+                    // Menus look: the environment as a square of the conditions' gradient, what you felt as a circle.
+                    MenusSkySquare(felt: onMoment(.rescue) ? .rescue : onMoment(.maintenance) ? .standard : .nothing,
+                                   noted: !(selfEvent.flatMap { abs($0.loggedAt.timeIntervalSince(date)) < 60 ? $0.voiceTranscript : nil } ?? "").isEmpty,
+                                   sketch: sketch) {
+                        AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: true)
+                    } map: { s in
+                        if let (lat, lon) = coordinate {
+                            PlaceMap(id: mapID + "-light", latitude: lat, longitude: lon, dark: false)
+                                .frame(width: s.width, height: s.height)
+                        }
+                    }
+                } else if Crit.AppLook.current.healthLike {
+                    // Apple Health look: the air is the gradient alone (the details page's field), with every
+                    // pollutant and pollen colour in it: hue from the temperature, light from the hour, softness from
+                    // the humidity, each layer's tint stronger as it rises. No particles.
+                    // The place sits underneath, grey, and the air lies over it as a wash: the colour is the air
+                    // above this place, not a spot in it.
+                    Color(uiColor: .systemGroupedBackground)
+                    if let (lat, lon) = coordinate {
+                        PlaceMap(id: mapID + "-light", latitude: lat, longitude: lon, dark: false)
+                            .frame(width: size.width, height: size.height)
+                            .modifier(MapZoomSource(id: mapID, namespace: mapNamespace))
+                            .saturation(0)
+                            .opacity(sketch ? 0.5 : 0.9)
+                            .frame(width: size.width, height: size.height)
+                            .clipped()
+                            .allowsHitTesting(false)
+                    }
+                    AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: true)
+                        .opacity(0.62)
+                        .allowsHitTesting(false)
+                } else {
+                    AmbientField(weave: weave, temperatureF: temperature, date: date, conditions: conditions, pollen: pollen, tintsLayers: false)
+                }
+                // Apple Health look: the map is drawn above, under the air's wash.
+                if !Crit.AppLook.current.healthLike, let (lat, lon) = coordinate {
                     // Pinned: the map never moves; the air is one regional reading, not a spot on a street.
                     PlaceMap(id: light ? mapID + "-light" : mapID, latitude: lat, longitude: lon, dark: !light)
                         .frame(width: size.width, height: size.height)
@@ -1675,7 +1974,7 @@ struct NowSky: View {
                 }
                 // The field: the whole sky washes orange with how much this time looks like your flare days, behind
                 // the dots, so a risky moment, past or ahead, reads at a glance. Nothing while still learning.
-                if Crit.RiskColor.familiesInInk, let r = risk, r > 0 {
+                if Crit.RiskColor.familiesInInk, Crit.AppLook.current != .menus, let r = risk, r > 0 {   // Menus: the air gradient alone
                     RadialGradient(colors: [Verdict.red.opacity(0.10 + 0.28 * r), Verdict.red.opacity(0.04 + 0.12 * r)],
                                    center: .center, startRadius: 0, endRadius: size.width * 0.9)
                         .allowsHitTesting(false)
@@ -1683,6 +1982,7 @@ struct NowSky: View {
                 }
                 // The dots: how much of each is in the air (size and count). Families in ink: plain ink, and orange
                 // for what's yours (paler for "sometimes"). Before learning nothing is yours, so it's all ink.
+                if !Crit.AppLook.current.healthLike {
                 ParticleField(particles: stack.map { layer in
                                   // How orange: a layer that's one of your patterns most of all, and every dot a little
                                   // with the time's risk, so the screen warms as the hour looks more like your flare days.
@@ -1700,12 +2000,18 @@ struct NowSky: View {
                               rippleInk: rippleInk, scan: true, hollow: sketch && (risk ?? 0) < 0.5,
                               breathes: !isPast,
                               reveal: sketch ? .soft : isPast ? .inward : .outward)
+                }
             }
             .frame(width: size.width, height: size.height)
             // The past is a print, a touch faded. The future softens the further out it is.
             .saturation(isPast ? 0.82 : 1)
             .blur(radius: sketch && !reduceMotionEnv ? 2.5 * farness : 0)
             .drawingGroup()
+            // Apple Health look: each new sky arrives with a water ripple from its middle; a fresh log's runs
+            // from the + (bottom corner). The particles' own ripple is off in this look, with the particles.
+            .modifier(SkyRipple(trigger: rippleAt,
+                                origin: captureInk != nil ? CGPoint(x: railLeft ? 0 : size.width, y: size.height) : CGPoint(x: size.width / 2, y: size.height * 0.55),
+                                enabled: Crit.AppLook.current.healthLike && !reduceMotionEnv))
             // Swiping the sky sideways dents the surface under the finger (set by NowHomeView).
             .distortionEffect(ShaderLibrary.dent(.float2(dent?.point ?? .zero), .float(170), .float(dent?.press ?? 0)),
                               maxSampleOffset: CGSize(width: 24, height: 24), isEnabled: dent != nil)
@@ -1715,11 +2021,41 @@ struct NowSky: View {
             .onChange(of: date) { _, _ in if settled { ripple() } }
             .onChange(of: settled) { _, s in if s { ripple() } }
             .mask {
+                // Menus look: the sky has its own edge, so no fade.
+                if Crit.AppLook.current == .menus { Rectangle() } else {
                 EllipticalGradient(colors: [.black, .black, .clear], center: UnitPoint(x: 0.5, y: 0.55),
                                    startRadiusFraction: 0, endRadiusFraction: 0.7)
                     .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.26),
                                                  .init(color: .black, location: 0.78), .init(color: .clear, location: 1)],
                                          startPoint: .top, endPoint: .bottom))
+                }
+            }
+            // Menus look: the air as a rounded glass cube in 3D, with physics; you in the middle.
+            .overlay {
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current == .cube {
+                    AirCubeSlot(air: cubeAir, felt: onMoment(.rescue) ? .rescue : onMoment(.maintenance) ? .standard : .nothing)
+                }
+            }
+            // Menus look: the air as a hand-drawn little world in ink, that you can turn.
+            .overlay {
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current == .sketch {
+                    AirSketch(air: cubeAir)
+                        .padding(.horizontal, -16)
+                }
+            }
+            // Menus look: the air as a little low-poly island you can spin; each part is one thing in the air.
+            .overlay {
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current == .island {
+                    AirIsland(air: cubeAir)
+                        .padding(.horizontal, -16)
+                }
+            }
+            // Menus look: the air as one soft gradient by share (Apple Card's spending colours), edge to edge.
+            .overlay {
+                if Crit.AppLook.current == .menus, Crit.MenusSky.current == .card {
+                    MenusAirCard(items: airCardItems)
+                        .padding(.horizontal, -16)
+                }
             }
             // The label sits beside the icon being read, never at a spot on the map.
             .overlay {
@@ -1800,8 +2136,9 @@ struct NowSky: View {
                     // of each other: the rail steps out instead.
                     // Judged on the folded rail: held open, its items are small dots and the stops squeeze to fit
                     // (RailRow.ys), so a short sky (an advice card open) must not hide it mid-touch.
-                    .opacity(railFits(size) ? 1 : 0)
-                    .allowsHitTesting(railFits(size))
+                    // Menus look: the rail gives way to the Environment and Body sections below the fold.
+                    .opacity(railFits(size) && Crit.AppLook.current != .menus ? 1 : 0)
+                    .allowsHitTesting(railFits(size) && Crit.AppLook.current != .menus)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Weather, particles and gases, biologics" + (showsSelf ? ", your voice and your body" : ""))
                     .accessibilityAdjustableAction { dir in
@@ -2187,6 +2524,9 @@ struct VerdictHeader: View {
     var when: String? = nil
     /// What was (or will be) on your calendar then: "Soccer practice, 6:00–7:30 PM" (EventKit, on this iPhone).
     var around: String? = nil
+    /// Apple Health look: the time for the context line under the sentence ("2:40 AM · Work"), or Now.
+    var whenDate: Date? = nil
+    var isNow = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skySettled) private var settled
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -2198,12 +2538,17 @@ struct VerdictHeader: View {
     @State private var breath = false
     private var hasMark: Bool { TheRead.Mark.allCases.contains { title.contains($0.rawValue) } }
 
+    /// Apple Health look: what (the tag) on top, the sentence, then when and where together in one grey line.
+    private var health: Bool { Crit.AppLook.current.healthLike }
+    private var hasTag: Bool { tag != nil || tagText != nil }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // The context line: tag, place, and the verdict (the place gives way first).
+            if !health || hasTag {
             HStack(spacing: 8) {
                 if let tag { MomentTag(moment: tag) } else if let tagText { MomentTag(moment: .okay, text: tagText) }
-                place.layoutPriority(0)
+                if !health { place.layoutPriority(0) }
                 // With a tag on the line too there's no room for both; the verdict (also in the chip and
                 // the sky's colour) gives way to the place.
                 if verdict != nil { verdictPill.layoutPriority(tagText == nil ? 1 : -1) }
@@ -2212,6 +2557,7 @@ struct VerdictHeader: View {
             .clipped()
             .frame(minHeight: 30, alignment: .leading)
             .padding(Edge.Set(corner.0), max(0, corner.1 - 20))
+            }
             // Instant while scrubbing; one short crossfade in place when you land. No roll, scale or blur.
             // Never cut: the sentence takes the lines it needs and the sky gives up the room.
             // Blurs between readings instead of cutting (the same as ScaleHeader), once the playhead has landed.
@@ -2238,6 +2584,8 @@ struct VerdictHeader: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(TheRead.spoken(title))
                 .animation(settled ? .easeInOut(duration: 0.26) : nil, value: title)
+                // Health look on Now: no tag line, so the sentence starts at the top and keeps clear of Settings.
+                .padding(Edge.Set(corner.0), health && !hasTag ? max(0, corner.1 - 56) : 0)
             // Three levels: the sentence; then what it adds (the rest of the read, near-white, tight under it);
             // then when, smallest and quietest, a step apart. They were one grey and competed (owner, Oct 18).
             VStack(alignment: .leading, spacing: 10) {
@@ -2249,9 +2597,21 @@ struct VerdictHeader: View {
                         .transition(.opacity)
                         .padding(.top, -2)
                 }
-                if when != nil || around != nil {
+                if health {
+                    // When and where, together: "2:40 AM · Work", "Now · Work".
+                    HStack(spacing: 6) {
+                        if let t = isNow ? "Now" : whenDate?.formatted(.dateTime.hour().minute()) {
+                            Text(t)
+                            Text("·")
+                        }
+                        place
+                    }
+                    .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+                }
+                if (when != nil && !health) || around != nil {
                     VStack(alignment: .leading, spacing: 4) {
-                        if let when {
+                        if let when, !health {
                             Label(when, systemImage: "clock")
                                 .font(.footnote.weight(.medium)).foregroundStyle(Theme.secondaryText)
                                 .labelStyle(.titleAndIcon).lineLimit(1)
@@ -2944,3 +3304,25 @@ struct CaptureCard: View {
     }
 }
 
+
+/// Apple Health look: the WWDC24-style water ripple (Shaders/Ripple.metal), run once each time `trigger`
+/// changes, over three seconds.
+struct SkyRipple<T: Equatable>: ViewModifier {
+    let trigger: T
+    let origin: CGPoint
+    let enabled: Bool
+    private let duration: TimeInterval = 3
+
+    func body(content: Content) -> some View {
+        content.keyframeAnimator(initialValue: 0.0, trigger: trigger) { view, elapsed in
+            view.visualEffect { v, _ in
+                v.layerEffect(ShaderLibrary.ripple(.float2(origin), .float(elapsed), .float(12), .float(15), .float(8), .float(1200)),
+                              maxSampleOffset: CGSize(width: 12, height: 12),
+                              isEnabled: enabled && elapsed > 0 && elapsed < duration)
+            }
+        } keyframes: { _ in
+            MoveKeyframe(0)
+            LinearKeyframe(duration, duration: duration)
+        }
+    }
+}

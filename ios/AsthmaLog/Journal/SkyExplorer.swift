@@ -582,6 +582,10 @@ struct GroupRail: View {
 
     /// Print: the key never changes hue. Each family's ink, full when something's in the air, faint when not.
     private func groupInk(_ g: RailGroup) -> Color? {
+        // Health-based looks: the air inks, as in the cube.
+        if Crit.AppLook.current.healthLike {
+            return g == .weather ? Theme.airWeather.deep : g == .particles ? Theme.airPM25.deep : Theme.airPollen.deep   // the air inks, as in the cube
+        }
         if Crit.RiskColor.familiesInInk {
             let has = g == .weather ? max(weatherAmount, weatherFacets.values.max() ?? 0) : (g.items.map(amount).max() ?? 0)
             return Color.primary.opacity(has > 0 ? 1 : 0.38)

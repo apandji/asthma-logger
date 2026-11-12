@@ -92,6 +92,19 @@ These are the rows a critic will pick. Each is a real compression. The answer is
 | The learning arc | The two counts it stands for | That learning is under way | — | "A quantity in disguise" (journey map §6) |
 | Counts reachable only by export | — | — | Insights › Your moments › Export table (a CSV) | Three steps and a file format away. Say so, or bring a plain-words "what this rests on" onto the pattern |
 
+### April's redesign (Oct 30 – Nov 6, `april/redesign`, merged into this branch Nov 12; not on `main`)
+
+All of it sits behind a switch (Design crit › App look: felt air · Apple Health · Menus). **felt air is still the
+default**, so the rows above describe what opens on a fresh install. Not compiled or tried here.
+
+| Decision | Hides | Reveals | How it opens | Open question |
+|---|---|---|---|---|
+| Menus look: Environment and Body as sections below Now; the rail removed | — | The readings and charts on the page, without a hold | Scroll | Trades the one-gesture reveal for always-visible. Which is the better answer to "can it be opened"? |
+| The air as a gradient in three bands (Pollution · Weather · Allergens), by share | Amounts; a band's size is its share, not how much | Which family leads | Tap a band to see what it is | A share can look the same on a clean day and a bad one |
+| The air as a hand-drawn 3D sketch (default in Menus), an island, a glass cube | Units and scale | Each thing in the air as its own object (cloud, sun, motes, grass, fog) | Tap a particle to name it (cube) | A metaphor is a compression too. Does each object open to its reading? |
+| Coloured pencil and a kind note when the air is calm ("Could be a nice day for a picnic") | — | A judgement of the day | — | "Calm" is the EPA's Good band plus low pollen and mild weather: everyone's number, used to judge your day. It sits against "weather is never judged" and against the argument here. Worth a decision before the talk |
+| One playhead line through the page, orange on a rescue | — | The moment against every chart at once | Drag | Uses orange for a rescue, where Oct 21 kept orange for "yours" |
+
 ## What the ledger shows
 
 - **Most compressions open in one gesture** (hold, or tap the sky). The export is the exception.

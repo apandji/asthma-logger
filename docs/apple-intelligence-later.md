@@ -13,5 +13,5 @@ suggesting tags from a voice note (you confirm them). These are ideas to discuss
 | **Visual Intelligence / photos** | Point the camera at a pet, a candle, a fire pit to tag a moment | The roadmap's photos step | Opt-in, on device only |
 | **Siri suggestions** | Offer "Add a note" right after a press, or the look-ahead in the morning | Matches the Lock Screen prompt and morning look-ahead | Never alarming, never "you will" |
 
-Rules that hold for any of these: code finds the pattern and the model only says it; no numbers on screen; nothing
+Rules that hold for any of these: code finds the pattern and the model only says it; no counts on screen; nothing
 leaves the device; facts, never causes.

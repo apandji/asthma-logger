@@ -64,7 +64,8 @@ of the general edge it says the general one. Data set: Settings › Data sets �
 Three ways to say it, under the Weather card (Settings › Design crit › Cold for you):
 
 1. **Sentence with the number:** "Your flare days often came when it was ~~below about 40°F~~" (highlighted).
-   The first number outside a reading, so it bends the no-numbers rule.
+   The first number outside a reading. Not an exception to the rule but the point of it (owner, Nov 12): numbers
+   about you and the air, never about the data. See [hide-reveal-ledger.md](hide-reveal-ledger.md).
 2. **Words only:** "…on days colder than almost all your usual ones" (highlighted). The share of your baselines
    past the edge picks the words.
 3. **The dots it came from:** a tally on a colder → warmer line, flares stacking up, usual days down, the side

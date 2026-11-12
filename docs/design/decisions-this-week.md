@@ -138,6 +138,11 @@ see are readings with units, when they hold the sky on Now, "an intention to lea
 tests and the exported table (`AGENTS.md` contract updated; PR #65: "complex, data-driven backend, simple
 frontend").
 
+**Restated (owner, Nov 12).** The rule is **numbers about you and the air, never about the data**. A count
+describes felt air's sample; a reading describes the air; "below about 40°F" (Oct 21, risk-color.md) describes
+you. The first stays off screen, the other two belong on it. The ledger of what each decision hides and reveals
+is [hide-reveal-ledger.md](hide-reveal-ledger.md).
+
 **Then the sentence got shorter (Oct 17–18).**
 - **The sparkle (PR #74, `046d5ab`).** "It sometimes shows up on your flare days" became a mark after the fact: ✦✦
   for often, ✦ for sometimes. VoiceOver and the morning notification get the words back. The tip explains the marks

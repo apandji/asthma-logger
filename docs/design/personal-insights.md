@@ -72,3 +72,9 @@ felt air pushes back on the "quantified self": you're not a number. No counts or
 **Still learning…** or **Learned · may shift with the seasons**, When/Where say "Mostly in the afternoon." The only
 numbers people see are readings with units, when they hold the sky on Now (an intention to learn). Counts stay in the
 data, the tests and the exported table. This supersedes the strength words and counts described above.
+
+**Restated (owner, Nov 12): numbers about you and the air, never about the data.** A count ("8 of 14") describes
+felt air's sample, not the person, so it stays off screen. Two kinds of number belong on screen: a reading with its
+unit, and where a reading starts to matter for you ("Your flare days often came when it was below about 40°F",
+`PersonalEdge`, risk-color.md). The second is the number an index can't hold. See
+[hide-reveal-ledger.md](hide-reveal-ledger.md).

@@ -51,7 +51,7 @@ association, not cause?
 Shown as "Learned · may shift with the seasons". Ask: do these map to how you think about asthma phenotypes or triggers?
 Would any of them mislead a patient (e.g. "Effort-led" read as "exercise-induced asthma")?
 
-Strength words: **Often · Sometimes · Maybe · No more than usual · Not tracked yet**. No numbers on screen.
+Strength words: **Often · Sometimes · Maybe · No more than usual · Not tracked yet**. No counts on screen.
 
 ## 5. Advice (a provocation, not guidance)
 

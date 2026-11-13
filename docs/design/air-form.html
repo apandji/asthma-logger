@@ -1,0 +1,631 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Air Form Study</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL@-15..0,300..800,0..1&display=swap">
+<style>
+/* Layout: the form fills a stage on the left (top on phones); a reading panel beside it names what you tap. */
+:root {
+  --bg: #EFECE6;
+  --stage: #E4DFD5;
+  --fg: #26231F;
+  --muted: #6E675D;
+  --line: rgba(38, 35, 31, 0.14);
+  --card: #F8F6F1;
+  --accent: #E8701F;            /* rescue orange, used only for focus and the selected chip */
+  --sentence: "Recursive", ui-sans-serif, system-ui, sans-serif;
+  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121315; --stage: #1B1C20; --fg: #EDEAE4; --muted: #9C968C;
+    --line: rgba(237, 234, 228, 0.14); --card: #1F2024; --accent: #FF8A3D; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121315; --stage: #1B1C20; --fg: #EDEAE4; --muted: #9C968C;
+  --line: rgba(237, 234, 228, 0.14); --card: #1F2024; --accent: #FF8A3D; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--ui); font-size: 15px; line-height: 1.45; }
+.wrap {
+  display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px;
+  padding-block: 20px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  max-width: 1360px; margin: 0 auto;
+}
+.stage {
+  position: sticky; top: 20px; height: calc(100vh - 40px); min-height: 420px; max-height: 860px;
+  background: radial-gradient(120% 90% at 50% 40%, var(--card), var(--stage)); border-radius: 22px; overflow: hidden;
+  touch-action: none;
+}
+.stage canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.stage canvas:active { cursor: grabbing; }
+.hint { position: absolute; left: 16px; bottom: 14px; font-size: 12px; color: var(--muted); pointer-events: none; }
+.tag { position: absolute; left: 16px; top: 14px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
+.panel { display: flex; flex-direction: column; gap: 22px; min-width: 0; padding-top: 4px; }
+.sentence { font-family: var(--sentence); font-variation-settings: "CASL" 0.3, "slnt" 0; font-weight: 560; font-size: 28px; line-height: 1.16; letter-spacing: -0.01em; text-wrap: balance; margin: 0; }
+.sub { color: var(--muted); margin: 6px 0 0; text-wrap: pretty; }
+.label { font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: inherit; color: inherit; }
+.preset { border: 1px solid var(--line); background: transparent; padding: 6px 11px; border-radius: 999px; font-size: 13px; cursor: pointer; }
+.preset[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: grid; gap: 4px; }
+.card h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.card .val { font-family: var(--sentence); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.card .lvl { font-size: 13px; color: var(--muted); }
+.card .rule { font-size: 13px; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+.card .close { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 4px; }
+.sw { width: 11px; height: 11px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
+.group { display: grid; gap: 4px; }
+.chip { display: grid; grid-template-columns: 14px minmax(0,1fr) auto; align-items: center; gap: 10px; text-align: left; width: 100%;
+  border: 0; background: transparent; padding: 7px 8px; border-radius: 10px; cursor: pointer; }
+.chip:hover { background: var(--line); }
+.chip[aria-pressed="true"] { background: var(--card); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.chip .v { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; text-align: right; }
+.chip.off .n { color: var(--muted); }
+.chip.off .sw { opacity: 0.35; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggle { display: flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+.key { display: grid; gap: 10px; margin: 0; }
+.key div { display: grid; grid-template-columns: 92px minmax(0,1fr); gap: 10px; font-size: 13px; }
+.key dt { font-weight: 600; }
+.key dd { margin: 0; color: var(--muted); }
+details { border-top: 1px solid var(--line); padding-top: 12px; }
+summary { cursor: pointer; font-weight: 600; }
+.sliders { display: grid; gap: 10px; margin-top: 12px; }
+.sl { display: grid; grid-template-columns: 112px minmax(0,1fr) 62px; gap: 8px; align-items: center; font-size: 13px; }
+.sl output { font-variant-numeric: tabular-nums; text-align: right; color: var(--muted); }
+.sl input { width: 100%; accent-color: var(--fg); }
+.foot { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+@media (max-width: 860px) {
+  .wrap { grid-template-columns: minmax(0,1fr); gap: 18px; }
+  .stage { position: relative; top: 0; height: min(68vh, 560px); min-height: 340px; }
+  .sentence { font-size: 24px; }
+}
+</style>
+
+<div class="wrap">
+  <div class="stage" id="stage">
+    <div class="tag">Outdoor air · example readings</div>
+    <div class="hint" id="hint">Drag to turn · tap a spike to name it</div>
+  </div>
+
+  <div class="panel">
+    <div>
+      <p class="sentence" id="sentence">Soft, round air.</p>
+      <p class="sub" id="subline"></p>
+    </div>
+
+    <div>
+      <p class="label">Example days</p>
+      <div class="presets" id="presets"></div>
+    </div>
+
+    <div class="card" id="card" hidden></div>
+
+    <div class="group" id="legend"></div>
+
+    <label class="toggle"><input type="checkbox" id="ghost" checked> Show yesterday's body as dots</label>
+
+    <div>
+      <p class="label">How to read it</p>
+      <dl class="key">
+        <div><dt>Spikes</dt><dd>Pollution. PM2.5 is a fur of thin needles, PM10 a few thorns, ozone and NO₂ their own clusters. Longer, sharper and more spread out as the reading rises. A reading of 0 has no spike at all.</dd></div>
+        <div><dt>Beads, tufts, burrs</dt><dd>Pollen. Tree is round beads, grass is soft tufts, weed is a burr with tiny prickles (ragweed). More of them as the level rises.</dd></div>
+        <div><dt>The body</dt><dd>Weather. Round when it's mild. Swollen and slumped when it's hot and muggy. Hard and terraced when it's cold. Gritty when it's dry, glossy when it's humid.</dd></div>
+        <div><dt>Toothed bands</dt><dd>Change since yesterday. Temperature at the waist, humidity above it, pressure below. Deeper, faster teeth for a bigger swing. Steady weather has no band.</dd></div>
+        <div><dt>Dots</dt><dd>Yesterday's body, so you can see it grow, shrink or slump.</dd></div>
+      </dl>
+    </div>
+
+    <details>
+      <summary>Adjust readings</summary>
+      <div class="sliders" id="sliders"></div>
+    </details>
+
+    <p class="foot">A design study for felt air. Example readings, outdoor. Not medical advice: the shape shows what's in the air, not what will happen to you.</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- Inks (the app's AirPalette) ----------
+  const INK = {
+    periwinkle: '#738CE6', peach: '#F7B585', coral: '#F27D5C', lilac: '#C7B3F0', mint: '#8CCCC2',
+    butter: '#F5DE85', pink: '#F5B3C7', sky: '#8CBDED', mist: '#B8C2E0', slate: '#6B78A3'
+  };
+  const BODY = { cold: '#C9DDF2', mild: '#EFE9DE', hot: '#F4C3A4' };
+
+  // ---------- Readings ----------
+  // AQI breakpoints (EPA, 2024 PM2.5 update): [Clow, Chigh, Ilow, Ihigh]
+  const BP = {
+    pm25: [[0,9,0,50],[9.1,35.4,51,100],[35.5,55.4,101,150],[55.5,125.4,151,200],[125.5,225.4,201,300],[225.5,500,301,500]],
+    pm10: [[0,54,0,50],[55,154,51,100],[155,254,101,150],[255,354,151,200],[355,424,201,300],[425,604,301,500]],
+    o3:   [[0,54,0,50],[55,70,51,100],[71,85,101,150],[86,105,151,200],[106,200,201,300]],
+    no2:  [[0,53,0,50],[54,100,51,100],[101,360,101,150],[361,649,151,200],[650,1249,201,300]]
+  };
+  const aqi = (k, c) => {
+    if (!(c > 0)) return 0;
+    for (const [cl, ch, il, ih] of BP[k]) if (c <= ch) return il + (ih - il) * (Math.max(c, cl) - cl) / (ch - cl);
+    return 500;
+  };
+  const epaWord = a => a <= 50 ? 'Good' : a <= 100 ? 'Moderate' : a <= 150 ? 'Unhealthy for sensitive groups' : a <= 200 ? 'Unhealthy' : 'Very unhealthy';
+  const tier = a => a <= 50 ? 'Good' : a <= 100 ? 'OK' : 'Not good';
+  const POLLEN = ['None', 'Low', 'Moderate', 'High'];
+
+  const FEATS = [
+    { id: 0, key: 'pm25', name: 'PM2.5', long: 'fine particles', unit: 'µg/m³', ink: INK.periwinkle, lat: 1.0, lon: 0.35, kind: 'pollutant',
+      rule: 'A fur of thin needles. More of them, longer and sharper as PM2.5 rises. None at 0.' },
+    { id: 1, key: 'pm10', name: 'PM10', long: 'coarse particles', unit: 'µg/m³', ink: INK.peach, lat: 0.3, lon: 1.25, kind: 'pollutant',
+      rule: 'A few thick thorns. Longer and sharper as PM10 rises. None at 0.' },
+    { id: 2, key: 'o3', name: 'Ozone', long: 'ground-level ozone', unit: 'ppb', ink: INK.lilac, lat: 0.32, lon: -0.95, kind: 'pollutant',
+      rule: 'Long, slender shards. Longer and sharper as ozone rises. None at 0.' },
+    { id: 3, key: 'no2', name: 'NO₂', long: 'nitrogen dioxide, mostly traffic', unit: 'ppb', ink: INK.coral, lat: 1.0, lon: 2.6, kind: 'pollutant',
+      rule: 'A tight cluster of short spikes. Sharper as NO₂ rises. None at 0.' },
+    { id: 4, key: 'tree', name: 'Tree pollen', long: 'oak, maple, birch…', ink: INK.mint, lat: -0.3, lon: 2.2, kind: 'pollen',
+      rule: 'Round beads. More and bigger as the level rises. None when there is none.' },
+    { id: 5, key: 'grass', name: 'Grass pollen', long: 'late spring into summer', ink: INK.butter, lat: -1.0, lon: -1.8, kind: 'pollen',
+      rule: 'Soft tufts with rounded tips. Denser and taller as the level rises.' },
+    { id: 6, key: 'weed', name: 'Weed pollen', long: 'ragweed, late summer and fall', ink: INK.pink, lat: -0.32, lon: -2.75, kind: 'pollen',
+      rule: 'Burrs: a round lump with tiny prickles, like ragweed pollen itself. More burrs as the level rises.' }
+  ];
+  const BANDS = [
+    { id: 7, key: 'temp', name: 'Temperature', lat: 0.0, scale: 25, unit: '°F' },
+    { id: 8, key: 'hum', name: 'Humidity', lat: 0.62, scale: 40, unit: '%' },
+    { id: 9, key: 'pres', name: 'Pressure', lat: -0.62, scale: 14, unit: 'hPa' }
+  ];
+
+  const PRESETS = [
+    { name: 'Calm', s: { pm25: 4, pm10: 10, o3: 30, no2: 5, tree: 1, grass: 0, weed: 0, temp: 66, tempY: 64, hum: 48, humY: 52, pres: 1016, presY: 1015 } },
+    { name: 'Oak pollen week', s: { pm25: 7, pm10: 22, o3: 42, no2: 9, tree: 3, grass: 1, weed: 0, temp: 71, tempY: 68, hum: 45, humY: 50, pres: 1012, presY: 1014 } },
+    { name: 'Wildfire smoke', s: { pm25: 88, pm10: 130, o3: 58, no2: 14, tree: 0, grass: 1, weed: 1, temp: 84, tempY: 86, hum: 38, humY: 40, pres: 1010, presY: 1011 } },
+    { name: 'Ozone heat', s: { pm25: 16, pm10: 35, o3: 84, no2: 22, tree: 0, grass: 1, weed: 0, temp: 97, tempY: 93, hum: 58, humY: 55, pres: 1009, presY: 1010 } },
+    { name: 'Cold front', s: { pm25: 3, pm10: 9, o3: 26, no2: 8, tree: 0, grass: 0, weed: 0, temp: 38, tempY: 71, hum: 34, humY: 82, pres: 1029, presY: 1004 } },
+    { name: 'Muggy ragweed', s: { pm25: 11, pm10: 28, o3: 46, no2: 10, tree: 0, grass: 2, weed: 3, temp: 86, tempY: 84, hum: 86, humY: 80, pres: 1011, presY: 1012 } },
+    { name: 'All zero (test)', s: { pm25: 0, pm10: 0, o3: 0, no2: 0, tree: 0, grass: 0, weed: 0, temp: 68, tempY: 68, hum: 50, humY: 50, pres: 1013, presY: 1013 } }
+  ];
+  let S = { ...PRESETS[0].s };
+  let presetIx = 0;
+
+  const weather = (t, h, p) => ({
+    hot: clamp((t - 74) / 26, 0, 1), cold: clamp((62 - t) / 40, 0, 1),
+    wet: clamp((h - 55) / 40, 0, 1), dry: clamp((38 - h) / 30, 0, 1), pres: clamp((p - 1013) / 20, -1, 1)
+  });
+  const deltas = () => ({
+    temp: clamp(Math.abs(S.temp - S.tempY) / 25, 0, 1) * Math.sign(S.temp - S.tempY),
+    hum: clamp(Math.abs(S.hum - S.humY) / 40, 0, 1) * Math.sign(S.hum - S.humY),
+    pres: clamp(Math.abs(S.pres - S.presY) / 14, 0, 1) * Math.sign(S.pres - S.presY)
+  });
+
+  function clamp(x, a, b) { return Math.min(b, Math.max(a, x)); }
+  function smooth(e0, e1, x) { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); }
+
+  // ---------- Noise ----------
+  function hash(i, j, k) {
+    let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) + Math.imul(k, 1274126177);
+    h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967295;
+  }
+  function noise3(x, y, z) {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+    const xf = x - xi, yf = y - yi, zf = z - zi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+    const l = (a, b, t) => a + (b - a) * t;
+    return l(l(l(hash(xi, yi, zi), hash(xi + 1, yi, zi), u), l(hash(xi, yi + 1, zi), hash(xi + 1, yi + 1, zi), u), v),
+             l(l(hash(xi, yi, zi + 1), hash(xi + 1, yi, zi + 1), u), l(hash(xi, yi + 1, zi + 1), hash(xi + 1, yi + 1, zi + 1), u), v), w);
+  }
+  function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  const fromLatLon = (lat, lon) => new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon));
+  function coneDirs(anchor, radius, n, seed) {
+    const r = rng(seed), out = [];
+    const t1 = new THREE.Vector3().crossVectors(anchor, Math.abs(anchor.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).normalize();
+    const t2 = new THREE.Vector3().crossVectors(anchor, t1);
+    for (let i = 0; i < n; i++) {
+      const a = i === 0 ? 0 : radius * Math.sqrt(r()), th = r() * Math.PI * 2;
+      out.push(anchor.clone().multiplyScalar(Math.cos(a)).addScaledVector(t1, Math.cos(th) * Math.sin(a)).addScaledVector(t2, Math.sin(th) * Math.sin(a)).normalize());
+      out[i].j = r();
+    }
+    return out;
+  }
+  FEATS.forEach(f => { f.anchor = fromLatLon(f.lat, f.lon); f.pool = coneDirs(f.anchor, f.kind === 'pollen' ? 0.42 : 0.36, 40, 101 + f.id * 17); });
+
+  // ---------- Scene ----------
+  const stage = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  stage.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
+  camera.position.set(0.6, 0.9, 5.6);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 3.2; controls.maxDistance = 9;
+  controls.autoRotate = !reduceMotion; controls.autoRotateSpeed = 0.7;
+  controls.addEventListener('start', () => { controls.autoRotate = false; camTween = null; });
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xd9cbb8, 0.75));
+  const key = new THREE.DirectionalLight(0xffffff, 1.25); key.position.set(-3, 4, 5); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xcfe0ff, 0.55); rim.position.set(4, -1, -4); scene.add(rim);
+
+  const geo = new THREE.SphereGeometry(1, 300, 210);
+  const posA = geo.attributes.position, N = posA.count;
+  const dir = new Float32Array(N * 3), lat = new Float32Array(N), lon = new Float32Array(N);
+  const nTerr = new Float32Array(N), nGrain = new Float32Array(N), nLump = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const x = posA.getX(i), y = posA.getY(i), z = posA.getZ(i), l = Math.hypot(x, y, z) || 1;
+    dir[i * 3] = x / l; dir[i * 3 + 1] = y / l; dir[i * 3 + 2] = z / l;
+    lat[i] = Math.asin(clamp(y / l, -1, 1)); lon[i] = Math.atan2(z / l, x / l);
+    nTerr[i] = noise3(x * 2.3 + 5, y * 2.3, z * 2.3);
+    nGrain[i] = noise3(x * 26, y * 26 + 3, z * 26);
+    nLump[i] = noise3(x * 1.4 + 9, y * 1.4, z * 1.4 + 2);
+  }
+  const colA = new THREE.BufferAttribute(new Float32Array(N * 3), 3);
+  geo.setAttribute('color', colA);
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 2.4);
+  const mat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.6, clearcoat: 0, sheen: 0.3, sheenRoughness: 0.8 });
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+
+  // Yesterday's body as dots.
+  const gGeo = new THREE.SphereGeometry(1, 64, 44);
+  const gBase = gGeo.attributes.position.array.slice();
+  const ghost = new THREE.Points(gGeo, new THREE.PointsMaterial({ size: 0.022, transparent: true, opacity: 0.45, color: 0x6e675d, depthWrite: false }));
+  scene.add(ghost);
+
+  // ---------- Shape ----------
+  const staticR = new Float32Array(N), featOwner = new Int8Array(N), featC = new Float32Array(N);
+  const bandC = new Float32Array(N), bandOwner = new Int8Array(N);
+  let spikes = [], activeBands = [], W = weather(S.temp, S.hum, S.pres);
+  let selected = null;
+
+  function bodyR(x, y, z, i, w) {
+    let r = 1 + 0.10 * w.hot - 0.08 * w.cold - 0.035 * w.pres;
+    const sag = 0.16 * w.hot + 0.12 * w.wet;
+    r += y < 0 ? sag * y * y : -0.45 * sag * y * y;
+    if (w.cold > 0 && i >= 0) r += w.cold * 0.13 * (Math.floor(nTerr[i] * 5) / 5 - 0.4);
+    if (w.dry > 0 && i >= 0) r += w.dry * 0.028 * (Math.abs(nGrain[i] - 0.5) * 2);
+    if (w.wet > 0 && i >= 0) r += w.wet * 0.05 * (nLump[i] - 0.5);
+    return r;
+  }
+
+  function buildSpikes() {
+    spikes = [];
+    for (const f of FEATS) {
+      const v = S[f.key];
+      if (!(v > 0)) continue;                                   // zero → no spike at all
+      if (f.kind === 'pollutant') {
+        const a = aqi(f.key, v), n = clamp(a / 220, 0.04, 1);
+        const p = 1 + 2.6 * n;                                   // sharper as it worsens
+        const spec = {
+          pm25: { count: 3 + Math.round(n * 26), h: 0.10 + 0.55 * n, w: 0.05 },
+          pm10: { count: 1 + Math.round(n * 6), h: 0.16 + 0.85 * n, w: 0.12 },
+          o3:   { count: 1 + Math.round(n * 9), h: 0.14 + 0.95 * n, w: 0.07 },
+          no2:  { count: 2 + Math.round(n * 12), h: 0.08 + 0.45 * n, w: 0.08 }
+        }[f.key];
+        const pool = coneDirs(f.anchor, 0.32 + 1.1 * n * n, 40, 101 + f.id * 17);   // spreads over the form as it worsens
+        for (let k = 0; k < spec.count; k++) {
+          const d = pool[k];
+          spikes.push({ id: f.id, d, h: spec.h * (0.72 + 0.28 * d.j), w: spec.w, p, kind: 'cone' });
+        }
+      } else {
+        const L = v / 3;
+        if (f.key === 'tree') for (let k = 0; k < 2 + v * 5; k++) { const d = f.pool[k]; spikes.push({ id: f.id, d, h: (0.05 + 0.1 * L) * (0.8 + 0.4 * d.j), w: 0.09 + 0.05 * L, kind: 'dome' }); }
+        if (f.key === 'grass') for (let k = 0; k < 4 + v * 9; k++) { const d = f.pool[k]; spikes.push({ id: f.id, d, h: (0.08 + 0.22 * L) * (0.6 + 0.6 * d.j), w: 0.038, kind: 'column' }); }
+        if (f.key === 'weed') {
+          for (let k = 0; k < v * 2; k++) {
+            const d = f.pool[k], hd = 0.07 + 0.06 * L, wd = 0.15;
+            spikes.push({ id: f.id, d, h: hd, w: wd, kind: 'dome' });
+            for (const m of coneDirs(d, wd * 0.75, 7 + v * 3, 900 + k)) spikes.push({ id: f.id, d: m, h: hd * 0.55 + 0.05 + 0.04 * L, w: 0.035, p: 1.4, kind: 'cone' });
+          }
+        }
+      }
+    }
+    for (const s of spikes) s.cw = Math.cos(s.w);
+  }
+
+  function profile(s, x) {
+    if (s.kind === 'cone') return Math.pow(1 - x, s.p);
+    if (s.kind === 'dome') return Math.pow(1 - x * x, 1.5);
+    return Math.sqrt(Math.max(0, 1 - x * x * x * x));         // column: soft, rounded tip
+  }
+
+  const c = new THREE.Color(), cTmp = new THREE.Color();
+  const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
+  const INKL = {}; FEATS.forEach(f => INKL[f.id] = lin(f.ink));
+  const BODYL = { cold: lin(BODY.cold), mild: lin(BODY.mild), hot: lin(BODY.hot) };
+  const GREY = lin('#B9B4AB');
+  const bandInk = b => b.key === 'temp' ? (S.temp >= S.tempY ? INK.coral : INK.sky) : b.key === 'hum' ? INK.mist : INK.slate;
+
+  function rebuild() {
+    W = weather(S.temp, S.hum, S.pres);
+    buildSpikes();
+    const dl = deltas();
+    activeBands = BANDS.map(b => ({ ...b, A: Math.abs(dl[b.key]), sgn: Math.sign(dl[b.key]) || 1, ink: lin(bandInk(b)) })).filter(b => b.A > 0.15);
+    activeBands.forEach(b => { b.bw = 0.10 + 0.09 * b.A; b.teeth = Math.round(9 + 22 * b.A); b.h = 0.03 + 0.24 * b.A; b.pow = 1 + 3.2 * b.A; });
+
+    for (let i = 0; i < N; i++) {
+      const x = dir[i * 3], y = dir[i * 3 + 1], z = dir[i * 3 + 2];
+      let best = 0, own = -1;
+      for (let k = 0; k < spikes.length; k++) {
+        const s = spikes[k], dt = x * s.d.x + y * s.d.y + z * s.d.z;
+        if (dt <= s.cw) continue;
+        const val = s.h * profile(s, Math.acos(Math.min(1, dt)) / s.w);
+        if (val > best) { best = val; own = s.id; }
+      }
+      staticR[i] = bodyR(x, y, z, i, W) + best;
+      featOwner[i] = own; featC[i] = best;
+    }
+    // body tint by temperature
+    const t = clamp((S.temp - 30) / 70, 0, 1);
+    const base = t < 0.5 ? BODYL.cold.clone().lerp(BODYL.mild, t / 0.5) : BODYL.mild.clone().lerp(BODYL.hot, (t - 0.5) / 0.5);
+    mat.roughness = clamp(0.62 - 0.45 * W.wet + 0.3 * W.dry, 0.12, 0.95);
+    mat.clearcoat = 0.9 * W.wet; mat.clearcoatRoughness = 0.25;
+    recolor(base);
+    rebuildGhost();
+    lastBandT = -1;
+    applyBands(performance.now() / 1000, true);
+    renderSidebar();
+  }
+
+  let baseColor = BODYL.mild.clone();
+  function recolor(base) {
+    if (base) baseColor = base;
+    const arr = colA.array, sel = selected;
+    for (let i = 0; i < N; i++) {
+      c.copy(baseColor);
+      if (featOwner[i] >= 0) c.lerp(INKL[featOwner[i]], 0.25 + 0.75 * smooth(0, 0.05, featC[i]));
+      for (const b of activeBands) {
+        const d = Math.abs(lat[i] - b.lat);
+        if (d < b.bw * 1.15) c.lerp(b.ink, 0.85 * (1 - d / (b.bw * 1.15)) * (0.4 + 0.6 * b.A));
+      }
+      if (sel !== null) {
+        const mine = featOwner[i] === sel || (sel >= 7 && activeBands.some(b => b.id === sel && Math.abs(lat[i] - b.lat) < b.bw)) || (sel === -1 && featOwner[i] < 0);
+        if (!mine) c.lerp(GREY, 0.55); else c.multiplyScalar(1.12);
+      }
+      arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b;
+    }
+    colA.needsUpdate = true;
+  }
+
+  function rebuildGhost() {
+    const w = weather(S.tempY, S.humY, S.presY), a = gGeo.attributes.position;
+    for (let i = 0; i < a.count; i++) {
+      const x = gBase[i * 3], y = gBase[i * 3 + 1], z = gBase[i * 3 + 2];
+      const r = bodyR(x, y, z, -1, w) * 1.005;
+      a.setXYZ(i, x * r, y * r, z * r);
+    }
+    a.needsUpdate = true;
+    ghost.visible = document.getElementById('ghost').checked && activeBands.length > 0;
+  }
+
+  let lastBandT = -1;
+  function applyBands(t, force) {
+    if (!force && (activeBands.length === 0 || t - lastBandT < 1 / 30)) return;
+    lastBandT = t;
+    const arr = posA.array, tt = reduceMotion ? 0 : t;
+    for (let i = 0; i < N; i++) {
+      let b = 0, bo = -1;
+      for (const B of activeBands) {
+        const d = Math.abs(lat[i] - B.lat);
+        if (d >= B.bw) continue;
+        const env = Math.pow(1 - (d / B.bw) ** 2, 2);
+        const ph = (lon[i] * B.teeth + tt * B.sgn * (0.6 + 2.4 * B.A) + 0.6 * Math.sin(lon[i] * 3 + B.id)) / (Math.PI * 2);
+        const tri = 1 - Math.abs(2 * (ph - Math.floor(ph)) - 1);
+        const v = env * B.h * Math.pow(tri, B.pow) * (0.7 + 0.3 * Math.sin(lon[i] * 5 + B.id * 2 + tt * 0.7));
+        if (v > b) { b = v; bo = B.id; }
+      }
+      bandC[i] = b; bandOwner[i] = bo;
+      const r = staticR[i] + b;
+      arr[i * 3] = dir[i * 3] * r; arr[i * 3 + 1] = dir[i * 3 + 1] * r; arr[i * 3 + 2] = dir[i * 3 + 2] * r;
+    }
+    posA.needsUpdate = true;
+    geo.computeVertexNormals();
+  }
+
+  // ---------- Loop ----------
+  let camTween = null;
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+
+  function frame(ms) {
+    const t = ms / 1000;
+    applyBands(t, false);
+    if (!reduceMotion) {
+      const calm = 1 - Math.max(0, ...activeBands.map(b => b.A));
+      const slow = 1 - 0.45 * Math.max(W.hot, W.wet);
+      let br = 0.016 * Math.sin(t * 1.5 * slow);
+      br += (1 - calm) * 0.012 * Math.sin(t * 5.3) * Math.sin(t * 1.7);   // a stutter when the weather swung
+      mesh.scale.setScalar(1 + br);
+    }
+    if (camTween) {
+      const k = Math.min(1, (t - camTween.t0) / 0.9), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+      camera.position.copy(camTween.from).lerp(camTween.to, e).setLength(camTween.dist);
+      if (k >= 1) camTween = null;
+    }
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+
+  function faceToward(v) {
+    controls.autoRotate = false;
+    const dist = camera.position.length();
+    const to = v.clone().normalize().add(new THREE.Vector3(0, 0.25, 0)).normalize().multiplyScalar(dist);
+    camTween = { from: camera.position.clone(), to, dist, t0: performance.now() / 1000 };
+  }
+
+  // ---------- Tap ----------
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  let down = null;
+  renderer.domElement.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6 || performance.now() - down.t > 500) return;
+    const r = renderer.domElement.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObject(mesh)[0];
+    if (!hit) { select(null); return; }
+    const f = hit.face, ids = [f.a, f.b, f.c];
+    let best = -1, bestV = 0;
+    for (const i of ids) {
+      if (featC[i] > bestV) { bestV = featC[i]; best = featOwner[i]; }
+      if (bandC[i] > bestV) { bestV = bandC[i]; best = bandOwner[i]; }
+    }
+    if (bestV < 0.012) {
+      // Near a band but between its teeth still counts as the band.
+      const B = activeBands.find(b => Math.abs(lat[ids[0]] - b.lat) < b.bw * 0.8);
+      best = B ? B.id : -1;
+    }
+    select(best);
+  });
+
+  function select(id) {
+    selected = id;
+    recolor();
+    renderCard();
+    renderSidebar();
+  }
+
+  // ---------- Words ----------
+  const fmt = (v, d = 0) => Number(v).toFixed(d);
+  function weatherDelta(key) {
+    const d = { temp: S.temp - S.tempY, hum: S.hum - S.humY, pres: S.pres - S.presY }[key];
+    if (key === 'temp') return Math.abs(d) < 2 ? 'About the same as yesterday' : `${fmt(Math.abs(d))}° ${d < 0 ? 'colder' : 'warmer'} than yesterday`;
+    if (key === 'hum') return Math.abs(d) < 4 ? 'About the same as yesterday' : `${fmt(Math.abs(d))} points ${d < 0 ? 'drier' : 'more humid'} than yesterday`;
+    return Math.abs(d) < 2 ? 'Steady since yesterday' : `${d < 0 ? 'Fell' : 'Rose'} ${fmt(Math.abs(d))} hPa since yesterday`;
+  }
+  function tempWord(t) { return t < 32 ? 'Freezing' : t < 50 ? 'Cold' : t < 62 ? 'Cool' : t <= 76 ? 'Mild' : t <= 88 ? 'Warm' : 'Hot'; }
+  function humWord(h) { return h < 30 ? 'Dry' : h <= 60 ? 'Comfortable' : h <= 75 ? 'Humid' : 'Muggy'; }
+
+  function sentence() {
+    const parts = [];
+    for (const f of FEATS) {
+      const v = S[f.key];
+      if (f.kind === 'pollutant') { const a = aqi(f.key, v); if (a > 50) parts.push({ s: a / 100, word: 'Prickly', say: `${f.key === 'o3' ? 'ozone' : f.name} is ${tier(a) === 'OK' ? 'up' : 'high'}` }); }
+      else if (v >= 2) parts.push({ s: v / 2.4, word: f.key === 'weed' ? 'Burry' : 'Bristly', say: `${f.name.toLowerCase()} is ${POLLEN[v].toLowerCase()}` });
+    }
+    const dl = deltas();
+    for (const b of BANDS) { const A = Math.abs(dl[b.key]); if (A > 0.3) parts.push({ s: A * 1.1, word: 'Jagged', say: (w => w[0].toLowerCase() + w.slice(1))(weatherDelta(b.key)) }); }
+    if (W.hot > 0.3 || W.wet > 0.5) parts.push({ s: Math.max(W.hot, W.wet) * 0.9, word: 'Heavy', say: `${tempWord(S.temp).toLowerCase()} and ${humWord(S.hum).toLowerCase()}` });
+    if (W.cold > 0.4) parts.push({ s: W.cold * 0.8, word: 'Hard', say: `${tempWord(S.temp).toLowerCase()}${W.dry > 0.2 ? ' and dry' : ''}` });
+    parts.sort((a, b) => b.s - a.s);
+    if (!parts.length) {
+      const anything = FEATS.some(f => S[f.key] > 0);
+      return { head: 'Soft, round air.', sub: anything ? `${tempWord(S.temp)}, with little in it. Every reading is in its good range.` : 'Nothing in the readings at all, so there are no spikes. Only the weather shapes the body.' };
+    }
+    const top = parts[0];
+    const cap = s => s[0].toUpperCase() + s.slice(1);
+    return { head: `${top.word} air. ${cap(top.say)}.`, sub: parts.length > 1 ? `Also: ${parts.slice(1, 4).map(p => p.say).join(', ')}.` : 'Everything else is in its good range.' };
+  }
+
+  // ---------- Panel ----------
+  const $ = id => document.getElementById(id);
+  function renderSidebar() {
+    const s = sentence();
+    $('sentence').textContent = s.head; $('subline').textContent = s.sub;
+    const groups = [
+      ['In the air', FEATS.filter(f => f.kind === 'pollutant').map(f => {
+        const v = S[f.key], a = aqi(f.key, v);
+        return { id: f.id, ink: f.ink, name: f.name, val: v > 0 ? `${fmt(v)} ${f.unit} · ${tier(a)}` : '0 · no spike', off: !(v > 0) };
+      })],
+      ['Pollen', FEATS.filter(f => f.kind === 'pollen').map(f => ({ id: f.id, ink: f.ink, name: f.name, val: S[f.key] > 0 ? POLLEN[S[f.key]] : 'None · no shape', off: !(S[f.key] > 0) }))],
+      ['Weather and change', BANDS.map(b => {
+        const A = activeBands.find(x => x.id === b.id);
+        const now = b.key === 'temp' ? `${fmt(S.temp)}°F` : b.key === 'hum' ? `${fmt(S.hum)}%` : `${fmt(S.pres)} hPa`;
+        return { id: b.id, ink: A ? bandInk(b) : '#B9B4AB', name: b.name, val: `${now} · ${A ? 'band' : 'steady'}`, off: false };
+      })]
+    ];
+    $('legend').innerHTML = groups.map(([t, rows]) => `<p class="label" style="margin-top:6px">${t}</p>` + rows.map(r =>
+      `<button class="chip${r.off ? ' off' : ''}" data-id="${r.id}" aria-pressed="${selected === r.id}"><span class="sw" style="background:${r.ink}"></span><span class="n">${r.name}</span><span class="v">${r.val}</span></button>`).join('')).join('');
+  }
+  $('legend').addEventListener('click', e => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    const id = +b.dataset.id;
+    if (selected === id) { select(null); return; }
+    select(id);
+    const f = FEATS.find(x => x.id === id);
+    if (f && S[f.key] > 0) faceToward(f.anchor);
+    const B = BANDS.find(x => x.id === id);
+    if (B) faceToward(fromLatLon(B.lat * 0.7, Math.atan2(camera.position.z, camera.position.x)));
+  });
+
+  function renderCard() {
+    const card = $('card');
+    if (selected === null) { card.hidden = true; return; }
+    card.hidden = false;
+    const x = '<button class="close" aria-label="Close" id="closeCard">×</button>';
+    const f = FEATS.find(q => q.id === selected), B = BANDS.find(q => q.id === selected);
+    if (f) {
+      const v = S[f.key];
+      if (f.kind === 'pollutant') {
+        const a = aqi(f.key, v);
+        card.innerHTML = `<h3><span class="sw" style="background:${f.ink}"></span>${f.name} · ${f.long}${x}</h3>
+          <div class="val">${v > 0 ? fmt(v) + ' <span style="font-size:15px">' + f.unit + '</span>' : '0'}</div>
+          <div class="lvl">${v > 0 ? `${tier(a)} · EPA: ${epaWord(a)}` : 'No reading above zero, so no spike'}</div>
+          <div class="rule">${f.rule}</div>`;
+      } else {
+        card.innerHTML = `<h3><span class="sw" style="background:${f.ink}"></span>${f.name}${x}</h3>
+          <div class="val">${POLLEN[v]}</div><div class="lvl">${f.long}</div><div class="rule">${f.rule}</div>`;
+      }
+    } else if (B) {
+      const now = B.key === 'temp' ? `${fmt(S.temp)}°F` : B.key === 'hum' ? `${fmt(S.hum)}%` : `${fmt(S.pres)} hPa`;
+      const yest = B.key === 'temp' ? `${fmt(S.tempY)}°F` : B.key === 'hum' ? `${fmt(S.humY)}%` : `${fmt(S.presY)} hPa`;
+      const where = { temp: 'the waist', hum: 'above the waist', pres: 'below the waist' }[B.key];
+      const extra = { temp: 'The value itself shapes the body: heat swells and slumps it, cold makes it hard and terraced.',
+        hum: 'The value itself sets the surface: glossy and lumpy when humid, gritty when dry.',
+        pres: 'The value itself tightens the body a little when pressure is high and loosens it when low.' }[B.key];
+      card.innerHTML = `<h3><span class="sw" style="background:${bandInk(B)}"></span>${B.name}${x}</h3>
+        <div class="val">${now}</div><div class="lvl">Yesterday ${yest} · ${weatherDelta(B.key)}</div>
+        <div class="rule">The toothed band at ${where} is the change. Deeper, faster teeth for a bigger swing${B.key === 'temp' ? ', blue when it cooled, coral when it warmed' : ''}. ${extra}</div>`;
+    } else {
+      card.innerHTML = `<h3><span class="sw" style="background:#EFE9DE"></span>The body · weather${x}</h3>
+        <div class="val">${fmt(S.temp)}°F</div>
+        <div class="lvl">${tempWord(S.temp)} · ${fmt(S.hum)}% humidity (${humWord(S.hum).toLowerCase()}) · ${fmt(S.pres)} hPa</div>
+        <div class="rule">Round and calm when it's mild. Heat swells it and makes it slump. Cold makes it hard and terraced. Dry air makes it gritty, humid air glossy.</div>`;
+    }
+    $('closeCard').onclick = () => select(null);
+  }
+
+  $('presets').innerHTML = PRESETS.map((p, i) => `<button class="preset" data-i="${i}" aria-pressed="${i === presetIx}">${p.name}</button>`).join('');
+  $('presets').addEventListener('click', e => {
+    const b = e.target.closest('.preset'); if (!b) return;
+    presetIx = +b.dataset.i; S = { ...PRESETS[presetIx].s };
+    document.querySelectorAll('.preset').forEach(x => x.setAttribute('aria-pressed', x === b));
+    selected = null; renderCard(); syncSliders(); rebuild();
+  });
+
+  const SL = [
+    ['pm25', 'PM2.5 µg/m³', 0, 150, 1], ['pm10', 'PM10 µg/m³', 0, 300, 1], ['o3', 'Ozone ppb', 0, 150, 1], ['no2', 'NO₂ ppb', 0, 200, 1],
+    ['tree', 'Tree pollen', 0, 3, 1], ['grass', 'Grass pollen', 0, 3, 1], ['weed', 'Weed pollen', 0, 3, 1],
+    ['temp', 'Temp °F', -10, 110, 1], ['tempY', 'Yesterday °F', -10, 110, 1], ['hum', 'Humidity %', 0, 100, 1], ['humY', 'Yesterday %', 0, 100, 1],
+    ['pres', 'Pressure hPa', 980, 1045, 1], ['presY', 'Yesterday hPa', 980, 1045, 1]
+  ];
+  $('sliders').innerHTML = SL.map(([k, l, mn, mx, st]) => `<label class="sl" for="s_${k}"><span>${l}</span><input id="s_${k}" type="range" min="${mn}" max="${mx}" step="${st}" data-k="${k}"><output id="o_${k}"></output></label>`).join('');
+  function syncSliders() { for (const [k] of SL) { $('s_' + k).value = S[k]; $('o_' + k).textContent = k === 'tree' || k === 'grass' || k === 'weed' ? POLLEN[S[k]] : S[k]; } }
+  let pending = false;
+  $('sliders').addEventListener('input', e => {
+    const k = e.target.dataset.k; if (!k) return;
+    S[k] = +e.target.value; $('o_' + k).textContent = k === 'tree' || k === 'grass' || k === 'weed' ? POLLEN[S[k]] : S[k];
+    document.querySelectorAll('.preset').forEach(x => x.setAttribute('aria-pressed', 'false'));
+    if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; rebuild(); renderCard(); }); }
+  });
+  $('ghost').addEventListener('change', () => { ghost.visible = $('ghost').checked && activeBands.length > 0; });
+
+  syncSliders();
+  rebuild();
+  requestAnimationFrame(frame);
+})();
+</script>

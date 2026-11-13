@@ -172,6 +172,8 @@ enum Theme {
         }
 
         static func sentence(size: CGFloat, slanted: Bool = false, voice: NarratorStyle = .current) -> Font {
+            // Menus look: Figtree, medium at most (owner, Nov 13).
+            if Crit.AppLook.current == .menus { return Figtree.font(size: size, weight: .medium) }
             // Apple Health look: SF, bold, as Health sets its summaries.
             if Crit.AppLook.current.healthLike { return .system(size: size, weight: .bold) }
             switch current {
@@ -188,6 +190,7 @@ enum Theme {
         }
 
         static func figures(size: CGFloat) -> Font {
+            if Crit.AppLook.current == .menus { return Figtree.font(size: size, weight: .medium).monospacedDigit() }
             if Crit.AppLook.current.healthLike { return .system(size: size, weight: .semibold).monospacedDigit() }
             switch current {
             case .system:
@@ -197,6 +200,51 @@ enum Theme {
             case .funnelSans:
                 return Theme.Funnel.font(size: size)
             }
+        }
+    }
+
+    /// UI type that follows the look: Figtree on the Menus look (medium at most), the system face elsewhere.
+    static func ui(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
+        Crit.AppLook.current == .menus ? Figtree.font(style, weight: weight) : Font.system(style).weight(weight)
+    }
+    static func ui(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        Crit.AppLook.current == .menus ? Figtree.font(size: size, weight: weight) : .system(size: size, weight: weight)
+    }
+
+    /// Bundled Figtree (OFL, Google Fonts; variable, Theme/Fonts/Figtree.ttf): the Menus look's one typeface
+    /// (owner, Nov 13). Never heavier than medium.
+    enum Figtree {
+        /// The variable font's weight axis ('wght'), set directly: SwiftUI's `.weight` doesn't move it.
+        private static let wghtAxis = 0x77676874
+        static func uiFont(size: CGFloat, weight: Font.Weight = .regular) -> UIFont {
+            let w: CGFloat = switch weight {
+            case .ultraLight, .thin, .light: 300
+            case .regular: 400
+            default: 500   // medium is the heaviest (owner, Nov 13)
+            }
+            let desc = UIFontDescriptor(fontAttributes: [.family: "Figtree"])
+                .addingAttributes([UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [wghtAxis: w]])
+            return UIFont(descriptor: desc, size: size)
+        }
+        static func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+            Font(uiFont(size: size, weight: weight))
+        }
+        /// A text style's size (following the Dynamic Type setting at the time) in Figtree.
+        static func font(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
+            let ui: UIFont.TextStyle = switch style {
+            case .largeTitle: .largeTitle
+            case .title: .title1
+            case .title2: .title2
+            case .title3: .title3
+            case .headline: .headline
+            case .subheadline: .subheadline
+            case .callout: .callout
+            case .footnote: .footnote
+            case .caption: .caption1
+            case .caption2: .caption2
+            default: .body
+            }
+            return font(size: UIFont.preferredFont(forTextStyle: ui).pointSize, weight: weight)
         }
     }
 

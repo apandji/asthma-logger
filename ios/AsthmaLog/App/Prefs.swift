@@ -21,6 +21,8 @@ enum Prefs {
     /// "system" (default), "light" (linen paper) or "dark" (black paper). Sets Crit.Paper underneath.
     static let appearance = "appearance"
     static let sounds = "sounds"
+    /// Settings › About: five taps on the version show the Scenarios row (demo run, data sets, staged days).
+    static let showScenarios = "showScenarios"
     /// Big-statement typeface: `system` (New York), `recursive` (default), or `funnelSans`.
     /// UI chrome stays SF. Legacy bool `useFunnelSans` is still read once for migration.
     static let statementTypeface = "statementTypeface"

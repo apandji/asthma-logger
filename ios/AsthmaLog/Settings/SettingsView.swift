@@ -2,7 +2,8 @@ import AsthmaCore
 import SwiftData
 import SwiftUI
 
-/// Settings: what the real app has, top to bottom; demo, design and test tools behind one row at the bottom.
+/// Settings: what the real app has, top to bottom. Scenarios (the demo run, data sets, staged days) are out of
+/// sight: tap the version five times under About and the row appears (owner, Nov 13).
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(Prefs.writeToHealth) private var writeToHealth = true
@@ -13,18 +14,19 @@ struct SettingsView: View {
     @AppStorage(Prefs.appearance) private var appearance = "system"
     @AppStorage(Prefs.railLeft) private var railLeft = false
     @AppStorage(Prefs.sounds) private var sounds = true
+    @AppStorage(Prefs.showScenarios) private var showScenarios = false
+    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.standard
+    @State private var versionTaps = 0
+
+    private var version: String {
+        let info = Bundle.main.infoDictionary
+        return [info?["CFBundleShortVersionString"] as? String, (info?["CFBundleVersion"] as? String).map { "(\($0))" }]
+            .compactMap { $0 }.joined(separator: " ")
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                // Demos, design reviews and testing, first for now (owner, Oct 23: MVP demos). Move back to the bottom
-                // before TestFlight.
-                Section {
-                    NavigationLink("Demo and development") { DeveloperSettings(close: { dismiss() }) }
-                } footer: {
-                    Text("Loadouts, data sets, design switches and prototypes. Not part of felt air.")
-                }
-
                 Section {
                     Toggle("After a press, ask what was going on", isOn: $quickRecord)
                         .onChange(of: quickRecord) { _, on in
@@ -76,18 +78,35 @@ struct SettingsView: View {
                         Text("Light").tag("light")
                         Text("Dark").tag("dark")
                     }
-                    Picker("Rail", selection: $railLeft) {
-                        Text("Right").tag(false)
-                        Text("Left").tag(true)
+                    // The rail belongs to the sky look; the chart look has none.
+                    if appLook == .feltAir {
+                        Picker("Rail", selection: $railLeft) {
+                            Text("Right").tag(false)
+                            Text("Left").tag(true)
+                        }
                     }
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("Light prints the sky on warm paper, dark on black. The rail goes on the side of the hand you hold the phone with.")
+                    if appLook == .feltAir {
+                        Text("Light prints the sky on warm paper, dark on black. The rail goes on the side of the hand you hold the phone with.")
+                    }
                 }
 
                 Section {
                     NavigationLink("Where your data comes from") { SourcesView() }
+                    LabeledContent("Version", value: version)
+                        .contentShape(.rect)
+                        .onTapGesture {
+                            versionTaps += 1
+                            guard versionTaps >= 5 else { return }
+                            versionTaps = 0
+                            showScenarios.toggle()
+                            UINotificationFeedbackGenerator().notificationOccurred(showScenarios ? .success : .warning)
+                        }
+                    if showScenarios {
+                        NavigationLink("Scenarios") { ScenarioSettings(close: { dismiss() }) }
+                    }
                 } header: {
                     Text("About")
                 } footer: {
@@ -106,9 +125,9 @@ struct SettingsView: View {
     }
 }
 
-/// Demo and development: data sets, demo moments, design crit switches, type, onboarding reset, prototypes.
-/// Data sets and demo moments are in every build (for demos on TestFlight); the rest is Debug only.
-struct DeveloperSettings: View {
+/// Scenarios: the demo run, data sets and staged days, for showing felt air. In every build, behind the
+/// version row. Design switches, test tools and prototypes are one level further down, Debug builds only.
+struct ScenarioSettings: View {
     /// Closes the Settings sheet (this page is pushed inside it, so its own `dismiss` would only pop).
     /// Onboarding is a full-screen cover under the sheet: it can't show until the sheet is gone.
     let close: () -> Void
@@ -121,16 +140,10 @@ struct DeveloperSettings: View {
     @State private var setName = "Andrew"
     @State private var confirmFresh = false
     @State private var demoNote: String?
-    @State private var tutorialNote: String?
-    @AppStorage(Crit.performanceHUD) private var perfHUD = false
     @AppStorage(Crit.InsightsState.key) private var critInsightsState = Crit.InsightsState.auto
     @AppStorage(Crit.DemoEvent.key) private var critEvent = Crit.DemoEvent.none
     @AppStorage(DemoPollen.Season.key) private var demoPollen = DemoPollen.Season.off
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
-    @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.print
-    @AppStorage(Crit.TimelineLook.key) private var critTimeline = Crit.TimelineLook.track
-    @AppStorage(Crit.AppLook.key) private var critAppLook = Crit.AppLook.feltAir
-    @AppStorage(Crit.MenusSky.key) private var critMenusSky = Crit.MenusSky.combined
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false
@@ -138,15 +151,7 @@ struct DeveloperSettings: View {
 
     var body: some View {
         Form {
-            LoadoutsSection(close: close)
-
-            // Every open design question in one place, grouped by screen (docs/design/ab-tests.md). In every build,
-            // so a TestFlight session can be set up on the phone.
-            Section {
-                NavigationLink("What we’re testing") { ABTestsView() }
-            } footer: {
-                Text("Each open design question, by screen: what it asks, the options, and which one is on. Colour, Now, Insights, Logging, Words.")
-            }
+            LoadoutsSection(close: close, groups: ["Demo run", "Start", "Insights"])
 
             Section {
                 LabeledContent("Showing", value: activeDataSet ?? "Your own data")
@@ -184,7 +189,6 @@ struct DeveloperSettings: View {
                     demoNote = n == 0 ? nil : "Removed \(n) demo moments."
                 }
                 Toggle("Show demo data in Insights", isOn: $demo)
-                #if DEBUG
                 // One switch for the air of a day worth showing (it sets pollen and the air event underneath).
                 Picker("Air on Now", selection: $demoScenario) {
                     ForEach(DemoScenario.allCases) { Text($0.title).tag($0) }
@@ -192,18 +196,6 @@ struct DeveloperSettings: View {
                 .onChange(of: demoScenario) { _, s in s.choose() }
                 // A stand-in week for "what was on" and "what you'll be doing" (the real thing is your calendar).
                 Toggle("Demo calendar", isOn: $demoCalendar)
-                Picker("Inks", selection: $critInks) {
-                    ForEach(Crit.Inks.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("App look", selection: $critAppLook) {
-                    ForEach(Crit.AppLook.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Menus sky", selection: $critMenusSky) {
-                    ForEach(Crit.MenusSky.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Timeline", selection: $critTimeline) {
-                    ForEach(Crit.TimelineLook.allCases) { Text($0.title).tag($0) }
-                }
                 Picker("Insights state", selection: $critInsightsState) {
                     ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
                 }
@@ -214,7 +206,6 @@ struct DeveloperSettings: View {
                 }
                 Toggle("Presses look like test sprays", isOn: $demoPriming)
                 Toggle("New moments count as active", isOn: $demoActive)
-                #endif
             } header: {
                 Text("Staged for a demo")
             } footer: {
@@ -222,6 +213,67 @@ struct DeveloperSettings: View {
             }
 
             #if DEBUG
+            Section {
+                NavigationLink("Design and development") { DesignSettings(close: close) }
+            } footer: {
+                Text("Open design questions, looks, test tools and early sketches. Debug builds only.")
+            }
+            #endif
+        }
+        .tint(Theme.standard)
+        .navigationTitle("Scenarios")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+}
+
+#if DEBUG
+/// Scenarios › Design and development: every open design question, the other looks, test tools, prototypes.
+struct DesignSettings: View {
+    let close: () -> Void
+    @Environment(ButtonLink.self) private var button
+    @AppStorage(Prefs.didOnboard) private var didOnboard = true
+    @State private var tutorialNote: String?
+    @AppStorage(Crit.performanceHUD) private var perfHUD = false
+    @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.print
+    @AppStorage(Crit.TimelineLook.key) private var critTimeline = Crit.TimelineLook.track
+    @AppStorage(Crit.AppLook.key) private var critAppLook = Crit.AppLook.standard
+    @AppStorage(Crit.MenusSky.key) private var critMenusSky = Crit.MenusSky.combined
+    @AppStorage(Crit.ChartStyle.key) private var critChartStyle = Crit.ChartStyle.filled
+
+    var body: some View {
+        Form {
+            // Every open design question in one place, grouped by screen (docs/design/ab-tests.md).
+            Section {
+                NavigationLink("What we’re testing") { ABTestsView() }
+            } footer: {
+                Text("Each open design question, by screen: what it asks, the options, and which one is on. Colour, Now, Insights, Logging, Words.")
+            }
+
+            LoadoutsSection(close: close, groups: ["Risk colour"])
+
+            Section {
+                Picker("App look", selection: $critAppLook) {
+                    ForEach(Crit.AppLook.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Menus sky", selection: $critMenusSky) {
+                    ForEach(Crit.MenusSky.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Chart", selection: $critChartStyle) {
+                    ForEach(Crit.ChartStyle.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Timeline", selection: $critTimeline) {
+                    ForEach(Crit.TimelineLook.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Inks", selection: $critInks) {
+                    ForEach(Crit.Inks.allCases) { Text($0.title).tag($0) }
+                }
+            } header: {
+                Text("Looks")
+            } footer: {
+                Text("The app as presented is the Menus look with the combined chart. The others are kept for comparison.")
+            }
+
             Section {
                 Button("Play onboarding") {
                     close()
@@ -247,17 +299,16 @@ struct DeveloperSettings: View {
             } footer: {
                 Text("Reset forgets the paired button and brings the tips back; your moments stay. Exertion check shows what Health and Motion return. Prototypes are early sketches, not the app. Debug builds only.")
             }
-            #endif
         }
         .tint(Theme.standard)
-        .navigationTitle("Demo and development")
+        .navigationTitle("Design and development")
         .navigationBarTitleDisplayMode(.inline)
     }
-
 }
+#endif
 
 #if DEBUG
-/// Settings › Demo and development › Tools › Prototypes: early sketches kept for reference.
+/// Scenarios › Design and development › Tools › Prototypes: early sketches kept for reference.
 struct PrototypesView: View {
     var body: some View {
         Form {

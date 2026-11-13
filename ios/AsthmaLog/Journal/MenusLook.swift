@@ -660,7 +660,9 @@ struct MenusStrip: View {
 /// they line up with it and with each other. Environment: a small area chart per condition in the Health
 /// look's category colours, rescue moments as faint orange rules, the playhead as a dark rule through all of
 /// them. Body: inhaler use, what you noted, and what Apple Health will add. Pinch or drag here too.
-/// Built from the readings stamped on your moments and baselines; a condition with none says so.
+/// The lines are the air hour by hour at one place (Apple Weather and Ambee history, then the forecast); the
+/// readings stamped on your moments and baselines are marks on them, never joined into a line of their own
+/// (owner, Nov 13: moments aren't continuous). A condition with neither says so.
 struct MenusDetails: View {
     @Binding var window: MenusWindow
     let events: [LogEvent]
@@ -673,6 +675,9 @@ struct MenusDetails: View {
     var big = false
     /// The forecast hours ahead of now, so the lines carry on past the playhead.
     var forecast: [(Date, Conditions)] = []
+    /// The hours behind now, as they were, at the forecast's place.
+    var history: [(Date, Conditions)] = []
+    @AppStorage(Crit.ChartStyle.key) private var chartStyle = Crit.ChartStyle.filled
     /// With the combined chart, the day's title sits just below it (owner, Nov 13).
     var dayTitle: MenusDayTitle? = nil
     @State private var chartWidth: CGFloat = 1
@@ -689,15 +694,15 @@ struct MenusDetails: View {
             // and as you scroll down the lines part into their own rows.
             MenusEnvironment(window: window, rescues: rescues, ink: window.ink(events), apart: apart, bandH: big ? 300 : 132, series: [
                 // Each its own hue from the air palette, so the lines stay apart when they overlap.
-                .init(name: "Temperature", air: Theme.AirInk(core: Theme.AirPalette.coral, glow: Theme.AirPalette.peach), points: series(.temperature), unit: "°F"),
-                .init(name: "Humidity", air: Theme.AirInk(core: Theme.AirPalette.mint, glow: Theme.AirPalette.sky), points: series(.humidity), unit: "%"),
-                .init(name: "Wind", air: Theme.AirInk(core: Theme.AirPalette.sky, glow: Theme.AirPalette.mist), points: series(.windSpeed), unit: "mph"),
+                .init(name: "Temperature", air: Theme.AirInk(core: Theme.AirPalette.coral, glow: Theme.AirPalette.peach), points: series(.temperature), marks: marks(.temperature), unit: "°F"),
+                .init(name: "Humidity", air: Theme.AirInk(core: Theme.AirPalette.mint, glow: Theme.AirPalette.sky), points: series(.humidity), marks: marks(.humidity), unit: "%"),
+                .init(name: "Wind", air: Theme.AirInk(core: Theme.AirPalette.sky, glow: Theme.AirPalette.mist), points: series(.windSpeed), marks: marks(.windSpeed), unit: "mph"),
                 .init(name: "Pressure", air: Theme.airStorm, points: [], unit: "", note: "Not tracked yet"),
-                .init(name: "PM2.5", air: Theme.airPM25, points: series(.pm25), unit: "µg"),
-                .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), unit: "ppb"),
-                .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: ""),
+                .init(name: "PM2.5", air: Theme.airPM25, points: series(.pm25), marks: marks(.pm25), unit: "µg"),
+                .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), marks: marks(.ozone), unit: "ppb"),
+                .init(name: "Pollen", air: Theme.airPollen, points: pollenLine, marks: pollenMarks, unit: ""),
                 .init(name: "Flu and illness", air: Theme.airIllness, points: [], unit: "", note: "Not tracked yet"),
-            ], width: $chartWidth, footer: dayTitle, edge: big)
+            ], width: $chartWidth, footer: dayTitle, edge: big, now: now, quiet: chartStyle == .quiet)
             section("Body", "From your logs and Apple Health") {
                 VStack(spacing: 0) {
                     dots("Inhaler use", shown.filter { $0.moment == .rescue || $0.moment == .maintenance }
@@ -730,19 +735,37 @@ struct MenusDetails: View {
 
     // MARK: Data
 
-    private func series(_ s: Signal) -> [(Date, Double)] {
-        let logged = shown.compactMap { e in e.conditions?.best(s).map { (e.loggedAt, $0.value) } }
+    /// The hours in and around the window: history behind now, the forecast ahead.
+    private var hourly: [(Date, Conditions)] {
         let pad = window.span * 0.5
-        let ahead = forecast.filter { $0.0 > now && $0.0 <= window.end.addingTimeInterval(pad) }
-            .compactMap { h in h.1.best(s).map { (h.0, $0.value) } }
-        return (logged + ahead).sorted { $0.0 < $1.0 }
+        let lo = window.start.addingTimeInterval(-pad), hi = window.end.addingTimeInterval(pad)
+        return history.filter { $0.0 <= now && $0.0 >= lo && $0.0 <= hi } + forecast.filter { $0.0 > now && $0.0 <= hi }
     }
 
-    /// The highest of tree, grass and weed pollen at each moment.
-    private var pollen: [(Date, Double)] {
+    /// One condition hour by hour: the line.
+    private func series(_ s: Signal) -> [(Date, Double)] {
+        hourly.compactMap { h in h.1.best(s).map { (h.0, $0.value) } }.sorted { $0.0 < $1.0 }
+    }
+
+    /// The readings stamped on your moments: marks, each with what kind of moment it was.
+    private func marks(_ s: Signal) -> [MenusEnvironment.Mark] {
         shown.compactMap { e in
-            let v = [Signal.pollenTree, .pollenGrass, .pollenWeed].compactMap { e.conditions?.best($0)?.value }.max()
-            return v.map { (e.loggedAt, $0) }
+            guard e.moment != .note, let v = e.conditions?.best(s)?.value else { return nil }
+            return .init(date: e.loggedAt, value: v, moment: e.moment)
+        }
+    }
+
+    private static let pollens = [Signal.pollenTree, .pollenGrass, .pollenWeed]
+
+    /// The highest of tree, grass and weed pollen each hour.
+    private var pollenLine: [(Date, Double)] {
+        hourly.compactMap { h in Self.pollens.compactMap { h.1.best($0)?.value }.max().map { (h.0, $0) } }.sorted { $0.0 < $1.0 }
+    }
+
+    private var pollenMarks: [MenusEnvironment.Mark] {
+        shown.compactMap { e in
+            guard e.moment != .note, let v = Self.pollens.compactMap({ e.conditions?.best($0)?.value }).max() else { return nil }
+            return .init(date: e.loggedAt, value: v, moment: e.moment)
         }
     }
 
@@ -859,14 +882,29 @@ struct MenusDetails: View {
 /// soft waves, the names stacked on the left in their colours. As you scroll down, the waves part and each settles
 /// into its own row with its name and the reading at the playhead, the per-condition view below. Each line is
 /// scaled to its own range: the chart compares shape and timing, never amounts across conditions.
+///
+/// A line is hourly readings for one place, and it's only drawn between hours that are next to each other: a
+/// gap stays a gap. Ahead of now the line is the forecast, drawn dashed, because it's a guess. Your moments are
+/// marks on the line at their own readings: a baseline a small hollow ring, a rescue an orange dot, a standard
+/// dose a blue one. What the engine compares is what you see.
 struct MenusEnvironment: View {
+    struct Mark {
+        let date: Date
+        let value: Double
+        let moment: MomentKind
+    }
+
     struct Series: Identifiable {
         let name: String
         let air: Theme.AirInk
+        /// Hour by hour, one place.
         let points: [(Date, Double)]
+        /// The readings on your moments.
+        var marks: [Mark] = []
         let unit: String
         var note: String = "No readings here"
         var id: String { name }
+        var hasData: Bool { points.count >= 2 || !marks.isEmpty }
     }
 
     let window: MenusWindow
@@ -883,7 +921,12 @@ struct MenusEnvironment: View {
     /// Edge to edge (the combined chart on home, owner Nov 13): the waves run the full screen width; names and
     /// readings keep a small inset.
     var edge = false
+    var now = Date()
+    /// Thin grey lines with no fill; the only colour is the moments' (Crit.ChartStyle.quiet).
+    var quiet = false
     private var inset: CGFloat { edge ? MenusColumns.page + MenusColumns.card : 0 }
+    /// Hours further apart than this aren't joined.
+    private static let maxGap: TimeInterval = 3.5 * 3600
 
     private let headerH: CGFloat = 54
     private let rowH: CGFloat = 76
@@ -897,7 +940,7 @@ struct MenusEnvironment: View {
                 // The section title arrives as the rows part.
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Environment").font(.title2.weight(.bold))
-                    Text("Outdoor, at your moments").font(.subheadline).foregroundStyle(.secondary)
+                    Text("Outdoor, hour by hour. The dots are your moments.").font(.subheadline).foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 4 + inset)
                 .opacity(Double(max(0, apart * 1.6 - 0.6)))
@@ -923,7 +966,9 @@ struct MenusEnvironment: View {
 
     /// The reading nearest the playhead, so the value follows you as you move.
     private func reading(_ s: Series) -> Double? {
-        guard s.points.count >= 2 else { return nil }
+        guard s.points.count >= 2 else {
+            return s.marks.min { abs($0.date.timeIntervalSince(window.center)) < abs($1.date.timeIntervalSince(window.center)) }?.value
+        }
         return (s.points.filter { $0.0 <= window.center.addingTimeInterval(window.span * 0.02) }.max(by: { $0.0 < $1.0 }) ?? s.points.first)?.1
     }
 
@@ -933,7 +978,7 @@ struct MenusEnvironment: View {
         // Ease the parting so the lines leave the shared line gently and land softly in their rows.
         let t = apart * apart * (3 - 2 * apart)
         let w = size.width
-        let withData = series.filter { $0.points.count >= 2 }
+        let withData = series.filter(\.hasData)
 
         // Rescue moments: faint orange rules through the shared band, then through each row.
         for r in rescues {
@@ -961,11 +1006,11 @@ struct MenusEnvironment: View {
             let nameOpacity = hasData ? 1 : Double(t)
             ctx.drawLayer { l in
                 l.opacity = nameOpacity
-                l.draw(Text(s.name).font(.system(size: nameSize, weight: .semibold)).foregroundStyle(s.air.deep),
+                l.draw(Text(s.name).font(.system(size: nameSize, weight: .semibold)).foregroundStyle(quiet ? Color.primary.opacity(0.6) : s.air.deep),
                        at: CGPoint(x: inset, y: nameY), anchor: .topLeading)
             }
 
-            guard s.points.count >= 2 else {
+            guard s.hasData else {
                 ctx.drawLayer { l in
                     l.opacity = Double(t)
                     l.draw(Text(s.note).font(.caption).foregroundStyle(.tertiary), at: CGPoint(x: inset, y: rowTop + 30), anchor: .topLeading)
@@ -980,25 +1025,63 @@ struct MenusEnvironment: View {
                 }
             }
 
-            // The wave: its own range, 20–100% of the box's height.
-            let lo = s.points.map(\.1).min()!, hi = s.points.map(\.1).max()!
-            let pts = s.points.sorted { $0.0 < $1.0 }.map { p -> CGPoint in
-                let f = hi > lo ? (p.1 - lo) / (hi - lo) * 0.8 + 0.2 : 0.5
-                return CGPoint(x: window.x(p.0, width: w), y: base - CGFloat(f) * chartH)
+            // Its own range (hours and moments together), 20–100% of the box's height.
+            let values = s.points.map(\.1) + s.marks.map(\.value)
+            let lo = values.min()!, hi = values.max()!
+            func at(_ d: Date, _ v: Double) -> CGPoint {
+                let f = hi > lo ? (v - lo) / (hi - lo) * 0.8 + 0.2 : 0.5
+                return CGPoint(x: window.x(d, width: w), y: base - CGFloat(f) * chartH)
             }
-            let line = smooth(pts)
-            var area = line
-            area.addLine(to: CGPoint(x: pts.last!.x, y: base))
-            area.addLine(to: CGPoint(x: pts.first!.x, y: base))
-            area.closeSubpath()
+            // Runs of neighbouring hours, split at now: behind it readings, ahead of it the forecast.
+            var runs: [(points: [CGPoint], ahead: Bool)] = []
+            var last: Date?
+            for p in s.points.sorted(by: { $0.0 < $1.0 }) {
+                let ahead = p.0 > now
+                if let l = last, p.0.timeIntervalSince(l) <= Self.maxGap, let r = runs.indices.last {
+                    if runs[r].ahead == ahead { runs[r].points.append(at(p.0, p.1)) }
+                    else { runs.append(([runs[r].points.last!, at(p.0, p.1)], ahead)) }   // joined at now, restyled
+                } else {
+                    runs.append(([at(p.0, p.1)], ahead))
+                }
+                last = p.0
+            }
+            let lineInk = quiet ? Color.primary.opacity(0.42) : s.air.deep.opacity(lerp(0.9, 1, t))
 
             ctx.drawLayer { l in
-                l.clip(to: Path(CGRect(x: 0, y: chartTop - 4, width: w, height: chartH + 4)))
-                // Together they overlap, so each is a little lighter; apart, each is as full as before.
-                let fill = lerp(0.55, 0.8, t)
-                l.fill(area, with: .linearGradient(Gradient(colors: [s.air.color.opacity(fill), s.air.glowColor.opacity(0.1)]),
-                                                   startPoint: CGPoint(x: 0, y: base - chartH), endPoint: CGPoint(x: 0, y: base)))
-                l.stroke(line, with: .color(s.air.deep.opacity(lerp(0.9, 1, t))), lineWidth: 1.5)
+                l.clip(to: Path(CGRect(x: 0, y: chartTop - 6, width: w, height: chartH + 6)))
+                for run in runs where run.points.count >= 2 {
+                    let line = smooth(run.points)
+                    if !quiet {
+                        var area = line
+                        area.addLine(to: CGPoint(x: run.points.last!.x, y: base))
+                        area.addLine(to: CGPoint(x: run.points.first!.x, y: base))
+                        area.closeSubpath()
+                        // Together they overlap, so each is a little lighter; apart, each is as full as before.
+                        // The forecast is paler: it's a guess.
+                        let fill = lerp(0.55, 0.8, t) * (run.ahead ? 0.5 : 1)
+                        l.fill(area, with: .linearGradient(Gradient(colors: [s.air.color.opacity(fill), s.air.glowColor.opacity(0.1)]),
+                                                           startPoint: CGPoint(x: 0, y: base - chartH), endPoint: CGPoint(x: 0, y: base)))
+                    }
+                    l.stroke(line, with: .color(lineInk.opacity(run.ahead ? 0.7 : 1)),
+                             style: StrokeStyle(lineWidth: quiet ? 1.25 : 1.5, lineCap: .round, dash: run.ahead ? [3, 4] : []))
+                }
+                // Your moments, at their own readings.
+                for m in s.marks.sorted(by: { $0.date < $1.date }) {
+                    let c = at(m.date, m.value)
+                    guard c.x >= -6, c.x <= w + 6 else { continue }
+                    switch m.moment {
+                    case .rescue, .maintenance:
+                        let r: CGFloat = 4
+                        let dot = Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
+                        l.fill(dot, with: .color(m.moment == .rescue ? Theme.rescue : Theme.standard))
+                        l.stroke(dot, with: .color(Color(uiColor: .systemGroupedBackground)), lineWidth: 1.5)
+                    default:
+                        let r: CGFloat = 2.5
+                        let ring = Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
+                        l.fill(ring, with: .color(Color(uiColor: .systemGroupedBackground)))
+                        l.stroke(ring, with: .color(Color.primary.opacity(0.45)), lineWidth: 1)
+                    }
+                }
             }
         }
     }

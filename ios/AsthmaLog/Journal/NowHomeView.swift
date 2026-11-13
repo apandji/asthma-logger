@@ -44,6 +44,8 @@ struct NowHomeView: View {
         // Only for where you are, not a forecast place you picked.
         didSet { if !forecastHours.isEmpty, chosen == nil { scheduleMorningBrief() } }
     }
+    /// The hours behind now at the forecast place, as they were (Apple Weather and Ambee history): the chart's lines.
+    @State private var historyHours: [NowHour] = []
     /// The forecast as shown: real, or in the staged demo (Insights ring forced to learned) with an exaggerated
     /// afternoon whose air matches the demo person's patterns, so the air drives the verdict, the sentence, the
     /// dots and the readings alike (owner, Oct 23: "I want the air dataset to drive this").
@@ -83,7 +85,7 @@ struct NowHomeView: View {
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
     @AppStorage(Crit.TimelineLook.key) private var timelineLook = Crit.TimelineLook.track
-    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.feltAir
+    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.standard
     private var healthLook: Bool { appLook.healthLike }
     // Menus look (Oct 30 sketch).
     @State private var menusScale = MenusScale.timeline
@@ -99,7 +101,7 @@ struct NowHomeView: View {
     @State private var showInsights = false
     /// Bumps each time the patterns are re-learned, so a loadout's landing can wait for the new person's.
     @State private var rebuilt = 0
-    /// A loadout's landing (Settings › Demo and development › Loadouts): an hour tomorrow, or Insights.
+    /// A loadout's landing (Settings › Scenarios): an hour tomorrow, or Insights.
     @AppStorage(Loadout.pendingKey) private var pendingLoadout = ""
     /// One column on the hand's side, this far from the screen edge to the centre: Insights and Settings at the
     /// top, the rail's icons, the + at the bottom, all on the same line.
@@ -1062,6 +1064,7 @@ struct NowHomeView: View {
                                 MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle,
                                              apart: min(1, max(0, (menusScroll - (combined ? 0 : 300)) / 260)), big: combined,
                                              forecast: hours.map { ($0.date, $0.conditions) },
+                                             history: historyHours.map { ($0.date, $0.conditions) },
                                              dayTitle: combined ? MenusDayTitle(window: menusWindow, now: now, verdict: menusVerdict,
                                                                                 backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil }) : nil)
                                     .padding(.bottom, 120)   // clear of the tab bar and the +
@@ -1601,6 +1604,7 @@ struct NowHomeView: View {
         Task { _ = await MapSnapshots.image(id: id, latitude: p.lat, longitude: p.lon, size: SkyPanel.mapSize, dark: true, scale: SkyPanel.mapScale) }
         // For a place that isn't here we have no live reading to carry forward.
         forecastHours = await NowHour.forecast(latitude: p.lat, longitude: p.lon, now: away == nil ? here?.conditions : nil)
+        historyHours = await NowHour.history(latitude: p.lat, longitude: p.lon)
         await model.loadForecast(latitude: p.lat, longitude: p.lon, placeLabel: p.place ?? "here")
     }
 }
@@ -1701,6 +1705,9 @@ struct NowHour: Identifiable, Sendable {
                 EnvObservation(signal: .temperature, value: h.temperatureF, unit: "°F", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true),
                 EnvObservation(signal: .humidity, value: h.humidityPct, unit: "%", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true),
             ]
+            if let w = h.windMph {
+                obs.append(EnvObservation(signal: .windSpeed, value: w, unit: "mph", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true))
+            }
             let a = ambee[Int(h.date.timeIntervalSince1970 / 3600)]
             obs += a?.observations(source: Ambee.source) ?? []
             let day = a == nil ? aq[AirNowProvider.dayString(h.date)] : nil
@@ -1722,6 +1729,38 @@ struct NowHour: Identifiable, Sendable {
             var conditions = Conditions(observations: obs, fetchedAt: .now)
             conditions.tempFallF = TempDrop.degreesFallen(at: h.date, in: temps)
             return NowHour(date: h.date, conditions: conditions, airCarried: airCarried)
+        }
+    }
+
+    static let historySource = "Apple Weather"
+
+    /// The hours behind now at one place, as they were: Apple Weather's past hours (temperature, humidity, wind)
+    /// and Ambee's hourly history (particles, ozone, pollen; live only, cached). This is what the chart's lines
+    /// are drawn from, so a line never joins two moments across hours nobody read (owner, Nov 13). Fails open:
+    /// whatever loaded is returned.
+    static func history(latitude: Double, longitude: Double, hours: Int = 72) async -> [NowHour] {
+        // Ambee's range ends on a 3-hour boundary, so a new hour doesn't cost a call each time (call budget).
+        let end = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 / 10_800).rounded(.down) * 10_800)
+        let start = end.addingTimeInterval(-Double(hours) * 3600)
+        async let weather = try? WeatherProvider().hours(latitude: latitude, longitude: longitude, from: start, to: .now)
+        var air: [Int: AmbeeHour] = [:]
+        if AmbeeClient.isLive, let h = try? await AmbeeClient.current.history(latitude: latitude, longitude: longitude, from: start, to: end) {
+            for a in h { air[Int(a.date.timeIntervalSince1970 / 3600)] = a }
+        }
+        var byHour: [Int: [EnvObservation]] = [:]
+        for h in await weather ?? [] where h.date <= Date() {
+            var obs = [
+                EnvObservation(signal: .temperature, value: h.temperatureF, unit: "°F", asOf: h.date, source: historySource, spatialScale: .modelGrid),
+                EnvObservation(signal: .humidity, value: h.humidityPct, unit: "%", asOf: h.date, source: historySource, spatialScale: .modelGrid),
+            ]
+            if let w = h.windMph {
+                obs.append(EnvObservation(signal: .windSpeed, value: w, unit: "mph", asOf: h.date, source: historySource, spatialScale: .modelGrid))
+            }
+            byHour[Int(h.date.timeIntervalSince1970 / 3600)] = obs
+        }
+        for (k, a) in air { byHour[k, default: []] += a.observations(source: Ambee.source) }
+        return byHour.keys.sorted().map { k in
+            NowHour(date: Date(timeIntervalSince1970: Double(k) * 3600), conditions: Conditions(observations: byHour[k] ?? [], fetchedAt: .now))
         }
     }
 }

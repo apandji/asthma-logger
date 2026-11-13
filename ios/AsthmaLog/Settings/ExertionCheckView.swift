@@ -3,7 +3,7 @@ import AsthmaCore
 import SwiftData
 import SwiftUI
 
-/// Settings › Demo and development › Exertion check. For the latest real moments (and right now): what
+/// Scenarios › Design and development › Exertion check. For the latest real moments (and right now): what
 /// Health and Motion return for the time before, the decision, and what the moment has stored. Numbers are
 /// fine here: it's a debugging page, not the app. Debug builds only.
 struct ExertionCheckView: View {

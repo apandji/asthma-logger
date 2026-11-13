@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Every open design question in one list (docs/design/ab-tests.md), grouped by screen: A-numbers are tested with
 /// people in a session (the facilitator sets the arms and watches), C-numbers are decided in a design crit.
-/// Settings › Demo and development › What we're testing. Nothing here is measured or sent anywhere.
+/// Scenarios › Design and development › What we’re testing. Nothing here is measured or sent anywhere.
 struct ABTest: Identifiable {
     let id: String          // "A1", "C1"
     let question: String    // what we're deciding
@@ -111,7 +111,7 @@ struct ABTest: Identifiable {
     }
 }
 
-/// Settings › Demo and development › What we're testing: every open question by screen, the option in force,
+/// Scenarios › Design and development › What we’re testing: every open question by screen, the option in force,
 /// and either what to watch (with people) or what the options do (crit).
 struct ABTestsView: View {
     /// Bumped on every change so the rows re-read their settings.

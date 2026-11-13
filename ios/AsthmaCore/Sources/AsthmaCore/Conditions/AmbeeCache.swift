@@ -7,7 +7,9 @@ import Foundation
 /// - **Latest**: one answer per cell per clock hour.
 /// - **History**: past hours never change, so they're kept (60 days) and a range is only fetched when an
 ///   hour in it is missing. Ambee's history runs an hour or two behind; those recent hours are asked for at
-///   most once an hour.
+///   most once an hour. The POC key only reaches back two days ("Only past 2 days data available!", a 400 for
+///   the whole request, seen Nov 13, 2026), so older missing hours are never asked for: what's kept is what
+///   was fetched in time.
 /// - **Forecast**: reused for `forecastTTL` (3 h by default).
 /// Two requests for the same thing at the same time share one call. Every failure falls through to the
 /// caller, which fails open as before.
@@ -17,6 +19,7 @@ public actor CachedAmbee: AmbeeSource {
     private let now: @Sendable () -> Date
     private let save: (@Sendable (Data) -> Void)?
     private let forecastTTL: TimeInterval
+    private let historyReach: TimeInterval
     private var store: Store
     private var inFlight: [String: Task<[AmbeeHour], Error>] = [:]
 
@@ -25,12 +28,14 @@ public actor CachedAmbee: AmbeeSource {
 
     /// `saved` is a previous `save` (nil or unreadable → empty). `save` is called after each change.
     public init(_ inner: any AmbeeSource, saved: Data? = nil, forecastTTL: TimeInterval = 3 * 3600,
+                historyReach: TimeInterval = 47 * 3600,
                 now: @escaping @Sendable () -> Date = { Date() }, save: (@Sendable (Data) -> Void)? = nil) {
         self.inner = inner
         self.sourceName = inner.sourceName
         self.now = now
         self.save = save
         self.forecastTTL = forecastTTL
+        self.historyReach = historyReach
         self.store = saved.flatMap { try? JSONDecoder().decode(Store.self, from: $0) } ?? Store()
     }
 
@@ -82,8 +87,9 @@ public actor CachedAmbee: AmbeeSource {
         // Hours inside Ambee's lag may not exist yet: missing ones there count only if we haven't asked this hour.
         let settled = now().addingTimeInterval(-3 * 3600)
         let askedThisHour = entry.historyAskedAt.map { Self.slot($0) == Self.slot(now()) } ?? false
+        let reachable = now().addingTimeInterval(-historyReach)
         let missing = wanted.filter { d in
-            entry.history[key(d)] == nil && !entry.noData.contains(key(d)) && (d < settled || !askedThisHour)
+            d >= reachable && entry.history[key(d)] == nil && !entry.noData.contains(key(d)) && (d < settled || !askedThisHour)
         }
         if !missing.isEmpty {
             let range = "\(missing.first!.timeIntervalSince1970)-\(missing.last!.timeIntervalSince1970)"
@@ -92,8 +98,11 @@ public actor CachedAmbee: AmbeeSource {
             }
             var e = store.cells[c.key] ?? CellStore()
             for h in fetched { e.history[key(h.date)] = h }
-            // Settled hours Ambee had nothing for: don't ask again.
-            for d in missing where d < settled && e.history[key(d)] == nil { e.noData.insert(key(d)) }
+            // Settled hours Ambee skipped inside what it returned: don't ask again. Only between the first and
+            // last hour it sent, so a short or empty answer (a failed request upstream) never blacks out a range.
+            if let first = fetched.map(\.date).min(), let last = fetched.map(\.date).max() {
+                for d in missing where d < settled && d > first && d < last && e.history[key(d)] == nil { e.noData.insert(key(d)) }
+            }
             e.historyAskedAt = now()
             store.cells[c.key] = e
             prune()

@@ -69,9 +69,22 @@ private final class Clock: @unchecked Sendable {
         #expect(await fake.calls.count == 1)
     }
 
+    @Test func hoursBeyondAmbeesReachAreNeverAskedFor() async throws {
+        let fake = Counting(), clock = Clock(start)
+        let cache = CachedAmbee(fake, now: { clock.date })   // reach: 47 h
+        let got = try await cache.history(latitude: 37.77, longitude: -122.42, from: start.addingTimeInterval(-72 * 3600), to: start)
+        #expect(got.count == 47)
+        #expect(got.first?.date == CachedAmbee.slot(start.addingTimeInterval(-46 * 3600)))
+        #expect(await fake.calls.count == 1)
+        // A range wholly out of reach costs nothing.
+        let old = try await cache.history(latitude: 37.77, longitude: -122.42, from: start.addingTimeInterval(-90 * 3600), to: start.addingTimeInterval(-60 * 3600))
+        #expect(old.isEmpty)
+        #expect(await fake.calls.count == 1)
+    }
+
     @Test func pastHoursAreKeptAndOnlyGapsFetched() async throws {
         let fake = Counting(), clock = Clock(start)
-        let cache = CachedAmbee(fake, now: { clock.date })
+        let cache = CachedAmbee(fake, historyReach: 100 * 3600, now: { clock.date })
         let from = start.addingTimeInterval(-48 * 3600), to = start.addingTimeInterval(-24 * 3600)
         let first = try await cache.history(latitude: 37.77, longitude: -122.42, from: from, to: to)
         #expect(first.count == 25)
@@ -88,13 +101,26 @@ private final class Clock: @unchecked Sendable {
         let fake = Counting(), clock = Clock(start)
         let gap = CachedAmbee.slot(start.addingTimeInterval(-30 * 3600))
         await fake.setGaps([gap])
-        let cache = CachedAmbee(fake, now: { clock.date })
+        let cache = CachedAmbee(fake, historyReach: 100 * 3600, now: { clock.date })
         let from = start.addingTimeInterval(-48 * 3600), to = start.addingTimeInterval(-24 * 3600)
         _ = try await cache.history(latitude: 37.77, longitude: -122.42, from: from, to: to)
         clock.date = start.addingTimeInterval(2 * 3600)
         let again = try await cache.history(latitude: 37.77, longitude: -122.42, from: from, to: to)
         #expect(again.count == 24)
         #expect(await fake.calls.count == 1)
+    }
+
+    @Test func aShortAnswerNeverBlacksOutTheRange() async throws {
+        let fake = Counting(), clock = Clock(start)
+        let from = start.addingTimeInterval(-40 * 3600), to = start.addingTimeInterval(-10 * 3600)
+        // Ambee answers with one hour only (a failed request upstream looks like this).
+        let only = CachedAmbee.slot(to)
+        await fake.setGaps(Set(stride(from: CachedAmbee.slot(from).timeIntervalSince1970, to: only.timeIntervalSince1970, by: 3600).map(Date.init(timeIntervalSince1970:))))
+        let cache = CachedAmbee(fake, now: { clock.date })
+        #expect(try await cache.history(latitude: 37.77, longitude: -122.42, from: from, to: to).count == 1)
+        await fake.setGaps([])
+        #expect(try await cache.history(latitude: 37.77, longitude: -122.42, from: from, to: to).count == 31)
+        #expect(await fake.calls.count == 2)
     }
 
     @Test func recentHistoryIsRetriedHourly() async throws {

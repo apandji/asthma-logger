@@ -16,6 +16,8 @@ struct NowHomeView: View {
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
     @AppStorage(Crit.InsightsState.key) private var forced = Crit.InsightsState.auto
     /// Reading the air somewhere other than here (an address, Home, Work). Nil is the phone's location.
+    /// How far the Menus Now page has scrolled; the combined chart parts its lines as it grows.
+    @State private var menusScroll: CGFloat = 0
     @State private var chosen = SavedPlace.load(SavedPlace.chosenKey)
     @State private var showPlaces = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
@@ -1039,17 +1041,27 @@ struct NowHomeView: View {
                     // scrolling down opens the Environment and Body sections in detail.
                     // The timeline is the section header, so it sticks to the top as the charts scroll under it,
                     // and the charts share its window and columns.
+                    // Combined chart (owner, Nov 13): no sky; the conditions' combined chart under the timeline is
+                    // the main visual, and scrolling parts its lines into rows.
+                    let combined = Crit.MenusSky.current == .combined
                     ScrollView(.vertical) {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                            VStack(alignment: .leading, spacing: 20) {
-                                header
-                                skyArea
+                            if combined {
+                                header.padding(.top, 8)
+                                Color.clear.frame(height: 16)
+                            } else {
+                                VStack(alignment: .leading, spacing: 20) {
+                                    header
+                                    skyArea
+                                }
+                                .padding(.top, 8)
+                                .containerRelativeFrame(.vertical) { h, _ in h - 74 - 150 - 24 }
+                                Color.clear.frame(height: 24)
                             }
-                            .padding(.top, 8)
-                            .containerRelativeFrame(.vertical) { h, _ in h - 74 - 150 - 24 }
-                            Color.clear.frame(height: 24)
                             Section {
-                                MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle)
+                                MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle,
+                                             apart: min(1, max(0, (menusScroll - (combined ? 0 : 300)) / 260)), big: combined,
+                                             forecast: hours.map { ($0.date, $0.conditions) })
                                     .padding(.bottom, 120)   // clear of the tab bar and the +
                             } header: {
                                 MenusStrip(window: $menusWindow, moments: moments,
@@ -1061,6 +1073,7 @@ struct NowHomeView: View {
                     }
                     .scrollIndicators(.hidden)
                     .scrollDisabled(probing)
+                    .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in menusScroll = y }
                 case .month:
                     MenusMonthView(events: events, now: now)
                 case .year:

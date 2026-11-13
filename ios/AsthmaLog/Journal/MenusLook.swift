@@ -644,6 +644,12 @@ struct MenusDetails: View {
     let now: Date
     let limits: ClosedRange<Date>
     let settle: () -> Void
+    /// 0: Environment's lines together on one line; 1: apart, one row each (from the page's scroll).
+    var apart: CGFloat = 0
+    /// The combined chart is the home's main visual (no sky above), so it's drawn tall.
+    var big = false
+    /// The forecast hours ahead of now, so the lines carry on past the playhead.
+    var forecast: [(Date, Conditions)] = []
     @State private var chartWidth: CGFloat = 1
     /// A little either side of the window, so lines run off the edges instead of stopping short.
     private var shown: [LogEvent] {
@@ -654,19 +660,19 @@ struct MenusDetails: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 48) {
-            section("Environment", "Outdoor, at your moments") {
-                VStack(spacing: 0) {
-                    // The same inks as the cube's hazes, so a colour means one reading everywhere.
-                    row("Temperature", Theme.airWeather, series(.temperature), unit: "°F")
-                    row("Humidity", Theme.airHumidity, series(.humidity), unit: "%")
-                    row("Wind", Theme.airWeather, series(.windSpeed), unit: "mph")
-                    row("Pressure", Theme.airWeather, [], unit: "")
-                    row("PM2.5", Theme.airPM25, series(.pm25), unit: "µg")
-                    row("Ozone", Theme.airOzone, series(.ozone), unit: "ppb")
-                    row("Pollen", Theme.airPollen, pollen, unit: "")
-                    row("Flu and illness", Theme.airIllness, [], unit: "")
-                }
-            }
+            // Environment (owner, Nov 13): every condition on one line first, like a cycle app's hormone chart,
+            // and as you scroll down the lines part into their own rows.
+            MenusEnvironment(window: window, rescues: rescues, ink: window.ink(events), apart: apart, bandH: big ? 300 : 132, series: [
+                // Each its own hue from the air palette, so the lines stay apart when they overlap.
+                .init(name: "Temperature", air: Theme.AirInk(core: Theme.AirPalette.coral, glow: Theme.AirPalette.peach), points: series(.temperature), unit: "°F"),
+                .init(name: "Humidity", air: Theme.AirInk(core: Theme.AirPalette.mint, glow: Theme.AirPalette.sky), points: series(.humidity), unit: "%"),
+                .init(name: "Wind", air: Theme.AirInk(core: Theme.AirPalette.sky, glow: Theme.AirPalette.mist), points: series(.windSpeed), unit: "mph"),
+                .init(name: "Pressure", air: Theme.airStorm, points: [], unit: "", note: "Not tracked yet"),
+                .init(name: "PM2.5", air: Theme.airPM25, points: series(.pm25), unit: "µg"),
+                .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), unit: "ppb"),
+                .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: ""),
+                .init(name: "Flu and illness", air: Theme.airIllness, points: [], unit: "", note: "Not tracked yet"),
+            ], width: $chartWidth)
             section("Body", "From your logs and Apple Health") {
                 VStack(spacing: 0) {
                     dots("Inhaler use", shown.filter { $0.moment == .rescue || $0.moment == .maintenance }
@@ -679,7 +685,7 @@ struct MenusDetails: View {
             }
         }
         .padding(.horizontal, MenusColumns.page)
-        .padding(.top, 64)   // room under the strip (owner, Nov 6); inside the playhead's overlay, so the line runs unbroken from the strip
+        .padding(.top, 20)   // the combined chart sits just under the strip (owner, Nov 13); inside the playhead's overlay
         // One playhead line through every row, continuing the strip's: in the chart column's middle.
         .overlay(alignment: .topLeading) {
             GeometryReader { g in
@@ -696,7 +702,11 @@ struct MenusDetails: View {
     // MARK: Data
 
     private func series(_ s: Signal) -> [(Date, Double)] {
-        shown.compactMap { e in e.conditions?.best(s).map { (e.loggedAt, $0.value) } }
+        let logged = shown.compactMap { e in e.conditions?.best(s).map { (e.loggedAt, $0.value) } }
+        let pad = window.span * 0.5
+        let ahead = forecast.filter { $0.0 > now && $0.0 <= window.end.addingTimeInterval(pad) }
+            .compactMap { h in h.1.best(s).map { (h.0, $0.value) } }
+        return (logged + ahead).sorted { $0.0 < $1.0 }
     }
 
     /// The highest of tree, grass and weed pollen at each moment.
@@ -813,6 +823,153 @@ struct MenusDetails: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 8)
+    }
+}
+
+/// Environment on Now (owner, Nov 13). At rest every condition is drawn on one shared baseline as overlapping
+/// soft waves, the names stacked on the left in their colours. As you scroll down, the waves part and each settles
+/// into its own row with its name and the reading at the playhead, the per-condition view below. Each line is
+/// scaled to its own range: the chart compares shape and timing, never amounts across conditions.
+struct MenusEnvironment: View {
+    struct Series: Identifiable {
+        let name: String
+        let air: Theme.AirInk
+        let points: [(Date, Double)]
+        let unit: String
+        var note: String = "No readings here"
+        var id: String { name }
+    }
+
+    let window: MenusWindow
+    let rescues: [Date]
+    let ink: Color
+    /// 0: together on one line. 1: apart, one row each. Follows the page's scroll.
+    let apart: CGFloat
+    /// The shared band's height at rest.
+    let bandH: CGFloat
+    let series: [Series]
+    @Binding var width: CGFloat
+
+    private let headerH: CGFloat = 54
+    private let rowH: CGFloat = 76
+
+    var body: some View {
+        // Tall enough for the rows, and for the shared band while it's together.
+        let height = max(headerH + CGFloat(series.count) * rowH, bandH + 40)
+        Canvas { ctx, size in draw(ctx, size) }
+            .frame(height: height)
+            .overlay(alignment: .topLeading) {
+                // The section title arrives as the rows part.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Environment").font(.title2.weight(.bold))
+                    Text("Outdoor, at your moments").font(.subheadline).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 4)
+                .opacity(Double(max(0, apart * 1.6 - 0.6)))
+                .offset(y: (1 - apart) * -8)
+                .allowsHitTesting(false)
+            }
+            .padding(.horizontal, MenusColumns.card)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width - 2 * MenusColumns.card } action: { width = $0 }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Environment")
+            .accessibilityValue(series.map { s in reading(s).map { "\(s.name) \(Int($0.rounded())) \(s.unit)" } ?? "\(s.name), \(s.note.lowercased())" }.joined(separator: ", "))
+    }
+
+    /// The reading nearest the playhead, so the value follows you as you move.
+    private func reading(_ s: Series) -> Double? {
+        guard s.points.count >= 2 else { return nil }
+        return (s.points.filter { $0.0 <= window.center.addingTimeInterval(window.span * 0.02) }.max(by: { $0.0 < $1.0 }) ?? s.points.first)?.1
+    }
+
+    private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
+
+    private func draw(_ ctx: GraphicsContext, _ size: CGSize) {
+        // Ease the parting so the lines leave the shared line gently and land softly in their rows.
+        let t = apart * apart * (3 - 2 * apart)
+        let w = size.width
+        let withData = series.filter { $0.points.count >= 2 }
+
+        // Rescue moments: faint orange rules through the shared band, then through each row.
+        for r in rescues {
+            let x = window.x(r, width: w)
+            guard x >= 0, x <= w else { continue }
+            var rule = Path()
+            rule.move(to: CGPoint(x: x, y: lerp(0, headerH, t)))
+            rule.addLine(to: CGPoint(x: x, y: lerp(bandH, size.height, t)))
+            ctx.stroke(rule, with: .color(Theme.rescue.opacity(0.3)), lineWidth: 1)
+        }
+
+        for (i, s) in series.enumerated() {
+            let rowTop = headerH + CGFloat(i) * rowH
+            // The chart's box: the shared band at rest, its own row when apart.
+            let chartTop = lerp(0, rowTop + 26, t)
+            let chartH = lerp(bandH, 36, min(1, t * 1.7))   // shrink ahead of the move, so rows never overlap mid-way
+            let base = chartTop + chartH
+
+            // Name: stacked on the left at rest (small), above its row when apart.
+            let legendIndex = withData.firstIndex { $0.name == s.name }
+            let hasData = legendIndex != nil
+            let restY = CGFloat(legendIndex ?? 0) * 15 + 2
+            let nameY = lerp(restY, rowTop + 4, t)
+            let nameSize = lerp(11, 15, t)
+            let nameOpacity = hasData ? 1 : Double(t)
+            ctx.drawLayer { l in
+                l.opacity = nameOpacity
+                l.draw(Text(s.name).font(.system(size: nameSize, weight: .semibold)).foregroundStyle(s.air.deep),
+                       at: CGPoint(x: 0, y: nameY), anchor: .topLeading)
+            }
+
+            guard s.points.count >= 2 else {
+                ctx.drawLayer { l in
+                    l.opacity = Double(t)
+                    l.draw(Text(s.note).font(.caption).foregroundStyle(.tertiary), at: CGPoint(x: 0, y: rowTop + 30), anchor: .topLeading)
+                }
+                continue
+            }
+            if let v = reading(s) {
+                ctx.drawLayer { l in
+                    l.opacity = Double(t)
+                    l.draw(Text("\(Int(v.rounded()))\(s.unit.isEmpty ? "" : " ")\(s.unit)").font(.caption.weight(.medium).monospacedDigit())
+                        .foregroundStyle(.secondary), at: CGPoint(x: w, y: rowTop + 6), anchor: .topTrailing)
+                }
+            }
+
+            // The wave: its own range, 20–100% of the box's height.
+            let lo = s.points.map(\.1).min()!, hi = s.points.map(\.1).max()!
+            let pts = s.points.sorted { $0.0 < $1.0 }.map { p -> CGPoint in
+                let f = hi > lo ? (p.1 - lo) / (hi - lo) * 0.8 + 0.2 : 0.5
+                return CGPoint(x: window.x(p.0, width: w), y: base - CGFloat(f) * chartH)
+            }
+            let line = smooth(pts)
+            var area = line
+            area.addLine(to: CGPoint(x: pts.last!.x, y: base))
+            area.addLine(to: CGPoint(x: pts.first!.x, y: base))
+            area.closeSubpath()
+
+            ctx.drawLayer { l in
+                l.clip(to: Path(CGRect(x: 0, y: chartTop - 4, width: w, height: chartH + 4)))
+                // Together they overlap, so each is a little lighter; apart, each is as full as before.
+                let fill = lerp(0.55, 0.8, t)
+                l.fill(area, with: .linearGradient(Gradient(colors: [s.air.color.opacity(fill), s.air.glowColor.opacity(0.1)]),
+                                                   startPoint: CGPoint(x: 0, y: base - chartH), endPoint: CGPoint(x: 0, y: base)))
+                l.stroke(line, with: .color(s.air.deep.opacity(lerp(0.9, 1, t))), lineWidth: 1.5)
+            }
+        }
+    }
+
+    /// A soft curve through the points (midpoint quadratic smoothing).
+    private func smooth(_ p: [CGPoint]) -> Path {
+        var path = Path()
+        guard let first = p.first else { return path }
+        path.move(to: first)
+        guard p.count > 2 else { p.dropFirst().forEach { path.addLine(to: $0) }; return path }
+        for i in 1..<p.count {
+            let mid = CGPoint(x: (p[i - 1].x + p[i].x) / 2, y: (p[i - 1].y + p[i].y) / 2)
+            path.addQuadCurve(to: mid, control: p[i - 1])
+        }
+        path.addLine(to: p[p.count - 1])
+        return path
     }
 }
 

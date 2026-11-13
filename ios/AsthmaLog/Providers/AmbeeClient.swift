@@ -2,24 +2,32 @@ import AsthmaCore
 import CoreLocation
 import Foundation
 
-/// The live Ambee API, behind the same `AmbeeSource` as the demo. Endpoints and headers follow Ambee's
-/// docs (docs/ambee-integration.md); **not yet run against a real key**. Fails open like every provider.
+/// The live Ambee API, behind the same `AmbeeSource` as the demo: air quality and pollen only (weather stays
+/// on WeatherKit, docs/ambee/poc-estimate.md). Air and pollen responses checked live Nov 13, 2026. Fails open.
 nonisolated struct AmbeeClient: AmbeeSource {
     let key: String
     let sourceName = Ambee.source
     private let base = "https://api.ambeedata.com"
 
-    /// The app's Ambee: the live client when there's a key, otherwise the labelled demo.
-    @MainActor static var current: any AmbeeSource { Secrets.ambee.map { AmbeeClient(key: $0) } ?? DemoAmbee() }
+    /// The app's Ambee: the live client behind the cache when there's a key, otherwise the labelled demo.
+    @MainActor static var current: any AmbeeSource { cached ?? DemoAmbee() }
+
+    /// One cache for the app's life, saved in Caches (iOS may clear it; it only costs calls).
+    @MainActor private static let cached: CachedAmbee? = Secrets.ambee.map { key in
+        let file = URL.cachesDirectory.appending(path: "ambee-cache.json")
+        return CachedAmbee(AmbeeClient(key: key), saved: try? Data(contentsOf: file),
+                           save: { try? $0.write(to: file, options: .atomic) })
+    }
+
+    /// True when Ambee answers are real, not the demo.
+    @MainActor static var isLive: Bool { cached != nil }
 
     func latest(latitude: Double, longitude: Double, at date: Date) async throws -> AmbeeHour {
         async let air: Ambee.AirQualityResponse = get("/latest/by-lat-lng", latitude, longitude)
         async let pollen: Ambee.PollenResponse = get("/v3/pollen/latest", latitude, longitude, ["speciesRisk": "true"])
-        async let weather: Ambee.WeatherResponse = get("/weather/latest/by-lat-lng", latitude, longitude, ["units": "us"])
-        let w = (try? await weather)?.data
         let hours = Ambee.hours(airQuality: (try? await air) ?? .init(), pollen: try? await pollen,
-                                weather: w.map { [$0] } ?? [], isForecast: false)
-        guard var h = hours.last else { throw URLError(.zeroByteResource) }
+                                weather: [], isForecast: false)
+        guard var h = Ambee.newest(hours) else { throw URLError(.zeroByteResource) }
         h.date = date
         return h
     }
@@ -28,17 +36,15 @@ nonisolated struct AmbeeClient: AmbeeSource {
         let range = ["from": stamp(from), "to": stamp(to)]
         async let air: Ambee.AirQualityResponse = get("/history/by-lat-lng", latitude, longitude, range)
         async let pollen: Ambee.PollenResponse = get("/v3/pollen/history", latitude, longitude, range)
-        async let weather: Ambee.WeatherResponse = get("/weather/history/by-lat-lng", latitude, longitude, range.merging(["units": "us"]) { a, _ in a })
         return Ambee.hours(airQuality: (try? await air) ?? .init(), pollen: try? await pollen,
-                           weather: (try? await weather)?.data?.history ?? [], isForecast: false)
+                           weather: [], isForecast: false)
     }
 
     func forecast(latitude: Double, longitude: Double, from: Date, hours: Int) async throws -> [AmbeeHour] {
         async let air: Ambee.AirQualityResponse = get("/forecast/aq/by-lat-lng", latitude, longitude)
         async let pollen: Ambee.PollenResponse = get("/v3/pollen/forecast/48hrs", latitude, longitude)
-        async let weather: Ambee.WeatherResponse = get("/weather/forecast/by-lat-lng", latitude, longitude, ["units": "us"])
         let all = Ambee.hours(airQuality: (try? await air) ?? .init(), pollen: try? await pollen,
-                              weather: (try? await weather)?.data?.forecast ?? [], isForecast: true)
+                              weather: [], isForecast: true)
         return Array(all.filter { $0.date >= from.addingTimeInterval(-3600) }.prefix(hours))
     }
 

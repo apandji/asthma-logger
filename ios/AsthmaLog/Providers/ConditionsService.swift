@@ -22,8 +22,8 @@ struct ConditionsService {
             guard let airNowKey else { return [] }
             return try await AirNowProvider(key: airNowKey).current(latitude: latitude, longitude: longitude)
         }
-        // Ambee: pollen and air in Ambee's own shapes, from the live API once there's a key and from the sample
-        // (DemoAmbee, labelled "Ambee (demo)", never in patterns) until then.
+        // Ambee: pollen and air, live and cached when there's a key; the sample (DemoAmbee, labelled
+        // "Ambee (demo)", never in patterns) on a build without one.
         let ambee = await AmbeeClient.current
         async let am = Self.attempt { () -> [EnvObservation] in
             let hour = try await ambee.latest(latitude: latitude, longitude: longitude, at: .now)

@@ -102,7 +102,7 @@ struct OnboardingView: View {
                           verdict: nil, tint: nil, around: CalendarReader.shared.around(f.loggedAt)?.line)
             // The magic moment: the readings land one by one, with a tick.
             AirReadings(conditions: f.conditions, weave: f.weave,
-                        pollen: DemoPollen.sample(at: f.loggedAt, season: pollenSeason))
+                        pollen: DemoPollen.best(f.conditions, at: f.loggedAt, season: pollenSeason))
         } else if fetching {
             VerdictHeader(place: AnyView(placeLine), title: OnboardingCopy.fetchingTop, verdict: nil, tint: nil)
             AirReadings(conditions: nil, weave: WeaveSpec(), pollen: nil, pending: true)
@@ -133,7 +133,7 @@ struct OnboardingView: View {
         if let f = first, step >= .pair {
             // The first moment: the map alone, then the scan in the cap's colour, then the air.
             NowSky(conditions: f.conditions, weave: f.weave,
-                   date: f.loggedAt, pollen: DemoPollen.sample(at: f.loggedAt, season: pollenSeason), probing: $probing,
+                   date: f.loggedAt, pollen: DemoPollen.best(f.conditions, at: f.loggedAt, season: pollenSeason), probing: $probing,
                    mapID: f.id.uuidString, coordinate: f.latitude.flatMap { lat in f.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
                    captureInk: pressedCap == .standard ? Theme.standardSoft : Theme.rescueSoft)
                 .id(f.id)

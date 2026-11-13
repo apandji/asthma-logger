@@ -79,14 +79,23 @@ nonisolated enum DemoPollen {
         )
     }
 
-    /// Pollen from a moment's own readings (Ambee, or its sample until the key), in the same bands as above.
+    /// Pollen from a moment's own readings, in the same bands as above: real Ambee readings first. Ambee's
+    /// sample (an older moment, from before the key) counts only on a build without a key.
     static func from(_ c: Conditions?) -> PollenSample? {
-        guard let c, let t = c.best(.pollenTree)?.value, let g = c.best(.pollenGrass)?.value, let w = c.best(.pollenWeed)?.value else { return nil }
+        guard let c else { return nil }
+        let real = Secrets.ambee != nil
+        func read(_ s: Signal) -> Double? { (c.bestReal(s) ?? (real ? nil : c.best(s)))?.value }
+        guard let t = read(.pollenTree), let g = read(.pollenGrass), let w = read(.pollenWeed) else { return nil }
         return PollenSample(
             tree: kind("Tree", "Tree", t, moderate: 100, high: 213),
             grass: kind("Grass", "Grass", g, moderate: 30, high: 61),
             weed: kind("Weed", "Weed", w, moderate: 44, high: 80)
         )
+    }
+
+    /// What a sky shows for pollen: the readings it has, or the Design-crit demo season when it has none.
+    static func best(_ c: Conditions?, at date: Date, season: Season) -> PollenSample? {
+        from(c) ?? sample(at: date, season: season)
     }
 
     private static func kind(_ name: String, _ species: String, _ count: Double, moderate: Double, high: Double) -> PollenSample.Kind {

@@ -67,7 +67,7 @@ struct DaysView: View {
                     Button { open(d.moments.contains { $0.id == selectedID } ? d.moments.first { $0.id == selectedID }! : t) } label: {
                         HStack(spacing: 14) {
                             AmbientField(weave: t.weave, temperatureF: t.conditions?.best(.temperature)?.value, date: t.loggedAt,
-                                         conditions: t.conditions, pollen: DemoPollen.sample(at: t.loggedAt, season: pollenSeason))
+                                         conditions: t.conditions, pollen: DemoPollen.best(t.conditions, at: t.loggedAt, season: pollenSeason))
                                 .frame(width: 84, height: 84)
                                 .clipShape(.rect(cornerRadius: 20, style: .continuous))
                                 // One pass per tile; cheap to scroll.

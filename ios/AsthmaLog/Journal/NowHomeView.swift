@@ -1061,13 +1061,16 @@ struct NowHomeView: View {
                             Section {
                                 MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle,
                                              apart: min(1, max(0, (menusScroll - (combined ? 0 : 300)) / 260)), big: combined,
-                                             forecast: hours.map { ($0.date, $0.conditions) })
+                                             forecast: hours.map { ($0.date, $0.conditions) },
+                                             dayTitle: combined ? MenusDayTitle(window: menusWindow, now: now, verdict: menusVerdict,
+                                                                                backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil }) : nil)
                                     .padding(.bottom, 120)   // clear of the tab bar and the +
                             } header: {
                                 MenusStrip(window: $menusWindow, moments: moments,
                                            forecast: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
                                            now: now, verdict: menusVerdict, limits: menusLimits, settle: menusSettle,
-                                           backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil })
+                                           backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil },
+                                           titleBelow: combined)
                             }
                         }
                     }

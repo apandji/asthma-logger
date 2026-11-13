@@ -494,25 +494,20 @@ struct MenusWindowGestures: ViewModifier {
 /// The sticky timeline: the playhead's day as a title with its time (and the verdict ahead), then the track on
 /// the shared window, in the chart column: ticks that adapt to the zoom, your moments as pills, the forecast
 /// as tinted slots, NOW, and the playhead in the middle. Pinch to zoom, drag to move, tap a moment to go to it.
-struct MenusStrip: View {
-    @Binding var window: MenusWindow
-    let moments: [LogEvent]
-    let forecast: [(Date, Double?)]
+/// The day the playhead is on ("Today, November 13"), tap to go back to now, and the line under it: the time,
+/// the verdict ahead, and how much the window shows.
+struct MenusDayTitle: View {
+    let window: MenusWindow
     let now: Date
     let verdict: String?
-    let limits: ClosedRange<Date>
-    let settle: () -> Void
     let backToNow: () -> Void
-    @Environment(\.colorScheme) private var scheme
-    @State private var width: CGFloat = 1
-    private let cal = Calendar.current
     private var atNow: Bool { abs(window.center.timeIntervalSince(now)) < window.span * 0.01 }
 
     var body: some View {
         VStack(spacing: 2) {
             Button(action: backToNow) {
                 HStack(spacing: 6) {
-                    Text(title).font(.title3.weight(.semibold))
+                    Text(Self.title(window.center)).font(.title3.weight(.semibold))
                     if !atNow {
                         Image(systemName: window.center > now ? "arrow.uturn.backward" : "arrow.uturn.forward")
                             .font(.footnote.weight(.bold)).opacity(0.5)
@@ -523,13 +518,53 @@ struct MenusStrip: View {
             }
             .buttonStyle(PressStyle())
             .disabled(atNow)
-            Text([atNow ? "Now" : window.center.formatted(.dateTime.hour().minute()), window.center >= now.addingTimeInterval(-60) ? verdict : nil, spanLabel]
+            Text([atNow ? "Now" : window.center.formatted(.dateTime.hour().minute()), window.center >= now.addingTimeInterval(-60) ? verdict : nil, Self.spanLabel(window.span)]
                 .compactMap { $0 }.joined(separator: " · "))
                 .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                 .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    static func title(_ d: Date) -> String {
+        let cal = Calendar.current
+        let day = cal.isDateInToday(d) ? "Today" : cal.isDateInYesterday(d) ? "Yesterday" : cal.isDateInTomorrow(d) ? "Tomorrow"
+            : d.formatted(.dateTime.weekday(.wide))
+        return "\(day), \(d.formatted(.dateTime.month(.wide).day()))"
+    }
+
+    /// How much is on screen: "12 h", "3 days", "2 weeks".
+    static func spanLabel(_ span: TimeInterval) -> String {
+        let h = span / 3600
+        if h < 36 { return "\(Int(h.rounded())) h" }
+        let d = h / 24
+        return d < 14 ? "\(Int(d.rounded())) days" : "\(Int((d / 7).rounded())) weeks"
+    }
+}
+
+struct MenusStrip: View {
+    @Binding var window: MenusWindow
+    let moments: [LogEvent]
+    let forecast: [(Date, Double?)]
+    let now: Date
+    let verdict: String?
+    let limits: ClosedRange<Date>
+    let settle: () -> Void
+    let backToNow: () -> Void
+    /// With the combined chart (owner, Nov 13) the day's title sits below the chart instead of above the ticks.
+    var titleBelow = false
+    @Environment(\.colorScheme) private var scheme
+    @State private var width: CGFloat = 1
+    private let cal = Calendar.current
+
+    var body: some View {
+        VStack(spacing: 2) {
+            if !titleBelow {
+                MenusDayTitle(window: window, now: now, verdict: verdict, backToNow: backToNow)
+            }
             // The whole width is the timeline (owner, Nov 6): the span sits in the line above.
             track
-                .padding(.horizontal, MenusColumns.page + MenusColumns.card)
+                .padding(.horizontal, titleBelow ? 0 : MenusColumns.page + MenusColumns.card)   // edge to edge with the combined chart (owner, Nov 13)
         }
         .padding(.top, 8)
         .frame(maxWidth: .infinity)
@@ -537,20 +572,8 @@ struct MenusStrip: View {
         .sensoryFeedback(.selection, trigger: cal.startOfDay(for: window.center))
     }
 
-    private var title: String {
-        let d = window.center
-        let day = cal.isDateInToday(d) ? "Today" : cal.isDateInYesterday(d) ? "Yesterday" : cal.isDateInTomorrow(d) ? "Tomorrow"
-            : d.formatted(.dateTime.weekday(.wide))
-        return "\(day), \(d.formatted(.dateTime.month(.wide).day()))"
-    }
-
-    /// How much is on screen: "12 h", "3 days", "2 weeks".
-    private var spanLabel: String {
-        let h = window.span / 3600
-        if h < 36 { return "\(Int(h.rounded())) h" }
-        let d = h / 24
-        return d < 14 ? "\(Int(d.rounded())) days" : "\(Int((d / 7).rounded())) weeks"
-    }
+    private var title: String { MenusDayTitle.title(window.center) }
+    private var spanLabel: String { MenusDayTitle.spanLabel(window.span) }
 
     private var track: some View {
         Canvas { ctx, size in
@@ -650,6 +673,8 @@ struct MenusDetails: View {
     var big = false
     /// The forecast hours ahead of now, so the lines carry on past the playhead.
     var forecast: [(Date, Conditions)] = []
+    /// With the combined chart, the day's title sits just below it (owner, Nov 13).
+    var dayTitle: MenusDayTitle? = nil
     @State private var chartWidth: CGFloat = 1
     /// A little either side of the window, so lines run off the edges instead of stopping short.
     private var shown: [LogEvent] {
@@ -672,7 +697,7 @@ struct MenusDetails: View {
                 .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), unit: "ppb"),
                 .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: ""),
                 .init(name: "Flu and illness", air: Theme.airIllness, points: [], unit: "", note: "Not tracked yet"),
-            ], width: $chartWidth)
+            ], width: $chartWidth, footer: dayTitle, edge: big)
             section("Body", "From your logs and Apple Health") {
                 VStack(spacing: 0) {
                     dots("Inhaler use", shown.filter { $0.moment == .rescue || $0.moment == .maintenance }
@@ -686,12 +711,16 @@ struct MenusDetails: View {
         }
         .padding(.horizontal, MenusColumns.page)
         .padding(.top, 20)   // the combined chart sits just under the strip (owner, Nov 13); inside the playhead's overlay
-        // One playhead line through every row, continuing the strip's: in the chart column's middle.
-        .overlay(alignment: .topLeading) {
+        // One playhead line through every row, continuing the strip's: in the chart column's middle. Behind the
+        // content, so the day's title under the combined chart sits over it.
+        .background(alignment: .topLeading) {
             GeometryReader { g in
                 let x0 = MenusColumns.page + MenusColumns.card
                 let w = g.size.width - 2 * (MenusColumns.page + MenusColumns.card)
-                Rectangle().fill(window.ink(events)).frame(width: 2, height: g.size.height)
+                // With the combined chart, the line stops at the chart while the lines are together.
+                let bandBottom: CGFloat = 20 + 300   // the top padding plus the combined chart's height
+                let h = big ? bandBottom * (1 - apart) + g.size.height * apart : g.size.height
+                Rectangle().fill(window.ink(events)).frame(width: 2, height: h)
                     .offset(x: x0 + w / 2 - 1)
             }
             .allowsHitTesting(false)
@@ -849,13 +878,19 @@ struct MenusEnvironment: View {
     let bandH: CGFloat
     let series: [Series]
     @Binding var width: CGFloat
+    /// Shown just under the shared band while the lines are together (the day's title), gone as they part.
+    var footer: MenusDayTitle? = nil
+    /// Edge to edge (the combined chart on home, owner Nov 13): the waves run the full screen width; names and
+    /// readings keep a small inset.
+    var edge = false
+    private var inset: CGFloat { edge ? MenusColumns.page + MenusColumns.card : 0 }
 
     private let headerH: CGFloat = 54
     private let rowH: CGFloat = 76
 
     var body: some View {
         // Tall enough for the rows, and for the shared band while it's together.
-        let height = max(headerH + CGFloat(series.count) * rowH, bandH + 40)
+        let height = max(headerH + CGFloat(series.count) * rowH, bandH + (footer == nil ? 40 : 110))
         Canvas { ctx, size in draw(ctx, size) }
             .frame(height: height)
             .overlay(alignment: .topLeading) {
@@ -864,13 +899,23 @@ struct MenusEnvironment: View {
                     Text("Environment").font(.title2.weight(.bold))
                     Text("Outdoor, at your moments").font(.subheadline).foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 4 + inset)
                 .opacity(Double(max(0, apart * 1.6 - 0.6)))
                 .offset(y: (1 - apart) * -8)
                 .allowsHitTesting(false)
             }
-            .padding(.horizontal, MenusColumns.card)
-            .onGeometryChange(for: CGFloat.self) { $0.size.width - 2 * MenusColumns.card } action: { width = $0 }
+            .overlay(alignment: .top) {
+                if let footer {
+                    footer
+                        .padding(.vertical, 6).padding(.horizontal, 12)
+                        .background(Color(uiColor: .systemGroupedBackground))
+                        .offset(y: bandH + 16 - apart * 30)
+                        .opacity(Double(max(0, 1 - apart * 2.5)))
+                        .allowsHitTesting(apart < 0.3)
+                }
+            }
+            .padding(.horizontal, edge ? -MenusColumns.page : MenusColumns.card)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width - (edge ? -2 * MenusColumns.page : 2 * MenusColumns.card) } action: { width = $0 }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Environment")
             .accessibilityValue(series.map { s in reading(s).map { "\(s.name) \(Int($0.rounded())) \(s.unit)" } ?? "\(s.name), \(s.note.lowercased())" }.joined(separator: ", "))
@@ -917,13 +962,13 @@ struct MenusEnvironment: View {
             ctx.drawLayer { l in
                 l.opacity = nameOpacity
                 l.draw(Text(s.name).font(.system(size: nameSize, weight: .semibold)).foregroundStyle(s.air.deep),
-                       at: CGPoint(x: 0, y: nameY), anchor: .topLeading)
+                       at: CGPoint(x: inset, y: nameY), anchor: .topLeading)
             }
 
             guard s.points.count >= 2 else {
                 ctx.drawLayer { l in
                     l.opacity = Double(t)
-                    l.draw(Text(s.note).font(.caption).foregroundStyle(.tertiary), at: CGPoint(x: 0, y: rowTop + 30), anchor: .topLeading)
+                    l.draw(Text(s.note).font(.caption).foregroundStyle(.tertiary), at: CGPoint(x: inset, y: rowTop + 30), anchor: .topLeading)
                 }
                 continue
             }
@@ -931,7 +976,7 @@ struct MenusEnvironment: View {
                 ctx.drawLayer { l in
                     l.opacity = Double(t)
                     l.draw(Text("\(Int(v.rounded()))\(s.unit.isEmpty ? "" : " ")\(s.unit)").font(.caption.weight(.medium).monospacedDigit())
-                        .foregroundStyle(.secondary), at: CGPoint(x: w, y: rowTop + 6), anchor: .topTrailing)
+                        .foregroundStyle(.secondary), at: CGPoint(x: w - inset, y: rowTop + 6), anchor: .topTrailing)
                 }
             }
 

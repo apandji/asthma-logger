@@ -39,6 +39,7 @@ struct WeatherProvider {
         let date: Date
         let temperatureF: Double
         let humidityPct: Double
+        var windMph: Double? = nil
 
         var tempPoint: TempPoint { TempPoint(date: date, temperatureF: temperatureF) }
     }
@@ -55,7 +56,8 @@ struct WeatherProvider {
         let location = CLLocation(latitude: latitude, longitude: longitude)
         let forecast = try await WeatherService.shared.weather(for: location, including: .hourly(startDate: start, endDate: end))
         return forecast.map {
-            Hour(date: $0.date, temperatureF: $0.temperature.converted(to: .fahrenheit).value, humidityPct: $0.humidity * 100)
+            Hour(date: $0.date, temperatureF: $0.temperature.converted(to: .fahrenheit).value, humidityPct: $0.humidity * 100,
+                 windMph: $0.wind.speed.converted(to: .milesPerHour).value)
         }
     }
 }

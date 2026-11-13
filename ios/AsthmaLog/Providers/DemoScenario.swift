@@ -1,7 +1,7 @@
 import AsthmaCore
 import Foundation
 
-/// One switch for demos (Settings › Demo and development › Demo scenario): the air of a day worth showing,
+/// One switch for demos (Settings › Scenarios › Air on Now): the air of a day worth showing,
 /// on Now and on every moment logged while it's on, so the header, the chips, the sky, the advice card and
 /// the journal's exposure question all play out on cue. Replaces the separate Pollen and Air event switches
 /// (it sets both underneath). Its readings are labelled "Demo scenario": shown, never in patterns

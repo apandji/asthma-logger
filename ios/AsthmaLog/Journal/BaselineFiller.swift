@@ -78,11 +78,14 @@ final class BaselineFiller {
     // MARK: History
 
     /// A day's hourly air at one place: Apple Weather temperature and humidity, the nearest stations' PM2.5
-    /// and ozone, with the 48 hours before so each moment gets its look-back.
+    /// and ozone, with the 48 hours before so each moment gets its look-back; and Ambee's hours for the day
+    /// (particles, ozone, pollen), so a baseline carries the same readings an inhaler moment does and the two
+    /// can be compared. Ambee's history only reaches two days back, which a day-later fill stays inside.
     struct DayOfAir {
         var weather: [WeatherProvider.Hour]
         var pm25: LookBackService.Series
         var ozone: LookBackService.Series
+        var ambee: [AmbeeHour] = []
 
         func conditions(at t: Date) -> Conditions? {
             /// The reading closest to the moment, within an hour.
@@ -105,6 +108,8 @@ final class BaselineFiller {
                 obs.append(EnvObservation(signal: .ozone, value: o.value, unit: "ppb", asOf: o.date, source: "OpenAQ",
                                           spatialScale: .station, stationName: ozone.station))
             }
+            // After the stations, as on a live moment (ConditionsService's order is the priority).
+            if let a = nearest(ambee, \.date) { obs += a.observations(source: Ambee.source).filter { $0.signal != .temperature && $0.signal != .humidity } }
             guard !obs.isEmpty else { return nil }
             var c = Conditions(observations: obs, fetchedAt: .now)
             let temps = weather.map(\.tempPoint)
@@ -122,7 +127,12 @@ final class BaselineFiller {
         let from = start.addingTimeInterval(-(LookBack.spanHours + TempDrop.windowHours) * 3600)
         async let weather = try? WeatherProvider().hours(latitude: latitude, longitude: longitude, from: from, to: end)
         async let air = LookBackService.airHours(latitude, longitude, start.addingTimeInterval(-LookBack.spanHours * 3600), end)
+        // Live Ambee only: its sample never goes on a baseline, because baselines feed the patterns.
+        var ambee: [AmbeeHour] = []
+        if AmbeeClient.isLive {
+            ambee = (try? await AmbeeClient.current.history(latitude: latitude, longitude: longitude, from: start, to: min(end, .now))) ?? []
+        }
         let a = await air
-        return DayOfAir(weather: await weather ?? [], pm25: a.pm25, ozone: a.ozone)
+        return DayOfAir(weather: await weather ?? [], pm25: a.pm25, ozone: a.ozone, ambee: ambee)
     }
 }

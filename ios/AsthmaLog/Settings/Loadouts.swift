@@ -126,12 +126,13 @@ struct Loadout: Identifiable {
 /// The Loadouts section: one row per loadout, grouped. A tap applies it and closes Settings.
 struct LoadoutsSection: View {
     let close: () -> Void
+    var groups = Loadout.groups
     @Environment(\.modelContext) private var context
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
     @AppStorage("loadout.last") private var last = ""
 
     var body: some View {
-        ForEach(Loadout.groups, id: \.self) { g in
+        ForEach(groups, id: \.self) { g in
             Section {
                 ForEach(Loadout.all.filter { $0.group == g }) { l in
                     Button {

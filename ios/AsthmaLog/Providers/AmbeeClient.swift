@@ -14,7 +14,7 @@ nonisolated struct AmbeeClient: AmbeeSource {
 
     /// One cache for the app's life, saved in Caches (iOS may clear it; it only costs calls).
     @MainActor private static let cached: CachedAmbee? = Secrets.ambee.map { key in
-        let file = URL.cachesDirectory.appending(path: "ambee-cache.json")
+        let file = URL.cachesDirectory.appending(path: "ambee-cache-2.json")
         return CachedAmbee(AmbeeClient(key: key), saved: try? Data(contentsOf: file),
                            save: { try? $0.write(to: file, options: .atomic) })
     }
@@ -36,8 +36,8 @@ nonisolated struct AmbeeClient: AmbeeSource {
         let range = ["from": stamp(from), "to": stamp(to)]
         async let air: Ambee.AirQualityResponse = get("/history/by-lat-lng", latitude, longitude, range)
         async let pollen: Ambee.PollenResponse = get("/v3/pollen/history", latitude, longitude, range)
-        return Ambee.hours(airQuality: (try? await air) ?? .init(), pollen: try? await pollen,
-                           weather: [], isForecast: false)
+        // Both or nothing: history is kept for good (CachedAmbee), so half an answer must not be stored as the hour.
+        return Ambee.hours(airQuality: try await air, pollen: try await pollen, weather: [], isForecast: false)
     }
 
     func forecast(latitude: Double, longitude: Double, from: Date, hours: Int) async throws -> [AmbeeHour] {

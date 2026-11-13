@@ -191,7 +191,9 @@ enum Crit {
         /// Menus is built on the Apple Health look (grey sky, pills, Health colours) with its own structure.
         var healthLike: Bool { self != .feltAir }
         static let key = "crit.appLook"
-        static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? .feltAir }
+        /// The app as presented (owner, Nov 13): April's chart-led look. The others stay as Debug options.
+        static let standard = AppLook.menus
+        static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? standard }
     }
 
     /// Menus look: the sky as a 3D rounded glass cube of air with physics, or the flat square with a circle.
@@ -210,6 +212,26 @@ enum Crit {
         }
         static let key = "crit.menusSky"
         static var current: MenusSky { UserDefaults.standard.string(forKey: key).flatMap(MenusSky.init) ?? .combined }
+    }
+
+    /// The combined chart's drawing (owner, Nov 13: "not convinced this is the best way to visualize"). Filled is
+    /// April's: each condition a soft filled wave in its own hue. Quiet draws every line thin and grey with no
+    /// fill, so the only colour is orange: your rescue moments, on the air's day. Weave (owner, Nov 13: "this feels
+    /// overwhelming... what is heightened") draws no lines at all: a row per condition, a cell per hour, inked only
+    /// when that condition is heightened, denser when high, orange where it's one of your patterns. All three draw
+    /// the same data.
+    enum ChartStyle: String, CaseIterable, Identifiable {
+        case filled, quiet, weave
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .filled: "Filled waves (April)"
+            case .quiet: "Quiet lines, orange for yours"
+            case .weave: "Weave: only what's heightened"
+            }
+        }
+        static let key = "crit.chartStyle"
+        static var current: ChartStyle { UserDefaults.standard.string(forKey: key).flatMap(ChartStyle.init) ?? .filled }
     }
 
     /// The timeline's look: the original track (small dots, a pill for the time), or Apple Health's

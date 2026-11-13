@@ -73,3 +73,14 @@ Things noticed while building, not yet decided. Add as you go; move an item out 
 - **Risk colour** (Oct 21): see risk-color.md. Risk becomes one warm ink (graphite → orange → bright orange,
   three steps); families move to icons, names and riso textures; green/gold/red retires. Five-second test with
   the TestFlight group before it ships; candidate crit switch: Design crit › Risk colour (today / A / A + D).
+- **A better engine than top-two lift** (Nov 13, owner's question): what we do is a case-crossover comparison
+  (each person against their own ordinary hours). Three steps the literature points to, to be checked against
+  sources before any of it is claimed: baselines matched to the inhaler moment's hour on nearby days, so time of
+  day stops looking like a trigger; one model with every condition in it, so heat and ozone aren't counted
+  twice; and starting from what's known about people in general, moved by your own data ("Still learning" =
+  not yet different from the general picture). On screen that could read as "common for many people" versus
+  "yours". Not for the Nov 20 presentation.
+- **The thesis thread** (Nov 13, owner): how technology hides and reveals, tool versus companion. felt air
+  hides the engine and reveals one sentence, what it read, what it didn't, and what is a guess. The chart's
+  gaps, dashed forecast and baseline / rescue marks are that idea drawn.
+

@@ -95,15 +95,17 @@ struct SettingsView: View {
 
                 Section {
                     NavigationLink("Where your data comes from") { SourcesView() }
-                    LabeledContent("Version", value: version)
-                        .contentShape(.rect)
-                        .onTapGesture {
-                            versionTaps += 1
-                            guard versionTaps >= 5 else { return }
-                            versionTaps = 0
-                            showScenarios.toggle()
-                            UINotificationFeedbackGenerator().notificationOccurred(showScenarios ? .success : .warning)
-                        }
+                    // A plain row to look at; five taps show or hide Scenarios.
+                    Button {
+                        versionTaps += 1
+                        guard versionTaps >= 5 else { return }
+                        versionTaps = 0
+                        withAnimation { showScenarios.toggle() }
+                        UINotificationFeedbackGenerator().notificationOccurred(showScenarios ? .success : .warning)
+                    } label: {
+                        LabeledContent("Version", value: version).contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
                     if showScenarios {
                         NavigationLink("Scenarios") { ScenarioSettings(close: { dismiss() }) }
                     }

@@ -22,6 +22,8 @@ matters, and the FigJam board "On API Calls Scoping" for when each call happens.
 | `CachedAmbee` | `AsthmaCore/Conditions/AmbeeCache.swift` | Every live call goes through it (`AmbeeClient.current`). Places snap to a ~500 m cell and Ambee is asked for the cell's centre. Latest: once per cell per hour. History: past hours kept 60 days, only gaps fetched; hours Ambee has nothing for aren't asked again; the last ~3 h (Ambee lags) at most hourly. Forecast: reused 3 h. Simultaneous asks share one call. Saved to Caches. |
 | Where live Ambee shows | App | Each moment's air and pollen (`ConditionsService`); the look-ahead hours (`NowHour.forecast`: Ambee hourly ahead of AirNow's daily categories); pollen on every sky (`DemoPollen.best`: the moment's real readings, the Design-crit demo season only when it has none). Without a key, all of this stays on the labelled demo. |
 | Resolution | Checked Nov 13 | History and forecast come back for the exact point asked (Ambee says 500 m). **Latest** comes back from a named point that can be several km away (6.5 km in San Francisco), with its own lat/lng. |
+| History reach | Checked Nov 13 | The POC key returns **two days** of history; a request reaching further back is a 400 for the whole range. `CachedAmbee` never asks beyond 47 h, so the chart's lines and the baselines' air come from what was fetched in time. |
+| Where history shows | App | The chart's lines behind now (`NowHour.history`, on a 3-hour boundary so a new hour isn't a new call) and each baseline's air (`BaselineFiller.dayOfAir`). |
 | New signals | `Signal.pollenTree`, `.pollenGrass` | Alongside the existing `pollenWeed`. |
 
 ## The rules while it's demo

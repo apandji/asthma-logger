@@ -45,7 +45,7 @@ struct MomentPager: View {
         VStack(spacing: 10) {
             ZStack {
                 if let e = current {
-                    SkyPanel(event: e, pollen: DemoPollen.sample(at: e.loggedAt, season: pollenSeason),
+                    SkyPanel(event: e, pollen: DemoPollen.best(e.conditions, at: e.loggedAt, season: pollenSeason),
                              zoom: zoom, mapNamespace: mapNamespace, probing: $probing, onOpen: { onOpen(e) }, onOverview: onOverview,
                              onStep: step)
                         .id(e.id)

@@ -61,7 +61,7 @@ struct NowHomeView: View {
                                 grass: base?.grass ?? .init(name: "Grass", species: "", count: 0, level: .low),
                                 weed: .init(name: "Weed", species: "Ragweed", count: Int(w.value), level: .high))
         }
-        return DemoPollen.sample(at: h.date, season: pollenSeason)
+        return DemoPollen.best(h.conditions, at: h.date, season: pollenSeason)
     }
 
     static func staged(_ h: NowHour) -> NowHour {
@@ -477,7 +477,7 @@ struct NowHomeView: View {
         guard let c = here?.conditions else { return nil }
         if Self.isMold(c) { return .mold }
         let stormy = (c.weatherCondition ?? "").localizedCaseInsensitiveContains("thunder")
-        let pollenHigh = DemoPollen.sample(at: now, season: pollenSeason)?.kinds.contains { $0.level == .high } ?? false
+        let pollenHigh = DemoPollen.best(here?.conditions, at: now, season: pollenSeason)?.kinds.contains { $0.level == .high } ?? false
         if stormy && pollenHigh { return .storm }
         if TempDrop.band(c.tempFallF) == .sharp { return .tempDrop }
         return nil
@@ -486,7 +486,7 @@ struct NowHomeView: View {
     /// The live air, with the demo scenario's readings added so the particles show it too.
     private var liveAir: (conditions: Conditions?, weave: WeaveSpec, pollen: PollenSample?) {
         var c = here?.conditions
-        let pollen = DemoPollen.sample(at: now, season: pollenSeason)
+        let pollen = DemoPollen.best(here?.conditions, at: now, season: pollenSeason)
         // The demo scenario's readings, applied now so switching it shows at once (DemoScenario).
         if var cc = c { (DemoScenario(rawValue: demoScenario) ?? .off).apply(to: &cc, at: now); c = cc }
         return (c, c.map { WeaveSpec($0.input) } ?? here?.weave ?? WeaveSpec(), pollen)
@@ -940,7 +940,7 @@ struct NowHomeView: View {
                 // Just logged: the map alone first, then a scan from the pin in the inhaler's ink, and the
                 // particles appear where it has passed.
                 return SkyInputs(conditions: j.conditions ?? here?.conditions, weave: j.weave.isEmpty ? (here?.weave ?? WeaveSpec()) : j.weave, date: j.loggedAt,
-                                 pollen: DemoPollen.sample(at: j.loggedAt, season: pollenSeason),
+                                 pollen: DemoPollen.best(j.conditions, at: j.loggedAt, season: pollenSeason),
                                  mapID: j.latitude == nil ? "here" : j.id.uuidString,
                                  coordinate: j.latitude.flatMap { lat in j.longitude.map { (lat, $0) } } ?? here.map { ($0.lat, $0.lon) },
                                  captureInk: j.moment == .rescue ? Theme.rescueSoft : Theme.standardSoft, onPin: { pinDetails = j },
@@ -955,7 +955,7 @@ struct NowHomeView: View {
                              onTap: { pinDetails = liveSnapshot() })
         case .moment(let m):
             return SkyInputs(conditions: m.conditions, weave: m.weave, date: m.loggedAt,
-                             pollen: DemoPollen.sample(at: m.loggedAt, season: pollenSeason),
+                             pollen: DemoPollen.best(m.conditions, at: m.loggedAt, season: pollenSeason),
                              mapID: m.id.uuidString, coordinate: m.latitude.flatMap { lat in m.longitude.map { (lat, $0) } },
                              mapNamespace: mapZoom, onPin: { pinDetails = m }, showsSelf: true, selfEvent: m, onTap: { pinDetails = m })
         case .hour(let h):
@@ -1687,13 +1687,20 @@ struct NowHour: Identifiable, Sendable {
         let hours = all.filter { $0.date > Date().addingTimeInterval(-3600) }
         var aq: [String: (pm25: Int?, ozone: Int?)] = [:]
         if let key = Secrets.airNow { aq = (try? await AirNowProvider(key: key).forecast(latitude: latitude, longitude: longitude)) ?? [:] }
-        let carried = aq.isEmpty ? now : nil
+        // Ambee's hourly air and pollen at ~500 m (cached), ahead of AirNow's daily categories. Live only.
+        var ambee: [Int: AmbeeHour] = [:]
+        if AmbeeClient.isLive, let f = try? await AmbeeClient.current.forecast(latitude: latitude, longitude: longitude, from: .now, hours: 48) {
+            for a in f { ambee[Int(a.date.timeIntervalSince1970 / 3600)] = a }
+        }
+        let carried = aq.isEmpty && ambee.isEmpty ? now : nil
         return hours.map { h in
             var obs = [
                 EnvObservation(signal: .temperature, value: h.temperatureF, unit: "°F", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true),
                 EnvObservation(signal: .humidity, value: h.humidityPct, unit: "%", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true),
             ]
-            let day = aq[AirNowProvider.dayString(h.date)]
+            let a = ambee[Int(h.date.timeIntervalSince1970 / 3600)]
+            obs += a?.observations(source: Ambee.source) ?? []
+            let day = a == nil ? aq[AirNowProvider.dayString(h.date)] : nil
             if let c = day?.pm25, let v = pm25ByCategory[c] {
                 obs.append(EnvObservation(signal: .pm25, value: v, unit: "µg/m³", asOf: h.date, source: source, spatialScale: .modelGrid, confidence: .low, isForecast: true))
             }
@@ -1701,7 +1708,7 @@ struct NowHour: Identifiable, Sendable {
                 obs.append(EnvObservation(signal: .ozone, value: v, unit: "ppb", asOf: h.date, source: source, spatialScale: .modelGrid, confidence: .low, isForecast: true))
             }
             var airCarried = false
-            if let carried {
+            if let carried, a == nil {
                 for signal in [Signal.pm25, .ozone, .aqi] {
                     guard let o = carried.best(signal) else { continue }
                     obs.append(EnvObservation(signal: signal, value: o.value, unit: o.unit, asOf: h.date, source: "Today's reading, carried forward",

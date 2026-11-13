@@ -2,7 +2,7 @@ import Foundation
 
 /// API keys injected from Config/Secrets.xcconfig through Info.plist. Missing → that source is skipped.
 /// Keys ship inside the TestFlight build — accepted for the proof of concept; move behind a proxy before release.
-enum Secrets {
+nonisolated enum Secrets {
     static var openAQ: String? { value("OPENAQ_API_KEY") }
     static var airNow: String? { value("AIRNOW_API_KEY") }
     static var ambee: String? { value("AMBEE_API_KEY") }

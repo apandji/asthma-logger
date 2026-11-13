@@ -24,7 +24,7 @@ struct MomentDetailsView: View {
     @State private var around: HourlyHistory?
 
     /// The same pollen the sky drew: the moment's own (Ambee, live or sample), else the demo season.
-    private var pollen: PollenSample? { DemoPollen.from(event.conditions) ?? DemoPollen.sample(at: event.loggedAt, season: pollenSeason) }
+    private var pollen: PollenSample? { DemoPollen.best(event.conditions, at: event.loggedAt, season: pollenSeason) }
     /// The same layers (and levels) the sky and the rail read, so a word here never disagrees with the rail.
     private var layers: AirLayers { AirLayers(conditions: event.conditions, weave: event.weave, pollen: pollen) }
     /// A live snapshot from Now (not saved): no voice note, no edit.

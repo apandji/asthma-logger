@@ -26,6 +26,42 @@ import Testing
         #expect(h.weedSpecies == "Ragweed")
     }
 
+    // Live shapes (Nov 13, 2026), trimmed: air and pollen land on different hours, pollen is stamped
+    // `timestamp` / `unixTs`, every species is listed with zeros, history names `majorPollutant`.
+    let liveAirJSON = #"""
+    {"message":"success","stations":[{"CO":0.119,"NO2":2.348,"OZONE":45.358,"PM10":1.12,"PM25":0.312,"SO2":0.147,
+     "updatedAt":"2026-11-13T15:00:00.000Z","AQI":42,"aqiInfo":{"pollutant":"O3","concentration":45,"category":"Good"},
+     "lat":37.7441,"lng":-122.4863,"placeName":"29th Ave"}]}
+    """#
+    let livePollenJSON = #"""
+    {"message":"success","lat":37.77,"lng":-122.42,"timezone":"America/Los_Angeles","data":[{
+     "Risk":{"grass_pollen":"Low","tree_pollen":"Low","weed_pollen":"Low"},
+     "Count":{"grass_pollen":0,"tree_pollen":0,"weed_pollen":18},
+     "Species":{"Grass":{"Grass":0},"Others":0,"Tree":{"Ash":0,"Oak":0},"Weed":{"Ragweed":18}},
+     "SpeciesRisk":{"Ragweed":"High"},"timestamp":"2026-11-13T16:00:00.000Z","unixTs":1794585600}]}
+    """#
+    let liveAirHistoryJSON = #"""
+    {"message":"success","data":[{"PM25":16.617,"OZONE":8.439,"AQI":66,"majorPollutant":"PM2.5",
+     "createdAt":"2026-11-12T16:00:00.000Z"}]}
+    """#
+
+    @Test func decodesLiveShapesAndMergesTheNewest() throws {
+        let air = try JSONDecoder().decode(Ambee.AirQualityResponse.self, from: Data(liveAirJSON.utf8))
+        let pollen = try JSONDecoder().decode(Ambee.PollenResponse.self, from: Data(livePollenJSON.utf8))
+        let hours = Ambee.hours(airQuality: air, pollen: pollen, weather: [], isForecast: false)
+        #expect(hours.count == 2)
+        let now = try #require(Ambee.newest(hours))
+        #expect(now.weedPollen == 18)
+        #expect(now.ozone == 45.358)
+        #expect(now.aqiPollutant == "O3")
+        #expect(now.weedSpecies == "Ragweed")
+        #expect(now.treeSpecies == nil)
+
+        let history = try JSONDecoder().decode(Ambee.AirQualityResponse.self, from: Data(liveAirHistoryJSON.utf8))
+        let h = try #require(Ambee.hours(airQuality: history, pollen: nil, weather: [], isForecast: false).first)
+        #expect(h.aqiPollutant == "PM2.5")
+    }
+
     @Test func observationsCarrySourceAndOutdoorScale() {
         let h = AmbeeHour(date: .now, pm25: 10, ozone: 30, weedPollen: 50, temperatureF: 60)
         let obs = h.observations(source: Ambee.demoSource)

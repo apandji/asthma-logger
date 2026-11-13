@@ -5,8 +5,8 @@ import Foundation
 /// runs on `DemoAmbee`, which produces the same shapes. Everything below the response models works on
 /// `AmbeeHour`, so swapping in the live client changes one file.
 ///
-/// The response models follow Ambee's public docs. They are **not yet checked against a live response**:
-/// every field is optional, and the decoding tests use the documented examples.
+/// The response models were checked against live air-quality and pollen responses (Nov 13, 2026); weather
+/// and fire are still as documented. Every field is optional.
 public enum Ambee {
     public static let source = "Ambee"
     public static let demoSource = "Ambee (demo)"
@@ -14,7 +14,7 @@ public enum Ambee {
     public static let scenarioSource = "Demo scenario"
     public static func isDemo(_ source: String) -> Bool { source == demoSource || source == scenarioSource }
 
-    // MARK: Responses (as documented)
+    // MARK: Responses
 
     /// `GET /latest/by-lat-lng` and `GET /history/by-lat-lng`: air quality.
     public struct AirQualityResponse: Codable, Sendable {
@@ -32,6 +32,11 @@ public enum Ambee {
             public var CO: Double?
             public var AQI: Double?
             public var aqiInfo: AQIInfo?
+            /// History names the pollutant behind the AQI here instead of in `aqiInfo` ("PM2.5").
+            public var majorPollutant: String?
+            /// Latest returns the station's own position, which can be several km from the asked point.
+            public var lat: Double?
+            public var lng: Double?
             public var createdAt: String?
             public var updatedAt: String?
         }
@@ -59,8 +64,15 @@ public enum Ambee {
             public var Risk: Risks?
             /// North America with `speciesRisk=true`: e.g. `Species.Tree["Oak"]`, `Species.Weed["Ragweed"]`.
             public var Species: SpeciesCounts?
+            /// The hour, as ISO 8601 and as Unix seconds (live responses; the docs showed `updatedAt` / `time`).
+            public var timestamp: String?
+            public var unixTs: Double?
             public var updatedAt: String?
             public var time: Double?
+
+            var date: Date? {
+                (unixTs ?? time).map { Date(timeIntervalSince1970: $0) } ?? Ambee.parseDate(timestamp ?? updatedAt)
+            }
         }
 
         public struct Counts: Codable, Sendable {
@@ -201,15 +213,14 @@ extension Ambee {
             guard let d = parseDate(s.createdAt ?? s.updatedAt) else { continue }
             upsert(d) {
                 $0.pm25 = s.PM25; $0.pm10 = s.PM10; $0.ozone = s.OZONE; $0.no2 = s.NO2
-                $0.aqi = s.AQI; $0.aqiPollutant = s.aqiInfo?.pollutant
+                $0.aqi = s.AQI; $0.aqiPollutant = s.aqiInfo?.pollutant ?? s.majorPollutant
             }
         }
         for e in pollen?.data ?? [] {
-            guard let d = e.time.map({ Date(timeIntervalSince1970: $0) }) ?? parseDate(e.updatedAt) else { continue }
+            guard let d = e.date else { continue }
             upsert(d) {
                 $0.treePollen = e.Count?.tree_pollen; $0.grassPollen = e.Count?.grass_pollen; $0.weedPollen = e.Count?.weed_pollen
-                $0.treeSpecies = e.Species?.Tree?.max { $0.value < $1.value }?.key
-                $0.weedSpecies = e.Species?.Weed?.max { $0.value < $1.value }?.key
+                $0.treeSpecies = top(e.Species?.Tree); $0.weedSpecies = top(e.Species?.Weed)
             }
         }
         for w in weather {
@@ -220,6 +231,28 @@ extension Ambee {
             }
         }
         return byHour.values.sorted { $0.date < $1.date }
+    }
+
+    /// The species with the most pollen, or nil when there's none (Ambee lists every species, zeros too).
+    static func top(_ species: [String: Double]?) -> String? {
+        species?.filter { $0.value > 0 }.max { $0.value < $1.value }?.key
+    }
+
+    /// One "now" from the newest hours: each field from the latest hour that has it. Air and pollen are
+    /// updated at different hours, so the newest hour alone often has only one of them.
+    public static func newest(_ hours: [AmbeeHour]) -> AmbeeHour? {
+        guard var h = hours.last else { return nil }
+        for older in hours.dropLast().reversed() {
+            h.pm25 = h.pm25 ?? older.pm25; h.pm10 = h.pm10 ?? older.pm10; h.ozone = h.ozone ?? older.ozone
+            h.no2 = h.no2 ?? older.no2; h.aqi = h.aqi ?? older.aqi; h.aqiPollutant = h.aqiPollutant ?? older.aqiPollutant
+            h.treePollen = h.treePollen ?? older.treePollen; h.grassPollen = h.grassPollen ?? older.grassPollen
+            h.weedPollen = h.weedPollen ?? older.weedPollen; h.treeSpecies = h.treeSpecies ?? older.treeSpecies
+            h.weedSpecies = h.weedSpecies ?? older.weedSpecies; h.temperatureF = h.temperatureF ?? older.temperatureF
+            h.humidity = h.humidity ?? older.humidity; h.dewpointF = h.dewpointF ?? older.dewpointF
+            h.windSpeed = h.windSpeed ?? older.windSpeed; h.precipitation = h.precipitation ?? older.precipitation
+            h.summary = h.summary ?? older.summary
+        }
+        return h
     }
 
     static func parseDate(_ s: String?) -> Date? {

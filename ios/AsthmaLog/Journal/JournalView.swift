@@ -85,7 +85,7 @@ struct JournalView: View {
                         if let f = flight {
                             AmbientField(weave: f.moment.weave, temperatureF: f.moment.conditions?.best(.temperature)?.value,
                                          date: f.moment.loggedAt, conditions: f.moment.conditions,
-                                         pollen: DemoPollen.sample(at: f.moment.loggedAt, season: pollenSeason))
+                                         pollen: DemoPollen.best(f.moment.conditions, at: f.moment.loggedAt, season: pollenSeason))
                                 .frame(width: f.rect.width, height: f.rect.height)
                                 .clipShape(.rect(cornerRadius: f.radius, style: .continuous))
                                 .position(x: f.rect.midX, y: f.rect.midY)
@@ -194,7 +194,7 @@ struct JournalView: View {
                          temperatureF: selected?.conditions?.best(.temperature)?.value ?? now?.temp,
                          date: selected?.loggedAt ?? .now,
                          conditions: selected?.conditions,
-                         pollen: DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason))
+                         pollen: DemoPollen.best(selected?.conditions, at: selected?.loggedAt ?? .now, season: pollenSeason))
                 .ignoresSafeArea()
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { fieldFrame = $0 }
                 .animation(.easeInOut(duration: 0.8), value: selected?.id)
@@ -347,7 +347,7 @@ struct JournalView: View {
                 SkyTip().invalidate(reason: .actionPerformed)
                 let unit = CGPoint(x: (drag.location.x - fieldFrame.minX) / fieldFrame.width,
                                    y: (drag.location.y - fieldFrame.minY) / fieldFrame.height)
-                let pollen = DemoPollen.sample(at: selected?.loggedAt ?? .now, season: pollenSeason)
+                let pollen = DemoPollen.best(selected?.conditions, at: selected?.loggedAt ?? .now, season: pollenSeason)
                 let layers = AirLayers(conditions: selected?.conditions, weave: fieldWeave, pollen: pollen)
                 withAnimation(.easeOut(duration: 0.15)) {
                     probePoint = drag.location

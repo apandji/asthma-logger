@@ -687,7 +687,7 @@ struct MenusDetails: View {
         VStack(alignment: .leading, spacing: 48) {
             // Environment (owner, Nov 13): every condition on one line first, like a cycle app's hormone chart,
             // and as you scroll down the lines part into their own rows.
-            MenusEnvironment(window: window, rescues: rescues, ink: window.ink(events), apart: apart, bandH: big ? 300 : 132, series: [
+            MenusEnvironment(window: window, rescues: rescues, ink: window.ink(events), apart: apart, bandH: big ? MenusEnvironment.bigBand : 132, series: [
                 // Each its own hue from the air palette, so the lines stay apart when they overlap.
                 .init(name: "Temperature", air: Theme.AirInk(core: Theme.AirPalette.coral, glow: Theme.AirPalette.peach), points: series(.temperature), unit: "°F"),
                 .init(name: "Humidity", air: Theme.AirInk(core: Theme.AirPalette.mint, glow: Theme.AirPalette.sky), points: series(.humidity), unit: "%"),
@@ -697,7 +697,7 @@ struct MenusDetails: View {
                 .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), unit: "ppb"),
                 .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: ""),
                 .init(name: "Flu and illness", air: Theme.airIllness, points: [], unit: "", note: "Not tracked yet"),
-            ], width: $chartWidth, footer: dayTitle, edge: big)
+            ], width: $chartWidth, footer: dayTitle, edge: big, now: now)
             section("Body", "From your logs and Apple Health") {
                 VStack(spacing: 0) {
                     dots("Inhaler use", shown.filter { $0.moment == .rescue || $0.moment == .maintenance }
@@ -718,8 +718,8 @@ struct MenusDetails: View {
                 let x0 = MenusColumns.page + MenusColumns.card
                 let w = g.size.width - 2 * (MenusColumns.page + MenusColumns.card)
                 // With the combined chart, the line stops at the chart while the lines are together.
-                let bandBottom: CGFloat = 20 + 300   // the top padding plus the combined chart's height
-                let h = big ? bandBottom * (1 - apart) + g.size.height * apart : g.size.height
+                let bandBottom: CGFloat = 20 + MenusEnvironment.bigBand   // the top padding plus the combined chart's height
+                let h = big ? g.size.height * apart : g.size.height   // the portrait stands alone at rest; no line through it
                 Rectangle().fill(window.ink(events)).frame(width: 2, height: h)
                     .offset(x: x0 + w / 2 - 1)
             }
@@ -883,6 +883,11 @@ struct MenusEnvironment: View {
     /// Edge to edge (the combined chart on home, owner Nov 13): the waves run the full screen width; names and
     /// readings keep a small inset.
     var edge = false
+    /// Samples after this are forecast hours, drawn lighter.
+    var now: Date = .now
+    @Environment(\.colorScheme) private var scheme
+    /// The portrait's height on home: it's the main visual, a square-ish field in the middle of the screen.
+    static let bigBand: CGFloat = 330
     private var inset: CGFloat { edge ? MenusColumns.page + MenusColumns.card : 0 }
 
     private let headerH: CGFloat = 54
@@ -930,10 +935,12 @@ struct MenusEnvironment: View {
     private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
 
     private func draw(_ ctx: GraphicsContext, _ size: CGSize) {
-        // Ease the parting so the lines leave the shared line gently and land softly in their rows.
+        // Ease the parting so the samples leave the shared band gently and land softly in their rows.
         let t = apart * apart * (3 - 2 * apart)
         let w = size.width
         let withData = series.filter { $0.points.count >= 2 }
+        let slots = max(withData.count, 1)
+        let slotH = (bandH - 8) / CGFloat(slots)
 
         // Rescue moments: faint orange rules through the shared band, then through each row.
         for r in rescues {
@@ -942,64 +949,195 @@ struct MenusEnvironment: View {
             var rule = Path()
             rule.move(to: CGPoint(x: x, y: lerp(0, headerH, t)))
             rule.addLine(to: CGPoint(x: x, y: lerp(bandH, size.height, t)))
-            ctx.stroke(rule, with: .color(Theme.rescue.opacity(0.3)), lineWidth: 1)
+            ctx.stroke(rule, with: .color(Theme.rescue.opacity(0.3 * (edge ? Double(min(1, max(0, t * 1.6 - 0.3))) : 1))), lineWidth: 1)
         }
 
-        for (i, s) in series.enumerated() {
-            let rowTop = headerH + CGFloat(i) * rowH
-            // The chart's box: the shared band at rest, its own row when apart.
-            let chartTop = lerp(0, rowTop + 26, t)
-            let chartH = lerp(bandH, 36, min(1, t * 1.7))   // shrink ahead of the move, so rows never overlap mid-way
-            let base = chartTop + chartH
+        // With the portrait (home), the rows only come in as you scroll; the portrait leaves as they do.
+        let portrait = edge
+        let rowsShown = portrait ? Double(min(1, max(0, t * 1.6 - 0.3))) : 1
+        if portrait, t < 0.7 {
+            drawPortrait(ctx, size: size, fade: Double(1 - t / 0.7), lift: t * 60)
+        }
 
-            // Name: stacked on the left at rest (small), above its row when apart.
-            let legendIndex = withData.firstIndex { $0.name == s.name }
-            let hasData = legendIndex != nil
-            let restY = CGFloat(legendIndex ?? 0) * 15 + 2
-            let nameY = lerp(restY, rowTop + 4, t)
-            let nameSize = lerp(11, 15, t)
-            let nameOpacity = hasData ? 1 : Double(t)
-            ctx.drawLayer { l in
-                l.opacity = nameOpacity
-                l.draw(Text(s.name).font(.system(size: nameSize, weight: .semibold)).foregroundStyle(s.air.deep),
-                       at: CGPoint(x: inset, y: nameY), anchor: .topLeading)
-            }
+        // Each sample is a soft watercolour mark (owner, Nov 13): we only know the air at the moments we
+        // snapshotted it, so nothing is drawn between them. Marks sit in one blurred, multiplied layer so
+        // overlaps mix like pigment on paper.
+        var labels: [(Text, CGPoint, UnitPoint, Double)] = []
+        ctx.drawLayer { paint in
+            paint.addFilter(.blur(radius: lerp(2.4, 1.1, t)))
+            paint.blendMode = scheme == .dark ? .screen : .normal
+            for (i, s) in series.enumerated() {
+                let rowTop = headerH + CGFloat(i) * rowH
+                let legendIndex = withData.firstIndex { $0.name == s.name }
+                let slot = CGFloat(legendIndex ?? 0)
+                // Its slot: a stripe of the shared band at rest, its own row when apart.
+                // At rest every condition sits on the same spot, a little stacked, so each moment is one blended
+                // portrait of its air (owner, Nov 13). Apart, each settles into its own row.
+                let restY = bandH * 0.62 + (slot - CGFloat(slots - 1) / 2) * min(12, slotH * 0.4)
+                let midY = lerp(restY, rowTop + 26 + 18, t)
+                let boxH = lerp(slotH, 36, t)
 
-            guard s.points.count >= 2 else {
-                ctx.drawLayer { l in
-                    l.opacity = Double(t)
-                    l.draw(Text(s.note).font(.caption).foregroundStyle(.tertiary), at: CGPoint(x: inset, y: rowTop + 30), anchor: .topLeading)
+                // Name: on the left of its slot at rest (small), above its row when apart.
+                let nameY = lerp(2 + slot * 15, rowTop + 4, t)
+                labels.append((Text(s.name).font(.system(size: lerp(11, 15, t), weight: .semibold)).foregroundStyle(s.air.deep),
+                               CGPoint(x: inset, y: nameY), .topLeading, portrait ? rowsShown : (legendIndex != nil ? 1 : Double(t))))
+                guard s.points.count >= 2 else {
+                    labels.append((Text(s.note).font(.caption).foregroundStyle(.tertiary), CGPoint(x: inset, y: rowTop + 30), .topLeading, Double(t)))
+                    continue
                 }
-                continue
-            }
-            if let v = reading(s) {
-                ctx.drawLayer { l in
-                    l.opacity = Double(t)
-                    l.draw(Text("\(Int(v.rounded()))\(s.unit.isEmpty ? "" : " ")\(s.unit)").font(.caption.weight(.medium).monospacedDigit())
-                        .foregroundStyle(.secondary), at: CGPoint(x: w - inset, y: rowTop + 6), anchor: .topTrailing)
+                if let v = reading(s) {
+                    labels.append((Text("\(Int(v.rounded()))\(s.unit.isEmpty ? "" : " ")\(s.unit)").font(.caption.weight(.medium).monospacedDigit())
+                        .foregroundStyle(.secondary), CGPoint(x: w - inset, y: rowTop + 6), .topTrailing, Double(t)))
+                }
+
+                // Its own range: the chart compares when each condition ran high, never amounts across them.
+                let lo = s.points.map(\.1).min()!, hi = s.points.map(\.1).max()!
+                for p in s.points {
+                    let x = window.x(p.0, width: w)
+                    guard x > -40, x < w + 40 else { continue }
+                    let f = CGFloat(hi > lo ? (p.1 - lo) / (hi - lo) : 0.5)
+                    var rng = IslandRNG(seed: UInt64(bitPattern: Int64(p.0.timeIntervalSince1970)) &+ UInt64(i) &* 7919)
+                    let jx = CGFloat.random(in: -5...5, using: &rng) * (1 - t * 0.5), jy = CGFloat.random(in: -4...4, using: &rng) * (1 - t * 0.5)
+                    // Bigger and deeper when it ran high for this condition.
+                    let mh = lerp(min(bandH * 0.42, 16 + 58 * f), boxH * (0.45 + 0.5 * f), t)
+                    let mw = max(12, mh * CGFloat.random(in: 0.75...1.15, using: &rng)) * (s.name == "Wind" ? 1.35 : 1)
+                    let rect = CGRect(x: x - mw / 2 + jx, y: midY - mh / 2 + jy, width: mw, height: mh)
+                    let ahead = p.0 > now
+                    let alpha = Double(lerp(0.12 + 0.42 * f, 0.32 + 0.4 * f, t)) * (ahead ? 0.5 : 1) * rowsShown
+                    let shape = mark(s.name, rect)
+                    paint.fill(shape, with: .color(s.air.color.opacity(alpha)))
+                    // Pigment pools low in the wash: a smaller, deeper core towards the bottom.
+                    let core = rect.insetBy(dx: mw * 0.2, dy: mh * 0.22).offsetBy(dx: 0, dy: mh * 0.12)
+                    paint.fill(mark(s.name, core), with: .color(s.air.color.opacity(alpha * lerp(0.35, 0.6, t))))
                 }
             }
+        }
 
-            // The wave: its own range, 20–100% of the box's height.
-            let lo = s.points.map(\.1).min()!, hi = s.points.map(\.1).max()!
-            let pts = s.points.sorted { $0.0 < $1.0 }.map { p -> CGPoint in
-                let f = hi > lo ? (p.1 - lo) / (hi - lo) * 0.8 + 0.2 : 0.5
-                return CGPoint(x: window.x(p.0, width: w), y: base - CGFloat(f) * chartH)
-            }
-            let line = smooth(pts)
-            var area = line
-            area.addLine(to: CGPoint(x: pts.last!.x, y: base))
-            area.addLine(to: CGPoint(x: pts.first!.x, y: base))
-            area.closeSubpath()
+        // Paper grain over the washes, so they read as printed pigment rather than a gradient.
+        var grain = Path()
+        var g = IslandRNG(seed: 0xFE17)
+        let top = lerp(0, headerH, t), bottom = lerp(bandH, size.height, t)
+        for _ in 0..<Int(w * (bottom - top) / 55) {
+            let x = CGFloat.random(in: 0...w, using: &g), y = CGFloat.random(in: top...bottom, using: &g)
+            grain.addEllipse(in: CGRect(x: x, y: y, width: 0.9, height: 0.9))
+        }
+        ctx.fill(grain, with: .color(paper.opacity(0.45)))
 
+        for (text, at, anchor, opacity) in labels where opacity > 0.01 {
             ctx.drawLayer { l in
-                l.clip(to: Path(CGRect(x: 0, y: chartTop - 4, width: w, height: chartH + 4)))
-                // Together they overlap, so each is a little lighter; apart, each is as full as before.
-                let fill = lerp(0.55, 0.8, t)
-                l.fill(area, with: .linearGradient(Gradient(colors: [s.air.color.opacity(fill), s.air.glowColor.opacity(0.1)]),
-                                                   startPoint: CGPoint(x: 0, y: base - chartH), endPoint: CGPoint(x: 0, y: base)))
-                l.stroke(line, with: .color(s.air.deep.opacity(lerp(0.9, 1, t))), lineWidth: 1.5)
+                l.opacity = opacity
+                l.draw(text, at: at, anchor: anchor)
             }
+        }
+    }
+
+    private var paper: Color { Color(uiColor: .systemGroupedBackground) }
+
+    // MARK: The portrait
+
+    /// How strong each reading is on a fixed scale (not its own range), 0…1: this sets a mark's size and depth.
+    /// Temperature counts distance from mild, either way.
+    private func intensity(_ name: String, _ v: Double, _ s: Series) -> CGFloat {
+        let x: Double
+        switch name {
+        case "Temperature": x = abs(v - 65) / 35
+        case "Humidity": x = v / 100
+        case "Wind": x = v / 25
+        case "PM2.5": x = v / 35
+        case "Ozone": x = v / 70
+        default: x = v / max(s.points.map(\.1).max() ?? 1, 1)
+        }
+        return CGFloat(min(1, max(0.08, x)))
+    }
+
+    /// Soft pastel inks for the portrait, like pigment on paper. No deep reds.
+    private func pigment(_ name: String, _ v: Double) -> Color {
+        switch name {
+        case "Temperature": MenusAir.tempColor(v)
+        case "Humidity": Color(uiColor: Theme.AirPalette.sky)
+        case "Wind": Color(uiColor: Theme.AirPalette.mist)
+        case "PM2.5": Color(uiColor: Theme.AirPalette.periwinkle)
+        case "Ozone": Color(uiColor: Theme.AirPalette.pink)
+        case "Pollen": Color(uiColor: Theme.AirPalette.butter)
+        default: Color(uiColor: Theme.AirPalette.lilac)
+        }
+    }
+
+    /// The environment at the playhead as one picture (owner, Nov 13): every condition laid into the same field
+    /// as soft watercolour shapes that overlap and mix. Stronger means bigger, deeper and more pieces; a calm
+    /// reading is a faint small wash. It's one snapshot, the moment you're on, so it changes as you move.
+    private func drawPortrait(_ ctx: GraphicsContext, size: CGSize, fade: Double, lift: CGFloat) {
+        let present = series.compactMap { s in reading(s).map { (s, $0) } }
+        guard !present.isEmpty else { return }
+        let S = min(size.width - 2 * inset, bandH - 80)
+        let c = CGPoint(x: size.width / 2, y: 18 + S / 2 - lift)
+        // Where each condition settles in the field, as fractions of S from the centre: sky on top, ground below.
+        let anchors: [String: CGPoint] = [
+            "Temperature": CGPoint(x: 0, y: -0.24), "Humidity": CGPoint(x: -0.2, y: 0.02), "Wind": CGPoint(x: 0.08, y: -0.04),
+            "PM2.5": CGPoint(x: 0.2, y: 0.16), "Ozone": CGPoint(x: 0.24, y: -0.2), "Pollen": CGPoint(x: -0.16, y: 0.26),
+        ]
+        let seed = UInt64(bitPattern: Int64(window.center.timeIntervalSince1970 / 600))
+        ctx.drawLayer { paint in
+            paint.opacity = fade
+            paint.addFilter(.blur(radius: 3))
+            paint.blendMode = scheme == .dark ? .screen : .multiply
+            for (k, (s, v)) in present.enumerated() {
+                let f = intensity(s.name, v, s)
+                let ink = pigment(s.name, v)
+                let a = anchors[s.name] ?? .zero
+                var rng = IslandRNG(seed: seed &+ UInt64(k + 1) &* 104_729)
+                // The main wash, then smaller pieces around it: more of them when it's strong.
+                let pieces = 1 + Int((f * 4).rounded())
+                for j in 0..<pieces {
+                    let main = j == 0
+                    let size = S * (main ? 0.16 + 0.34 * f : CGFloat.random(in: 0.06...0.14, using: &rng) * (0.6 + f))
+                    let spread = main ? 0 : S * (0.1 + 0.16 * f)
+                    let p = CGPoint(x: c.x + a.x * S + CGFloat.random(in: -1...1, using: &rng) * spread,
+                                    y: c.y + a.y * S + CGFloat.random(in: -1...1, using: &rng) * spread)
+                    let r = CGRect(x: p.x - size / 2, y: p.y - size * 0.55, width: size * CGFloat.random(in: 0.8...1.1, using: &rng), height: size * 1.1)
+                    let alpha = (0.18 + 0.5 * Double(f)) * (main ? 1 : 0.8)
+                    paint.fill(mark(s.name, r), with: .color(ink.opacity(alpha)))
+                    // Pigment pools towards the bottom of each wash.
+                    let core = r.insetBy(dx: r.width * 0.22, dy: r.height * 0.24).offsetBy(dx: 0, dy: r.height * 0.14)
+                    paint.fill(mark(s.name, core), with: .color(ink.opacity(alpha * 0.5)))
+                }
+            }
+        }
+        // The key: each condition with its reading, small, under the picture.
+        var y = c.y + S / 2 + 12
+        var line: [Text] = []
+        for (s, v) in present {
+            line.append(Text("● ").foregroundStyle(pigment(s.name, v)) +
+                        Text("\(s.name) \(Int(v.rounded()))\(s.unit.isEmpty ? "" : " " + s.unit)   ").foregroundStyle(.secondary))
+        }
+        let rows = stride(from: 0, to: line.count, by: 3).map { Array(line[$0..<min($0 + 3, line.count)]) }
+        for row in rows {
+            ctx.drawLayer { l in
+                l.opacity = fade
+                l.draw(row.reduce(Text(""), +).font(.caption2.weight(.medium).monospacedDigit()), at: CGPoint(x: size.width / 2, y: y), anchor: .top)
+            }
+            y += 16
+        }
+    }
+
+    /// Each condition keeps one shape, so its marks stay findable when columns overlap: blocks for
+    /// temperature and particles, a soft drop for humidity, a long oval for wind, a round for ozone, a star for pollen.
+    private func mark(_ name: String, _ r: CGRect) -> Path {
+        switch name {
+        case "Humidity": return Path(roundedRect: r, cornerSize: CGSize(width: r.width / 2, height: r.width / 2))
+        case "Wind", "Ozone": return Path(ellipseIn: r)
+        case "Pollen":
+            var p = Path()
+            let c = CGPoint(x: r.midX, y: r.midY), R = min(r.width, r.height) / 2 * 1.1
+            for k in 0..<12 {
+                let a = CGFloat(k) * .pi / 6 - .pi / 2
+                let rr = k.isMultiple(of: 2) ? R : R * 0.58
+                let q = CGPoint(x: c.x + cos(a) * rr, y: c.y + sin(a) * rr)
+                k == 0 ? p.move(to: q) : p.addLine(to: q)
+            }
+            p.closeSubpath()
+            return p
+        default: return Path(roundedRect: r, cornerSize: CGSize(width: 2, height: 2))
         }
     }
 

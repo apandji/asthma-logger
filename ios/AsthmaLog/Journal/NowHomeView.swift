@@ -1065,6 +1065,7 @@ struct NowHomeView: View {
                                              apart: min(1, max(0, (menusScroll - (combined ? 0 : 300)) / 260)), big: combined,
                                              forecast: hours.map { ($0.date, $0.conditions) },
                                              history: historyHours.map { ($0.date, $0.conditions) },
+                                             yours: Set((model.report?.gatedRows ?? []).map(\.id)),
                                              dayTitle: combined ? MenusDayTitle(window: menusWindow, now: now, verdict: menusVerdict,
                                                                                 backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil }) : nil)
                                     .padding(.bottom, 120)   // clear of the tab bar and the +

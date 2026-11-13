@@ -677,6 +677,8 @@ struct MenusDetails: View {
     var forecast: [(Date, Conditions)] = []
     /// The hours behind now, as they were, at the forecast's place.
     var history: [(Date, Conditions)] = []
+    /// Your gated patterns, as lift-table ids ("ozone:high"): the weave inks those cells orange.
+    var yours: Set<String> = []
     @AppStorage(Crit.ChartStyle.key) private var chartStyle = Crit.ChartStyle.filled
     /// With the combined chart, the day's title sits just below it (owner, Nov 13).
     var dayTitle: MenusDayTitle? = nil
@@ -694,15 +696,15 @@ struct MenusDetails: View {
             // and as you scroll down the lines part into their own rows.
             MenusEnvironment(window: window, rescues: rescues, ink: window.ink(events), apart: apart, bandH: big ? 300 : 132, series: [
                 // Each its own hue from the air palette, so the lines stay apart when they overlap.
-                .init(name: "Temperature", air: Theme.AirInk(core: Theme.AirPalette.coral, glow: Theme.AirPalette.peach), points: series(.temperature), marks: marks(.temperature), unit: "°F"),
-                .init(name: "Humidity", air: Theme.AirInk(core: Theme.AirPalette.mint, glow: Theme.AirPalette.sky), points: series(.humidity), marks: marks(.humidity), unit: "%"),
-                .init(name: "Wind", air: Theme.AirInk(core: Theme.AirPalette.sky, glow: Theme.AirPalette.mist), points: series(.windSpeed), marks: marks(.windSpeed), unit: "mph"),
+                .init(name: "Temperature", air: Theme.AirInk(core: Theme.AirPalette.coral, glow: Theme.AirPalette.peach), points: series(.temperature), marks: marks(.temperature), unit: "°F", levels: levels(.temperature)),
+                .init(name: "Humidity", air: Theme.AirInk(core: Theme.AirPalette.mint, glow: Theme.AirPalette.sky), points: series(.humidity), marks: marks(.humidity), unit: "%", levels: levels(.humidity)),
+                .init(name: "Wind", air: Theme.AirInk(core: Theme.AirPalette.sky, glow: Theme.AirPalette.mist), points: series(.windSpeed), marks: marks(.windSpeed), unit: "mph", levels: levels(.windSpeed)),
                 .init(name: "Pressure", air: Theme.airStorm, points: [], unit: "", note: "Not tracked yet"),
-                .init(name: "PM2.5", air: Theme.airPM25, points: series(.pm25), marks: marks(.pm25), unit: "µg"),
-                .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), marks: marks(.ozone), unit: "ppb"),
-                .init(name: "Pollen", air: Theme.airPollen, points: pollenLine, marks: pollenMarks, unit: ""),
+                .init(name: "PM2.5", air: Theme.airPM25, points: series(.pm25), marks: marks(.pm25), unit: "µg", levels: levels(.pm25)),
+                .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), marks: marks(.ozone), unit: "ppb", levels: levels(.ozone)),
+                .init(name: "Pollen", air: Theme.airPollen, points: pollenLine, marks: pollenMarks, unit: "", levels: pollenLevels),
                 .init(name: "Flu and illness", air: Theme.airIllness, points: [], unit: "", note: "Not tracked yet"),
-            ], width: $chartWidth, footer: dayTitle, edge: big, now: now, quiet: chartStyle == .quiet)
+            ], width: $chartWidth, footer: dayTitle, edge: big, now: now, style: chartStyle)
             section("Body", "From your logs and Apple Health") {
                 VStack(spacing: 0) {
                     dots("Inhaler use", shown.filter { $0.moment == .rescue || $0.moment == .maintenance }
@@ -752,6 +754,55 @@ struct MenusDetails: View {
         shown.compactMap { e in
             guard e.moment != .note, let v = e.conditions?.best(s)?.value else { return nil }
             return .init(date: e.loggedAt, value: v, moment: e.moment)
+        }
+    }
+
+    /// How heightened one condition is each hour, for the weave: 0 ordinary, 1 heightened, 2 high. The same
+    /// bands the patterns use (`Banding`), so a cell and a pattern mean the same thing; wind has no band yet, so
+    /// its edges (15 and 25 mph) are only for drawing.
+    private func levels(_ s: Signal) -> [MenusEnvironment.Cell] {
+        hourly.compactMap { h in
+            guard let v = h.1.best(s)?.value else { return nil }
+            let (level, id): (Int, String?) = switch s {
+            case .temperature:
+                switch Banding.temp(v, isExtreme: Banding.isExtremeTemp(v)) {
+                case .hot: (Banding.isExtremeTemp(v) ? 2 : 1, "temp:hot")
+                case .cold: (Banding.isExtremeTemp(v) ? 2 : 1, "temp:cold")
+                default: (0, nil)
+                }
+            case .humidity:
+                switch Banding.humidity(v) {
+                case .humid: (1, "humidity:humid")
+                case .dry: (1, "humidity:dry")
+                default: (0, nil)
+                }
+            case .pm25:
+                switch Banding.pm25(v) {
+                case .high: (2, "pm25:high")
+                case .moderate: (1, "pm25:moderate")
+                default: (0, nil)
+                }
+            case .ozone:
+                switch Banding.ozone(ppb: v) {
+                case .high: (2, "ozone:high")
+                case .moderate: (1, "ozone:moderate")
+                default: (0, nil)
+                }
+            case .windSpeed: (v >= 25 ? 2 : v >= 15 ? 1 : 0, nil)
+            default: (0, nil)
+            }
+            return .init(date: h.0, level: level, yours: id.map(yours.contains) ?? false)
+        }
+    }
+
+    /// Pollen's level each hour: the highest of tree, grass and weed, each on its own scale.
+    private var pollenLevels: [MenusEnvironment.Cell] {
+        hourly.compactMap { h in
+            guard let p = DemoPollen.from(h.1) else { return nil }
+            let top = p.kinds.map(\.level).max() ?? .low
+            let weed = p.weed.level
+            return .init(date: h.0, level: top.rawValue,
+                         yours: weed != .low && yours.contains("pollen_weed:\(weed == .high ? "high" : "moderate")"))
         }
     }
 
@@ -903,8 +954,19 @@ struct MenusEnvironment: View {
         var marks: [Mark] = []
         let unit: String
         var note: String = "No readings here"
+        /// For the weave: how heightened it is each hour.
+        var levels: [Cell] = []
         var id: String { name }
         var hasData: Bool { points.count >= 2 || !marks.isEmpty }
+    }
+
+    /// One hour of one condition in the weave.
+    struct Cell {
+        let date: Date
+        /// 0 ordinary, 1 heightened, 2 high.
+        let level: Int
+        /// The level is one of this person's patterns.
+        var yours = false
     }
 
     let window: MenusWindow
@@ -922,8 +984,9 @@ struct MenusEnvironment: View {
     /// readings keep a small inset.
     var edge = false
     var now = Date()
-    /// Thin grey lines with no fill; the only colour is the moments' (Crit.ChartStyle.quiet).
-    var quiet = false
+    /// Filled waves, thin grey lines with no fill, or the weave (Crit.ChartStyle).
+    var style = Crit.ChartStyle.filled
+    private var quiet: Bool { style == .quiet }
     private var inset: CGFloat { edge ? MenusColumns.page + MenusColumns.card : 0 }
     /// Hours further apart than this aren't joined.
     private static let maxGap: TimeInterval = 3.5 * 3600
@@ -979,6 +1042,7 @@ struct MenusEnvironment: View {
         let t = apart * apart * (3 - 2 * apart)
         let w = size.width
         let withData = series.filter(\.hasData)
+        if style == .weave { drawWeave(ctx, size, t: t, withData: withData); return }
 
         // Rescue moments: faint orange rules through the shared band, then through each row.
         for r in rescues {
@@ -1081,6 +1145,77 @@ struct MenusEnvironment: View {
                         l.fill(ring, with: .color(Color(uiColor: .systemGroupedBackground)))
                         l.stroke(ring, with: .color(Color.primary.opacity(0.45)), lineWidth: 1)
                     }
+                }
+            }
+        }
+    }
+
+    /// The weave: a row per condition, a cell per hour, inked only when that condition is heightened. Together,
+    /// the rows share the band, top to bottom; apart, each sits in its own row like the other drawings. An hour
+    /// with no reading has no thread under it. The forecast's cells are hollow: a guess.
+    private func drawWeave(_ ctx: GraphicsContext, _ size: CGSize, t: CGFloat, withData: [Series]) {
+        let w = size.width
+        let slice = bandH / CGFloat(max(1, withData.count))
+        let hour = max(1, w * CGFloat(3600 / window.span))
+        let paper = Color(uiColor: .systemGroupedBackground)
+
+        // Rescue moments: an orange rule down through every row, so you read across it what was heightened then.
+        for r in rescues {
+            let x = window.x(r, width: w)
+            guard x >= 0, x <= w else { continue }
+            var rule = Path()
+            rule.move(to: CGPoint(x: x, y: lerp(0, headerH, t)))
+            rule.addLine(to: CGPoint(x: x, y: lerp(bandH, size.height, t)))
+            ctx.stroke(rule, with: .color(Theme.rescue.opacity(0.55)), lineWidth: 1.5)
+        }
+
+        for (i, s) in series.enumerated() {
+            let rowTop = headerH + CGFloat(i) * rowH
+            guard let k = withData.firstIndex(where: { $0.name == s.name }) else {
+                // No readings: its name and note arrive as the rows part, as in the other drawings.
+                ctx.drawLayer { l in
+                    l.opacity = Double(t)
+                    l.draw(Text(s.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(.secondary),
+                           at: CGPoint(x: inset, y: rowTop + 4), anchor: .topLeading)
+                    l.draw(Text(s.note).font(.caption).foregroundStyle(.tertiary), at: CGPoint(x: inset, y: rowTop + 30), anchor: .topLeading)
+                }
+                continue
+            }
+            let restTop = CGFloat(k) * slice
+            let cellTop = lerp(restTop + 20, rowTop + 26, t)
+            let cellH = lerp(max(10, slice - 28), 30, t)
+            let mid = cellTop + cellH / 2
+
+            // The level at the playhead: the name darkens when its thread is inked there.
+            let here = s.levels.filter { $0.date <= window.center }.max { $0.date < $1.date }
+            let lit = (here?.level ?? 0) > 0 && here.map { window.center.timeIntervalSince($0.date) < 2 * 3600 } ?? false
+            let nameInk: Color = lit ? (here?.yours == true ? Theme.rescue : .primary) : Color.primary.opacity(0.45)
+            ctx.draw(Text(s.name).font(.system(size: lerp(12, 15, t), weight: .semibold)).foregroundStyle(nameInk),
+                     at: CGPoint(x: inset, y: lerp(restTop + 2, rowTop + 4, t)), anchor: .topLeading)
+            if let v = reading(s) {
+                ctx.drawLayer { l in
+                    l.opacity = Double(t)
+                    l.draw(Text("\(Int(v.rounded()))\(s.unit.isEmpty ? "" : " ")\(s.unit)").font(.caption.weight(.medium).monospacedDigit())
+                        .foregroundStyle(.secondary), at: CGPoint(x: w - inset, y: rowTop + 6), anchor: .topTrailing)
+                }
+            }
+
+            for c in s.levels {
+                let x = window.x(c.date, width: w)
+                guard x + hour >= 0, x <= w else { continue }
+                let ahead = c.date > now
+                // The thread: a hairline under every hour that has a reading.
+                ctx.fill(Path(CGRect(x: x, y: mid - 0.5, width: hour, height: 1)), with: .color(Color.primary.opacity(ahead ? 0.10 : 0.18)))
+                guard c.level > 0 else { continue }
+                let ink = c.yours ? Theme.rescue : Color.primary
+                // Heightened is a half-height cell, high a full one.
+                let h = c.level >= 2 ? cellH : cellH * 0.5
+                let cell = Path(roundedRect: CGRect(x: x + 0.5, y: mid - h / 2, width: max(1, hour - 1), height: h), cornerRadius: min(2, hour / 3))
+                if ahead {
+                    ctx.fill(cell, with: .color(paper))
+                    ctx.stroke(cell, with: .color(ink.opacity(c.level >= 2 ? 0.7 : 0.4)), lineWidth: 1)
+                } else {
+                    ctx.fill(cell, with: .color(ink.opacity(c.level >= 2 ? 0.85 : 0.38)))
                 }
             }
         }

@@ -216,11 +216,20 @@ enum Crit {
 
     /// The combined chart's drawing (owner, Nov 13: "not convinced this is the best way to visualize"). Filled is
     /// April's: each condition a soft filled wave in its own hue. Quiet draws every line thin and grey with no
-    /// fill, so the only colour is orange: your rescue moments, on the air's day. Both draw the same data.
+    /// fill, so the only colour is orange: your rescue moments, on the air's day. Weave (owner, Nov 13: "this feels
+    /// overwhelming... what is heightened") draws no lines at all: a row per condition, a cell per hour, inked only
+    /// when that condition is heightened, denser when high, orange where it's one of your patterns. All three draw
+    /// the same data.
     enum ChartStyle: String, CaseIterable, Identifiable {
-        case filled, quiet
+        case filled, quiet, weave
         var id: String { rawValue }
-        var title: String { self == .filled ? "Filled waves (April)" : "Quiet lines, orange for yours" }
+        var title: String {
+            switch self {
+            case .filled: "Filled waves (April)"
+            case .quiet: "Quiet lines, orange for yours"
+            case .weave: "Weave: only what's heightened"
+            }
+        }
         static let key = "crit.chartStyle"
         static var current: ChartStyle { UserDefaults.standard.string(forKey: key).flatMap(ChartStyle.init) ?? .filled }
     }

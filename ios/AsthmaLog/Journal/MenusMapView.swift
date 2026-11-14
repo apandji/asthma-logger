@@ -97,3 +97,36 @@ struct MomentsGridIcon: View {
         .accessibilityHidden(true)
     }
 }
+
+/// The Home tab's mark (owner, Nov 13): one of Home's fans, open on its stem, in outline like the other tab icons.
+struct FanIcon: View {
+    var size: CGFloat = 24
+    var body: some View {
+        Canvas { ctx, s in
+            let w = s.width, lw = w * 0.075
+            let pivot = CGPoint(x: w / 2, y: w * 0.56)
+            let r = w * 0.44
+            let spread = 150.0 * .pi / 180
+            // The fan: a wedge with a cloud rim of three soft bumps.
+            var fan = Path()
+            fan.move(to: pivot)
+            let steps = 60, bumps = 3.0
+            for j in 0...steps {
+                let t = Double(j) / Double(steps)
+                let a = -Double.pi / 2 - spread / 2 + spread * t
+                let p = (t * bumps).truncatingRemainder(dividingBy: 1)
+                let rr = r * CGFloat(0.86 + 0.14 * (1 - pow(2 * p - 1, 2)).squareRoot())
+                fan.addLine(to: CGPoint(x: pivot.x + cos(a) * rr, y: pivot.y + sin(a) * rr))
+            }
+            fan.closeSubpath()
+            ctx.stroke(fan, with: .foreground, style: StrokeStyle(lineWidth: lw, lineCap: .round, lineJoin: .round))
+            // The stem.
+            var stem = Path()
+            stem.move(to: pivot)
+            stem.addLine(to: CGPoint(x: pivot.x, y: w * 0.98))
+            ctx.stroke(stem, with: .foreground, style: StrokeStyle(lineWidth: lw, lineCap: .round))
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}

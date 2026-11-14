@@ -22,7 +22,7 @@ enum MenusScale: String, CaseIterable, Identifiable {
 }
 
 /// The bottom switch: the moments (this page at the chosen scale) or Insights, in place.
-enum MenusTab: Hashable { case home, moments, map, insights }
+enum MenusTab: Hashable { case home, moments, map, insights, log }
 
 // MARK: Top bar
 
@@ -291,39 +291,57 @@ struct MenusBottomBar: View {
     let firstLabel: String
     /// `true`: voice memo (log a rescue and listen); `false`: log symptoms (log a rescue and write).
     let felt: (Bool) -> Void
-    @State private var open = false
+    /// Where the log sheet zooms from.
+    let logSource: Namespace.ID
+    @Namespace private var selection
+    /// The bar and the + share one height and one centre line (owner, Nov 13).
+    private let barH: CGFloat = 60
+    private let tabs: [MenusTab] = [.home, .moments, .map, .insights]
+    @State private var tabsWidth: CGFloat = 1
+    /// While a finger slides along the bar: the lens grows a little and follows it (Apple's tab bar, iOS 26).
+    @State private var sliding = false
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        // One glass group, so the tabs and the + read as one piece of Liquid Glass that parts in two
+        // (owner, Nov 13, after Instagram and Linear).
+        GlassEffectContainer(spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             HStack(spacing: 0) {
                 // Home (the flowers), Moments as a grid of rings, the Map, then Insights (owner, Nov 13).
-                segment(firstLabel, AnyView(Image(systemName: firstLabel == "Home" ? "house" : "chart.bar.xaxis")
-                                                .font(Theme.Figtree.font(size: 22, weight: .medium))), .home)
-                segment("Moments", AnyView(MomentsGridIcon(size: 21)), .moments)
-                segment("Map", AnyView(Image(systemName: "map").font(Theme.Figtree.font(size: 22, weight: .medium))), .map)
-                segment("Insights", AnyView(Image(systemName: "sparkles").font(Theme.Figtree.font(size: 22, weight: .semibold))), .insights)
+                // One optical size for every icon.
+                segment(firstLabel, AnyView(FanIcon(size: 23)), .home)
+                segment("Moments", AnyView(MomentsGridIcon(size: 20)), .moments)
+                segment("Map", AnyView(Image(systemName: "map").font(.system(size: 20, weight: .medium))), .map)
+                segment("Insights", AnyView(Image(systemName: "sparkles").font(.system(size: 20, weight: .medium))), .insights)
             }
-            .padding(.horizontal, 6)
-            .glassEffect(.regular, in: .capsule)
-            Spacer()
-            Button { withAnimation(Theme.snap) { open.toggle() } } label: {
-                Image(systemName: open ? "xmark" : "plus").font(Theme.Figtree.font(.title2, weight: .semibold))
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 56, height: 56)
-                    // Solid ink, like a rescue pill (owner, Nov 13).
-                    .background(Circle().fill(Color.black))
-                    .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+            .padding(5)
+            .frame(height: barH)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { tabsWidth = $0 }
+            .glassEffect(.regular.interactive(), in: .capsule)
+            // Slide a finger along the bar and the lens follows it from tab to tab.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { v in
+                        if !sliding { withAnimation(Theme.snap) { sliding = true } }
+                        let i = Int((v.location.x - 5) / max((tabsWidth - 10) / CGFloat(tabs.count), 1))
+                        let t = tabs[min(max(i, 0), tabs.count - 1)]
+                        if t != tab { withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { tab = t } }
+                    }
+                    .onEnded { _ in withAnimation(Theme.snap) { sliding = false } }
+            )
+            // The + (owner, Nov 13): straight into the log sheet, which zooms out of this button (`logSource`).
+            // The sheet has the mic and the keyboard, so there's no choice to make first.
+            Button { felt(false) } label: {
+                Image(systemName: "plus").font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: barH, height: barH)
+                    .contentShape(Circle())
+                    // The sheet zooms out of here (on the label: glass draws the button in its own layer).
+                    .matchedTransitionSource(id: "log", in: logSource)
             }
-            .buttonStyle(PressStyle())
-            .foregroundStyle(.white)
-            .accessibilityLabel(open ? "Close" : "Log")
-            .overlay(alignment: .bottomTrailing) {
-                if open {
-                    feltCard
-                        .offset(y: -68)
-                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottomTrailing)))
-                }
-            }
+            .glassEffect(.regular.tint(.black).interactive(), in: .circle)
+            .accessibilityLabel("Log")
+        }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
@@ -332,44 +350,26 @@ struct MenusBottomBar: View {
 
     private func segment(_ label: String, _ icon: AnyView, _ t: MenusTab) -> some View {
         Button { withAnimation(Theme.snap) { tab = t } } label: {
-            VStack(spacing: 4) {
-                icon.frame(height: 28)
-                Text(label).font(Theme.Figtree.font(.caption2, weight: .semibold))
-            }
-            .foregroundStyle(tab == t ? Color.primary : Color.secondary)
-            .frame(width: 70, height: 56)
-            .contentShape(Rectangle())
+            // Icons only for now (owner, Nov 13); the name stays for VoiceOver. Equal segments, the chosen one
+            // on a soft capsule that slides between them.
+            icon.frame(width: 24, height: 24)
+                .foregroundStyle(tab == t ? Color.primary : Color.primary.opacity(0.55))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background {
+                    if tab == t {
+                        // The lens: a soft capsule that slides between tabs, a touch larger while you slide.
+                        Capsule().fill(Color.primary.opacity(sliding ? 0.12 : 0.08))
+                            .scaleEffect(sliding ? 1.08 : 1)
+                            .matchedGeometryEffect(id: "tab", in: selection)
+                    }
+                }
+                .contentShape(Capsule())
         }
         .buttonStyle(PressStyle())
+        .accessibilityLabel(label)
         .accessibilityAddTraits(tab == t ? .isSelected : [])
     }
 
-    private var feltCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Felt something?").font(Theme.Figtree.font(.subheadline, weight: .semibold))
-            option("Voice memo", "mic") { felt(true) }
-            option("Log symptoms", "square.and.pencil") { felt(false) }
-        }
-        .padding(16)
-        .frame(width: 210, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
-    }
-
-    private func option(_ label: String, _ symbol: String, _ action: @escaping () -> Void) -> some View {
-        Button {
-            withAnimation(Theme.snap) { open = false }
-            action()
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: symbol).foregroundStyle(Theme.rescue).frame(width: 20)
-                Text(label)
-            }
-            .font(Theme.Figtree.font(.body))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .foregroundStyle(.primary)
-    }
 }
 
 // MARK: Side menu

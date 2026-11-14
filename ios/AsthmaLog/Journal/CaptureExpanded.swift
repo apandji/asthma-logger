@@ -129,7 +129,7 @@ struct CaptureExpanded: View {
 /// answer in a bubble on the right (streaming as you speak, the words it's picking up lit), then what it
 /// heard as chips you can untick, then the next question. The questions are a fixed set (`Interview`), never
 /// generated, and it ends after a few. Quick replies sit above the composer for when you can't talk.
-private struct ChatCapture: View {
+struct ChatCapture: View {
     @Bindable var session: CaptureSession
     let finish: () -> Void
     @State private var typing = false
@@ -149,7 +149,7 @@ private struct ChatCapture: View {
                                 .id("live")
                         }
                         if session.done {
-                            Text("That's everything. Done keeps it with this moment.")
+                            Text("Moment logged.")
                                 .font(.subheadline).foregroundStyle(Theme.secondaryText).id("done")
                         }
                     }
@@ -341,7 +341,7 @@ private struct ChatCapture: View {
 /// The classic journal entry: your words at the top (spoken or typed, the words it's picking up lit), then
 /// the same questions as sections of chips, in the providers' order. Everything visible at once, nothing
 /// asked; you fill what applies.
-private struct JournalCapture: View {
+struct JournalCapture: View {
     @Bindable var session: CaptureSession
 
     var body: some View {

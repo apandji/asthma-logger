@@ -7,7 +7,7 @@ design decisions they test are in [../design/hide-reveal-ledger.md](../design/hi
 ## Thesis
 
 > Systems that index the world make it usable by flattening it: many measurements become one number, one
-> colour, one ranked feed. Every flattening is a decision about what to hide, and when people cannot see that
+> colour, one summary. Every flattening is a decision about what to hide, and when people cannot see that
 > decision or undo it, they lose the ability to judge for themselves. My work rebuilds these summaries so they
 > can be opened, giving back what was hidden and, with it, the choice of what to do.
 

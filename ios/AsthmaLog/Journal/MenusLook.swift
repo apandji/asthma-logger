@@ -723,7 +723,7 @@ struct MenusDetails: View {
                 .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), unit: "ppb"),
                 .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: "% of a high day"),
                 .init(name: "Flu and illness", air: Theme.airIllness, points: [], unit: "", note: "Not tracked yet"),
-            ], width: $chartWidth, footer: dayTitle, edge: big, now: now, triggers: triggers)
+            ], width: $chartWidth, footer: dayTitle, edge: big, now: now, triggers: triggers, airMissing: airMissing)
             section("Body", "From your logs and Apple Health") {
                 VStack(spacing: 0) {
                     dots("Inhaler use", shown.filter { $0.moment == .rescue || $0.moment == .maintenance }
@@ -762,6 +762,19 @@ struct MenusDetails: View {
         let ahead = forecast.filter { $0.0 > now && $0.0 <= window.end.addingTimeInterval(pad) }
             .compactMap { h in h.1.best(s).map { (h.0, $0.value) } }
         return (logged + ahead).sorted { $0.0 < $1.0 }
+    }
+
+    /// No air at the playhead (owner, Nov 13): the moment you're on has no reading, or there's no moment or
+    /// forecast hour within three hours of it. The fans close and the stems sink.
+    private var airMissing: Bool {
+        let c = window.center
+        if let m = shown.filter({ $0.moment != .okay && abs($0.loggedAt.timeIntervalSince(c)) < 30 * 60 })
+            .min(by: { abs($0.loggedAt.timeIntervalSince(c)) < abs($1.loggedAt.timeIntervalSince(c)) }) {
+            return !(m.conditions?.input.hasAnyValue ?? false)
+        }
+        let near = shown.contains { abs($0.loggedAt.timeIntervalSince(c)) < 3 * 3600 && ($0.conditions?.input.hasAnyValue ?? false) }
+            || forecast.contains { abs($0.0.timeIntervalSince(c)) < 3 * 3600 }
+        return !near
     }
 
     /// The highest of tree, grass and weed pollen at each moment.
@@ -921,6 +934,8 @@ struct MenusEnvironment: View {
     var now: Date = .now
     /// How much each condition is one of your triggers, 0…1, by series name (from the gated lift rows).
     var triggers: [String: Double] = [:]
+    /// No air at the playhead: close every fan and sink the stems.
+    var airMissing = false
     /// The portrait's key, shown for the swatch you tap (owner, Nov 13).
     @State private var tapped: (name: String, at: CGPoint)?
     @State private var hideTap: Task<Void, Never>?
@@ -939,14 +954,19 @@ struct MenusEnvironment: View {
         return e < Self.openDuration ? Int(e * Self.fps) : nil
     }
 
-    /// How far each fan should be open at the playhead, 0…1 (closed with no reading).
+    /// How far each fan should be open at the playhead, 0…1 (closed with no reading). "__stem" is how tall the
+    /// stems stand: shorter when there's no reading at all (owner, Nov 13). Both ease with the same tween.
     private func targetOpens() -> [String: CGFloat] {
         var out: [String: CGFloat] = [:]
+        let none = noAir
         for s in series where s.note != "Not tracked yet" {
-            out[s.name] = reading(s).map { intensity(s.name, $0, s) } ?? 0
+            out[s.name] = none ? 0 : reading(s).map { intensity(s.name, $0, s) } ?? 0
         }
+        out["__stem"] = none ? 0.4 : 1
         return out
     }
+
+    private var noAir: Bool { airMissing }
 
     /// The opening at a moment in the tween, eased in and out.
     private func shownOpens(at t: Date) -> [String: CGFloat] {
@@ -1260,6 +1280,9 @@ struct MenusEnvironment: View {
                 }
             }
         }
+        // No reading at all: the stems sink to a fraction of their height (the fans are closed, so they can't touch).
+        let grow = opens?["__stem"] ?? (noAir ? 0.4 : 1)
+        for k in spots.indices { spots[k].y = ground - (ground - spots[k].y) * grow }
         return present.enumerated().map { i, sv in
             let (s, v) = sv
             let p = spots[i]

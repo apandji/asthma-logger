@@ -447,20 +447,22 @@ struct CaptureChip: View {
         self.label = label; kind = nil; self.on = on; self.action = action
     }
 
-    private var ink: Color { kind == .trigger || kind == nil ? .white : Theme.symptom }
+    /// Menus look (owner, Nov 13): one ink, black when chosen, for every kind, the same as the app's marks.
+    private var menus: Bool { Crit.AppLook.current == .menus }
+    private var ink: Color { menus ? .black : kind == .trigger || kind == nil ? .white : Theme.symptom }
 
     var body: some View {
         Button(action: action) {
             Text(label)
                 .font(small ? .subheadline.weight(.medium) : .body.weight(.medium))
-                .foregroundStyle(on ? Color.black : .primary)
+                .foregroundStyle(on ? (menus ? Color.white : Color.black) : .primary)
                 .padding(.horizontal, small ? 12 : 16)
                 .frame(minHeight: small ? 32 : 44)
                 .background(Capsule().fill(on ? AnyShapeStyle(ink) : AnyShapeStyle(Color.primary.opacity(0.1))))
                 .overlay {
                     if suggested && !on {
                         Capsule().strokeBorder(ink.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
-                    } else if kind == .symptom || kind == .outcome, !on {
+                    } else if !menus, kind == .symptom || kind == .outcome, !on {
                         Capsule().strokeBorder(Theme.symptom.opacity(0.45), lineWidth: 1)
                     }
                 }

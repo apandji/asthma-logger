@@ -8,6 +8,9 @@ tested, the Status column says so.
 
 ## The argument this serves (owner, Nov 12)
 
+The thesis as now worded, with its research questions and studies: [../research/thesis.md](../research/thesis.md).
+The sources: [../research/literature-review.md](../research/literature-review.md).
+
 felt air is one of several works behind a larger argument: indexes and other flattening systems choose what to
 hide and what to reveal, and when they flatten, they take agency away from the person. The Air Quality Index is
 the case here. It folds six pollutants, a monitor that may be miles away and a population threshold into one

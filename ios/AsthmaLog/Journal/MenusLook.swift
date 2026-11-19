@@ -22,7 +22,7 @@ enum MenusScale: String, CaseIterable, Identifiable {
 }
 
 /// The bottom switch: the moments (this page at the chosen scale) or Insights, in place.
-enum MenusTab: Hashable { case moments, insights }
+enum MenusTab: Hashable { case home, moments, map, insights, log }
 
 // MARK: Top bar
 
@@ -34,28 +34,14 @@ struct MenusTopBar: View {
     var body: some View {
         HStack {
             Button(action: openMenu) {
-                Image(systemName: "line.3.horizontal").font(.subheadline.weight(.semibold))
+                Image(systemName: "line.3.horizontal").font(Theme.Figtree.font(.subheadline, weight: .semibold))
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .accessibilityLabel("Menu")
             Spacer()
-            Menu {
-                Picker("Scale", selection: $scale) {
-                    ForEach(MenusScale.allCases) { Text($0.title).tag($0) }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(scale.title)
-                    Image(systemName: "chevron.down").font(.caption.weight(.bold))
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 14).padding(.vertical, 9)
-                .glassEffect(.regular.interactive(), in: .capsule)
-            }
-            .accessibilityLabel("Scale, \(scale.title)")
+            // No scale menu (owner, Nov 13): Moments has its own Day, Month and Year.
         }
         .padding(.horizontal, 20)
     }
@@ -163,8 +149,13 @@ enum SkyDial {
         if rescue || standard {
             let c = r * 0.62
             let circle = Path(ellipseIn: CGRect(x: p.x - c, y: p.y - c, width: 2 * c, height: 2 * c))
-            ctx.fill(circle, with: .color(rescue ? Theme.rescue : Theme.standardSoft))
-            ctx.stroke(circle, with: .color(.white), lineWidth: 1)
+            // One ink: rescue filled, standard an outline (owner, Nov 13).
+            if rescue {
+                ctx.fill(circle, with: .color(.primary))
+                ctx.stroke(circle, with: .color(.white), lineWidth: 1)
+            } else {
+                ctx.stroke(circle, with: .color(.primary), lineWidth: 1.2)
+            }
         }
         if note { ctx.fill(Path(ellipseIn: CGRect(x: rect.maxX - 1.5, y: rect.minY - 1.5, width: 3.5, height: 3.5)), with: .color(.primary)) }
     }
@@ -203,8 +194,8 @@ struct MenusLanes: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.title2.weight(.bold))
-            Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+            Text(title).font(Theme.Figtree.font(.title2, weight: .bold))
+            Text(subtitle).font(Theme.Figtree.font(.subheadline)).foregroundStyle(.secondary)
             Canvas { ctx, size in draw(&ctx, size) }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.top, 14)
@@ -220,7 +211,7 @@ struct MenusLanes: View {
         let youY: CGFloat = 14
         let laneH = min(54, (size.height - 70) / CGFloat(Self.lanes.count))
         func text(_ s: String, _ p: CGPoint, bold: Bool = false, anchor: UnitPoint = .leading) {
-            ctx.draw(Text(s).font(.caption.weight(bold ? .semibold : .medium)).foregroundStyle(bold ? Color.primary : Color.secondary), at: p, anchor: anchor)
+            ctx.draw(Text(s).font(Theme.Figtree.font(.caption, weight: bold ? .semibold : .medium)).foregroundStyle(bold ? Color.primary : Color.secondary), at: p, anchor: anchor)
         }
         // You
         text("You", CGPoint(x: 0, y: youY), bold: true)
@@ -228,8 +219,8 @@ struct MenusLanes: View {
         for e in events where e.loggedAt >= start && e.loggedAt < end {
             let mx = x(e.loggedAt)
             switch e.moment {
-            case .rescue: ctx.fill(Path(CGRect(x: mx - 3.5, y: youY - 11, width: 7, height: 7)), with: .color(Theme.rescue))
-            case .maintenance where !rescuesOnly: ctx.stroke(Path(CGRect(x: mx - 2.5, y: youY + 4, width: 5, height: 5)), with: .color(Theme.standard), lineWidth: 1)
+            case .rescue: ctx.fill(Path(CGRect(x: mx - 3.5, y: youY - 11, width: 7, height: 7)), with: .color(.primary))
+            case .maintenance where !rescuesOnly: ctx.stroke(Path(CGRect(x: mx - 2.5, y: youY + 4, width: 5, height: 5)), with: .color(.primary), lineWidth: 1)
             case .note where !rescuesOnly: ctx.fill(Path(ellipseIn: CGRect(x: mx - 1.5, y: youY + 13, width: 3, height: 3)), with: .color(.primary))
             default: break
             }
@@ -300,78 +291,85 @@ struct MenusBottomBar: View {
     let firstLabel: String
     /// `true`: voice memo (log a rescue and listen); `false`: log symptoms (log a rescue and write).
     let felt: (Bool) -> Void
-    @State private var open = false
+    /// Where the log sheet zooms from.
+    let logSource: Namespace.ID
+    @Namespace private var selection
+    /// The bar and the + share one height and one centre line (owner, Nov 13).
+    private let barH: CGFloat = 60
+    private let tabs: [MenusTab] = [.home, .moments, .map, .insights]
+    @State private var tabsWidth: CGFloat = 1
+    /// While a finger slides along the bar: the lens grows a little and follows it (Apple's tab bar, iOS 26).
+    @State private var sliding = false
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        // One glass group, so the tabs and the + read as one piece of Liquid Glass that parts in two
+        // (owner, Nov 13, after Instagram and Linear).
+        GlassEffectContainer(spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             HStack(spacing: 0) {
-                segment(firstLabel, firstLabel == "Moments" ? "list.bullet" : "chart.bar.xaxis", .moments)
-                segment("Insights", "sparkles", .insights)
+                // Home (the flowers), Moments as a grid of rings, the Map, then Insights (owner, Nov 13).
+                // One optical size for every icon.
+                segment(firstLabel, AnyView(FanIcon(size: 23)), .home)
+                segment("Moments", AnyView(MomentsGridIcon(size: 20)), .moments)
+                segment("Map", AnyView(Image(systemName: "map").font(.system(size: 20, weight: .medium))), .map)
+                segment("Insights", AnyView(Image(systemName: "sparkles").font(.system(size: 20, weight: .medium))), .insights)
             }
-            .padding(.horizontal, 6)
-            .glassEffect(.regular, in: .capsule)
-            Spacer()
-            Button { withAnimation(Theme.snap) { open.toggle() } } label: {
-                Image(systemName: open ? "xmark" : "plus").font(.title2.weight(.semibold))
-                    .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 56, height: 56)
-                    .glassEffect(.regular.interactive(), in: .circle)
+            .padding(5)
+            .frame(height: barH)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { tabsWidth = $0 }
+            .glassEffect(.regular.interactive(), in: .capsule)
+            // Slide a finger along the bar and the lens follows it from tab to tab.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 8)
+                    .onChanged { v in
+                        if !sliding { withAnimation(Theme.snap) { sliding = true } }
+                        let i = Int((v.location.x - 5) / max((tabsWidth - 10) / CGFloat(tabs.count), 1))
+                        let t = tabs[min(max(i, 0), tabs.count - 1)]
+                        if t != tab { withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { tab = t } }
+                    }
+                    .onEnded { _ in withAnimation(Theme.snap) { sliding = false } }
+            )
+            // The + (owner, Nov 13): straight into the log sheet, which zooms out of this button (`logSource`).
+            // The sheet has the mic and the keyboard, so there's no choice to make first.
+            Button { felt(false) } label: {
+                Image(systemName: "plus").font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: barH, height: barH)
+                    .contentShape(Circle())
+                    // The sheet zooms out of here (on the label: glass draws the button in its own layer).
+                    .matchedTransitionSource(id: "log", in: logSource)
             }
-            .foregroundStyle(.primary)
-            .accessibilityLabel(open ? "Close" : "Log")
-            .overlay(alignment: .bottomTrailing) {
-                if open {
-                    feltCard
-                        .offset(y: -68)
-                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottomTrailing)))
-                }
-            }
+            .glassEffect(.regular.tint(.black).interactive(), in: .circle)
+            .accessibilityLabel("Log")
+        }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 6)
         .sensoryFeedback(.selection, trigger: tab)
     }
 
-    private func segment(_ label: String, _ symbol: String, _ t: MenusTab) -> some View {
+    private func segment(_ label: String, _ icon: AnyView, _ t: MenusTab) -> some View {
         Button { withAnimation(Theme.snap) { tab = t } } label: {
-            VStack(spacing: 4) {
-                Image(systemName: symbol).font(.system(size: 22, weight: .semibold)).frame(height: 28)
-                Text(label).font(.caption2.weight(.semibold))
-            }
-            .foregroundStyle(tab == t ? Color.primary : Color.secondary)
-            .frame(width: 96, height: 56)
-            .contentShape(Rectangle())
+            // Icons only for now (owner, Nov 13); the name stays for VoiceOver. Equal segments, the chosen one
+            // on a soft capsule that slides between them.
+            icon.frame(width: 24, height: 24)
+                .foregroundStyle(tab == t ? Color.primary : Color.primary.opacity(0.55))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background {
+                    if tab == t {
+                        // The lens: a soft capsule that slides between tabs, a touch larger while you slide.
+                        Capsule().fill(Color.primary.opacity(sliding ? 0.12 : 0.08))
+                            .scaleEffect(sliding ? 1.08 : 1)
+                            .matchedGeometryEffect(id: "tab", in: selection)
+                    }
+                }
+                .contentShape(Capsule())
         }
         .buttonStyle(PressStyle())
+        .accessibilityLabel(label)
         .accessibilityAddTraits(tab == t ? .isSelected : [])
     }
 
-    private var feltCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Felt something?").font(.subheadline.weight(.semibold))
-            option("Voice memo", "mic") { felt(true) }
-            option("Log symptoms", "square.and.pencil") { felt(false) }
-        }
-        .padding(16)
-        .frame(width: 210, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
-    }
-
-    private func option(_ label: String, _ symbol: String, _ action: @escaping () -> Void) -> some View {
-        Button {
-            withAnimation(Theme.snap) { open = false }
-            action()
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: symbol).foregroundStyle(Theme.rescue).frame(width: 20)
-                Text(label)
-            }
-            .font(.body)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-        }
-        .foregroundStyle(.primary)
-    }
 }
 
 // MARK: Side menu
@@ -385,9 +383,9 @@ struct MenusSideMenu: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("felt air").font(.title2.weight(.bold))
+                Text("felt air").font(Theme.Figtree.font(.title2, weight: .bold))
                 Spacer()
-                Button(action: close) { Image(systemName: "xmark").font(.body.weight(.semibold)).frame(width: 44, height: 44) }
+                Button(action: close) { Image(systemName: "xmark").font(Theme.Figtree.font(.body, weight: .semibold)).frame(width: 44, height: 44) }
                     .foregroundStyle(.primary)
                     .accessibilityLabel("Close menu")
             }
@@ -398,7 +396,7 @@ struct MenusSideMenu: View {
             row("tablecells", "Table for your doctor", action: { close(); doctor() })
             Spacer()
             Text("felt air is a diary, not a medical device.")
-                .font(.footnote).foregroundStyle(.secondary)
+                .font(Theme.Figtree.font(.footnote)).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 24)
         .padding(.top, 60).padding(.bottom, 40)
@@ -411,10 +409,10 @@ struct MenusSideMenu: View {
     private func row(_ symbol: String, _ title: String, note: String? = nil, action: (() -> Void)?) -> some View {
         Button { action?() } label: {
             HStack(spacing: 14) {
-                Image(systemName: symbol).font(.body).frame(width: 24)
+                Image(systemName: symbol).font(Theme.Figtree.font(.body)).frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.body)
-                    if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
+                    Text(title).font(Theme.Figtree.font(.body))
+                    if let note { Text(note).font(Theme.Figtree.font(.caption)).foregroundStyle(.secondary) }
                 }
                 Spacer()
             }
@@ -453,7 +451,7 @@ struct MenusWindow: Equatable {
 
     /// The playhead's colour: rescue orange on a rescue moment (like its pill), the ink otherwise.
     func ink(_ moments: [LogEvent]) -> Color {
-        moments.contains { $0.moment == .rescue && abs($0.loggedAt.timeIntervalSince(center)) < 20 * 60 } ? Theme.rescue : .primary
+        .primary   // one ink for the playhead (owner, Nov 13: no rescue colour)
     }
 }
 
@@ -494,6 +492,54 @@ struct MenusWindowGestures: ViewModifier {
 /// The sticky timeline: the playhead's day as a title with its time (and the verdict ahead), then the track on
 /// the shared window, in the chart column: ticks that adapt to the zoom, your moments as pills, the forecast
 /// as tinted slots, NOW, and the playhead in the middle. Pinch to zoom, drag to move, tap a moment to go to it.
+/// The day the playhead is on ("Today, November 13"), tap to go back to now, and the line under it: the time,
+/// the verdict ahead, and how much the window shows.
+struct MenusDayTitle: View {
+    let window: MenusWindow
+    let now: Date
+    let verdict: String?
+    let backToNow: () -> Void
+    private var atNow: Bool { abs(window.center.timeIntervalSince(now)) < window.span * 0.01 }
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Button(action: backToNow) {
+                HStack(spacing: 6) {
+                    Text(Self.title(window.center)).font(Theme.Figtree.font(.title3, weight: .semibold))
+                    if !atNow {
+                        Image(systemName: window.center > now ? "arrow.uturn.backward" : "arrow.uturn.forward")
+                            .font(Theme.Figtree.font(.footnote, weight: .bold)).opacity(0.5)
+                    }
+                }
+                .foregroundStyle(.primary)
+                .contentTransition(.numericText())
+            }
+            .buttonStyle(PressStyle())
+            .disabled(atNow)
+            Text([atNow ? "Now" : window.center.formatted(.dateTime.hour().minute()), window.center >= now.addingTimeInterval(-60) ? verdict : nil, Self.spanLabel(window.span)]
+                .compactMap { $0 }.joined(separator: " · "))
+                .font(Theme.Figtree.font(.subheadline)).foregroundStyle(.secondary).lineLimit(1)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    static func title(_ d: Date) -> String {
+        let cal = Calendar.current
+        let day = cal.isDateInToday(d) ? "Today" : cal.isDateInYesterday(d) ? "Yesterday" : cal.isDateInTomorrow(d) ? "Tomorrow"
+            : d.formatted(.dateTime.weekday(.wide))
+        return "\(day), \(d.formatted(.dateTime.month(.wide).day()))"
+    }
+
+    /// How much is on screen: "12 h", "3 days", "2 weeks".
+    static func spanLabel(_ span: TimeInterval) -> String {
+        let h = span / 3600
+        if h < 36 { return "\(Int(h.rounded())) h" }
+        let d = h / 24
+        return d < 14 ? "\(Int(d.rounded())) days" : "\(Int((d / 7).rounded())) weeks"
+    }
+}
+
 struct MenusStrip: View {
     @Binding var window: MenusWindow
     let moments: [LogEvent]
@@ -503,33 +549,20 @@ struct MenusStrip: View {
     let limits: ClosedRange<Date>
     let settle: () -> Void
     let backToNow: () -> Void
+    /// With the combined chart (owner, Nov 13) the day's title sits below the chart instead of above the ticks.
+    var titleBelow = false
     @Environment(\.colorScheme) private var scheme
     @State private var width: CGFloat = 1
     private let cal = Calendar.current
-    private var atNow: Bool { abs(window.center.timeIntervalSince(now)) < window.span * 0.01 }
 
     var body: some View {
         VStack(spacing: 2) {
-            Button(action: backToNow) {
-                HStack(spacing: 6) {
-                    Text(title).font(.title3.weight(.semibold))
-                    if !atNow {
-                        Image(systemName: window.center > now ? "arrow.uturn.backward" : "arrow.uturn.forward")
-                            .font(.footnote.weight(.bold)).opacity(0.5)
-                    }
-                }
-                .foregroundStyle(.primary)
-                .contentTransition(.numericText())
+            if !titleBelow {
+                MenusDayTitle(window: window, now: now, verdict: verdict, backToNow: backToNow)
             }
-            .buttonStyle(PressStyle())
-            .disabled(atNow)
-            Text([atNow ? "Now" : window.center.formatted(.dateTime.hour().minute()), window.center >= now.addingTimeInterval(-60) ? verdict : nil, spanLabel]
-                .compactMap { $0 }.joined(separator: " · "))
-                .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                .monospacedDigit()
             // The whole width is the timeline (owner, Nov 6): the span sits in the line above.
             track
-                .padding(.horizontal, MenusColumns.page + MenusColumns.card)
+                .padding(.horizontal, titleBelow ? 0 : MenusColumns.page + MenusColumns.card)   // edge to edge with the combined chart (owner, Nov 13)
         }
         .padding(.top, 8)
         .frame(maxWidth: .infinity)
@@ -537,24 +570,12 @@ struct MenusStrip: View {
         .sensoryFeedback(.selection, trigger: cal.startOfDay(for: window.center))
     }
 
-    private var title: String {
-        let d = window.center
-        let day = cal.isDateInToday(d) ? "Today" : cal.isDateInYesterday(d) ? "Yesterday" : cal.isDateInTomorrow(d) ? "Tomorrow"
-            : d.formatted(.dateTime.weekday(.wide))
-        return "\(day), \(d.formatted(.dateTime.month(.wide).day()))"
-    }
-
-    /// How much is on screen: "12 h", "3 days", "2 weeks".
-    private var spanLabel: String {
-        let h = window.span / 3600
-        if h < 36 { return "\(Int(h.rounded())) h" }
-        let d = h / 24
-        return d < 14 ? "\(Int(d.rounded())) days" : "\(Int((d / 7).rounded())) weeks"
-    }
+    private var title: String { MenusDayTitle.title(window.center) }
+    private var spanLabel: String { MenusDayTitle.spanLabel(window.span) }
 
     private var track: some View {
         Canvas { ctx, size in
-            let w = size.width, mid: CGFloat = 40
+            let w = size.width, mid: CGFloat = 74
             let x = { (d: Date) in window.x(d, width: w) }
             let ink = Color.primary
             // Ticks: hours when zoomed in, days when out, weeks when far out; labels above the major ones.
@@ -566,17 +587,12 @@ struct MenusStrip: View {
                     let isMajor = major == 7 * 86_400 ? cal.component(.weekday, from: t) == cal.firstWeekday && cal.component(.hour, from: t) == 0
                         : Int(t.timeIntervalSince(cal.startOfDay(for: t))) % Int(major) == 0
                     let h: CGFloat = isMajor ? 14 : 6
+                    // A baseline ring sits at 9 am and 6 pm: no small tick through it.
+                    let hr = cal.component(.hour, from: t)
+                    if !isMajor, cal.component(.minute, from: t) == 0, hr == 9 || hr == 18 { t = t.addingTimeInterval(minor); continue }
                     var p = Path(); p.move(to: CGPoint(x: x(t), y: mid - h / 2)); p.addLine(to: CGPoint(x: x(t), y: mid + h / 2))
                     ctx.stroke(p, with: .color(ink.opacity(t > now ? 0.18 : 0.4)), lineWidth: 1)
-                    if isMajor {
-                        let label = major < 86_400 ? t.formatted(.dateTime.hour())
-                            : major == 86_400 ? t.formatted(.dateTime.weekday(.abbreviated).day())
-                            : t.formatted(.dateTime.month(.abbreviated).day())
-                        if abs(x(t) - w / 2) > 18 {
-                            ctx.draw(Text(label).font(.caption2.weight(.medium)).foregroundStyle(ink.opacity(t > now ? 0.35 : 0.55)),
-                                     at: CGPoint(x: x(t), y: 8))
-                        }
-                    }
+                    // No day labels above (owner, Nov 13): the day is under the playhead.
                 }
                 t = t.addingTimeInterval(minor)
             }
@@ -586,15 +602,34 @@ struct MenusStrip: View {
                 let c: Color = v == nil ? ink.opacity(0.08) : (v! >= 1 ? Verdict.red : v! >= 0.5 ? Verdict.yellow : Verdict.green).opacity(0.7)
                 ctx.fill(Path(CGRect(x: x(d), y: mid - 4, width: max(1, slot - 1), height: 8)), with: .color(c))
             }
-            // Moments: inhaler use as upright pills, rescue orange, standard blue (owner, Nov 6), narrower as you
-            // zoom out. A note sits as a small dot beside the moment it follows.
+            // Baseline captures (owner, Nov 13, for now): a small dot every day at 9 am and 6 pm, the ordinary
+            // moments the patterns compare against. Ahead of now they're faint, still to come. Under the pills.
+            var bDay = cal.startOfDay(for: window.start.addingTimeInterval(-86_400))
+            while bDay <= window.end {
+                for hour in [9, 18] {
+                    guard let b = cal.date(bySettingHour: hour, minute: 0, second: 0, of: bDay),
+                          b >= window.start.addingTimeInterval(-3600), b <= window.end.addingTimeInterval(3600) else { continue }
+                    // An empty ring (owner, Nov 13).
+                    let d: CGFloat = 5
+                    ctx.stroke(Path(ellipseIn: CGRect(x: x(b) - d / 2, y: mid - d / 2, width: d, height: d)),
+                               with: .color(ink.opacity(b <= now ? 0.6 : 0.2)), lineWidth: 1)
+                }
+                bDay = cal.date(byAdding: .day, value: 1, to: bDay)!
+            }
+            // Moments: inhaler use as upright pills in one ink (owner, Nov 13): rescue filled, standard an outline,
+            // narrower as you zoom out. A note sits as a small dot beside the moment it follows.
             let r: CGFloat = min(10, max(5, w * CGFloat(2.5 * 3600 / window.span)))
             let shown = moments.filter { $0.loggedAt >= window.start.addingTimeInterval(-3600) && $0.loggedAt <= window.end.addingTimeInterval(3600) }
             for m in shown where m.moment == .rescue || m.moment == .maintenance {
                 let noted = !(m.voiceTranscript ?? "").isEmpty || shown.contains { $0.moment == .note && abs($0.loggedAt.timeIntervalSince(m.loggedAt)) < 3600 }
                 let cx = x(m.loggedAt), pw = min(r, 7) * 1.1, ph = min(r, 7) * 2.8
                 let pill = Path(roundedRect: CGRect(x: cx - pw / 2, y: mid - ph / 2, width: pw, height: ph), cornerRadius: pw / 2)
-                ctx.fill(pill, with: .color(m.moment == .rescue ? Theme.rescue : Theme.standard))
+                if m.moment == .rescue {
+                    ctx.fill(pill, with: .color(ink))
+                } else {
+                    ctx.stroke(Path(roundedRect: CGRect(x: cx - pw / 2 + 0.6, y: mid - ph / 2 + 0.6, width: pw - 1.2, height: ph - 1.2),
+                                    cornerRadius: (pw - 1.2) / 2), with: .color(ink), lineWidth: 1.2)
+                }
                 if noted {
                     ctx.fill(Path(ellipseIn: CGRect(x: cx + pw / 2 + 2, y: mid - ph / 2, width: 4, height: 4)), with: .color(ink.opacity(0.45)))
                 }
@@ -605,15 +640,25 @@ struct MenusStrip: View {
                 ctx.stroke(n, with: .color(ink.opacity(0.7)), lineWidth: 1.5)
             }
             let head = window.ink(moments)
-            var ph = Path(); ph.move(to: CGPoint(x: w / 2, y: mid - 18)); ph.addLine(to: CGPoint(x: w / 2, y: size.height))
+            var ph = Path(); ph.move(to: CGPoint(x: w / 2, y: mid - 18)); ph.addLine(to: CGPoint(x: w / 2, y: mid + 18))
             ctx.stroke(ph, with: .color(head), lineWidth: 2)
+            // The playhead's time, just above its pointer (owner, Nov 13): the time on one line, the day small beneath.
+            let atNow = abs(window.center.timeIntervalSince(now)) < 60
+            let time = atNow ? "Now" : window.center.formatted(.dateTime.hour().minute())
+            let day = atNow ? "" : cal.isDate(window.center, inSameDayAs: now) ? "Today"
+                : cal.isDateInYesterday(window.center) ? "Yesterday"
+                : window.center.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            // 16 pt time, 13 pt day (owner, Nov 13).
+            ctx.draw(Text(time).font(Theme.Figtree.font(size: 16, weight: .medium).monospacedDigit()).foregroundStyle(head),
+                     at: CGPoint(x: w / 2, y: day.isEmpty ? mid - 44 : mid - 64))
+            ctx.draw(Text(day).font(Theme.Figtree.font(size: 13)).foregroundStyle(head.opacity(0.5)), at: CGPoint(x: w / 2, y: mid - 44))
             // Health's pointer, on the playhead.
             var tri = Path()
             tri.move(to: CGPoint(x: w / 2 - 5, y: mid - 26)); tri.addLine(to: CGPoint(x: w / 2 + 5, y: mid - 26))
             tri.addLine(to: CGPoint(x: w / 2, y: mid - 20)); tri.closeSubpath()
             ctx.fill(tri, with: .color(head))
         }
-        .frame(height: 60)
+        .frame(height: 104)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .contentShape(Rectangle())
         .onTapGesture { p in
@@ -650,6 +695,12 @@ struct MenusDetails: View {
     var big = false
     /// The forecast hours ahead of now, so the lines carry on past the playhead.
     var forecast: [(Date, Conditions)] = []
+    /// With the combined chart, the day's title sits just below it (owner, Nov 13).
+    /// How much each condition is one of your triggers, 0…1: sets each fan's size.
+    var triggers: [String: Double] = [:]
+    var dayTitle: MenusDayTitle? = nil
+    /// The flowers' area height on home: the room between the header and the timeline (owner, Nov 13).
+    var bigBand: CGFloat = MenusEnvironment.bigBand
     @State private var chartWidth: CGFloat = 1
     /// A little either side of the window, so lines run off the edges instead of stopping short.
     private var shown: [LogEvent] {
@@ -662,7 +713,7 @@ struct MenusDetails: View {
         VStack(alignment: .leading, spacing: 48) {
             // Environment (owner, Nov 13): every condition on one line first, like a cycle app's hormone chart,
             // and as you scroll down the lines part into their own rows.
-            MenusEnvironment(window: window, rescues: rescues, ink: window.ink(events), apart: apart, bandH: big ? 300 : 132, series: [
+            MenusEnvironment(window: window, rescues: rescues, ink: window.ink(events), apart: apart, bandH: big ? bigBand : 132, series: [
                 // Each its own hue from the air palette, so the lines stay apart when they overlap.
                 .init(name: "Temperature", air: Theme.AirInk(core: Theme.AirPalette.coral, glow: Theme.AirPalette.peach), points: series(.temperature), unit: "°F"),
                 .init(name: "Humidity", air: Theme.AirInk(core: Theme.AirPalette.mint, glow: Theme.AirPalette.sky), points: series(.humidity), unit: "%"),
@@ -670,15 +721,15 @@ struct MenusDetails: View {
                 .init(name: "Pressure", air: Theme.airStorm, points: [], unit: "", note: "Not tracked yet"),
                 .init(name: "PM2.5", air: Theme.airPM25, points: series(.pm25), unit: "µg"),
                 .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), unit: "ppb"),
-                .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: ""),
+                .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: "% of a high day"),
                 .init(name: "Flu and illness", air: Theme.airIllness, points: [], unit: "", note: "Not tracked yet"),
-            ], width: $chartWidth)
+            ], width: $chartWidth, footer: dayTitle, edge: big, now: now, triggers: triggers, airMissing: airMissing)
             section("Body", "From your logs and Apple Health") {
                 VStack(spacing: 0) {
                     dots("Inhaler use", shown.filter { $0.moment == .rescue || $0.moment == .maintenance }
-                        .map { ($0.loggedAt, $0.moment == .rescue ? Theme.rescue : Theme.standardSoft) })
+                        .map { ($0.loggedAt, Color.primary, $0.moment != .rescue) })
                     dots("Felt journal", shown.filter { $0.moment == .note || !($0.voiceTranscript ?? "").isEmpty }
-                        .map { ($0.loggedAt, Color.primary) })
+                        .map { ($0.loggedAt, Color.primary, false) })
                     empty("Activity", "From Apple Health, not connected yet")
                     empty("Heart and breathing", "Heart rate and respiratory rate, empty for now")
                 }
@@ -686,12 +737,16 @@ struct MenusDetails: View {
         }
         .padding(.horizontal, MenusColumns.page)
         .padding(.top, 20)   // the combined chart sits just under the strip (owner, Nov 13); inside the playhead's overlay
-        // One playhead line through every row, continuing the strip's: in the chart column's middle.
-        .overlay(alignment: .topLeading) {
+        // One playhead line through every row, continuing the strip's: in the chart column's middle. Behind the
+        // content, so the day's title under the combined chart sits over it.
+        .background(alignment: .topLeading) {
             GeometryReader { g in
                 let x0 = MenusColumns.page + MenusColumns.card
                 let w = g.size.width - 2 * (MenusColumns.page + MenusColumns.card)
-                Rectangle().fill(window.ink(events)).frame(width: 2, height: g.size.height)
+                // With the combined chart, the line stops at the chart while the lines are together.
+                let bandBottom: CGFloat = 20 + bigBand   // the top padding plus the combined chart's height
+                let h = big ? g.size.height * apart : g.size.height   // the portrait stands alone at rest; no line through it
+                Rectangle().fill(window.ink(events)).frame(width: 2, height: h)
                     .offset(x: x0 + w / 2 - 1)
             }
             .allowsHitTesting(false)
@@ -709,11 +764,31 @@ struct MenusDetails: View {
         return (logged + ahead).sorted { $0.0 < $1.0 }
     }
 
+    /// No air at the playhead (owner, Nov 13): the moment you're on has no reading, or there's no moment or
+    /// forecast hour within three hours of it. The fans close and the stems sink.
+    private var airMissing: Bool {
+        let c = window.center
+        if let m = shown.filter({ $0.moment != .okay && abs($0.loggedAt.timeIntervalSince(c)) < 30 * 60 })
+            .min(by: { abs($0.loggedAt.timeIntervalSince(c)) < abs($1.loggedAt.timeIntervalSince(c)) }) {
+            return !(m.conditions?.input.hasAnyValue ?? false)
+        }
+        let near = shown.contains { abs($0.loggedAt.timeIntervalSince(c)) < 3 * 3600 && ($0.conditions?.input.hasAnyValue ?? false) }
+            || forecast.contains { abs($0.0.timeIntervalSince(c)) < 3 * 3600 }
+        return !near
+    }
+
     /// The highest of tree, grass and weed pollen at each moment.
+    /// Pollen at each moment, as the share of a high day (100 = high) for whichever of tree, grass and weed
+    /// is closest to high. Demo moments without readings use the display-only demo pollen (owner, Nov 13),
+    /// the season from Design crit, or late-summer ragweed when that's off.
     private var pollen: [(Date, Double)] {
-        shown.compactMap { e in
-            let v = [Signal.pollenTree, .pollenGrass, .pollenWeed].compactMap { e.conditions?.best($0)?.value }.max()
-            return v.map { (e.loggedAt, $0) }
+        let raw = UserDefaults.standard.string(forKey: DemoPollen.Season.key).flatMap(DemoPollen.Season.init(rawValue:))
+        let season: DemoPollen.Season = raw == nil || raw == .off ? .ragweed : raw!
+        return shown.compactMap { e in
+            let sample = DemoPollen.from(e.conditions) ?? (e.isDemo ? DemoPollen.sample(at: e.loggedAt, season: season) : nil)
+            guard let p = sample else { return nil }
+            let share = max(Double(p.tree.count) / 213, Double(p.grass.count) / 61, Double(p.weed.count) / 80) * 100
+            return (e.loggedAt, share)
         }
     }
 
@@ -722,8 +797,8 @@ struct MenusDetails: View {
     private func section(_ title: String, _ subtitle: String, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.title2.weight(.bold))
-                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                Text(title).font(Theme.Figtree.font(.title2, weight: .bold))
+                Text(subtitle).font(Theme.Figtree.font(.subheadline)).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 4)
             // No card: the rows sit on the page, inset to the same columns as the strip.
@@ -733,11 +808,11 @@ struct MenusDetails: View {
     }
 
     private func label(_ name: String, _ ink: Color?) -> some View {
-        Text(name).font(.subheadline.weight(.semibold)).foregroundStyle(ink ?? .primary).lineLimit(1)
+        Text(name).font(Theme.Figtree.font(.subheadline, weight: .semibold)).foregroundStyle(ink ?? .primary).lineLimit(1)
     }
 
     private func valueText(_ s: String, dim: Bool = false) -> some View {
-        Text(s).font(.caption.weight(.medium).monospacedDigit())
+        Text(s).font(Theme.Figtree.font(.caption, weight: .medium).monospacedDigit())
             .foregroundStyle(dim ? .tertiary : .secondary)
     }
 
@@ -762,7 +837,7 @@ struct MenusDetails: View {
                 let y = { (v: Double) in hi > lo ? (v - lo) / (hi - lo) * 0.8 + 0.2 : 0.5 }
                 Chart {
                     ForEach(rescues, id: \.self) { r in
-                        RuleMark(x: .value("Rescue", r)).foregroundStyle(Theme.rescue.opacity(0.35)).lineStyle(StrokeStyle(lineWidth: 1))
+                        RuleMark(x: .value("Rescue", r)).foregroundStyle(Color.primary.opacity(0.2)).lineStyle(StrokeStyle(lineWidth: 1))
                     }
                     ForEach(points, id: \.0) { p in
                         AreaMark(x: .value("Time", p.0), yStart: .value("Low", 0), yEnd: .value(name, y(p.1)))
@@ -781,7 +856,7 @@ struct MenusDetails: View {
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { chartWidth = $0 }
             } else {
                 Text(name == "Pressure" || name == "Flu and illness" ? "Not tracked yet" : "No readings here")
-                    .font(.caption).foregroundStyle(.tertiary)
+                    .font(Theme.Figtree.font(.caption)).foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -791,7 +866,8 @@ struct MenusDetails: View {
     }
 
     /// Dots on the window: one per log, in its colour; the playhead as a dark rule.
-    private func dots(_ name: String, _ marks: [(Date, Color)]) -> some View {
+    /// `marks`: when, the ink, and whether it's hollow (standard inhaler) rather than filled (rescue).
+    private func dots(_ name: String, _ marks: [(Date, Color, Bool)]) -> some View {
         let inView = marks.filter { window.domain.contains($0.0) }
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -803,7 +879,7 @@ struct MenusDetails: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.primary.opacity(0.06)).frame(height: 2)
                     ForEach(Array(inView.enumerated()), id: \.offset) { _, m in
-                        Circle().fill(m.1).frame(width: 9, height: 9)
+                        Circle().fill(m.2 ? Color.clear : m.1).strokeBorder(m.1, lineWidth: 1.2).frame(width: 9, height: 9)
                             .position(x: window.x(m.0, width: g.size.width), y: g.size.height / 2)
                     }
                 }
@@ -819,7 +895,7 @@ struct MenusDetails: View {
     private func empty(_ name: String, _ note: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             label(name, nil)
-            Text(note).font(.caption).foregroundStyle(.tertiary)
+            Text(note).font(Theme.Figtree.font(.caption)).foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 8)
@@ -849,28 +925,129 @@ struct MenusEnvironment: View {
     let bandH: CGFloat
     let series: [Series]
     @Binding var width: CGFloat
+    /// Shown just under the shared band while the lines are together (the day's title), gone as they part.
+    var footer: MenusDayTitle? = nil
+    /// Edge to edge (the combined chart on home, owner Nov 13): the waves run the full screen width; names and
+    /// readings keep a small inset.
+    var edge = false
+    /// Samples after this are forecast hours, drawn lighter.
+    var now: Date = .now
+    /// How much each condition is one of your triggers, 0…1, by series name (from the gated lift rows).
+    var triggers: [String: Double] = [:]
+    /// No air at the playhead: close every fan and sink the stems.
+    var airMissing = false
+    /// The portrait's key, shown for the swatch you tap (owner, Nov 13).
+    @State private var tapped: (name: String, at: CGPoint)?
+    @State private var hideTap: Task<Void, Never>?
+    @State private var canvasSize: CGSize = .zero
+    /// The fans' opening tween: from, to, and when it started.
+    @State private var openFrom: [String: CGFloat] = [:]
+    @State private var openTo: [String: CGFloat] = [:]
+    @State private var openStart: Date = .distantPast
+    private static let openDuration: TimeInterval = 0.75
+    /// Hand-drawn timing (owner, Nov 13): the fans move at 12 drawings a second, not smoothly.
+    private static let fps: Double = 12
+
+    /// Which drawing of the tween we're on, or nil when it's done (then the fans hold still).
+    private func frame(at t: Date) -> Int? {
+        let e = t.timeIntervalSince(openStart)
+        return e < Self.openDuration ? Int(e * Self.fps) : nil
+    }
+
+    /// How far each fan should be open at the playhead, 0…1 (closed with no reading). "__stem" is how tall the
+    /// stems stand: shorter when there's no reading at all (owner, Nov 13). Both ease with the same tween.
+    private func targetOpens() -> [String: CGFloat] {
+        var out: [String: CGFloat] = [:]
+        let none = noAir
+        for s in series where s.note != "Not tracked yet" {
+            out[s.name] = none ? 0 : reading(s).map { intensity(s.name, $0, s) } ?? 0
+        }
+        out["__stem"] = none ? 0.4 : 1
+        return out
+    }
+
+    private var noAir: Bool { airMissing }
+
+    /// The opening at a moment in the tween, eased in and out.
+    private func shownOpens(at t: Date) -> [String: CGFloat] {
+        // Stepped to whole drawings, so it moves in small jumps like a flipbook.
+        let held = (t.timeIntervalSince(openStart) * Self.fps).rounded(.down) / Self.fps
+        let p = CGFloat(min(1, max(0, held / Self.openDuration)))
+        let e = p * p * (3 - 2 * p)
+        var out: [String: CGFloat] = [:]
+        for (k, to) in openTo { out[k] = (openFrom[k] ?? to) + (to - (openFrom[k] ?? to)) * e }
+        return out
+    }
+    @Environment(\.colorScheme) private var scheme
+    /// The portrait's height on home: it's the main visual, a square-ish field in the middle of the screen.
+    static let bigBand: CGFloat = 430
+    private var inset: CGFloat { edge ? MenusColumns.page + MenusColumns.card : 0 }
 
     private let headerH: CGFloat = 54
     private let rowH: CGFloat = 76
 
     var body: some View {
         // Tall enough for the rows, and for the shared band while it's together.
-        let height = max(headerH + CGFloat(series.count) * rowH, bandH + 40)
-        Canvas { ctx, size in draw(ctx, size) }
+        let height = max(headerH + CGFloat(series.count) * rowH, bandH + (footer == nil ? 40 : 110))
+        // The fans ease open and closed as you move between moments (owner, Nov 13): a short tween from where
+        // they were to where this moment puts them, picked up mid-way if you keep moving.
+        TimelineView(.animation(minimumInterval: 1 / Self.fps, paused: Date().timeIntervalSince(openStart) > Self.openDuration + 0.1)) { tl in
+            Canvas { ctx, size in draw(ctx, size, opens: shownOpens(at: tl.date), boil: frame(at: tl.date)) }
+        }
+            .onAppear { let t = targetOpens(); openFrom = t; openTo = t }
+            .onChange(of: targetOpens()) { _, new in
+                openFrom = shownOpens(at: .now)
+                openTo = new
+                openStart = .now
+            }
             .frame(height: height)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { canvasSize = $0 }
+            .contentShape(Rectangle())
+            .onTapGesture { p in
+                guard edge, apart < 0.3, let w = swatch(at: p) else {
+                    withAnimation(.smooth(duration: 0.25)) { tapped = nil }
+                    return
+                }
+                withAnimation(.smooth(duration: 0.25)) { tapped = (w.series.name, CGPoint(x: w.rect.midX, y: w.rect.minY)) }
+                hideTap?.cancel()
+                hideTap = Task {
+                    try? await Task.sleep(for: .seconds(3))
+                    guard !Task.isCancelled else { return }
+                    withAnimation(.smooth(duration: 0.4)) { tapped = nil }
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                if let t = tapped, apart < 0.3, let w = portraitLayout(canvasSize, lift: 0).first(where: { $0.series.name == t.name }) {
+                    legend(w)
+                        .fixedSize()
+                        .position(x: min(max(t.at.x, 70), canvasSize.width - 70), y: max(t.at.y - 34, 20))
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                        .allowsHitTesting(false)
+                }
+            }
             .overlay(alignment: .topLeading) {
                 // The section title arrives as the rows part.
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Environment").font(.title2.weight(.bold))
-                    Text("Outdoor, at your moments").font(.subheadline).foregroundStyle(.secondary)
+                    Text("Environment").font(Theme.Figtree.font(.title2, weight: .bold))
+                    Text("Outdoor, at your moments").font(Theme.Figtree.font(.subheadline)).foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 4 + inset)
                 .opacity(Double(max(0, apart * 1.6 - 0.6)))
                 .offset(y: (1 - apart) * -8)
                 .allowsHitTesting(false)
             }
-            .padding(.horizontal, MenusColumns.card)
-            .onGeometryChange(for: CGFloat.self) { $0.size.width - 2 * MenusColumns.card } action: { width = $0 }
+            .overlay(alignment: .top) {
+                if let footer {
+                    footer
+                        .padding(.vertical, 6).padding(.horizontal, 12)
+                        .background(Color(uiColor: .systemGroupedBackground))
+                        .offset(y: bandH + 16 - apart * 30)
+                        .opacity(Double(max(0, 1 - apart * 2.5)))
+                        .allowsHitTesting(apart < 0.3)
+                }
+            }
+            .padding(.horizontal, edge ? -MenusColumns.page : MenusColumns.card)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width - (edge ? -2 * MenusColumns.page : 2 * MenusColumns.card) } action: { width = $0 }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Environment")
             .accessibilityValue(series.map { s in reading(s).map { "\(s.name) \(Int($0.rounded())) \(s.unit)" } ?? "\(s.name), \(s.note.lowercased())" }.joined(separator: ", "))
@@ -884,11 +1061,13 @@ struct MenusEnvironment: View {
 
     private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
 
-    private func draw(_ ctx: GraphicsContext, _ size: CGSize) {
-        // Ease the parting so the lines leave the shared line gently and land softly in their rows.
+    private func draw(_ ctx: GraphicsContext, _ size: CGSize, opens: [String: CGFloat], boil: Int? = nil) {
+        // Ease the parting so the samples leave the shared band gently and land softly in their rows.
         let t = apart * apart * (3 - 2 * apart)
         let w = size.width
         let withData = series.filter { $0.points.count >= 2 }
+        let slots = max(withData.count, 1)
+        let slotH = (bandH - 8) / CGFloat(slots)
 
         // Rescue moments: faint orange rules through the shared band, then through each row.
         for r in rescues {
@@ -897,64 +1076,403 @@ struct MenusEnvironment: View {
             var rule = Path()
             rule.move(to: CGPoint(x: x, y: lerp(0, headerH, t)))
             rule.addLine(to: CGPoint(x: x, y: lerp(bandH, size.height, t)))
-            ctx.stroke(rule, with: .color(Theme.rescue.opacity(0.3)), lineWidth: 1)
+            ctx.stroke(rule, with: .color(Color.primary.opacity(0.18 * (edge ? Double(min(1, max(0, t * 1.6 - 0.3))) : 1))), lineWidth: 1)
         }
 
-        for (i, s) in series.enumerated() {
-            let rowTop = headerH + CGFloat(i) * rowH
-            // The chart's box: the shared band at rest, its own row when apart.
-            let chartTop = lerp(0, rowTop + 26, t)
-            let chartH = lerp(bandH, 36, min(1, t * 1.7))   // shrink ahead of the move, so rows never overlap mid-way
-            let base = chartTop + chartH
+        // With the portrait (home), the rows only come in as you scroll; the portrait leaves as they do.
+        let portrait = edge
+        let rowsShown = portrait ? Double(min(1, max(0, t * 1.6 - 0.3))) : 1
+        if portrait, t < 0.7 {
+            drawPortrait(ctx, size: size, fade: Double(1 - t / 0.7), lift: t * 60, opens: opens, boil: boil)
+        }
 
-            // Name: stacked on the left at rest (small), above its row when apart.
-            let legendIndex = withData.firstIndex { $0.name == s.name }
-            let hasData = legendIndex != nil
-            let restY = CGFloat(legendIndex ?? 0) * 15 + 2
-            let nameY = lerp(restY, rowTop + 4, t)
-            let nameSize = lerp(11, 15, t)
-            let nameOpacity = hasData ? 1 : Double(t)
-            ctx.drawLayer { l in
-                l.opacity = nameOpacity
-                l.draw(Text(s.name).font(.system(size: nameSize, weight: .semibold)).foregroundStyle(s.air.deep),
-                       at: CGPoint(x: 0, y: nameY), anchor: .topLeading)
-            }
+        // Each sample is a soft watercolour mark (owner, Nov 13): we only know the air at the moments we
+        // snapshotted it, so nothing is drawn between them. Marks sit in one blurred, multiplied layer so
+        // overlaps mix like pigment on paper.
+        var labels: [(Text, CGPoint, UnitPoint, Double)] = []
+        ctx.drawLayer { paint in
+            paint.addFilter(.blur(radius: lerp(2.4, 1.1, t)))
+            paint.blendMode = scheme == .dark ? .screen : .normal
+            for (i, s) in series.enumerated() {
+                let rowTop = headerH + CGFloat(i) * rowH
+                let legendIndex = withData.firstIndex { $0.name == s.name }
+                let slot = CGFloat(legendIndex ?? 0)
+                // Its slot: a stripe of the shared band at rest, its own row when apart.
+                // At rest every condition sits on the same spot, a little stacked, so each moment is one blended
+                // portrait of its air (owner, Nov 13). Apart, each settles into its own row.
+                let restY = bandH * 0.62 + (slot - CGFloat(slots - 1) / 2) * min(12, slotH * 0.4)
+                let midY = lerp(restY, rowTop + 26 + 18, t)
+                let boxH = lerp(slotH, 36, t)
 
-            guard s.points.count >= 2 else {
-                ctx.drawLayer { l in
-                    l.opacity = Double(t)
-                    l.draw(Text(s.note).font(.caption).foregroundStyle(.tertiary), at: CGPoint(x: 0, y: rowTop + 30), anchor: .topLeading)
+                // Name: on the left of its slot at rest (small), above its row when apart.
+                let nameY = lerp(2 + slot * 15, rowTop + 4, t)
+                labels.append((Text(s.name).font(Theme.Figtree.font(size: lerp(11, 15, t), weight: .semibold)).foregroundStyle(s.air.deep),
+                               CGPoint(x: inset, y: nameY), .topLeading, portrait ? rowsShown : (legendIndex != nil ? 1 : Double(t))))
+                guard s.points.count >= 2 else {
+                    labels.append((Text(s.note).font(Theme.Figtree.font(.caption)).foregroundStyle(.tertiary), CGPoint(x: inset, y: rowTop + 30), .topLeading, Double(t)))
+                    continue
                 }
-                continue
-            }
-            if let v = reading(s) {
-                ctx.drawLayer { l in
-                    l.opacity = Double(t)
-                    l.draw(Text("\(Int(v.rounded()))\(s.unit.isEmpty ? "" : " ")\(s.unit)").font(.caption.weight(.medium).monospacedDigit())
-                        .foregroundStyle(.secondary), at: CGPoint(x: w, y: rowTop + 6), anchor: .topTrailing)
+                if let v = reading(s) {
+                    labels.append((Text("\(Int(v.rounded()))\(s.unit.isEmpty ? "" : " ")\(s.unit)").font(Theme.Figtree.font(.caption, weight: .medium).monospacedDigit())
+                        .foregroundStyle(.secondary), CGPoint(x: w - inset, y: rowTop + 6), .topTrailing, Double(t)))
+                }
+
+                // Its own range: the chart compares when each condition ran high, never amounts across them.
+                let lo = s.points.map(\.1).min()!, hi = s.points.map(\.1).max()!
+                for p in s.points {
+                    let x = window.x(p.0, width: w)
+                    guard x > -40, x < w + 40 else { continue }
+                    let f = CGFloat(hi > lo ? (p.1 - lo) / (hi - lo) : 0.5)
+                    var rng = IslandRNG(seed: UInt64(bitPattern: Int64(p.0.timeIntervalSince1970)) &+ UInt64(i) &* 7919)
+                    let jx = CGFloat.random(in: -5...5, using: &rng) * (1 - t * 0.5), jy = CGFloat.random(in: -4...4, using: &rng) * (1 - t * 0.5)
+                    // Bigger and deeper when it ran high for this condition.
+                    let mh = lerp(min(bandH * 0.42, 16 + 58 * f), boxH * (0.45 + 0.5 * f), t)
+                    let mw = max(12, mh * CGFloat.random(in: 0.75...1.15, using: &rng)) * (s.name == "Wind" ? 1.35 : 1)
+                    let rect = CGRect(x: x - mw / 2 + jx, y: midY - mh / 2 + jy, width: mw, height: mh)
+                    let ahead = p.0 > now
+                    let alpha = Double(lerp(0.12 + 0.42 * f, 0.32 + 0.4 * f, t)) * (ahead ? 0.5 : 1) * rowsShown
+                    let shape = mark(s.name, rect)
+                    paint.fill(shape, with: .color(s.air.color.opacity(alpha)))
+                    // Pigment pools low in the wash: a smaller, deeper core towards the bottom.
+                    let core = rect.insetBy(dx: mw * 0.2, dy: mh * 0.22).offsetBy(dx: 0, dy: mh * 0.12)
+                    paint.fill(mark(s.name, core), with: .color(s.air.color.opacity(alpha * lerp(0.35, 0.6, t))))
                 }
             }
+        }
 
-            // The wave: its own range, 20–100% of the box's height.
-            let lo = s.points.map(\.1).min()!, hi = s.points.map(\.1).max()!
-            let pts = s.points.sorted { $0.0 < $1.0 }.map { p -> CGPoint in
-                let f = hi > lo ? (p.1 - lo) / (hi - lo) * 0.8 + 0.2 : 0.5
-                return CGPoint(x: window.x(p.0, width: w), y: base - CGFloat(f) * chartH)
-            }
-            let line = smooth(pts)
-            var area = line
-            area.addLine(to: CGPoint(x: pts.last!.x, y: base))
-            area.addLine(to: CGPoint(x: pts.first!.x, y: base))
-            area.closeSubpath()
+        // Paper grain over the washes, so they read as printed pigment rather than a gradient.
+        var grain = Path()
+        var g = IslandRNG(seed: 0xFE17)
+        let top = lerp(0, headerH, t), bottom = lerp(bandH, size.height, t)
+        for _ in 0..<Int(w * (bottom - top) / 55) {
+            let x = CGFloat.random(in: 0...w, using: &g), y = CGFloat.random(in: top...bottom, using: &g)
+            grain.addEllipse(in: CGRect(x: x, y: y, width: 0.9, height: 0.9))
+        }
+        ctx.fill(grain, with: .color(paper.opacity(0.45)))
 
+        for (text, at, anchor, opacity) in labels where opacity > 0.01 {
             ctx.drawLayer { l in
-                l.clip(to: Path(CGRect(x: 0, y: chartTop - 4, width: w, height: chartH + 4)))
-                // Together they overlap, so each is a little lighter; apart, each is as full as before.
-                let fill = lerp(0.55, 0.8, t)
-                l.fill(area, with: .linearGradient(Gradient(colors: [s.air.color.opacity(fill), s.air.glowColor.opacity(0.1)]),
-                                                   startPoint: CGPoint(x: 0, y: base - chartH), endPoint: CGPoint(x: 0, y: base)))
-                l.stroke(line, with: .color(s.air.deep.opacity(lerp(0.9, 1, t))), lineWidth: 1.5)
+                l.opacity = opacity
+                l.draw(text, at: at, anchor: anchor)
             }
+        }
+    }
+
+    private var paper: Color { Color(uiColor: .systemGroupedBackground) }
+
+    // MARK: The portrait
+
+    /// How strong each reading is on a fixed scale (not its own range), 0…1: this sets a mark's size and depth.
+    /// Temperature counts distance from mild, either way.
+    private func intensity(_ name: String, _ v: Double, _ s: Series) -> CGFloat {
+        let x: Double
+        switch name {
+        case "Temperature": x = abs(v - 65) / 35
+        case "Humidity": x = v / 100
+        case "Wind": x = v / 25
+        case "PM2.5": x = v / 35
+        case "Ozone": x = v / 70
+        case "Pollen": x = v / 100   // share of a high day
+        default: x = v / max(s.points.map(\.1).max() ?? 1, 1)
+        }
+        return CGFloat(min(1, max(0.08, x)))
+    }
+
+    /// Coloured-pencil inks for the fans, after the drawing: rose, cobalt, vermilion, teal, ochre, violet, graphite.
+    private func pigment(_ name: String, _ v: Double) -> Color {
+        switch name {
+        case "Temperature": Color(red: 0.86, green: 0.36, blue: 0.30)
+        case "Humidity": Color(red: 0.20, green: 0.50, blue: 0.56)
+        case "Wind": Color(red: 0.42, green: 0.43, blue: 0.45)
+        case "PM2.5": Color(red: 0.18, green: 0.42, blue: 0.78)
+        case "Ozone": Color(red: 0.86, green: 0.42, blue: 0.56)
+        case "Pollen": Color(red: 0.93, green: 0.74, blue: 0.16)   // yellow (owner, Nov 13)
+        default: Color(red: 0.50, green: 0.40, blue: 0.70)
+        }
+    }
+
+    /// One fan in the portrait: its base (where the stem meets the fan), its reach, how far it's open, and the
+    /// random state that roughens its pencil lines. `rect` is what a tap hits.
+    private struct Swatch {
+        let series: Series; let value: Double?
+        let strength: CGFloat   // how far it's open: the reading against your threshold, 0…1
+        let weight: CGFloat     // how much it's one of your triggers, 0…1: sets the fan's size
+        let base: CGPoint; let reach: CGFloat; let ground: CGFloat
+        let rect: CGRect; let rng: IslandRNG
+    }
+
+    /// How much each condition is one of yours, 0…1, from the gated rows. Equal for all while still learning.
+    private func weight(_ name: String) -> CGFloat {
+        guard !triggers.isEmpty else { return 0.45 }
+        return CGFloat(min(1, max(0.15, triggers[name] ?? 0.15)))
+    }
+
+    /// Where each condition's fan stands, shared by drawing and tapping so a tap finds what you see.
+    private func portraitLayout(_ size: CGSize, lift: CGFloat, opens: [String: CGFloat]? = nil) -> [Swatch] {
+        // Every condition we track always has its flower (owner, Nov 13). No reading, or a low one: a closed fan.
+        let present = series.filter { $0.note != "Not tracked yet" }.map { ($0, reading($0)) }
+        guard !present.isEmpty else { return [] }
+        let n = present.count
+        // On home the ground sits just above the timeline, about 30 pt from its time (owner, Nov 13).
+        let ground = bandH - (edge ? 4 : 34) - lift
+        let left = inset + 20, right = size.width - inset - 20
+        let gap = (right - left) / CGFloat(max(n, 1))
+        // Big and small alternate along the row, so the two biggest fans stand well apart (owner, Nov 13:
+        // no overlaps): biggest second from the left, the next one second from the right, and so on.
+        let order = present.indices.sorted { weight(present[$0].0.name) > weight(present[$1].0.name) }
+        let pattern = n == 6 ? [1, 4, 3, 0, 5, 2] : n == 5 ? [1, 3, 2, 0, 4] : Array(0..<n)
+        var slots = Array(repeating: 0, count: n)
+        for (rank, i) in order.enumerated() { slots[i] = pattern[rank] }
+
+        struct Spot { var x: CGFloat; var y: CGFloat; let r: CGFloat; let w: CGFloat; var rng: IslandRNG }
+        let W = right - left
+        var spots: [Spot] = present.enumerated().map { i, sv in
+            let s = sv.0
+            // Seeded by the condition, not the day: each flower keeps its place, stem and size from day to day,
+            // and only how far it opens changes (owner, Nov 13).
+            var rng = IslandRNG(seed: UInt64(s.name.unicodeScalars.reduce(7) { $0 &* 31 &+ Int($1.value) }.magnitude))
+            let w = weight(s.name)
+            let slot = slots[i]
+            // Sized so that, fully open, every round fits the row without touching (owner, Nov 13 sketch).
+            let reach = min(W * (0.055 + 0.17 * w), (bandH - 40) * 0.3)
+            // Bigger triggers stand taller; the small ones rise to staggered heights.
+            let rise: [CGFloat] = [0.1, 0.4, 0.22, 0.5, 0.06, 0.32]
+            let stem = (bandH - 60) * (0.12 + 0.78 * w * w) + (bandH - 60) * rise[slot % rise.count] * (1 - w)
+                + CGFloat.random(in: -6...6, using: &rng)
+            let x = left + gap * (CGFloat(slot) + 0.5) + CGFloat.random(in: -4...4, using: &rng)
+            // Planned as a full round: wholly above the ground and below the top.
+            var y = min(max(ground - stem, reach + 10), ground - reach - 14)
+            // Your biggest trigger stands highest, near the top (owner, Nov 13).
+            if i == order.first { y = reach + 10 }
+            return Spot(x: x, y: y, r: reach, w: w, rng: rng)
+        }
+        // The rest stand clearly lower than your biggest trigger, at least a third of the way down from it.
+        if let top = order.first {
+            let floorTop = spots[top].y + (ground - spots[top].y) * 0.34
+            for k in spots.indices where k != top {
+                spots[k].y = min(max(spots[k].y, floorTop), ground - spots[k].r - 14)
+            }
+        }
+        // No two fully open rounds touch (owner, Nov 13). The bigger trigger keeps its spot; the smaller one moves
+        // straight down until clear, or up if there's no room below.
+        let margin: CGFloat = 8
+        let order2 = spots.indices.sorted { spots[$0].w > spots[$1].w }
+        for _ in 0..<4 {
+            for (bi, big) in order2.enumerated() {
+                for small in order2.dropFirst(bi + 1) {
+                    let b = spots[big], sm = spots[small]
+                    let need = b.r + sm.r + margin
+                    let dx = abs(b.x - sm.x)
+                    guard dx < need, hypot(b.x - sm.x, b.y - sm.y) < need else { continue }
+                    let dy = (need * need - dx * dx).squareRoot()
+                    let below = b.y + dy, above = b.y - dy
+                    let floor = ground - sm.r - 14, ceiling = sm.r + 10
+                    if below <= floor { spots[small].y = below }
+                    else if above >= ceiling { spots[small].y = above }
+                    else {
+                        // Neither fits: slide it sideways, away from the bigger one.
+                        let dir: CGFloat = sm.x >= b.x ? 1 : -1
+                        spots[small].y = floor
+                        let dy2 = abs(b.y - floor)
+                        let dxNeed = dy2 < need ? (need * need - dy2 * dy2).squareRoot() : 0
+                        spots[small].x = min(max(b.x + dir * dxNeed, left + sm.r), right - sm.r)
+                    }
+                }
+            }
+        }
+        // No reading at all: the stems sink to a fraction of their height (the fans are closed, so they can't touch).
+        let grow = opens?["__stem"] ?? (noAir ? 0.4 : 1)
+        for k in spots.indices { spots[k].y = ground - (ground - spots[k].y) * grow }
+        return present.enumerated().map { i, sv in
+            let (s, v) = sv
+            let p = spots[i]
+            let open = opens?[s.name] ?? v.map { intensity(s.name, $0, s) } ?? 0
+            let base = CGPoint(x: p.x, y: p.y)
+            let below = open > 0.5 ? p.r * (open - 0.5) * 2 : 0
+            let rect = CGRect(x: p.x - p.r, y: base.y - p.r, width: p.r * 2, height: p.r + max(below, 12))
+            return Swatch(series: s, value: v, strength: open, weight: p.w, base: base, reach: p.r, ground: ground, rect: rect, rng: p.rng)
+        }
+    }
+
+    /// Fans in coloured pencil (owner, Nov 13, after a drawing of pencil fans on stems). Each fan is a condition:
+    /// its size is how much it's one of your triggers, and how far it opens is today's reading against your
+    /// threshold, a closed brush when it's low, a full round when it's at or past it.
+    /// `boil`: the drawing number while moving. Each drawing's rim wobbles a little differently, like line
+    /// boil in hand-drawn animation; nil holds the rim still.
+    private func drawPortrait(_ ctx: GraphicsContext, size: CGSize, fade: Double, lift: CGFloat, opens: [String: CGFloat], boil: Int? = nil) {
+        let fans = portraitLayout(size, lift: lift, opens: opens)
+        guard let ground = fans.first?.ground else { return }
+        ctx.drawLayer { paint in
+            paint.opacity = fade
+            paint.blendMode = scheme == .dark ? .screen : .multiply
+            // The ground: a faint pencil rule the stems stand on.
+            var g = Path(); g.move(to: CGPoint(x: inset, y: ground)); g.addLine(to: CGPoint(x: size.width - inset, y: ground))
+            paint.stroke(g, with: .color(.secondary.opacity(0.25)), lineWidth: 0.6)
+            for f in fans {
+                var rng = f.rng
+                let ink = pigment(f.series.name, f.value ?? 0)
+                // Stem, a little unsteady.
+                // It meets the fan at its pivot; as the fan closes into a full round, it stops at the round's
+                // bottom edge instead of running through it (owner, Nov 13).
+                let o = min(1, max(0, (f.strength - 0.85) / 0.15))
+                let top = CGPoint(x: f.base.x, y: f.base.y + f.reach * 0.93 * o * o * (3 - 2 * o))
+                var stem = Path(); stem.move(to: CGPoint(x: f.base.x, y: ground))
+                stem.addQuadCurve(to: top, control: CGPoint(x: f.base.x + CGFloat.random(in: -3...3, using: &rng), y: (ground + top.y) / 2))
+                paint.stroke(stem, with: .color(ink.opacity(0.7)), lineWidth: 0.8)
+                // The fan: closed is a narrow brush (16°), fully open a whole round. Deep where it meets the stem,
+                // thinning towards a rim of a few wide soft bumps with a faint halo, like a cloud's edge
+                // (owner, Nov 13: fade fill, cloud rim).
+                let spread = (16 + 344 * Double(f.strength)) * .pi / 180
+                func wedge(_ r: CGFloat) -> Path {
+                    let bumps = max(2, Int((spread * 180 / .pi / 40).rounded()))
+                    let full = spread >= 2 * .pi - 0.01
+                    let steps = 160
+                    var w = Path()
+                    if !full { w.move(to: f.base) }
+                    for j in 0...steps {
+                        let t = Double(j) / Double(steps)
+                        let a = -Double.pi / 2 - spread / 2 + spread * t
+                        let p = (t * Double(bumps)).truncatingRemainder(dividingBy: 1)
+                        var wob = 0.0
+                        if let b = boil {
+                            let fb = Double(b)
+                            let w1: Double = 0.022 * sin(t * 9 + fb * 2.3)
+                            let w2: Double = 0.012 * sin(t * 23 - fb * 1.7)
+                            wob = w1 + w2
+                        }
+                        let bump: Double = (1 - pow(2 * p - 1, 2)).squareRoot()
+                        let rr = r * CGFloat(0.93 + 0.07 * bump + wob)
+                        let q = CGPoint(x: f.base.x + cos(a) * rr, y: f.base.y + sin(a) * rr)
+                        if full && j == 0 { w.move(to: q) } else { w.addLine(to: q) }
+                    }
+                    w.closeSubpath()
+                    return w
+                }
+                func fade(_ r: CGFloat) -> GraphicsContext.Shading {
+                    .radialGradient(Gradient(stops: [.init(color: ink, location: 0), .init(color: ink.opacity(0.55), location: 0.5),
+                                                     .init(color: ink.opacity(0.08), location: 1)]),
+                                    center: f.base, startRadius: 0, endRadius: r)
+                }
+                let shape = wedge(f.reach)
+                paint.fill(shape, with: fade(f.reach))
+                // No halo round the rim (owner, Nov 13).
+            }
+        }
+    }
+
+    /// The swatch under a tap: the smallest one that holds the point, so one sitting on top of a bigger one wins.
+    private func swatch(at p: CGPoint) -> Swatch? {
+        portraitLayout(canvasSize, lift: 0).filter { $0.rect.insetBy(dx: -6, dy: -6).contains(p) }
+            .min { $0.rect.width * $0.rect.height < $1.rect.width * $1.rect.height }
+    }
+
+    /// The tap label (owner, Nov 13): an annotation above the fan, like a label on a botanical print. The name
+    /// in the fan's own ink, the reading quiet beneath it, no card, on the paper.
+    private func legend(_ w: Swatch) -> some View {
+        VStack(spacing: 1) {
+            Text(w.series.name)
+                .font(Theme.Figtree.font(size: 15, weight: .medium))
+                .foregroundStyle(pigment(w.series.name, w.value ?? 0).mix(with: .black, by: 0.25))
+            Text(Self.readingText(w.value, unit: w.series.unit))
+                .font(Theme.Figtree.font(size: 13).monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        // A soft glow of paper round the letters, so they read over a petal without a box.
+        .shadow(color: Color(uiColor: .systemGroupedBackground), radius: 3)
+        .shadow(color: Color(uiColor: .systemGroupedBackground), radius: 6)
+        .multilineTextAlignment(.center)
+    }
+
+    /// "62 °F", "33 ppb", "90% of a high day", or "No reading".
+    static func readingText(_ v: Double?, unit: String) -> String {
+        guard let v else { return "No reading" }
+        let n = Int(v.rounded())
+        if unit.hasPrefix("%") { return "\(n)\(unit)" }
+        return unit.isEmpty ? "\(n)" : "\(n) \(unit)"
+    }
+
+    /// A watercolour swatch: a few thin glazes of one wobbly shape, paler in the middle, with the pigment
+    /// pulled to a darker, ragged rim where the water dried (the edge darkening of a real wash).
+    private func swatch(_ ctx: GraphicsContext, name: String, rect r: CGRect, ink: Color, alpha: Double, rng: inout IslandRNG) {
+        let base = outline(name, r)
+        let c = CGPoint(x: r.midX, y: r.midY)
+        let R = max(r.width, r.height) / 2
+        // Glazes: the same shape, each a little different, so the body is uneven like pooled water.
+        for g in 0..<3 {
+            let path = wobble(base, around: c, amount: R * 0.06, rng: &rng)
+            let a = alpha * (g == 0 ? 0.55 : 0.28)
+            ctx.fill(path, with: .radialGradient(Gradient(colors: [ink.opacity(a * 0.55), ink.opacity(a)]),
+                                                 center: CGPoint(x: c.x + CGFloat.random(in: -0.2...0.2, using: &rng) * R,
+                                                                 y: c.y - CGFloat.random(in: 0...0.25, using: &rng) * R),
+                                                 startRadius: 0, endRadius: R * 1.05))
+        }
+        // The dried edge: pigment pulled out to the rim, soft on the inside, sharper outside.
+        let rim = wobble(base, around: c, amount: R * 0.04, rng: &rng)
+        ctx.drawLayer { l in
+            l.clip(to: rim)
+            l.addFilter(.blur(radius: 2.2))
+            l.stroke(rim, with: .color(ink.opacity(min(1, alpha * 0.95))), lineWidth: 5)
+        }
+        ctx.stroke(rim, with: .color(ink.opacity(alpha * 0.35)), lineWidth: 0.8)
+    }
+
+    /// Points round a condition's shape: a soft block, a drop, an oval or a star.
+    private func outline(_ name: String, _ r: CGRect) -> [CGPoint] {
+        let c = CGPoint(x: r.midX, y: r.midY), rx = r.width / 2, ry = r.height / 2
+        let n = 64
+        return (0..<n).map { i in
+            let a = CGFloat(i) / CGFloat(n) * 2 * .pi
+            let (ca, sa) = (cos(a), sin(a))
+            switch name {
+            case "Pollen":
+                let k = 0.72 + 0.28 * cos(6 * a)
+                return CGPoint(x: c.x + ca * rx * k, y: c.y + sa * ry * k)
+            case "Wind", "Ozone", "Humidity":
+                let e: CGFloat = name == "Humidity" ? 2.6 : 2
+                return CGPoint(x: c.x + rx * copysign(pow(abs(ca), 2 / e), ca), y: c.y + ry * copysign(pow(abs(sa), 2 / e), sa))
+            default:   // a soft-cornered block
+                let e: CGFloat = 7
+                return CGPoint(x: c.x + rx * copysign(pow(abs(ca), 2 / e), ca), y: c.y + ry * copysign(pow(abs(sa), 2 / e), sa))
+            }
+        }
+    }
+
+    /// The outline pushed in and out by slow random waves, closed with smooth curves.
+    private func wobble(_ pts: [CGPoint], around c: CGPoint, amount: CGFloat, rng: inout IslandRNG) -> Path {
+        let p1 = CGFloat.random(in: 0...6.28, using: &rng), p2 = CGFloat.random(in: 0...6.28, using: &rng), p3 = CGFloat.random(in: 0...6.28, using: &rng)
+        let n = pts.count
+        let moved = pts.enumerated().map { i, p -> CGPoint in
+            let a = CGFloat(i) / CGFloat(n) * 2 * .pi
+            let d = amount * (0.55 * sin(3 * a + p1) + 0.3 * sin(5 * a + p2) + 0.15 * sin(11 * a + p3))
+            let dx = p.x - c.x, dy = p.y - c.y, len = max(hypot(dx, dy), 0.001)
+            return CGPoint(x: p.x + dx / len * d, y: p.y + dy / len * d)
+        }
+        var path = Path()
+        let mid = { (i: Int) in CGPoint(x: (moved[i % n].x + moved[(i + 1) % n].x) / 2, y: (moved[i % n].y + moved[(i + 1) % n].y) / 2) }
+        path.move(to: mid(0))
+        for i in 1...n { path.addQuadCurve(to: mid(i), control: moved[i % n]) }
+        path.closeSubpath()
+        return path
+    }
+
+    /// Each condition keeps one shape, so its marks stay findable when columns overlap: blocks for
+    /// temperature and particles, a soft drop for humidity, a long oval for wind, a round for ozone, a star for pollen.
+    private func mark(_ name: String, _ r: CGRect) -> Path {
+        switch name {
+        case "Humidity": return Path(roundedRect: r, cornerSize: CGSize(width: r.width / 2, height: r.width / 2))
+        case "Wind", "Ozone": return Path(ellipseIn: r)
+        case "Pollen":
+            var p = Path()
+            let c = CGPoint(x: r.midX, y: r.midY), R = min(r.width, r.height) / 2 * 1.1
+            for k in 0..<12 {
+                let a = CGFloat(k) * .pi / 6 - .pi / 2
+                let rr = k.isMultiple(of: 2) ? R : R * 0.58
+                let q = CGPoint(x: c.x + cos(a) * rr, y: c.y + sin(a) * rr)
+                k == 0 ? p.move(to: q) : p.addLine(to: q)
+            }
+            p.closeSubpath()
+            return p
+        default: return Path(roundedRect: r, cornerSize: CGSize(width: 2, height: 2))
         }
     }
 
@@ -1012,10 +1530,10 @@ struct MenusSkySquare<Field: View, Map: View>: View {
             switch felt {
             case .rescue:
                 Circle().fill(Theme.rescue)
-                Image(systemName: "inhaler.fill").font(.system(size: c * 0.34, weight: .semibold)).foregroundStyle(.white)
+                Image(systemName: "inhaler.fill").font(Theme.Figtree.font(size: c * 0.34, weight: .semibold)).foregroundStyle(.white)
             case .standard:
                 Circle().fill(Theme.standardSoft)
-                Image(systemName: "inhaler.fill").font(.system(size: c * 0.34, weight: .semibold)).foregroundStyle(Theme.standard)
+                Image(systemName: "inhaler.fill").font(Theme.Figtree.font(size: c * 0.34, weight: .semibold)).foregroundStyle(Theme.standard)
             case .nothing:
                 Circle().fill(.white.opacity(0.35))
                 Circle().strokeBorder(.white, style: StrokeStyle(lineWidth: 2.5, dash: [6, 6]))

@@ -35,7 +35,7 @@ struct InsightsView: View {
                 VStack(spacing: 24) {
                     // SF for the page's name; the one Recursive line on the page is your archetype.
                     Text("Personal Insights")
-                        .font(.title2.weight(.semibold))
+                        .font(Theme.ui(.title2, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
                     if learned, let p = profile {
@@ -49,7 +49,7 @@ struct InsightsView: View {
                             .frame(maxWidth: .infinity)
                         Text("Still learning…").font(Theme.serifTitleLarge).kerning(Theme.serifKerning)
                         Text("Keep logging when you use your inhaler. felt air fills in your ordinary moments on its own, and your profile appears here once it has learned.")
-                            .font(.subheadline).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
+                            .font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
                     }
                     whenAndWhere
                     tiles
@@ -78,7 +78,7 @@ struct InsightsView: View {
                 case .moments: MomentsLogView(events: Array(events)).background(paperBackground)
                 }
             }
-            .environment(\.colorScheme, paper == .linen ? .light : .dark)
+            .environment(\.colorScheme, paper == .linen || Crit.AppLook.current == .menus ? .light : .dark)   // Menus look: always light (owner, Nov 13)
             .task(id: dataKey) {
                 model.rebuild(events: events, demo: demo)
                 recordSnapshot()
@@ -146,15 +146,15 @@ struct InsightsView: View {
             let name = edge.map { $0.side == .below ? "Cold-sensitive, your way" : "Heat-sensitive, your way" } ?? a.name
             let line = edge.map { $0.side == .below ? ($0.isGeneral ? "Your flare days come on freezing days, more than your usual ones do." : "Your flare days come on days colder than most of your usual ones, before it’s freezing.") : "Your flare days come on days warmer than most of your usual ones." } ?? a.line
             Text(name).font(Theme.serifTitleLarge).kerning(Theme.serifKerning).multilineTextAlignment(.center)
-            Text(line).font(.body).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            Text(line).font(Theme.ui(.body)).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
             // Learned, not a score. It can move: felt air keeps learning, and seasons change what's in the air.
             Button { path.append(Page.history) } label: {
                 HStack(spacing: 6) {
                     Circle().fill(Verdict.connected).frame(width: 7, height: 7)
                     Text("Learned · may shift with the seasons").lineLimit(1)
-                    Image(systemName: "chevron.right").font(.caption2.weight(.bold)).opacity(0.6)
+                    Image(systemName: "chevron.right").font(Theme.ui(.caption2, weight: .bold)).opacity(0.6)
                 }
-                .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+                .font(Theme.ui(.subheadline, weight: .medium)).foregroundStyle(Theme.secondaryText)
             }
             .buttonStyle(PressStyle())
         }
@@ -183,7 +183,7 @@ struct InsightsView: View {
         let rank: [AirProfile.Status: Int] = [.pattern: 0, .early: 1, .nothing: 2, .notTracked: 3]
         let axes = p.axes.sorted { (rank[$0.status]!, -$0.strength) < (rank[$1.status]!, -$1.strength) }
         return VStack(alignment: .leading, spacing: 10) {
-            Text("What shows up on your flare days").font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+            Text("What shows up on your flare days").font(Theme.ui(.subheadline, weight: .medium)).foregroundStyle(Theme.secondaryText)
             let arch = Archetype(profile: p, learned: true)
             let lead = arch.categories.first ?? axes.first?.category
             let opened = open ?? Set([lead].compactMap { $0 })
@@ -272,11 +272,11 @@ struct InsightsView: View {
     /// One row, on the same glass as the home's buttons: icon, name, value, chevron.
     private func row(_ icon: String, _ title: String, _ value: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.body).frame(width: 24)
-            Text(title).font(.body.weight(.medium))
+            Image(systemName: icon).font(Theme.ui(.body)).frame(width: 24)
+            Text(title).font(Theme.ui(.body, weight: .medium))
             Spacer(minLength: 8)
-            Text(value).font(.subheadline).foregroundStyle(Theme.secondaryText).lineLimit(1)
-            Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(Theme.secondaryText)
+            Text(value).font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+            Image(systemName: "chevron.right").font(Theme.ui(.caption, weight: .bold)).foregroundStyle(Theme.secondaryText)
         }
         .foregroundStyle(.primary)
         .padding(.horizontal, 16).padding(.vertical, 15)
@@ -336,7 +336,7 @@ struct InsightSection<Content: View>: View {
                 if let systemImage { Image(systemName: systemImage) }
                 Text(title)
             }
-            .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+            .font(Theme.ui(.subheadline, weight: .medium)).foregroundStyle(Theme.secondaryText)
             content
             Rectangle().fill(Theme.secondaryText.opacity(0.2)).frame(height: 0.5).padding(.top, 8)
         }
@@ -392,7 +392,7 @@ struct LearningRing: View {
                     }
                 }
                 }
-                Image(systemName: done ? "sparkles" : "sparkle").font(.system(size: size * 0.2, weight: .semibold))
+                Image(systemName: done ? "sparkles" : "sparkle").font(Theme.ui(size: size * 0.2, weight: .semibold))
                     .symbolEffect(.pulse, isActive: done && !reduceMotion)
                     .symbolEffect(.bounce, value: done)
             }

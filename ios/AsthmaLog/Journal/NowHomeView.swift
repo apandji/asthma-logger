@@ -18,6 +18,8 @@ struct NowHomeView: View {
     /// Reading the air somewhere other than here (an address, Home, Work). Nil is the phone's location.
     /// How far the Menus Now page has scrolled; the combined chart parts its lines as it grows.
     @State private var menusScroll: CGFloat = 0
+    /// The visible height of the Now page, between the top and the timeline inset.
+    @State private var menusViewport: CGFloat = 0
     @State private var chosen = SavedPlace.load(SavedPlace.chosenKey)
     @State private var showPlaces = false
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
@@ -87,7 +89,11 @@ struct NowHomeView: View {
     private var healthLook: Bool { appLook.healthLike }
     // Menus look (Oct 30 sketch).
     @State private var menusScale = MenusScale.timeline
-    @State private var menusTab = MenusTab.moments
+    @State private var menusTab = MenusTab.home
+    @State private var showLogChoices = false
+    /// The + that the log sheet zooms out of, and which way in it was (voice or written).
+    @Namespace private var logSource
+    @State private var logVoice = false
     @State private var showSideMenu = false
     @State private var showDoctor = false
     /// Menus look: the air cube's one 3D scene, and where its slot sits on the page.
@@ -276,6 +282,14 @@ struct NowHomeView: View {
                     .presentationDragIndicator(.visible)
             }
             .overlay(alignment: .bottom) { bottomBar }
+            // Menus look: the log sheet grows out of the + (attached outside the bar, so the zoom can find it) (owner, Nov 13).
+            .sheet(isPresented: Binding(get: { appLook == .menus && capture != nil },
+                                        set: { if !$0 { closeMenusCapture() } })) {
+                if let s = capture {
+                    CaptureSheet(session: s, chat: captureStyle == .chat, voice: logVoice) { capture = nil }
+                        .navigationTransition(.zoom(sourceID: "log", in: logSource))
+                }
+            }
             // Menus look: the side menu slides in from the left over everything, a scrim behind it.
             .overlay {
                 if showSideMenu {
@@ -300,7 +314,7 @@ struct NowHomeView: View {
                 else { cubeSlotOwner = id; cubeSlot = rect }
             }
             .overlay {
-                if appLook == .menus, Crit.MenusSky.current == .cube, menusTab == .moments, menusScale == .timeline {
+                if appLook == .menus, Crit.MenusSky.current == .cube, menusTab == .home, menusScale == .timeline {
                     AirCubeLayer(world: cubeWorld, slot: cubeSlot)
                 }
             }
@@ -700,8 +714,11 @@ struct NowHomeView: View {
                                   title: here == nil ? AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions) : nowRead,
                                   verdict: nil, tint: nil, isNow: true)
                     // The air arriving for this moment: shimmering while it's fetched, then each reading lands.
-                    AirReadings(conditions: j.conditions, weave: j.weave, pollen: nil, pending: j.envStatus == .pending)
-                        .padding(.top, 6)
+                    // Menus look: the flowers show the air, so no readings row here (owner, Nov 13).
+                    if appLook != .menus {
+                        AirReadings(conditions: j.conditions, weave: j.weave, pollen: nil, pending: j.envStatus == .pending)
+                            .padding(.top, 6)
+                    }
                 } else {
                     // The verdict is on the timeline's chip now (playheadVerdict), not a pill up here.
                     VerdictHeader(place: AnyView(placeLabel(here?.lat, here?.lon, here?.place, current: true)),
@@ -997,7 +1014,8 @@ struct NowHomeView: View {
     /// Lock Screen card. The style is the A/B test's arm (docs/design/ab-tests.md).
     /// `listen`: opened from a mic, so it starts listening straight away (you already said you'd talk).
     private func openCapture(_ e: LogEvent, listen: Bool = false) {
-        guard captureStyle != .sheet else { recording = e; return }
+        logVoice = listen
+        guard captureStyle != .sheet || appLook == .menus else { recording = e; return }
         let s = CaptureSession(event: e, chat: captureStyle == .chat, autoSelect: autoSelect == .ticked)
         withAnimation(reduceMotion ? nil : Theme.lift) { capture = s }
         if listen {
@@ -1011,15 +1029,9 @@ struct NowHomeView: View {
     /// The + (and Insights), and, just logged, the panel that rises over the timeline and the + like a toast.
     @ViewBuilder private var bottomBar: some View {
         if appLook == .menus {
-            MenusBottomBar(tab: $menusTab, firstLabel: menusScale == .timeline ? "Moments" : "Timeline", felt: felt)
-                .opacity(capture == nil && logged == nil ? 1 : 0)
-                .allowsHitTesting(capture == nil && logged == nil)
-                .overlay(alignment: .bottom) {
-                    if let e = logged, capture == nil {
-                        LoggedPanel(event: e, record: { closeLogged(); openCapture(e, listen: true) }, close: closeLogged)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                    }
-                }
+            // Always there: the log sheet zooms out of the +, and replaces the old "just logged" panel on this
+            // look (its Quick journal button sat where the + is and started the mic on a second tap).
+            MenusBottomBar(tab: $menusTab, firstLabel: "Home", felt: felt, logSource: logSource)
         } else {
             feltAirBottomBar
         }
@@ -1031,10 +1043,55 @@ struct NowHomeView: View {
     private var menusPage: some View {
         VStack(alignment: .leading, spacing: 0) {
             MenusTopBar(scale: $menusScale, openMenu: { withAnimation(Theme.smooth) { showSideMenu = true } })
-            if menusTab == .insights {
-                InsightsView(skyColor: skyColorNow)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            // Apple's tab bar (owner, Nov 13, after Instagram and Linear): Liquid Glass, a lens you can drag across
+            // the tabs, it shrinks as you scroll, and the + is the separate round tab at the end.
+            // Pages as native tabs (each keeps its state); the system's bar is hidden for ours (bottomBar), so the
+            // + can stand apart in its own glass.
+            TabView(selection: $menusTab) {
+                Tab(value: MenusTab.home) { menusHome.background(Self.paper).toolbarVisibility(.hidden, for: .tabBar) } label: { Self.tabIcon(Self.fanImage, "Home") }
+                Tab(value: MenusTab.moments) {
+                    // Your inhaler use by day, month and year.
+                    MenusMomentsView(events: moments, now: now).background(Self.paper).toolbarVisibility(.hidden, for: .tabBar)
+                } label: { Self.tabIcon(Self.gridImage, "Moments") }
+                Tab(value: MenusTab.map) {
+                    // Where your moments were. Runs under the tab bar.
+                    MenusMapView(events: moments).ignoresSafeArea(edges: .bottom).toolbarVisibility(.hidden, for: .tabBar)
+                } label: { Self.tabIcon(Image(systemName: "map"), "Map") }
+                Tab(value: MenusTab.insights) {
+                    InsightsView(skyColor: skyColorNow).frame(maxWidth: .infinity, maxHeight: .infinity).toolbarVisibility(.hidden, for: .tabBar)
+                } label: { Self.tabIcon(Image(systemName: "sparkles"), "Insights") }
+            }
+            .toolbarVisibility(.hidden, for: .tabBar)
+            .tint(.primary)
+        }
+        // The sky's sideways scrub moves the window too, and on Now it keeps up with the clock.
+        .onChange(of: focusTime) { _, t in
+            let target = t ?? now
+            if abs(menusWindow.center.timeIntervalSince(target)) > 1 { withAnimation(Theme.smooth) { menusWindow.center = target } }
+        }
+        .onChange(of: now) { _, n in if focusTime == nil { menusWindow.center = n } }
+    }
+
+    /// The app's grey paper behind every tab (the system's grouped background).
+    private static let paper = Color(uiColor: .systemGroupedBackground)
+
+    /// A tab's icon with no title (owner, Nov 13); the name is for VoiceOver.
+    private static func tabIcon(_ image: Image, _ name: String) -> some View {
+        image.accessibilityLabel(name)
+    }
+
+    /// The custom marks as template images, so the tab bar can tint them like SF Symbols.
+    private static let fanImage = render(FanIcon(size: 26))
+    private static let gridImage = render(MomentsGridIcon(size: 22))
+    private static func render(_ view: some View) -> Image {
+        let r = ImageRenderer(content: view.foregroundStyle(.black))
+        r.scale = 3
+        guard let ui = r.uiImage else { return Image(systemName: "circle") }
+        return Image(uiImage: ui.withRenderingMode(.alwaysTemplate))
+    }
+
+    /// Home: the flowers over the timeline.
+    @ViewBuilder private var menusHome: some View {
                 switch menusScale {
                 case .timeline:
                     // The first screen is Now as before (the Apple Health look's header, sky and timeline);
@@ -1044,10 +1101,20 @@ struct NowHomeView: View {
                     // Combined chart (owner, Nov 13): no sky; the conditions' combined chart under the timeline is
                     // the main visual, and scrolling parts its lines into rows.
                     let combined = Crit.MenusSky.current == .combined
+                    let strip = MenusStrip(window: $menusWindow, moments: moments,
+                                           forecast: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
+                                           now: now, verdict: menusVerdict, limits: menusLimits, settle: menusSettle,
+                                           backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil },
+                                           titleBelow: combined)
                     ScrollView(.vertical) {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                             if combined {
-                                header.padding(.top, 8)
+                                // A fixed height for the header (owner, Nov 13), so the fans below stay put whether
+                                // the line above is one line or three.
+                                // One block (header is a Group: a frame on it would apply to each child).
+                                VStack(alignment: .leading, spacing: 0) { header }
+                                    .padding(.top, 8)
+                                    .frame(height: 158, alignment: .top)
                                 Color.clear.frame(height: 16)
                             } else {
                                 VStack(alignment: .leading, spacing: 20) {
@@ -1061,34 +1128,30 @@ struct NowHomeView: View {
                             Section {
                                 MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle,
                                              apart: min(1, max(0, (menusScroll - (combined ? 0 : 300)) / 260)), big: combined,
-                                             forecast: hours.map { ($0.date, $0.conditions) })
+                                             forecast: hours.map { ($0.date, $0.conditions) },
+                                             triggers: Self.fanWeights(gatedRows, demo: events.contains(where: \.isDemo)),
+                                             dayTitle: nil,
+                                             // The flowers fill the room between the header and the timeline.
+                                             bigBand: menusViewport > 0 ? max(300, menusViewport - 158 - 16 - 20) : MenusEnvironment.bigBand)   // the time is on the timeline now (owner, Nov 13)
                                     .padding(.bottom, 120)   // clear of the tab bar and the +
                             } header: {
-                                MenusStrip(window: $menusWindow, moments: moments,
-                                           forecast: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
-                                           now: now, verdict: menusVerdict, limits: menusLimits, settle: menusSettle,
-                                           backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil })
+                                if !combined { strip }
                             }
                         }
+                    }
+                    // With the fans, the timeline sits at the bottom, just above the tab bar (owner, Nov 13).
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if combined { strip.padding(.bottom, 86) }   // clear of the tab bar   // room above and below (owner, Nov 13)
                     }
                     .scrollIndicators(.hidden)
                     .scrollDisabled(probing)
                     .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, y in menusScroll = y }
+                    .onScrollGeometryChange(for: CGFloat.self) { $0.containerSize.height } action: { _, h in menusViewport = h }   // already clear of the timeline inset
                 case .month:
                     MenusMonthView(events: events, now: now)
                 case .year:
                     MenusYearView(events: events, now: now)
                 }
-            }
-        }
-        // The sky's sideways scrub moves the window too, and on Now it keeps up with the clock.
-        .onChange(of: focusTime) { _, t in
-            let target = t ?? now
-            if abs(menusWindow.center.timeIntervalSince(target)) > 1 { withAnimation(Theme.smooth) { menusWindow.center = target } }
-        }
-        .onChange(of: now) { _, n in if focusTime == nil { menusWindow.center = n } }
-        // The scrolling Now page runs under the tab bar; the others stop above it.
-        .padding(.bottom, menusTab == .moments && menusScale == .timeline ? 0 : 74)
     }
 
     /// How far the Menus window can go: the first moment (a week back at least) to the forecast's end.
@@ -1169,8 +1232,17 @@ struct NowHomeView: View {
         withAnimation(reduceMotion ? nil : Theme.smooth) { logged = nil }
     }
 
+    /// Swiped away rather than closed: keep what's there, or drop an empty one, the same as the close button.
+    private func closeMenusCapture() {
+        guard let s = capture else { return }
+        if s.listening { Task { await s.stopListening(); if s.hasAnything { s.save(context: context) } else { s.discard() } } }
+        else if s.hasAnything { s.save(context: context) } else { s.discard() }
+        capture = nil
+    }
+
     @ViewBuilder private var captureOverlay: some View {
-        if let s = capture {
+        // The Menus look shows it as a sheet from the + instead (menusCaptureSheet).
+        if let s = capture, appLook != .menus {
             CaptureExpanded(session: s, chat: captureStyle == .chat) {
                 withAnimation(reduceMotion ? nil : Theme.smooth) { capture = nil }
             }
@@ -1278,6 +1350,31 @@ struct NowHomeView: View {
     /// What in this sky is one of yours, by the sky's names ("PM2.5", "Weed pollen", "Weather", "Smoke", "Drop"),
     /// 1 when it shows up often on your flare days, 0.65 sometimes. Empty before felt air has learned: then the
     /// dots and washes are plain ink, sized by how much is in the air.
+    /// How much each condition is one of yours, 0…1, for the fans: the strongest gated lift among its bins,
+    /// scaled so lift 1.25 (the gate) is small and lift 3 or more is a full-size fan. Empty while still learning.
+    static func fanWeights(_ rows: [LiftRow], demo: Bool = false) -> [String: Double] {
+        // Demo week only (owner, Nov 13): a pollen-led person, like someone with a bad seasonal allergy. Demo
+        // pollen is display-only and never makes a lift row, so the demo's fan sizes are set here, for the
+        // picture alone. Real logs always use the gated rows below.
+        if demo {
+            return ["Pollen": 1, "Ozone": 0.7, "PM2.5": 0.45, "Humidity": 0.35, "Temperature": 0.25, "Wind": 0.15]
+        }
+        var out: [String: Double] = [:]
+        for r in rows where r.gated {
+            let name: String? = switch r.bin {
+            case "pm25", "smoke_at_point": "PM2.5"
+            case "ozone": "Ozone"
+            case "pollen_weed", "pollen_tree", "pollen_grass": "Pollen"
+            case "temp", "temp_drop", "heat_alert": "Temperature"
+            case "humidity": "Humidity"
+            default: nil
+            }
+            guard let name else { continue }
+            out[name] = max(out[name] ?? 0, min(1, max(0.2, (r.lift - 1) / 2)))
+        }
+        return out
+    }
+
     static func yours(_ rows: [LiftRow]) -> [String: Double] {
         var out: [String: Double] = [:]
         for r in rows {
@@ -2561,14 +2658,24 @@ struct VerdictHeader: View {
     /// Apple Health look: what (the tag) on top, the sentence, then when and where together in one grey line.
     private var health: Bool { Crit.AppLook.current.healthLike }
     private var hasTag: Bool { tag != nil || tagText != nil }
+    /// Menus look (owner, Nov 13): the place sits on the top line with the tag, and there's no time line
+    /// (the timeline shows the time).
+    private var menus: Bool { Crit.AppLook.current == .menus }
+    /// The sentence without its pattern marks (private-use characters), as plain words.
+    static func unmarked(_ s: String) -> String {
+        String(String.UnicodeScalarView(s.unicodeScalars.filter { !(0xE000...0xF8FF).contains($0.value) }))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // The context line: tag, place, and the verdict (the place gives way first).
-            if !health || hasTag {
+            if !health || hasTag || menus {
             HStack(spacing: 8) {
                 if let tag { MomentTag(moment: tag) } else if let tagText { MomentTag(moment: .okay, text: tagText) }
                 if !health { place.layoutPriority(0) }
+                if menus {
+                    place.font(Theme.Figtree.font(.subheadline)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                }
                 // With a tag on the line too there's no room for both; the verdict (also in the chip and
                 // the sky's colour) gives way to the place.
                 if verdict != nil { verdictPill.layoutPriority(tagText == nil ? 1 : -1) }
@@ -2589,7 +2696,10 @@ struct VerdictHeader: View {
             let (head, tail) = Self.flow(patternMark == "words" ? TheRead.spoken(title) : title)
             ZStack(alignment: .topLeading) {
                 Group {
-                    if Self.firstMark(head) != nil {
+                    if menus {
+                        // Menus look: plain words, no pattern underlines (owner, Nov 13).
+                        Text(Self.unmarked(head)).font(font).kerning(Theme.serifKerning)
+                    } else if Self.firstMark(head) != nil {
                         // Each underlined part is its own tap, with its own tip (owner, Oct 18).
                         MarkedText(text: head, font: font, kerning: Theme.serifKerning, ink: .primary)
                     } else {
@@ -2609,7 +2719,11 @@ struct VerdictHeader: View {
             // Three levels: the sentence; then what it adds (the rest of the read, near-white, tight under it);
             // then when, smallest and quietest, a step apart. They were one grey and competed (owner, Oct 18).
             VStack(alignment: .leading, spacing: 10) {
-                if let tail {
+                if let tail, menus {
+                    Text(Self.unmarked(tail)).font(Theme.Figtree.font(.body)).foregroundStyle(Color.primary.opacity(0.82))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, -2)
+                } else if let tail {
                     MarkedText(text: tail, font: .body, ink: Color.primary.opacity(0.82))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityLabel(TheRead.spoken(tail))
@@ -2617,7 +2731,7 @@ struct VerdictHeader: View {
                         .transition(.opacity)
                         .padding(.top, -2)
                 }
-                if health {
+                if health && !menus {
                     // When and where, together: "2:40 AM · Work", "Now · Work".
                     HStack(spacing: 6) {
                         if let t = isNow ? "Now" : whenDate?.formatted(.dateTime.hour().minute()) {

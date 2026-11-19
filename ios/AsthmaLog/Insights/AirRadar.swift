@@ -94,7 +94,7 @@ struct AirRadar: View {
             withAnimation(Theme.snap) { selected = on ? nil : c }
         } label: {
             VStack(spacing: 2) {
-                Text(c.shortTitle).font(.caption.weight(.semibold)).lineLimit(1).fixedSize()
+                Text(c.shortTitle).font(Theme.ui(.caption, weight: .semibold)).lineLimit(1).fixedSize()
                     .foregroundStyle(axis.status == .notTracked ? Theme.secondaryText : .primary)
                 Circle().fill(on ? Self.ink(axis) : .clear).frame(width: 5, height: 5)
             }

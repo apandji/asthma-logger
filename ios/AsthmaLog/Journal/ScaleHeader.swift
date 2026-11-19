@@ -115,18 +115,27 @@ struct MomentTag: View {
     /// Apple Health look: a tinted capsule in the timeline's colour (the system's tag style, as in Reminders
     /// and Health): the SF Symbols inhaler and the word in the colour, the colour faint behind. Standard's pale blue is too light for words, so its word takes the deeper blue.
     private var healthTag: some View {
-        let mark = moment == .rescue ? Theme.rescue : Theme.standardSoft
-        let word = moment == .rescue ? Theme.rescue : Theme.standard
+        // Menus look (owner, Nov 13): one ink, rescue a filled capsule, standard an outlined one.
+        let menus = Crit.AppLook.current == .menus
+        let mark = menus ? Color.primary : moment == .rescue ? Theme.rescue : Theme.standardSoft
+        let word = menus ? (moment == .rescue ? Color(uiColor: .systemBackground) : Color.primary)
+            : moment == .rescue ? Theme.rescue : Theme.standard
         return HStack(spacing: 6) {
-            Image(systemName: "inhaler.fill").font(.footnote.weight(.semibold)).foregroundStyle(word)
+            Image(systemName: "inhaler.fill").font(Theme.Figtree.font(.footnote, weight: .semibold)).foregroundStyle(word)
             Text(moment.title)
-                .font(.subheadline.weight(.semibold))
+                .font(Theme.Figtree.font(.subheadline, weight: .semibold))
                 .foregroundStyle(word)
                 .lineLimit(1).fixedSize()
         }
         .padding(.leading, 9).padding(.trailing, 11)
         .padding(.vertical, 5)
-        .background(Capsule().fill(mark.opacity(moment == .rescue ? 0.15 : 0.3)))
+        .background {
+            if menus {
+                if moment == .rescue { Capsule().fill(mark) } else { Capsule().strokeBorder(mark, lineWidth: 1.2) }
+            } else {
+                Capsule().fill(mark.opacity(moment == .rescue ? 0.15 : 0.3))
+            }
+        }
         .accessibilityElement(children: .combine)
     }
 

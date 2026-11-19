@@ -129,7 +129,7 @@ struct CaptureExpanded: View {
 /// answer in a bubble on the right (streaming as you speak, the words it's picking up lit), then what it
 /// heard as chips you can untick, then the next question. The questions are a fixed set (`Interview`), never
 /// generated, and it ends after a few. Quick replies sit above the composer for when you can't talk.
-private struct ChatCapture: View {
+struct ChatCapture: View {
     @Bindable var session: CaptureSession
     let finish: () -> Void
     @State private var typing = false
@@ -149,7 +149,7 @@ private struct ChatCapture: View {
                                 .id("live")
                         }
                         if session.done {
-                            Text("That's everything. Done keeps it with this moment.")
+                            Text("Moment logged.")
                                 .font(.subheadline).foregroundStyle(Theme.secondaryText).id("done")
                         }
                     }
@@ -341,7 +341,7 @@ private struct ChatCapture: View {
 /// The classic journal entry: your words at the top (spoken or typed, the words it's picking up lit), then
 /// the same questions as sections of chips, in the providers' order. Everything visible at once, nothing
 /// asked; you fill what applies.
-private struct JournalCapture: View {
+struct JournalCapture: View {
     @Bindable var session: CaptureSession
 
     var body: some View {
@@ -447,20 +447,22 @@ struct CaptureChip: View {
         self.label = label; kind = nil; self.on = on; self.action = action
     }
 
-    private var ink: Color { kind == .trigger || kind == nil ? .white : Theme.symptom }
+    /// Menus look (owner, Nov 13): one ink, black when chosen, for every kind, the same as the app's marks.
+    private var menus: Bool { Crit.AppLook.current == .menus }
+    private var ink: Color { menus ? .black : kind == .trigger || kind == nil ? .white : Theme.symptom }
 
     var body: some View {
         Button(action: action) {
             Text(label)
                 .font(small ? .subheadline.weight(.medium) : .body.weight(.medium))
-                .foregroundStyle(on ? Color.black : .primary)
+                .foregroundStyle(on ? (menus ? Color.white : Color.black) : .primary)
                 .padding(.horizontal, small ? 12 : 16)
                 .frame(minHeight: small ? 32 : 44)
                 .background(Capsule().fill(on ? AnyShapeStyle(ink) : AnyShapeStyle(Color.primary.opacity(0.1))))
                 .overlay {
                     if suggested && !on {
                         Capsule().strokeBorder(ink.opacity(0.7), style: StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
-                    } else if kind == .symptom || kind == .outcome, !on {
+                    } else if !menus, kind == .symptom || kind == .outcome, !on {
                         Capsule().strokeBorder(Theme.symptom.opacity(0.45), lineWidth: 1)
                     }
                 }

@@ -27,14 +27,14 @@ struct CategoryCard: View {
                 HStack(spacing: 10) {
                     // The same symbol as the rail's stop, in the category's ink.
                     Image(systemName: Icons.category(axis.category))
-                        .font(.subheadline.weight(.semibold))
+                        .font(Theme.ui(.subheadline, weight: .semibold))
                         .foregroundStyle(axis.status == .notTracked ? Theme.secondaryText.opacity(0.5) : AirRadar.ink(axis))
                         .frame(width: 22)
-                    Text(axis.category.title).font(.body.weight(.medium))
+                    Text(axis.category.title).font(Theme.ui(.body, weight: .medium))
                     Spacer(minLength: 8)
-                    Text(axis.status.word).font(.caption.weight(.semibold))
+                    Text(axis.status.word).font(Theme.ui(.caption, weight: .semibold))
                         .foregroundStyle(axis.status == .pattern ? Color.primary : Theme.secondaryText)
-                    Image(systemName: "chevron.down").font(.caption.weight(.bold)).foregroundStyle(Theme.secondaryText)
+                    Image(systemName: "chevron.down").font(Theme.ui(.caption, weight: .bold)).foregroundStyle(Theme.secondaryText)
                         .rotationEffect(.degrees(expanded ? 180 : 0))
                 }
                 .contentShape(Rectangle())
@@ -59,7 +59,7 @@ struct CategoryCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
                     if let r = t.row, starred.contains(r.id) {
-                        Image(systemName: "star.fill").font(.caption2)
+                        Image(systemName: "star.fill").font(Theme.ui(.caption2))
                             .foregroundStyle(Crit.RiskColor.familiesInInk ? Verdict.red : WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
                             .accessibilityLabel("Leads your profile")
                     } else if let r = t.row, t.strength == .strong || t.strength == .some {
@@ -67,12 +67,12 @@ struct CategoryCard: View {
                         Circle().fill(Crit.RiskColor.familiesInInk ? Verdict.red : WeatherColor.ink(bin: r.bin, level: r.level) ?? AirRadar.ink(axis))
                             .frame(width: 8, height: 8).accessibilityHidden(true)
                     }
-                    Text(t.name).font(.subheadline)
+                    Text(t.name).font(Theme.ui(.subheadline))
                         .foregroundStyle(t.strength == .notTracked || t.strength == .none ? Theme.secondaryText : .primary)
                 }
             }
             Spacer(minLength: 8)
-            Text(t.strength.word).font(.caption.weight(t.strength == .strong ? .bold : .semibold))
+            Text(t.strength.word).font(Theme.ui(.caption, weight: t.strength == .strong ? .bold : .semibold))
                 .foregroundStyle(t.strength == .strong || t.strength == .some ? Color.primary : Theme.secondaryText)
         }
         .padding(.leading, 20)
@@ -94,8 +94,8 @@ struct SmallBox: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: icon).font(.subheadline.weight(.semibold))
-            Text(text).font(.subheadline).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+            Label(title, systemImage: icon).font(Theme.ui(.subheadline, weight: .semibold))
+            Text(text).font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
             if !pins.isEmpty {
                 Map(initialPosition: .region(Self.region(pins)), interactionModes: []) {
                     ForEach(Array(pins.enumerated()), id: \.offset) { _, p in
@@ -151,7 +151,7 @@ struct ProfileHistoryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Your profile can shift with the seasons. felt air keeps a snapshot each time it changes, and once a month.")
-                    .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    .font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText)
                 if let current {
                     entry(current, label: same.last.map { "Now, since \($0.date.formatted(.dateTime.month(.abbreviated).day().year()))" } ?? "Now")
                 }
@@ -159,7 +159,7 @@ struct ProfileHistoryView: View {
                     entry(s, label: "Since \(s.date.formatted(.dateTime.month(.abbreviated).day().year()))")
                 }
                 if past.isEmpty && current == nil {
-                    Text("Your first profile is kept once felt air has learned your pattern.").font(.subheadline)
+                    Text("Your first profile is kept once felt air has learned your pattern.").font(Theme.ui(.subheadline))
                 }
             }
             .padding(20)
@@ -174,8 +174,8 @@ struct ProfileHistoryView: View {
             AirRadar(profile: s.profile, selected: .constant(nil), size: 56, labels: false)
                 .frame(width: 72, height: 72)
             VStack(alignment: .leading, spacing: 3) {
-                Text(label).font(.caption).foregroundStyle(Theme.secondaryText)
-                Text(s.title).font(.body.weight(.medium))
+                Text(label).font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText)
+                Text(s.title).font(Theme.ui(.body, weight: .medium))
             }
             Spacer(minLength: 0)
         }
@@ -211,9 +211,9 @@ struct MomentsLogView: View {
                             HStack(spacing: 12) {
                                 MomentSwatch(event: m, size: 22)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(m.moment.title) · \(m.loggedAt.formatted(date: .omitted, time: .shortened))").font(.subheadline.weight(.medium))
+                                    Text("\(m.moment.title) · \(m.loggedAt.formatted(date: .omitted, time: .shortened))").font(Theme.ui(.subheadline, weight: .medium))
                                     Text([m.placeName, (m.voiceTranscript ?? "").isEmpty ? nil : "“\(m.voiceTranscript!)”"].compactMap { $0 }.joined(separator: " · "))
-                                        .font(.caption).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                                        .font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText).lineLimit(1)
                                 }
                             }
                         }

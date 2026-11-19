@@ -14,7 +14,7 @@ struct PersonalEdgeCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(colder ? "Cold, for you" : "Heat, for you").font(.caption.weight(.semibold)).foregroundStyle(Theme.secondaryText)
+            Text(colder ? "Cold, for you" : "Heat, for you").font(Theme.ui(.caption, weight: .semibold)).foregroundStyle(Theme.secondaryText)
             switch style {
             case .sentence:
                 (Text("Your flare days often came when it was ") + highlight(edge.phrase(unit: "°F")) + Text("."))
@@ -24,12 +24,12 @@ struct PersonalEdgeCard: View {
                     .font(Theme.serifTitle)
             case .dots:
                 Text(colder ? "Your flare days sat on the cold side of your usual days." : "Your flare days sat on the warm side of your usual days.")
-                    .font(.subheadline)
+                    .font(Theme.ui(.subheadline))
                 EdgeDots(edge: edge, flare: flare, baseline: baseline)
                     .frame(height: 128)
             }
             Text(edge.isGeneral ? "Worked out from your moments. It’s where cold starts for most people too." : "Worked out from your moments. For most people, \(colder ? "cold starts at freezing" : "heat starts around 90°F").")
-                .font(.caption).foregroundStyle(Theme.secondaryText)
+                .font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -83,9 +83,9 @@ private struct EdgeDots: View {
             }
             row(flare, base: 44, dir: -1, filled: true)
             row(baseline, base: 58, dir: 1, filled: false)
-            ctx.draw(Text("colder").font(.caption2).foregroundStyle(Theme.secondaryText), at: CGPoint(x: pad, y: 118), anchor: .leading)
-            ctx.draw(Text("warmer").font(.caption2).foregroundStyle(Theme.secondaryText), at: CGPoint(x: size.width - pad, y: 118), anchor: .trailing)
-            ctx.draw(Text("from here").font(.caption2.weight(.semibold)), at: CGPoint(x: ex, y: 118), anchor: .center)
+            ctx.draw(Text("colder").font(Theme.ui(.caption2)).foregroundStyle(Theme.secondaryText), at: CGPoint(x: pad, y: 118), anchor: .leading)
+            ctx.draw(Text("warmer").font(Theme.ui(.caption2)).foregroundStyle(Theme.secondaryText), at: CGPoint(x: size.width - pad, y: 118), anchor: .trailing)
+            ctx.draw(Text("from here").font(Theme.ui(.caption2, weight: .semibold)), at: CGPoint(x: ex, y: 118), anchor: .center)
         }
         .accessibilityLabel("Dots for each flare moment and each usual day, colder to warmer. Your flare moments cluster on the \(edge.side == .below ? "cold" : "warm") side.")
     }

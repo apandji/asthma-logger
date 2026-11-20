@@ -12,7 +12,7 @@ matters, and the FigJam board "On API Calls Scoping" for when each call happens.
 | Piece | Where | Status |
 |---|---|---|
 | Response models (air quality, pollen v3 with species, weather, fire) | `AsthmaCore/Conditions/Ambee.swift` | Air quality and pollen **checked against live responses** (Nov 13, 2026): pollen hours are `timestamp` / `unixTs`, history names `majorPollutant`, latest returns the station's own lat/lng. Weather and fire still as documented. Every field optional. |
-| `AmbeeHour`: one hour at one place, our units | same | µg/m³, ppb, grains/m³, °F, %. `isForecast` marks forecast hours. |
+| `AmbeeHour`: one hour at one place, our units | same | µg/m³, ppb, particles/m³, °F, %. `isForecast` marks forecast hours. |
 | Mapping to readings (`observations(source:)`) | same | Each reading labelled with its source ("Ambee" / "Ambee (demo)"), outdoor, model-grid scale. |
 | Mapping to the look-back (`Ambee.lookBack`) | same | 48 h history → the two windows the look-back already stores. |
 | `AmbeeSource` protocol: `latest`, `history` (48 h), `forecast` | same | The app only talks to this. |

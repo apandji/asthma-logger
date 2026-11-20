@@ -90,3 +90,23 @@ import Testing
         #expect(c.best(.pressure)?.value == 1012)
     }
 }
+
+/// The species under a pollen total (`PollenSpecies`): kept as sent, zeros too.
+@Suite struct PollenSpeciesTests {
+    @Test func speciesComeThroughFromAmbee() throws {
+        let json = #"{"message":"success","data":[{"Risk":{"grass_pollen":"Low","tree_pollen":"Low","weed_pollen":"Low"},"Count":{"grass_pollen":0,"tree_pollen":3,"weed_pollen":11},"Species":{"Grass":{"Grass":0},"Others":2,"Tree":{"Ash":0,"Oak":3,"Elm":0},"Weed":{"Ragweed":11}},"timestamp":"2026-11-18T10:00:00.000Z","unixTs":1794996000}]}"#
+        let pollen = try JSONDecoder().decode(Ambee.PollenResponse.self, from: Data(json.utf8))
+        let hour = try #require(Ambee.hours(airQuality: .init(), pollen: pollen, weather: [], isForecast: false).first)
+        let s = try #require(hour.species)
+        #expect(s.counts(.tree).map(\.name) == ["Oak", "Ash", "Elm"])        // most first, then by name; zeros kept
+        #expect(s.counts(.weed).first?.count == 11)
+        #expect(s.others == 2 && s.source == Ambee.source)
+        #expect(hour.weedRisk == "Low")
+        #expect(PollenSpecies.text(11) == "11 particles/m³")
+    }
+
+    @Test func oldUnitReadsAsAmbees() {
+        let old = EnvObservation(signal: .pollenTree, value: 40, unit: "grains/m³", asOf: .now, source: "Ambee", spatialScale: .modelGrid)
+        #expect(ObservationCopy.value(old) == "40 particles/m³")
+    }
+}

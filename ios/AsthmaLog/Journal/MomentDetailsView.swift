@@ -22,6 +22,8 @@ struct MomentDetailsView: View {
     @AppStorage(Crit.Paper.key) private var paper = Crit.Paper.black
     @AppStorage(DemoPollen.Season.key) private var pollenSeason = DemoPollen.Season.off
     @State private var around: HourlyHistory?
+    /// The pollen row opened to its species (tap the row).
+    @State private var openSpecies: String?
 
     /// The same pollen the sky drew: the moment's own (Ambee, live or sample), else the demo season.
     private var pollen: PollenSample? { DemoPollen.best(event.conditions, at: event.loggedAt, season: pollenSeason) }
@@ -272,6 +274,8 @@ struct MomentDetailsView: View {
         /// Air and pollen: Good / OK / Not good. Weather: its plain word (Hot, Humid), never a judgement.
         var word: String?
         var level: WeaveSpec.Level?
+        /// Pollen only: every species behind the total, most first, zeros too. Tap the row to open them.
+        var species: [PollenSpecies.Count]? = nil
     }
 
     private func rows(_ f: ReadingFamily) -> [Row] {
@@ -297,13 +301,54 @@ struct MomentDetailsView: View {
             let l = layers
             return [("Tree pollen", l.tree), ("Grass pollen", l.grass), ("Weed pollen", l.weed)].enumerated().map { i, pair in
                 let kind = i < kinds.count ? kinds[i] : nil
+                let group = PollenSpecies.Group.allCases[i]
+                let under = c?.pollenSpecies?.counts(group)
                 return Row(id: pair.0, detail: kind.flatMap { $0.count > 0 && $0.name != "Grass" ? $0.species : nil },
-                           value: kind.map { "\($0.count) grains/m³" }, word: pair.1.map { Tier($0.level).word }, level: pair.1?.level)
+                           value: kind.map { "\($0.count) particles/m³" }, word: pair.1.map { Tier($0.level).word }, level: pair.1?.level,
+                           species: under.flatMap { $0.isEmpty ? nil : $0 })
             }
         }
     }
 
-    private func row(_ r: Row, ink: Color) -> some View {
+    /// A reading, and for pollen with species behind it, a row that opens: the total first, the detail if you ask.
+    @ViewBuilder private func row(_ r: Row, ink: Color) -> some View {
+        if let species = r.species {
+            let open = openSpecies == r.id
+            VStack(alignment: .leading, spacing: 0) {
+                Button { withAnimation(Theme.smooth) { openSpecies = open ? nil : r.id } } label: {
+                    HStack(spacing: 6) {
+                        plainRow(r, ink: ink)
+                        Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Theme.secondaryText)
+                            .rotationEffect(.degrees(open ? 180 : 0))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(open ? "Hides the species" : "Shows the count for each species")
+                if open {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(species) { s in
+                            HStack {
+                                Text(s.name)
+                                Spacer(minLength: 8)
+                                Text(PollenSpecies.text(s.count)).monospacedDigit()
+                            }
+                            .foregroundStyle(s.count > 0 ? Color.primary : Theme.secondaryText)
+                        }
+                        Text("Each species Ambee counted for this hour. A zero was looked for and not found.")
+                            .foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true).padding(.top, 2)
+                    }
+                    .font(.caption)
+                    .padding(.leading, 30).padding(.bottom, 10)
+                    .transition(.opacity)
+                }
+            }
+        } else {
+            plainRow(r, ink: ink)
+        }
+    }
+
+    private func plainRow(_ r: Row, ink: Color) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: Icons.layer(r.id) == "circle.fill" ? Self.weatherIcon(r.id) : Icons.layer(r.id))
                 .font(.subheadline).foregroundStyle(r.value == nil ? Theme.secondaryText : ink).frame(width: 20)

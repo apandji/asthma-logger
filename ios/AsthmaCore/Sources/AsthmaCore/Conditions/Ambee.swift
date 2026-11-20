@@ -91,6 +91,7 @@ public enum Ambee {
             public var Tree: [String: Double]?
             public var Grass: [String: Double]?
             public var Weed: [String: Double]?
+            public var Others: Double?
         }
     }
 
@@ -169,7 +170,7 @@ public enum Ambee {
 }
 
 /// One hour of Ambee data at one place, whatever endpoint it came from. Units are ours: µg/m³ for
-/// particles, ppb for gases, grains/m³ for pollen, °F, %.
+/// particles, ppb for gases, particles/m³ for pollen, °F, %.
 public struct AmbeeHour: Codable, Sendable, Equatable {
     public var date: Date
     public var pm25: Double?
@@ -188,6 +189,8 @@ public struct AmbeeHour: Codable, Sendable, Equatable {
     public var weedRisk: String?
     /// Sea-level pressure, hPa (Ambee weather).
     public var pressureHpa: Double?
+    /// Every species Ambee counted, zeros too (`PollenSpecies`).
+    public var species: PollenSpecies?
     /// The top species in each group, when Ambee sends them ("Oak", "Ragweed").
     public var treeSpecies: String?
     public var weedSpecies: String?
@@ -223,8 +226,8 @@ public struct AmbeeHour: Codable, Sendable, Equatable {
         }
         return [
             o(.pm25, pm25, "µg/m³"), o(.pm10, pm10, "µg/m³"), o(.ozone, ozone, "ppb"), o(.no2, no2, "ppb"),
-            o(.aqi, aqi, "AQI"), o(.pollenTree, treePollen, "grains/m³", treeRisk), o(.pollenGrass, grassPollen, "grains/m³", grassRisk),
-            o(.pollenWeed, weedPollen, "grains/m³", weedRisk), o(.pressure, pressureHpa, "hPa"), o(.temperature, temperatureF, "°F"), o(.humidity, humidity, "%"),
+            o(.aqi, aqi, "AQI"), o(.pollenTree, treePollen, "particles/m³", treeRisk), o(.pollenGrass, grassPollen, "particles/m³", grassRisk),
+            o(.pollenWeed, weedPollen, "particles/m³", weedRisk), o(.pressure, pressureHpa, "hPa"), o(.temperature, temperatureF, "°F"), o(.humidity, humidity, "%"),
             o(.dewpoint, dewpointF, "°F"), o(.windSpeed, windSpeed, "mph"),
         ].compactMap { $0 }
     }
@@ -262,6 +265,11 @@ extension Ambee {
             upsert(d) {
                 $0.treePollen = e.Count?.tree_pollen; $0.grassPollen = e.Count?.grass_pollen; $0.weedPollen = e.Count?.weed_pollen
                 $0.treeRisk = e.Risk?.tree_pollen; $0.grassRisk = e.Risk?.grass_pollen; $0.weedRisk = e.Risk?.weed_pollen
+                if let s = e.Species {
+                    let all = PollenSpecies(tree: s.Tree ?? [:], grass: s.Grass ?? [:], weed: s.Weed ?? [:], others: s.Others,
+                                            source: Ambee.source, asOf: d)
+                    if !all.isEmpty { $0.species = all }
+                }
                 $0.treeSpecies = top(e.Species?.Tree); $0.weedSpecies = top(e.Species?.Weed)
             }
         }
@@ -293,6 +301,7 @@ extension Ambee {
             h.weedSpecies = h.weedSpecies ?? older.weedSpecies; h.temperatureF = h.temperatureF ?? older.temperatureF
             h.humidity = h.humidity ?? older.humidity; h.dewpointF = h.dewpointF ?? older.dewpointF
             h.windSpeed = h.windSpeed ?? older.windSpeed; h.precipitation = h.precipitation ?? older.precipitation
+            h.species = h.species ?? older.species
             h.treeRisk = h.treeRisk ?? older.treeRisk; h.grassRisk = h.grassRisk ?? older.grassRisk
             h.weedRisk = h.weedRisk ?? older.weedRisk; h.pressureHpa = h.pressureHpa ?? older.pressureHpa
             h.summary = h.summary ?? older.summary

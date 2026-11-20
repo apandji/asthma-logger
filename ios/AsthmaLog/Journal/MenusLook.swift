@@ -771,6 +771,12 @@ struct MenusDetails: View {
         return events.filter { $0.loggedAt >= window.start.addingTimeInterval(-pad) && $0.loggedAt <= window.end.addingTimeInterval(pad) }
     }
     private var rescues: [Date] { shown.filter { $0.moment == .rescue }.map(\.loggedAt) }
+    /// The species under the pollen total at the playhead: the nearest moment's, within an hour and a half.
+    private var speciesAtPlayhead: PollenSpecies? {
+        let near = shown.min { abs($0.loggedAt.timeIntervalSince(window.center)) < abs($1.loggedAt.timeIntervalSince(window.center)) }
+        guard let near, abs(near.loggedAt.timeIntervalSince(window.center)) <= 5400 else { return nil }
+        return near.conditions?.pollenSpecies
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 48) {
@@ -786,7 +792,7 @@ struct MenusDetails: View {
                 .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), unit: "ppb"),
                 .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: "% of a high day"),
                 .init(name: "Flu and illness", air: Theme.airIllness, points: [], unit: "", note: "Not tracked yet"),
-            ], width: $chartWidth, footer: dayTitle, edge: big, now: now, triggers: triggers, airMissing: airMissing)
+            ], width: $chartWidth, footer: dayTitle, edge: big, now: now, triggers: triggers, airMissing: airMissing, species: speciesAtPlayhead)
             // On home the flowers stand alone above the soil and the map (owner, Nov 19); Body lives elsewhere.
             if !big { section("Body", "From your logs and Apple Health") {
                 VStack(spacing: 0) {
@@ -1002,6 +1008,8 @@ struct MenusEnvironment: View {
     var triggers: [String: Double] = [:]
     /// No air at the playhead: close every fan and sink the stems.
     var airMissing = false
+    /// The species under the pollen total at the playhead, for the Pollen flower's tap label.
+    var species: PollenSpecies? = nil
     /// The portrait's key, shown for the swatch you tap (owner, Nov 13).
     @State private var tapped: (name: String, at: CGPoint)?
     @State private var hideTap: Task<Void, Never>?
@@ -1083,7 +1091,8 @@ struct MenusEnvironment: View {
                 withAnimation(.smooth(duration: 0.25)) { tapped = (w.series.name, CGPoint(x: w.rect.midX, y: w.rect.minY)) }
                 hideTap?.cancel()
                 hideTap = Task {
-                    try? await Task.sleep(for: .seconds(3))
+                    // The species list is more to read: it stays longer.
+                    try? await Task.sleep(for: .seconds(w.series.name == "Pollen" && species != nil ? 7 : 3))
                     guard !Task.isCancelled else { return }
                     withAnimation(.smooth(duration: 0.4)) { tapped = nil }
                 }
@@ -1092,7 +1101,7 @@ struct MenusEnvironment: View {
                 if let t = tapped, apart < 0.3, let w = portraitLayout(canvasSize, lift: 0).first(where: { $0.series.name == t.name }) {
                     legend(w)
                         .fixedSize()
-                        .position(x: min(max(w.rect.midX, 70), canvasSize.width - 70), y: max(w.rect.minY - 30, 20))
+                        .position(x: min(max(w.rect.midX, 90), canvasSize.width - 90), y: max(w.rect.minY - 30 - speciesLift(w), 20 + speciesLift(w)))
                         .transition(.opacity.combined(with: .scale(scale: 0.92)))
                         .allowsHitTesting(false)
                 }
@@ -1475,12 +1484,31 @@ struct MenusEnvironment: View {
             Text(Self.relativeText(w.value, unit: w.series.unit, usual: w.series.points.map(\.1)))
                 .font(Theme.Figtree.font(size: 13).monospacedDigit())
                 .foregroundStyle(.secondary)
+            // One layer down (owner, Nov 19): the species behind the pollen total, as counted. Only what was found.
+            ForEach(speciesLines(w), id: \.self) { line in
+                Text(line).font(Theme.Figtree.font(size: 12).monospacedDigit()).foregroundStyle(.secondary)
+            }
         }
         // A soft glow of paper round the letters, so they read over a petal without a box.
         .shadow(color: Color(uiColor: .systemGroupedBackground), radius: 3)
         .shadow(color: Color(uiColor: .systemGroupedBackground), radius: 6)
         .multilineTextAlignment(.center)
     }
+
+    /// The Pollen flower's species, most first: "Ragweed 15 particles/m³". Up to four, then how many more.
+    private func speciesLines(_ w: Swatch) -> [String] {
+        guard w.series.name == "Pollen", let species else { return [] }
+        var all: [PollenSpecies.Count] = []
+        for g in PollenSpecies.Group.allCases { all += species.counts(g) }
+        let found = all.filter { $0.count > 0 }.sorted { $0.count > $1.count }
+        guard !found.isEmpty else { return ["No species counted above zero"] }
+        var lines = found.prefix(4).map { "\($0.name) \(PollenSpecies.text($0.count))" }
+        if found.count > 4 { lines.append("and \(found.count - 4) more in the moment's details") }
+        return lines
+    }
+
+    /// Room for the species lines, so the label still sits above the flower.
+    private func speciesLift(_ w: Swatch) -> CGFloat { CGFloat(speciesLines(w).count) * 8 }
 
     /// The tap label in words (owner, Nov 19, like Apple Weather): pollen as a level, the rest as a reading, and
     /// how it compares with your usual (the middle of this condition's readings on your moments).

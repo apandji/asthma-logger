@@ -72,7 +72,7 @@ def ambee(lat, lon):
     if not key:
         return []
     now = datetime.now(timezone.utc)
-    rng = {"lat": lat, "lng": lon, "from": (now - timedelta(hours=47)).strftime("%Y-%m-%d %H:00:00"),
+    rng = {"lat": lat, "lng": lon, "speciesRisk": "true", "from": (now - timedelta(hours=47)).strftime("%Y-%m-%d %H:00:00"),
            "to": now.strftime("%Y-%m-%d %H:00:00")}
     head = {"x-api-key": key, "Content-type": "application/json"}
     hours = {}
@@ -97,6 +97,9 @@ def ambee(lat, lon):
             h = hours.setdefault(t, {})
             for k, name in (("tree_pollen", "tree"), ("grass_pollen", "grass"), ("weed_pollen", "weed")):
                 if c.get(k) is not None: h[name] = c[k]
+            sp = e.get("Species") or {}
+            if sp: h["species"] = {"tree": sp.get("Tree") or {}, "grass": sp.get("Grass") or {}, "weed": sp.get("Weed") or {},
+                                 "others": sp.get("Others")}
     except Exception as e:
         print("Ambee pollen:", e, file=sys.stderr)
     return [{"t": t, **v} for t, v in sorted(hours.items()) if v]

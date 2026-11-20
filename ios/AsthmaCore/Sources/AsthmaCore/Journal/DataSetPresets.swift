@@ -116,7 +116,7 @@ public enum DataSetPreset: String, CaseIterable, Sendable, Identifiable {
                 EnvObservation(signal: .humidity, value: min(99, max(10, rh.rounded())), unit: "%", asOf: at, source: src, spatialScale: .modelGrid),
                 EnvObservation(signal: .pm25, value: (pm * 10).rounded() / 10, unit: "µg/m³", asOf: at, source: src, spatialScale: .station, distanceKm: 4.8),
                 EnvObservation(signal: .ozone, value: o3.rounded(), unit: "ppb", asOf: at, source: src, spatialScale: .station, distanceKm: 4.8),
-                EnvObservation(signal: .pollenWeed, value: weed == "High" ? 180 : 12, unit: "grains/m³", asOf: at, source: src,
+                EnvObservation(signal: .pollenWeed, value: weed == "High" ? 180 : 12, unit: "particles/m³", asOf: at, source: src,
                                spatialScale: .modelGrid, category: weed),
             ], fetchedAt: at)
             c.tempFallF = fall

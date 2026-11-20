@@ -14,7 +14,15 @@ public struct NavigatorAir: Codable, Sendable {
         public var tree: Double?
         public var grass: Double?
         public var weed: Double?
+        public var species: Species?
         public var date: Date { Date(timeIntervalSince1970: t) }
+    }
+
+    public struct Species: Codable, Sendable {
+        public var tree: [String: Double]?
+        public var grass: [String: Double]?
+        public var weed: [String: Double]?
+        public var others: Double?
     }
 
     public struct City: Codable, Sendable {
@@ -128,9 +136,9 @@ public enum NavigatorSet {
                 if city.name == air.ambeeCity, let a = recent[h.t] {
                     add(.pm25, a.pm25, "µg/m³", Ambee.source)
                     add(.ozone, a.ozone, "ppb", Ambee.source)
-                    add(.pollenTree, a.tree, "grains/m³", Ambee.source)
-                    add(.pollenGrass, a.grass, "grains/m³", Ambee.source)
-                    add(.pollenWeed, a.weed, "grains/m³", Ambee.source,
+                    add(.pollenTree, a.tree, "particles/m³", Ambee.source)
+                    add(.pollenGrass, a.grass, "particles/m³", Ambee.source)
+                    add(.pollenWeed, a.weed, "particles/m³", Ambee.source,
                         category: a.weed.map { $0 < 20 ? "Low" : $0 < 77 ? "Moderate" : "High" })
                 }
                 add(.pm25, h.pm25, "µg/m³", openMeteo)
@@ -139,6 +147,10 @@ public enum NavigatorSet {
                 add(.humidity, h.humidity, "%", openMeteo)
                 add(.windSpeed, h.wind, "mph", openMeteo)
                 var c = Conditions(observations: obs, fetchedAt: at)
+                if city.name == air.ambeeCity, let s = recent[h.t]?.species {
+                    c.pollenSpecies = PollenSpecies(tree: s.tree ?? [:], grass: s.grass ?? [:], weed: s.weed ?? [:], others: s.others,
+                                                    source: Ambee.source, asOf: h.date)
+                }
                 // °F fallen over the three hours before, from the same real series.
                 if let now = h.tempF {
                     let before = city.hours.filter { $0.t >= h.t - 3 * 3600 && $0.t < h.t }.compactMap(\.tempF)

@@ -163,7 +163,7 @@ struct AirLayers {
     var readable: [Layer] { [pm25, pm10, no2, ozone, tree, grass, weed].compactMap { $0 } }
 
     /// Level edges per layer (start of low, moderate, high, and a ceiling for "high"):
-    /// EPA for pollutants (µg/m³ or ppb), Ambee's risk thresholds for pollen (grains/m³).
+    /// EPA for pollutants (µg/m³ or ppb), Ambee's risk thresholds for pollen (particles/m³).
     static let edges: [String: [Double]] = [
         "PM2.5": [0, 12, 35, 150], "PM10": [0, 55, 155, 355], "NO₂": [0, 54, 101, 360], "Ozone": [0, 55, 71, 125],
         "Tree pollen": [0, 100, 213, 940], "Grass pollen": [0, 30, 61, 342], "Weed pollen": [0, 44, 80, 296],

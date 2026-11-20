@@ -67,7 +67,7 @@ import Testing
         let obs = h.observations(source: Ambee.demoSource)
         #expect(obs.count == 4)
         #expect(obs.allSatisfy { $0.source == Ambee.demoSource && $0.spatialScale == .modelGrid })
-        #expect(obs.contains { $0.signal == .pollenWeed && $0.unit == "grains/m³" })
+        #expect(obs.contains { $0.signal == .pollenWeed && $0.unit == "particles/m³" })
     }
 
     @Test func demoIsDeterministicAndSeasonal() async throws {

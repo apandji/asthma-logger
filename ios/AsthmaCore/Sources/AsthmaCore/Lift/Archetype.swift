@@ -14,7 +14,7 @@ public struct Archetype: Sendable, Equatable {
     public enum Kind: String, Codable, Sendable, CaseIterable {
         case forming, noClearTrigger
         // One family leads. Weather by its group; `weather` when its lead row has no group.
-        case weather, coldAir, heatHumid, suddenChange, biologics, particulates, exertion, infections
+        case weather, coldAir, heatHumid, suddenChange, biologics, particulates, exertion, infections, indoor
         // Known pairs.
         case hotHazy, coldEffort, stormSeason, seasonal, coldSeason
         /// Any other pair: named from its lead and companion (`name` on the archetype, kept in the snapshot).
@@ -68,6 +68,7 @@ public struct Archetype: Sendable, Equatable {
         case .particulates: .particulates
         case .exertion: .exertion
         case .infections: .infections
+        case .indoor: .indoor
         }
     }
 
@@ -107,6 +108,7 @@ public struct Archetype: Sendable, Equatable {
         case .particulates: "Air-quality-led"
         case .exertion: "Effort-led"
         case .infections: "Comes with colds"
+        case .indoor: "Home-led"
         case .hotHazy: "Hot, hazy days"
         case .coldEffort: "Cold air and effort"
         case .stormSeason: "Storm season"
@@ -136,6 +138,7 @@ public struct Archetype: Sendable, Equatable {
         case .particulates: "poor air"
         case .exertion: "effort"
         case .infections: "colds going around"
+        case .indoor: "things indoors"
         }
     }
 
@@ -148,10 +151,11 @@ public struct Archetype: Sendable, Equatable {
         case .coldAir: "Your flare days tend to come with cold or dry air."
         case .heatHumid: "Your flare days tend to be hot, or heavy and humid."
         case .suddenChange: "Your flare days tend to follow a sharp drop in temperature or a change in the weather."
-        case .biologics: "Your flare days line up with living things in the air: pollen, pets or mold."
+        case .biologics: "Your flare days line up with pollen in the air."
         case .particulates: "Your flare days line up with what's floating in the air: ozone, fine particles or smoke."
         case .exertion: "Your flare days come after being active."
         case .infections: "Your flare days tend to come when colds and flu are going around."
+        case .indoor: "Your flare days come with things indoors, like cooking, pets or cleaning."
         case .hotHazy: "Your flare days tend to be hot, with ozone or fine particles up."
         case .coldEffort: "Your flare days come with effort in cold or dry air."
         case .stormSeason: "Your flare days come when the weather turns while pollen is up."
@@ -228,6 +232,7 @@ public extension AirProfile {
         .particulates: ["Coarse dust (PM10)", "Traffic fumes (NO₂)"],
         .exertion: [],
         .infections: ["Coming down with something"],
+        .indoor: [],
     ]
 
     /// Every trigger in a category: the biggest flare-vs-baseline gap first (that's the one that leads the
@@ -244,7 +249,7 @@ public extension AirProfile {
         // listed, so the family reads complete. Journal tags wait for a reviewed note, except in Self, which
         // is nothing but tags: without them the card would open on nothing.
         for def in Bins.all where Category.of(bin: def.bin) == c && bins[def.bin] == nil
-            && (!def.bin.hasPrefix("tag_") || c == .exertion) {
+            && (!def.bin.hasPrefix("tag_") || c == .exertion || c == .indoor) {
             out.append(Trigger(name: Bins.label(def.bin), strength: .notTracked, row: nil))
         }
         for missing in notYet[c] ?? [] where !out.contains(where: { $0.name == missing }) {

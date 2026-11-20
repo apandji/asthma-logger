@@ -19,7 +19,7 @@ import Testing
 
     @Test func demoFramesGiveABoundedShapeWithCounts() {
         let p = AirProfile(report: Lift.compute(DemoData.frames(), gate: .demo))
-        #expect(p.axes.count == 5)
+        #expect(p.axes.count == 6)
         #expect(p.axis(.infections).status == .notTracked)
         #expect(p.axes.allSatisfy { (0...1).contains($0.strength) })
         // No reviewed notes in the demo frames: exertion can't be read yet.

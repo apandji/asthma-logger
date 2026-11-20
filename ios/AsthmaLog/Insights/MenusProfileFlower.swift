@@ -49,7 +49,7 @@ struct MenusProfileFlower: View {
         case .particulates: return ink("PM2.5")
         case .biologics: return ink("Pollen")
         case .weather: return ink("Temperature")
-        case .exertion, .infections: return Color(white: 0.45)
+        case .exertion, .infections, .indoor: return Color(white: 0.45)
         }
     }
 

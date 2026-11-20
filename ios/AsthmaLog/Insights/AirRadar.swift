@@ -49,6 +49,7 @@ struct AirRadar: View {
             case .particulates: return Theme.airPM25.color
             case .exertion: return Theme.airNO2.color.mix(with: Theme.airPM10.color, by: 0.4)
             case .infections: return Theme.airIllness.color
+            case .indoor: return Theme.airNO2.color
             }
         }
         return switch c {
@@ -58,6 +59,7 @@ struct AirRadar: View {
         // About you, not the air: the key ink, like the text (Print, owner Oct 21), never a new hue.
         case .exertion: WeatherColor.coolFamilies ? WeatherColor.hex(0x9470CD) : WeatherColor.flat ? Color.primary : Theme.rescueSoft
         case .infections: WeatherColor.coolFamilies ? WeatherColor.hex(0x5F75C1) : WeatherColor.flat ? Color.primary : Theme.rescueSoft
+        case .indoor: WeatherColor.coolFamilies ? WeatherColor.hex(0x8A7F70) : WeatherColor.flat ? Color.primary : Theme.rescueSoft
         }
     }
 
@@ -263,6 +265,7 @@ extension AirProfile.Category {
         case .particulates: "Irritants"
         case .exertion: "Exercise"
         case .infections: "Colds and flu"
+        case .indoor: "Indoors"
         }
     }
 }

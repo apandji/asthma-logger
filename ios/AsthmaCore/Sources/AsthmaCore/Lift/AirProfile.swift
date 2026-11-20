@@ -13,6 +13,8 @@ public struct AirProfile: Sendable, Equatable {
     /// History: keep them (`exertion` reads "Exercise").
     public enum Category: String, Sendable, CaseIterable, Identifiable {
         case weather, biologics, particulates, exertion, infections
+        /// What you note about where you were (April, Nov 20): cooking, pets, cleaning, dust, mold, smoke, scents.
+        case indoor
         public var id: String { rawValue }
 
         public var title: String {
@@ -23,6 +25,7 @@ public struct AirProfile: Sendable, Equatable {
             case .exertion: "Exercise"
             // Colds going around and colds you mention. Never "infection" about you.
             case .infections: "Colds and flu"
+            case .indoor: "Indoors"
             }
         }
 
@@ -30,24 +33,27 @@ public struct AirProfile: Sendable, Equatable {
         public var covers: String {
             switch self {
             case .weather: "Cold, dry air, heat and humidity, sudden changes"
-            case .biologics: "Pollen, mold, pets"
-            case .particulates: "Fine particles, ozone, smoke, fumes, strong scents"
+            case .biologics: "Pollen"
+            case .particulates: "Fine particles, ozone, wildfire smoke"
             case .exertion: "Being active in the hour before"
             case .infections: "Flu-like illness around, colds you mention"
+            case .indoor: "Cooking, pets, cleaning, dust, mold, smoke, strong scents"
             }
         }
 
-        /// About you, not the air: printed in the text colour, never on the map.
-        public var isBody: Bool { self == .exertion || self == .infections }
+        /// About you, not the outdoor air: printed in the text colour, never on the map. Indoors is what you
+        /// noted, so it isn't on the map either.
+        public var isBody: Bool { self == .exertion || self == .infections || self == .indoor }
 
         /// Which lift-table bins belong here. Time and place (hour, season, place, indoor/outdoor) and stress
         /// sit outside the families.
         public static func of(bin: String) -> Category? {
             switch bin {
             case "temp", "humidity", "temp_drop", "heat_alert", "wind", "tag_coldAir", "pressure_change", "storm": .weather
-            case "pollen_weed", "pollen_tree", "pollen_grass", "tag_pets", "tag_mold": .biologics
-            case "pm25", "ozone", "smoke_at_point", "tag_smoke", "tag_dust", "tag_cleaningProducts", "tag_strongScents",
-                 "tag_cooking": .particulates
+            case "pollen_weed", "pollen_tree", "pollen_grass": .biologics
+            case "pm25", "ozone", "smoke_at_point": .particulates
+            // What you noted indoors gets its own family (April, Nov 20), apart from the outdoor air.
+            case "tag_pets", "tag_mold", "tag_smoke", "tag_dust", "tag_cleaningProducts", "tag_strongScents", "tag_cooking": .indoor
             case "tag_exercise", "exertion": .exertion
             case "ili", "tag_coldOrFlu": .infections
             default: nil
@@ -123,6 +129,7 @@ public struct AirProfile: Sendable, Equatable {
         let ozone = row("ozone", "high", 6, 14, 7, 40, gated: true)
         let humid = row("humidity", "humid", 5, 14, 9, 40, gated: false)
         let exercise = row("tag_exercise", "yes", 2, 6, 2, 15, gated: false)
+        let pets = row("tag_pets", "yes", 3, 7, 2, 16, gated: false)
         func gap(_ r: LiftRow) -> Double { r.attackRate - r.baselineRate }
         return AirProfile(axes: [
             Axis(category: .weather, strength: gap(humid), status: .early, lead: humid),
@@ -130,6 +137,7 @@ public struct AirProfile: Sendable, Equatable {
             Axis(category: .particulates, strength: gap(ozone), status: .pattern, lead: ozone),
             Axis(category: .exertion, strength: gap(exercise), status: .early, lead: exercise),
             Axis(category: .infections, strength: 0, status: .notTracked, lead: nil),
+            Axis(category: .indoor, strength: gap(pets), status: .early, lead: pets),
         ])
     }()
 }

@@ -10,6 +10,7 @@ enum Icons {
     static let me = "person.fill"
     static let exercise = "figure.run"
     static let colds = "facemask.fill"
+    static let indoor = "sofa.fill"
     /// Your voice and your body: their own stops on the rail.
     static let voice = "waveform"
     static let body = "figure.walk"
@@ -36,6 +37,7 @@ enum Icons {
         case .biologics: biologics
         case .exertion: exercise
         case .infections: colds
+        case .indoor: indoor
         }
     }
 

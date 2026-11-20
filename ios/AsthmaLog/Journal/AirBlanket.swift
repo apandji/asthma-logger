@@ -46,6 +46,9 @@ struct AirBlanket: View {
 
     /// Watercolour palette (April, Nov 20: calmer than the flowers' full inks, mid-tone like paint on paper).
     /// Same hue for each condition as the garden, so they still read as one family.
+    /// The colours in the order the keys list them.
+    static let keyOrder = ["Pollen", "Ozone", "PM2.5", "Humidity", "Temperature", "Cold air", "Pressure", "Wind", "Flu"]
+
     static func ink(_ name: String) -> Color {
         func hex(_ v: UInt32) -> Color {
             Color(red: Double(v >> 16 & 0xFF) / 255, green: Double(v >> 8 & 0xFF) / 255, blue: Double(v & 0xFF) / 255)

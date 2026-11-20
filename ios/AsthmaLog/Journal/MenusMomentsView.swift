@@ -93,11 +93,14 @@ struct MenusMomentsView: View {
             switch mode {
             case .day: dayList(counts)
             case .month:
-                // The weekdays stay put above the scrolling months.
+                // The key, then the weekdays, stay put above the scrolling months (April, Nov 20: the key at a glance).
+                Self.keyStrip.padding(.bottom, 22)
                 weekdayHeader.padding(.horizontal, 16).padding(.bottom, 6)
                 Divider().padding(.horizontal, 16)
                 monthList(counts)
-            case .year: yearList(counts)
+            case .year:
+                Self.keyStrip.padding(.bottom, 16)
+                yearList(counts)
             }
         }
         .sensoryFeedback(.selection, trigger: mode)
@@ -272,6 +275,27 @@ struct MenusMomentsView: View {
         }
     }
 
+    /// The colours at a glance, pinned over Month and Year (April, Nov 20): a row you can slide, each colour and its
+    /// name, then the inhaler mark. ⓘ has the longer key.
+    static var keyStrip: some View {
+        // Wrapped, not a sideways scroll (April, Nov 20): two lines with room between them.
+        FlowLayout(spacing: 14, lineSpacing: 6) {
+            ForEach(AirBlanket.keyOrder, id: \.self) { k in
+                HStack(spacing: 5) {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous).fill(AirBlanket.ink(k).opacity(0.75)).frame(width: 12, height: 9)
+                    Text(k).font(Theme.Figtree.font(size: 12)).foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 5) {
+                pill(filled: true, width: 4, height: 10)
+                Text("Inhaler").font(Theme.Figtree.font(size: 12)).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20).padding(.top, 4)
+        .accessibilityElement(children: .combine)
+    }
+
     private var weekdayHeader: some View {
         let symbols = cal.veryShortStandaloneWeekdaySymbols
         let order = (0..<7).map { (cal.firstWeekday - 1 + $0) % 7 }
@@ -401,7 +425,9 @@ struct MenusMomentsView: View {
     // MARK: Year
 
     private var years: [Int] {
-        Array(cal.component(.year, from: firstDay)...cal.component(.year, from: now))
+        // The demo reaches back to 2024 (April, Nov 20), so the sample seasons show over more than one year.
+        let first = cal.component(.year, from: firstDay)
+        return Array((AirBlanket.demoAir ? min(first, 2024) : first)...cal.component(.year, from: now))
     }
 
     private func yearList(_ counts: [Date: (rescue: Int, standard: Int)]) -> some View {

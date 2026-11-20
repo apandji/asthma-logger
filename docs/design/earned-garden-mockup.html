@@ -1,0 +1,362 @@
+<title>Earned Garden</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: one tall phone on the left (garden above a marked fold, the detail beneath), controls and the rules on the right. */
+:root {
+  --bg: #fafafa; --surface: #ffffff; --fg: #17171a; --muted: #6b6b73; --line: #e4e4e8; --chip: #efeff2; --accent: #e8701f; --drkm: 0;
+  /* The app is always light: the phone keeps fixed inks in both themes. */
+  --phone-bg: #f2f2f7; --phone-ink: #121214; --phone-muted: #6e6e76; --phone-card: #ffffff; --phone-body: #121214; --phone-line: #dcdce2;
+  --ui: "ABC Areal Superfamily Variable", "ABC Areal", "Areal", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --app: "Figtree", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111113; --surface: #19191c; --fg: #ededf0; --muted: #9a9aa3; --line: #2b2b30; --chip: #232327; --accent: #ff8a3d; --drkm: 1; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111113; --surface: #19191c; --fg: #ededf0; --muted: #9a9aa3; --line: #2b2b30; --chip: #232327; --accent: #ff8a3d; --drkm: 1; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--ui); font-variation-settings: "MONO" 0, "DRKM" var(--drkm);
+  font-size: 15px; line-height: 1.5; padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 36px; }
+header h1 { font-size: 28px; font-weight: 520; letter-spacing: -0.01em; margin: 0 0 8px; text-wrap: balance; }
+header p, .notes p { color: var(--muted); max-width: 62ch; margin: 0; }
+.eyebrow { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+h2 { font-size: 19px; font-weight: 520; margin: 0 0 8px; text-wrap: balance; }
+.study { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 40px; align-items: start; border-top: 1px solid var(--line); padding-top: 32px; }
+@media (max-width: 760px) { .study { grid-template-columns: minmax(0, 1fr); gap: 24px; } .phone { margin: 0 auto; } }
+.notes { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+@media (min-width: 761px) { .notes { position: sticky; top: 16px; } }
+.controls { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.row > span { font-size: 12px; color: var(--muted); width: 64px; }
+button.seg { font: inherit; font-size: 13px; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+button.seg:hover { background: var(--chip); }
+button.seg[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+button:focus-visible, [role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; }
+.tablebox { overflow-x: auto; }
+ol.steps { margin: 0; padding-left: 20px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; max-width: 60ch; }
+ol.steps b { color: var(--fg); font-weight: 500; }
+
+/* The phone. */
+.phone { width: 100%; max-width: 340px; background: var(--phone-body); border-radius: 46px; padding: 9px; }
+.screen { background: var(--phone-bg); color: var(--phone-ink); border-radius: 38px; overflow: hidden; font-family: var(--app); }
+.head { padding: 26px 20px 0; min-height: 92px; }
+.where { font-size: 12px; color: var(--phone-muted); display: flex; gap: 8px; align-items: center; }
+.tag { background: var(--phone-ink); color: #fff; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 500; }
+.read { font-size: 19px; font-weight: 500; line-height: 1.2; margin-top: 6px; letter-spacing: -0.01em; }
+svg.garden { display: block; width: 100%; height: auto; }
+svg text { font-family: var(--app); }
+.fold { display: flex; align-items: center; gap: 8px; padding: 2px 20px 10px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--phone-muted); }
+.fold::before, .fold::after { content: ""; flex: 1; border-top: 1px dashed var(--phone-line); }
+.card { background: var(--phone-card); border-radius: 18px; margin: 0 14px 12px; padding: 12px 14px; font-size: 13px; }
+.card h3 { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--phone-muted); margin: 0 0 8px; }
+.note { font-size: 15px; line-height: 1.4; }
+.note mark { background: #fbe3d2; color: inherit; border-radius: 4px; padding: 0 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { border: 1px solid var(--phone-line); border-radius: 999px; padding: 3px 9px; font-size: 12px; }
+.r { display: flex; align-items: baseline; gap: 8px; padding: 6px 0; border-top: 1px solid var(--phone-bg); }
+.r:first-of-type { border-top: 0; }
+.r b { font-weight: 500; } .r i { margin-left: auto; font-style: normal; font-variant-numeric: tabular-nums; }
+.r small, .more small { color: var(--phone-muted); font-size: 11px; }
+.r.tap { cursor: pointer; }
+.more { font-size: 12px; padding: 2px 0 8px 12px; color: var(--phone-muted); line-height: 1.5; }
+.more span { color: var(--phone-ink); font-variant-numeric: tabular-nums; }
+.map { height: 96px; border-radius: 12px; background: #e9e9ef; position: relative; overflow: hidden; }
+.pad { height: 22px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">felt air · design study · Nov 19, 2026</p>
+    <h1>A garden where flowers are earned</h1>
+    <p>A proposal, not the app. Above the fold is what matters to you. Below it is everything the app knows. Every flower is the same shape. Change the person and the day, then tap a flower or a row.</p>
+  </header>
+
+  <section class="study">
+    <div class="phone" aria-label="Phone mockup: the garden, then the detail under the fold">
+      <div class="screen">
+        <div class="head">
+          <div class="where"><span class="tag">Inhaler</span><span>St. Louis, MO</span></div>
+          <div class="read" id="read"></div>
+        </div>
+        <svg class="garden" id="garden" viewBox="0 0 340 330" role="img" aria-label="The garden: tall flowers for what matters to this person, buds for the rest"></svg>
+        <div class="fold">Under the fold</div>
+        <div class="card"><h3>Journal</h3><div class="note" id="note"></div><div class="chips" id="chips"></div></div>
+        <div class="card"><h3>Where</h3><div class="map" id="map"></div></div>
+        <div class="card"><h3>Every reading</h3><div id="readings"></div></div>
+        <div class="card"><h3>Kind of day</h3><div id="kind"></div></div>
+        <div class="card"><h3>Body</h3><div id="body"></div></div>
+        <div class="pad"></div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="controls">
+        <div class="row" id="personRow"><span>Person</span>
+          <button class="seg" id="p-new" data-person="fresh" aria-pressed="false">Just started</button>
+          <button class="seg" id="p-nav" data-person="navigator" aria-pressed="true">The navigator</button>
+          <button class="seg" id="p-pollen" data-person="pollen" aria-pressed="false">Pollen and effort</button></div>
+        <div class="row" id="dayRow"><span>The day</span>
+          <button class="seg" id="d-haze" data-day="haze" aria-pressed="true">Still and hazy</button>
+          <button class="seg" id="d-cold" data-day="cold" aria-pressed="false">Cold snap</button>
+          <button class="seg" id="d-storm" data-day="storm" aria-pressed="false">Spring storm</button>
+          <button class="seg" id="d-calm" data-day="calm" aria-pressed="false">Calm</button></div>
+      </div>
+
+      <div>
+        <p class="eyebrow">The rule</p>
+        <ol class="steps">
+          <li><b>A flower stands</b> when it is one of yours, or when it is well up right now.</li>
+          <li><b>Everything else is a bud</b> on the ground: there, quiet, and you can still tap it.</li>
+          <li><b>Each flower keeps its place</b> from day to day. Only its height and how far it opens change.</li>
+          <li><b>A thread joins two flowers</b> when together they make a kind of day.</li>
+        </ol>
+      </div>
+
+      <div class="tablebox"><table>
+        <thead><tr><th>Property</th><th>Means</th></tr></thead>
+        <tbody>
+          <tr><td>Shape</td><td>One shape for every flower: the fan. Nothing to decode</td></tr>
+          <tr><td>Colour</td><td>The family: blue weather, red irritants, green allergens, violet colds and flu, graphite for exercise</td></tr>
+          <tr><td>Standing or bud</td><td>Whether it matters: yours, or well up right now</td></tr>
+          <tr><td>Height and size</td><td>How much it is one of yours</td></tr>
+          <tr><td>How far it opens</td><td>How much is in the air now. For temperature, humidity and pressure: how far from normal</td></tr>
+          <tr><td>Words, on tap</td><td>Which way: "colder than usual", "falling". And the detail: tree, grass, weed</td></tr>
+        </tbody>
+      </table></div>
+
+      <div>
+        <p class="eyebrow">Tried and dropped</p>
+        <p>A different shape per family, and a lean for below or above normal. Both made the garden harder to read (owner, Nov 19), so direction and detail moved into words.</p>
+      </div>
+
+      <div>
+        <p class="eyebrow">Open questions</p>
+        <ol class="steps">
+          <li><b>How many can stand?</b> The study lets up to seven stand. Fewer?</li>
+          <li><b>Does a bud grow back down?</b> When a factor stops being yours, does its flower shrink over weeks, or stay?</li>
+          <li><b>Body data.</b> Under the fold until it turns out to matter, then a sprout. Which Health readings are worth the permission?</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n, a = {}, t) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (t != null) e.textContent = t; return e; };
+const W = 340, GROUND = 282;
+
+// Every factor: its family shape, its colour, a fixed place in the garden, its source.
+const F = [
+  { id: 'temp',     name: 'Temperature',  shape: 'fan',     color: '#2b6fd6', x: 30,  src: 'Apple Weather', delta: true, lo: 'colder than usual', hi: 'warmer than usual' },
+  { id: 'pm25',     name: 'Fine particles', shape: 'fan', color: '#d93a3a', x: 68,  src: 'Ambee' },
+  { id: 'humidity', name: 'Humidity',     shape: 'fan',     color: '#6fa3e8', x: 106, src: 'Apple Weather', delta: true, lo: 'drier than usual', hi: 'more humid than usual' },
+  { id: 'pollen',   name: 'Pollen',       shape: 'fan', color: '#2f8f5b', x: 144, src: 'Ambee' },
+  { id: 'pressure', name: 'Pressure',     shape: 'fan',     color: '#4a5fc4', x: 182, src: 'Apple Weather', delta: true, lo: 'falling', hi: 'rising' },
+  { id: 'ozone',    name: 'Ozone',        shape: 'fan',   color: '#ee8a85', x: 220, src: 'Ambee' },
+  { id: 'wind',     name: 'Wind',         shape: 'fan',     color: '#a9bedd', x: 254, src: 'Apple Weather' },
+  { id: 'flu',      name: 'Flu going around', shape: 'fan', color: '#8a63c9', x: 286, src: 'Ambee' },
+  { id: 'effort',   name: 'Exercise',     shape: 'fan',  color: '#3a3a40', x: 316, src: 'Apple Health' },
+];
+// Values 0…1. Temperature, humidity and pressure are signed distance from normal. Pollen is [tree, grass, weed]. null = no reading.
+const DAYS = {
+  haze:  { v: { temp: .3, humidity: .5, wind: .08, pressure: -.1, pm25: .85, ozone: .5, pollen: [0, 0, .2], flu: .2, effort: 0 },
+           read: 'The air is still and hazy.', combo: ['wind', 'pm25', 'still and hazy'],
+           note: 'Walked to the car after my shift. The sky was brown and my <mark>chest got tight</mark>.', tags: ['Chest tightness'],
+           rows: [['Fine particles', '24 µg/m³', 'Ambee · modelled'], ['Ozone', '41 ppb', 'Ambee · modelled'], ['Temperature', '58°F', 'Apple Weather'], ['Humidity', '82%', 'Apple Weather'],
+                  ['Wind', '3 mph', 'Apple Weather'], ['Pressure', 'Steady', 'Apple Weather'], ['Pollen', 'Low', 'Ambee'], ['Flu going around', 'Low', 'Ambee · metro, weekly']],
+           species: [['Ragweed', 15], ['Oak', 0], ['Elm', 0], ['Grass', 0]], body: 'Still for the hour before.' },
+  cold:  { v: { temp: -.9, humidity: -.6, wind: .7, pressure: .5, pm25: .2, ozone: .1, pollen: null, flu: .7, effort: .8 },
+           read: "It's cold and dry.", combo: ['temp', 'humidity', 'cold and dry'],
+           note: '<mark>Ran</mark> for the bus in <mark>the cold</mark>.', tags: ['Exercise', 'Cold air'],
+           rows: [['Temperature', '24°F', 'Apple Weather'], ['Humidity', '22%', 'Apple Weather'], ['Wind', '19 mph', 'Apple Weather'], ['Pressure', 'Rising · 3 hPa in 3 hours', 'Apple Weather'],
+                  ['Fine particles', '7 µg/m³', 'Ambee · modelled'], ['Ozone', '18 ppb', 'Ambee · modelled'], ['Pollen', 'No reading', '—'], ['Flu going around', 'High', 'Ambee · metro, weekly']],
+           species: null, body: 'Active in the hour before: a burst of steps.' },
+  storm: { v: { temp: .2, humidity: .6, wind: .6, pressure: -.8, pm25: .2, ozone: .3, pollen: [.3, .9, .4], flu: .2, effort: .1 },
+           read: 'There are thunderstorms with pollen up.', combo: ['pressure', 'pollen', 'thunderstorm with pollen'],
+           note: 'Storm rolling in. Started <mark>wheezing</mark> on the porch.', tags: ['Wheezing'],
+           rows: [['Pollen', 'High', 'Ambee'], ['Pressure', 'Falling · 4 hPa in 3 hours', 'Apple Weather'], ['Humidity', '84%', 'Apple Weather'], ['Wind', '17 mph', 'Apple Weather'],
+                  ['Temperature', '71°F', 'Apple Weather'], ['Fine particles', '8 µg/m³', 'Ambee · modelled'], ['Ozone', '31 ppb', 'Ambee · modelled'], ['Flu going around', 'Low', 'Ambee · metro, weekly']],
+           species: [['Grass', 58], ['Oak', 41], ['Ragweed', 22], ['Birch', 9], ['Maple', 0]], body: 'Still for the hour before.' },
+  calm:  { v: { temp: .05, humidity: -.1, wind: .2, pressure: 0, pm25: .12, ozone: .2, pollen: [0, 0, .1], flu: .15, effort: 0 },
+           read: 'Nothing in the air stands out.', combo: null, note: '', tags: [],
+           rows: [['Temperature', '64°F', 'Apple Weather'], ['Humidity', '48%', 'Apple Weather'], ['Wind', '6 mph', 'Apple Weather'], ['Pressure', 'Steady', 'Apple Weather'],
+                  ['Fine particles', '5 µg/m³', 'Ambee · modelled'], ['Ozone', '22 ppb', 'Ambee · modelled'], ['Pollen', 'Low', 'Ambee'], ['Flu going around', 'Low', 'Ambee · metro, weekly']],
+           species: [['Ragweed', 6], ['Oak', 0], ['Grass', 0]], body: 'Still for the hour before.' },
+};
+// How much each factor is one of yours, 0…1.
+const PEOPLE = {
+  fresh:     {},
+  navigator: { pm25: 1, humidity: .6, wind: .55 },
+  pollen:    { pollen: 1, effort: .7, pressure: .55 },
+};
+const state = { person: 'navigator', day: 'haze', picked: null, openRow: null };
+const svg = document.getElementById('garden');
+
+const amount = (f, v) => v == null ? 0 : Array.isArray(v) ? Math.max(...v) : Math.min(1, Math.abs(v));
+
+function fanPath(x, y, r, open, tilt) {
+  const span = 16 + 150 * open, a0 = (-90 - span / 2 + tilt) * Math.PI / 180, a1 = (-90 + span / 2 + tilt) * Math.PI / 180;
+  const p = a => `${(x + r * Math.cos(a)).toFixed(1)} ${(y + r * Math.sin(a)).toFixed(1)}`;
+  return `M ${x} ${y} L ${p(a0)} A ${r} ${r} 0 ${span > 180 ? 1 : 0} 1 ${p(a1)} Z`;
+}
+
+// One flower head in its family's shape, drawn at (x, y). `a` is how much is in the air now.
+function head(g, f, x, y, r, a, v, color, gid) {
+  if (f.shape === 'fan') {
+    // One shape for every flower, standing straight: which way a reading sits is said in words, on tap.
+    g.append(el('path', { d: fanPath(x, y, r, a, 0), fill: `url(#${gid})` }));
+  } else if (f.shape === 'bloom') {
+    const rr = r * (.42 + .58 * a);
+    g.append(el('circle', { cx: x, cy: y - rr * .55, r: rr, fill: `url(#${gid})` }));
+    for (let i = 0; i < 9; i++) {   // a ring of specks that thickens with the amount
+      const t = i / 9 * Math.PI * 2, d = rr * 1.12;
+      g.append(el('circle', { cx: x + d * Math.cos(t), cy: y - rr * .55 + d * Math.sin(t), r: .6 + 1.3 * a, fill: color, opacity: .25 + .4 * a }));
+    }
+  } else if (f.shape === 'trefoil') {
+    const vals = Array.isArray(v) ? v : [0, 0, 0];
+    [-38, 0, 38].forEach((deg, i) => {
+      const len = r * (.3 + .9 * vals[i]), t = (-90 + deg) * Math.PI / 180;
+      const cx = x + (len / 2) * Math.cos(t), cy = y + (len / 2) * Math.sin(t);
+      g.append(el('ellipse', { cx, cy, rx: len / 2, ry: 3 + 4.5 * vals[i], transform: `rotate(${-90 + deg} ${cx} ${cy})`, fill: color, opacity: [.9, .7, .55][i] }));
+    });
+  } else if (f.shape === 'bell') {
+    const drop = 8 + 16 * a;   // the stem curls over and the bell hangs
+    g.append(el('path', { d: `M ${x} ${y} q 10 -12 14 ${drop * .3}`, fill: 'none', stroke: color, 'stroke-width': 1 }));
+    const bx = x + 14, by = y + drop * .3, w = 6 + 7 * a, h = 9 + 9 * a;
+    g.append(el('path', { d: `M ${bx - 2} ${by} q -${w} ${h * .5} -${w} ${h} l ${w * 2 + 4} 0 q 0 -${h * .5} -${w} -${h} Z`, fill: color, opacity: .55 + .4 * a }));
+  } else {   // sprout: two leaves
+    const s = r * (.5 + .5 * a);
+    [-1, 1].forEach(d => { const cx = x + d * s * .5, cy = y - s * .35;
+      g.append(el('ellipse', { cx, cy, rx: s * .55, ry: s * .22, transform: `rotate(${d * -32} ${cx} ${cy})`, fill: color, opacity: .78 })); });
+  }
+}
+
+function words(f, v) {
+  if (v == null) return 'no reading';
+  if (Array.isArray(v)) return ['tree', 'grass', 'weed'].map((n, i) => `${n} ${v[i] < .2 ? 'low' : v[i] < .6 ? 'up' : 'high'}`).join(' · ');
+  if (f.delta) return Math.abs(v) < .15 ? (f.id === 'pressure' ? 'steady' : 'about normal') : (v < 0 ? f.lo : f.hi);
+  if (f.id === 'effort') return v > .5 ? 'active beforehand' : 'still beforehand';
+  return v < .25 ? 'low' : v < .6 ? 'up a little' : 'high';
+}
+
+function render() {
+  const day = DAYS[state.day], yours = PEOPLE[state.person];
+  document.getElementById('read').textContent = day.read;
+  svg.replaceChildren();
+  const defs = el('defs'); svg.append(defs);
+  svg.append(el('line', { x1: 10, x2: W - 10, y1: GROUND, y2: GROUND, stroke: '#d5d5dc', 'stroke-width': 1 }));
+
+  // Who stands: yours, or well up right now. At most seven; the rest are buds.
+  const all = F.map(f => { const v = day.v[f.id], w = yours[f.id] ?? 0, a = amount(f, v);
+    return { f, v, w, a, score: Math.max(w, a >= .6 ? a * .8 : 0), stands: (w >= .5 || a >= .6) && v != null }; });
+  all.filter(o => o.stands).sort((p, q) => q.score - p.score).slice(7).forEach(o => o.stands = false);
+  const tiers = [150, 86, 196, 116, 170, 100, 210];
+  let k = 0;
+  const pos = {};
+  all.forEach(o => {
+    const { f, v, w, a } = o, color = v == null ? '#b9b9c0' : f.color, g = el('g', { style: 'cursor:pointer' });
+    const gid = 'g-' + f.id;
+    if (o.stands) {
+      const h = tiers[k++ % tiers.length] * (.75 + .35 * Math.max(w, .3)), y = GROUND - h, r = 15 + 17 * Math.max(w, .35);
+      const grad = el('radialGradient', { id: gid, gradientUnits: 'userSpaceOnUse', cx: f.x, cy: y, r });
+      grad.append(el('stop', { offset: 0, 'stop-color': color, 'stop-opacity': .98 }), el('stop', { offset: .6, 'stop-color': color, 'stop-opacity': .6 }), el('stop', { offset: 1, 'stop-color': color, 'stop-opacity': .2 }));
+      defs.append(grad);
+      g.append(el('line', { x1: f.x, x2: f.x, y1: GROUND, y2: y, stroke: color, 'stroke-width': 1, opacity: .8 }));
+      head(g, f, f.x, y, r, a, v, color, gid);
+      g.append(el('rect', { x: f.x - 17, y: y - r - 6, width: 34, height: h + r + 10, fill: 'transparent' }));
+      pos[f.id] = { x: f.x, y, top: y - r };
+    } else {
+      // A bud: a short stem and a closed tip in the family colour.
+      g.append(el('line', { x1: f.x, x2: f.x, y1: GROUND, y2: GROUND - 14, stroke: color, 'stroke-width': 1, opacity: .55 }));
+      g.append(el('ellipse', { cx: f.x, cy: GROUND - 18, rx: 2.6, ry: 5, fill: color, opacity: .6 }));
+      g.append(el('rect', { x: f.x - 15, y: GROUND - 34, width: 30, height: 40, fill: 'transparent' }));
+      pos[f.id] = { x: f.x, y: GROUND - 18, top: GROUND - 26 };
+    }
+    g.addEventListener('click', () => { state.picked = state.picked === f.id ? null : f.id; render(); });
+    svg.append(g);
+  });
+
+  // A thread between the two flowers that make today's kind of day.
+  if (day.combo) {
+    const a = pos[day.combo[0]], b = pos[day.combo[1]];
+    if (a && b) {
+      const mx = (a.x + b.x) / 2, my = Math.min(a.y, b.y) - 26;
+      svg.append(el('path', { d: `M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`, fill: 'none', stroke: '#121214', 'stroke-width': .8, 'stroke-dasharray': '2 3', opacity: .55 }));
+      if (!state.picked) svg.append(el('text', { x: Math.min(W - 60, Math.max(60, mx)), y: Math.max(12, my + 4), 'text-anchor': 'middle', 'font-size': 9.5, fill: '#6e6e76' }, day.combo[2]));
+    }
+  }
+  // The tap label.
+  if (state.picked) {
+    const o = all.find(q => q.f.id === state.picked), p = pos[o.f.id], lx = Math.min(W - 78, Math.max(78, p.x)), ly = Math.max(26, p.top - 22);
+    svg.append(el('text', { x: lx, y: ly, 'text-anchor': 'middle', 'font-size': 11.5, 'font-weight': 600, fill: '#121214' }, o.f.name + (o.stands ? '' : ' · bud')));
+    svg.append(el('text', { x: lx, y: ly + 12, 'text-anchor': 'middle', 'font-size': 10, fill: '#6e6e76' }, words(o.f, o.v) + (o.w >= .5 ? ' · one of yours' : '')));
+  }
+  // Names along the ground, so the study reads without tapping.
+  F.forEach(f => svg.append(el('text', { x: f.x, y: GROUND + 13, 'text-anchor': 'middle', 'font-size': 6.6, fill: '#8a8a92' },
+    { temp: 'Temp', pm25: 'PM2.5', humidity: 'Humid', pollen: 'Pollen', pressure: 'Press', ozone: 'Ozone', wind: 'Wind', flu: 'Flu', effort: 'Effort' }[f.id])));
+  svg.append(el('text', { x: W / 2, y: GROUND + 34, 'text-anchor': 'middle', 'font-size': 9.5, fill: '#8a8a92' },
+    all.filter(o => o.stands).length + ' standing · ' + all.filter(o => !o.stands).length + ' buds'));
+  fold(day);
+}
+
+// Under the fold: everything the app knows about the moment.
+function fold(day) {
+  document.getElementById('note').innerHTML = day.note || '<span style="color:var(--phone-muted)">No note on this moment.</span>';
+  document.getElementById('chips').replaceChildren(...day.tags.map(t => { const c = document.createElement('span'); c.className = 'chip'; c.textContent = t; return c; }));
+  const box = document.getElementById('readings'); box.replaceChildren();
+  day.rows.forEach(([name, value, src]) => {
+    const r = document.createElement('div'); r.className = 'r';
+    r.innerHTML = `<b>${name}</b><small>${src}</small><i>${value}</i>`;
+    box.append(r);
+    if (name === 'Pollen' && day.species) {
+      r.classList.add('tap'); r.tabIndex = 0; r.setAttribute('role', 'button');
+      const more = document.createElement('div'); more.className = 'more'; more.hidden = state.openRow !== 'Pollen';
+      more.innerHTML = day.species.map(([n, c]) => `${n} <span>${c} particles/m³</span>`).join('<br>') + '<br><small>A zero was looked for and not found.</small>';
+      const toggle = () => { state.openRow = state.openRow === 'Pollen' ? null : 'Pollen'; more.hidden = state.openRow !== 'Pollen'; };
+      r.addEventListener('click', toggle);
+      r.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+      r.querySelector('i').textContent = value + '  ▾';
+      box.append(more);
+    }
+  });
+  // Collected, shown here, but not in the patterns yet, so no flower.
+  [['Coarse dust (PM10)', '31 µg/m³'], ['Traffic fumes (NO₂)', '14 ppb'], ['Sulphur dioxide (SO₂)', '1 ppb'], ['Carbon monoxide (CO)', '0.3 ppm']].forEach(([name, value]) => {
+    const r = document.createElement('div'); r.className = 'r';
+    r.innerHTML = `<b>${name}</b><small>Ambee · not in your patterns yet</small><i>${value}</i>`;
+    box.append(r);
+  });
+  const last = document.createElement('div'); last.className = 'r';
+  last.innerHTML = '<b style="color:var(--phone-muted)">Indoor air</b><small>can\'t be seen</small><i style="color:var(--phone-muted)">—</i>';
+  box.append(last);
+  document.getElementById('kind').innerHTML = day.combo
+    ? `<div class="r"><b>${day.combo[2][0].toUpperCase() + day.combo[2].slice(1)}</b><i>${state.person === 'fresh' ? 'Not yet known for you' : 'Often on your inhaler days'}</i></div>`
+    : '<div class="r"><b style="color:var(--phone-muted)">None today</b></div>';
+  document.getElementById('body').innerHTML = `<div class="r"><b>${day.body}</b><small>Apple Health</small></div>`;
+}
+
+// A plain street grid stands in for the map.
+(function map() {
+  const m = el('svg', { viewBox: '0 0 300 96', width: '100%', height: '96', preserveAspectRatio: 'xMidYMid slice' });
+  for (let i = 0; i < 9; i++) m.append(el('line', { x1: i * 40 - 10, x2: i * 40 + 30, y1: 0, y2: 96, stroke: '#ffffff', 'stroke-width': 5 }));
+  for (let j = 0; j < 4; j++) m.append(el('line', { x1: 0, x2: 300, y1: j * 30 + 8, y2: j * 30 + 2, stroke: '#ffffff', 'stroke-width': 5 }));
+  m.append(el('circle', { cx: 150, cy: 48, r: 7, fill: '#121214' }), el('circle', { cx: 150, cy: 48, r: 14, fill: 'none', stroke: '#121214', 'stroke-width': 1, opacity: .35 }));
+  document.getElementById('map').append(m);
+})();
+
+function bind(rowId, key, attr) {
+  document.getElementById(rowId).addEventListener('click', e => {
+    const b = e.target.closest('button.seg'); if (!b) return;
+    state[key] = b.dataset[attr]; state.picked = null; state.openRow = null;
+    b.parentElement.querySelectorAll('button.seg').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    render();
+  });
+}
+bind('personRow', 'person', 'person'); bind('dayRow', 'day', 'day');
+render();
+</script>

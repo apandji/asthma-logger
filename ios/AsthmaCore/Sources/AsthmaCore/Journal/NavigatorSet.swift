@@ -159,6 +159,15 @@ public enum NavigatorSet {
                                                          spatialScale: .modelGrid, confidence: .medium))
                     c.pressureChangeHpa = PressureChange.change(at: h.date, in: city.hours.compactMap { x in x.pressure.map { PressurePoint(date: x.date, hPa: $0) } })
                 }
+                // The two days before (`LookBack`), from the same real series.
+                // Only the hours that can matter (a little over two days back), or a data set takes seconds to load.
+                let recentHours = city.hours.filter { $0.t <= h.t && $0.t >= h.t - 52 * 3600 }
+                c.lookBack = LookBack.compute(
+                    at: h.date,
+                    pm25: recentHours.compactMap { x in x.pm25.map { HourValue(date: x.date, value: $0) } },
+                    ozone: recentHours.compactMap { x in x.ozone.map { HourValue(date: x.date, value: $0) } },
+                    temps: recentHours.compactMap { x in x.tempF.map { TempPoint(date: x.date, temperatureF: $0) } },
+                    fetchedAt: at)
                 // °F fallen over the three hours before, from the same real series.
                 if let now = h.tempF {
                     let before = city.hours.filter { $0.t >= h.t - 3 * 3600 && $0.t < h.t }.compactMap(\.tempF)

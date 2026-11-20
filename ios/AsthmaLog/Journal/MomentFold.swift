@@ -19,8 +19,13 @@ struct MomentFold: View {
         VStack(alignment: .leading, spacing: 12) {
             if let event { journal(event) }
             readings
+            before
             kinds
             if let event { bodyCard(event) }
+            card("What felt air can't see") {
+                Text("Indoor air, and anything in the room with you. Every reading here is outdoors.")
+                    .font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+            }
             Text("Outdoor air only. Not medical advice.")
                 .font(Theme.ui(.footnote)).foregroundStyle(Theme.secondaryText)
                 .padding(.horizontal, 4).padding(.top, 4)
@@ -92,32 +97,112 @@ struct MomentFold: View {
 
     // MARK: Readings
 
-    private var readings: some View {
-        card("Every reading") {
-            if let c = conditions, !c.observations.isEmpty {
-                ForEach(ReadingFamily.allCases, id: \.self) { family in
-                    let rows = family.signals.compactMap { s in c.best(s) }
-                    if !rows.isEmpty {
-                        Text(family.title).font(Theme.ui(.caption, weight: .medium)).foregroundStyle(Theme.secondaryText).padding(.top, 2)
-                        ForEach(rows, id: \.signal) { o in reading(o, in: c) }
+    /// The readings that lead each family; the rest sit behind "More".
+    static let leading: Set<Signal> = [.temperature, .humidity, .windSpeed, .pm25, .ozone, .pollenTree, .pollenGrass, .pollenWeed]
+
+    /// One card per family (owner, Nov 19: chunked so it reads), the main readings first and the rest one tap down.
+    @ViewBuilder private var readings: some View {
+        if let c = conditions, !c.observations.isEmpty {
+            ForEach(ReadingFamily.allCases, id: \.self) { family in
+                let all = family.signals.compactMap { s in c.best(s) }
+                let main = all.filter { Self.leading.contains($0.signal) }
+                let rest = all.filter { !Self.leading.contains($0.signal) }
+                if !all.isEmpty {
+                    card(family == .pollutants ? "Irritants and pollution" : family.title) {
+                        ForEach(main, id: \.signal) { o in reading(o, in: c) }
                         if family == .weather, let swing = c.pressureChangeHpa {
-                            line("Pressure, last 3 hours", MenusEnvironment.pressureText(swing), note: "Apple Weather")
+                            line("Pressure", MenusEnvironment.pressureText(swing), note: "Apple Weather · over 3 hours")
+                        }
+                        if !rest.isEmpty {
+                            let key = "more-" + family.rawValue
+                            let isOpen = open.contains(key)
+                            if isOpen { ForEach(rest, id: \.signal) { o in reading(o, in: c) } }
+                            Button { withAnimation(Theme.smooth) { if isOpen { open.remove(key) } else { open.insert(key) } } } label: {
+                                Text(isOpen ? "Fewer readings" : "More readings")
+                                    .font(Theme.ui(.footnote, weight: .medium)).foregroundStyle(Theme.secondaryText)
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
-            } else {
+            }
+        } else {
+            card("Readings") {
                 Text("No reading for this hour.").font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText)
             }
-            line("Indoor air", "Can't be seen", dim: true)
         }
+    }
+
+    /// A plain word for a reading where the app has one (the same bands the patterns use), before its number.
+    static func word(_ o: EnvObservation) -> String? {
+        func level(_ b: PollutantBand) -> String? { b == .low ? "Low" : b == .moderate ? "Raised" : b == .high ? "High" : nil }
+        switch o.signal {
+        case .pm25: return level(Banding.pm25(o.value))
+        case .pm10: return level(Banding.pm10(o.value))
+        case .ozone: return level(Banding.ozone(ppb: o.value))
+        case .no2: return level(Banding.no2(ppb: o.value))
+        case .humidity: return Banding.humidity(o.value) == .dry ? "Dry" : Banding.humidity(o.value) == .humid ? "Humid" : nil
+        case .windSpeed: return Banding.wind(mph: o.value) == .calm ? "Calm" : Banding.wind(mph: o.value) == .windy ? "Windy" : "Breezy"
+        default: return nil
+        }
+    }
+
+    /// Where a reading came from: its source, and how far away when it's a station.
+    static func source(_ o: EnvObservation) -> String {
+        var parts = [o.source]
+        if let km = o.distanceKm { let mi = km * 0.621371; parts.append(mi < 1 ? "under a mile away" : "\(Int(mi.rounded())) mi away") }
+        if o.isForecast { parts.append("forecast") }
+        return parts.joined(separator: " · ")
+    }
+
+    // MARK: The two days before
+
+    /// What the air had been doing before the moment (`LookBack`): the highest in the six hours up to it and in
+    /// the day and a half before that. A flare often trails the air, so this is kept on every moment.
+    @ViewBuilder private var before: some View {
+        if let b = conditions?.lookBack {
+            card("The two days before") {
+                Text("The highest reading in each stretch.").font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText)
+                peaks("Fine particles", now: b.pm25Now, earlier: b.pm25Earlier, unit: "µg/m³") { Self.word(EnvObservation(signal: .pm25, value: $0, unit: "", asOf: .now, source: "", spatialScale: .modelGrid)) }
+                peaks("Ozone", now: b.ozoneNow, earlier: b.ozoneEarlier, unit: "ppb") { Self.word(EnvObservation(signal: .ozone, value: $0, unit: "", asOf: .now, source: "", spatialScale: .modelGrid)) }
+                peaks("Biggest temperature fall", now: b.tempFallNow, earlier: b.tempFallEarlier, unit: "°F in 3 hours") { TempDrop.band($0) == .sharp ? "Sharp" : nil }
+                if let station = b.pm25Station ?? b.ozoneStation {
+                    Text("From \(station).").font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private func peaks(_ name: String, now: WindowPeak, earlier: WindowPeak, unit: String, word: (Double) -> String?) -> some View {
+        func text(_ p: WindowPeak, hours: Double) -> String {
+            guard LookBack.isCovered(p, windowHours: hours), let v = p.worst else { return "Not enough readings" }
+            let n = v.rounded() == v || v >= 10 ? String(Int(v.rounded())) : String(format: "%.1f", v)
+            return [word(v), "\(n) \(unit)"].compactMap { $0 }.joined(separator: " · ")
+        }
+        let hasNow = LookBack.isCovered(now, windowHours: LookBack.nowHours)
+        let hasEarlier = LookBack.isCovered(earlier, windowHours: LookBack.spanHours - LookBack.nowHours)
+        return VStack(alignment: .leading, spacing: 3) {
+            if !hasNow && !hasEarlier {
+                // Nothing to show for either window: one quiet line, not two.
+                line(name, "Not enough readings", dim: true)
+            } else {
+                Text(name).font(Theme.ui(.subheadline, weight: .medium))
+                line("Last 6 hours", text(now, hours: LookBack.nowHours), dim: !hasNow)
+                line("Before that", text(earlier, hours: LookBack.spanHours - LookBack.nowHours), dim: !hasEarlier)
+            }
+        }
+        .padding(.bottom, 4)
     }
 
     @ViewBuilder private func reading(_ o: EnvObservation, in c: Conditions) -> some View {
         let name = Self.name(o.signal)
         let group: PollenSpecies.Group? = o.signal == .pollenTree ? .tree : o.signal == .pollenGrass ? .grass : o.signal == .pollenWeed ? .weed : nil
         let species = group.flatMap { g in c.pollenSpecies?.counts(g) }.flatMap { $0.isEmpty ? nil : $0 }
-        let value = group == nil ? ObservationCopy.value(o) : [o.category, PollenSpecies.text(o.value)].compactMap { $0 }.joined(separator: " · ")
-        let note = o.source + (o.isForecast ? " · forecast" : "")
+        let value = group == nil ? [Self.word(o), ObservationCopy.value(o)].compactMap { $0 }.joined(separator: " · ")
+            : [o.category, PollenSpecies.text(o.value)].compactMap { $0 }.joined(separator: " · ")
+        let note = Self.source(o)
         if let species {
             let isOpen = open.contains(name)
             Button { withAnimation(Theme.smooth) { if isOpen { open.remove(name) } else { open.insert(name) } } } label: {

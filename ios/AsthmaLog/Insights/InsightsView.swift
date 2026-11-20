@@ -33,11 +33,8 @@ struct InsightsView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 24) {
-                    // SF for the page's name; the one Recursive line on the page is your archetype.
-                    Text("Personal Insights")
-                        .font(Theme.ui(.title2, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 8)
+                    // No page title (April, Nov 20): the archetype's name ("Pollen-led") heads the page.
+                    Color.clear.frame(height: 8)
                     if Crit.AppLook.current == .menus {
                         // Menus look (owner, Nov 19): your profile as one flower in home's language, ranked the
                         // same way as home's fans (the sample profile until your own triggers are learned).

@@ -21,7 +21,7 @@ struct MomentFold: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let event { journal(event) } else if canStartNew, record != nil { emptyJournal(nil) }
+            if let event { journal(event) } else if canStartNew, record != nil { card("Journal") { recordRow(nil) } }
             readings
             before
             kinds
@@ -82,27 +82,21 @@ struct MomentFold: View {
         }
     }
 
-    /// No note yet (owner, Nov 19): the card is the way in. Tap it and the journal opens, already listening.
-    private func emptyJournal(_ e: LogEvent?) -> some View {
-        card("Journal") { recordRow(e) }
-    }
-
     private func recordRow(_ e: LogEvent?) -> some View {
         Button { record?(e) } label: {
+            // The same row as a moment's page (April, Nov 20): "Add to journal" with the write icon, and the
+            // same flow as the +, where you type, tap or speak.
             HStack(spacing: 12) {
-                Image(systemName: "mic.fill").font(.body.weight(.semibold)).foregroundStyle(.white)
-                    .frame(width: 44, height: 44).background(Circle().fill(.black))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(e == nil ? "Add a moment" : "Add what was going on").font(Theme.ui(.body, weight: .medium)).foregroundStyle(Color.primary)
-                    Text("Tap to start recording. It stays on this iPhone.").font(Theme.ui(.footnote)).foregroundStyle(Theme.secondaryText)
-                }
+                Image(systemName: "square.and.pencil").font(.title3).foregroundStyle(Color.primary).frame(width: 28)
+                Text("Add to journal").font(Theme.ui(.body)).foregroundStyle(Color.primary)
                 Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
-        .accessibilityLabel(e == nil ? "Add a moment with a voice note" : "Add a voice note to this moment")
-        .accessibilityHint("Opens the journal, listening")
+        .accessibilityLabel("Add to journal")
+        .accessibilityHint(e == nil ? "Starts a moment now and opens the journal" : "Opens the journal for this moment")
     }
 
     static func transcript(_ e: LogEvent) -> String {

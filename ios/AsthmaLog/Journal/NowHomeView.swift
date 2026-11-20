@@ -1179,7 +1179,7 @@ struct NowHomeView: View {
                                                yours: Set(gatedRows.compactMap { $0.level == "yes" ? Combination.of(bin: $0.bin) : nil }),
                                                // No note yet: the journal card starts one, listening. On Now with no
                                                // moment, it makes a manual moment first, like the +.
-                                               record: { e in if let e { openCapture(e, listen: true) } else { felt(true) } },
+                                               record: { e in if let e { openCapture(e, listen: false) } else { felt(false) } },
                                                canStartNew: { if case .now = focus { true } else { false } }())
                                         .padding(.bottom, 32)
                                 }

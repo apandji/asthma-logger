@@ -246,6 +246,10 @@ struct ChatCapture: View {
                             CaptureChip(label: r.label, on: false) { session.reply(r) }
                         }
                     }
+                    // Not on the list (April, Nov 20): "Something else" opens the keyboard to say what it was.
+                    if q == .doing || q == .around {
+                        CaptureChip(label: "Something else", on: false) { if !typing { switchMode() } else { focused = true } }
+                    }
                 }
                 .padding(.top, 4)
                 .transition(.opacity)

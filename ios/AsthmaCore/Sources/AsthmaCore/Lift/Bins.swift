@@ -62,6 +62,11 @@ public enum Bins {
             guard let l = f.infection, l != .unknown else { return nil }
             return l.rawValue
         },
+        // v7: wind speed in three steps. Only frames with a wind reading count, in the level and in the totals:
+        // moments from before wind was kept have none, and counting them as "not windy" would invent a pattern.
+        BinDef(bin: "wind", isBoolean: false, sampled: { $0.windBand != .unknown }) { f in
+            f.windBand == .unknown ? nil : f.windBand.rawValue
+        },
     ] + JournalTag.triggers.map { tag in
         // Triggers only (symptoms and outcomes are recorded, never bins). Only frames with a reviewed note:
         // an unreviewed moment is missing, not "no".
@@ -85,6 +90,7 @@ public enum Bins {
         case "temp_drop": return "Sharp temperature drop"
         case "exertion": return "Being active"
         case "ili": return "Flu-like illness around"
+        case "wind": return "Wind"
         default:
             if bin.hasPrefix("tag_"), let tag = JournalTag(rawValue: String(bin.dropFirst(4))) {
                 return tag.label

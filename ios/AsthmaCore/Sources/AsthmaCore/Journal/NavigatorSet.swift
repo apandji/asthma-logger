@@ -2,7 +2,7 @@ import Foundation
 
 /// Real hourly outdoor air for the cities a made-up person moved through, pulled by
 /// `ios/scripts/pull-navigator-air.py` into `navigator-air.json`: Open-Meteo for the six weeks (PM2.5, ozone,
-/// temperature, humidity), Ambee for the last two days in the city they're in now (with pollen).
+/// temperature, humidity, wind), Ambee for the last two days in the city they're in now (with pollen).
 public struct NavigatorAir: Codable, Sendable {
     public struct Hour: Codable, Sendable {
         public var t: Double
@@ -10,6 +10,7 @@ public struct NavigatorAir: Codable, Sendable {
         public var ozone: Double?
         public var tempF: Double?
         public var humidity: Double?
+        public var wind: Double?
         public var tree: Double?
         public var grass: Double?
         public var weed: Double?
@@ -136,6 +137,7 @@ public enum NavigatorSet {
                 add(.ozone, h.ozone, "ppb", openMeteo)
                 add(.temperature, h.tempF, "°F", openMeteo)
                 add(.humidity, h.humidity, "%", openMeteo)
+                add(.windSpeed, h.wind, "mph", openMeteo)
                 var c = Conditions(observations: obs, fetchedAt: at)
                 // °F fallen over the three hours before, from the same real series.
                 if let now = h.tempF {

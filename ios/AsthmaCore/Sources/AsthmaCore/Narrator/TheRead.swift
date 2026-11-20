@@ -38,6 +38,9 @@ public enum TheRead {
         case ("temp", "mild"): "Mild weather"
         case ("humidity", "humid"): "Humid air"
         case ("humidity", "dry"): "Dry air"
+        case ("wind", "windy"): "Windy weather"
+        case ("wind", "breezy"): "A breeze"
+        case ("wind", "calm"): "Still air"
         case ("smoke_at_point", "yes"): "Smoky air"
         case ("heat_alert", "yes"): "A heat alert"
         case ("temp_drop", "yes"): "A sharp temperature drop"
@@ -109,6 +112,9 @@ public enum TheRead {
         case ("temp", let t) where ["hot", "cold", "mild"].contains(t): return ("It was \(t).", "It's \(t).", "it looks \(t)")
         case ("humidity", "humid"): return ("It was humid.", "It's humid.", "it looks humid")
         case ("humidity", "dry"): return ("The air was dry.", "The air is dry.", "the air looks dry")
+        case ("wind", "windy"): return ("It was windy.", "It's windy.", "it looks windy")
+        case ("wind", "breezy"): return ("It was breezy.", "It's breezy.", "it looks breezy")
+        case ("wind", "calm"): return ("The air was still.", "The air is still.", "the air looks still")
         case ("smoke_at_point", "yes"): return ("The air was smoky.", "The air is smoky.", "the air looks smoky")
         case ("heat_alert", "yes"): return ("A heat alert was on.", "A heat alert is on.", "a heat alert is out")
         case ("temp_drop", "yes"):
@@ -128,6 +134,7 @@ public enum TheRead {
         var out: [(String, String)] = []
         for b in ["pm25", "ozone", "pollen_weed", "pollen_tree", "pollen_grass"] { out += [(b, "high"), (b, "moderate")] }
         out += [("temp", "hot"), ("temp", "cold"), ("temp", "mild"), ("humidity", "humid"), ("humidity", "dry"),
+                ("wind", "windy"), ("wind", "breezy"), ("wind", "calm"),
                 ("smoke_at_point", "yes"), ("heat_alert", "yes"), ("temp_drop", "yes"), ("exertion", "yes")]
         out += JournalTag.allCases.map { ("tag_\($0.rawValue)", "yes") }
         return out

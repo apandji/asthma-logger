@@ -125,7 +125,8 @@ public struct Conditions: Codable, Sendable, Equatable {
             pollenWeedRisk: bestReal(.pollenWeed)?.category,
             aqi: bestReal(.aqi).map { Int($0.value.rounded()) },
             alertNames: alerts.map(\.name),
-            tempFallF: tempFallF
+            tempFallF: tempFallF,
+            windMph: bestReal(.windSpeed)?.value
         )
     }
 }

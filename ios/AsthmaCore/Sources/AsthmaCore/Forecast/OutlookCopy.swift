@@ -40,6 +40,7 @@ public enum OutlookCopy {
         case "smoke_at_point": return level == "yes" ? "signs of smoke" : "no signs of smoke"
         case "heat_alert": return level == "yes" ? "a heat alert" : "no heat alert"
         case "temp_drop": return level == "yes" ? "a sharp temperature drop" : "steady temperatures"
+        case "wind": return level == "calm" ? "still air" : level == "breezy" ? "a breeze" : "windy weather"
         case "hour", "season": return level
         default: return "\(Bins.label(bin).lowercased()) \(level)"
         }

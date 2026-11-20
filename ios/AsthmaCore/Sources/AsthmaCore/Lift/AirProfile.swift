@@ -44,7 +44,7 @@ public struct AirProfile: Sendable, Equatable {
         /// sit outside the families.
         public static func of(bin: String) -> Category? {
             switch bin {
-            case "temp", "humidity", "temp_drop", "heat_alert", "tag_coldAir", "pressure_change", "storm": .weather
+            case "temp", "humidity", "temp_drop", "heat_alert", "wind", "tag_coldAir", "pressure_change", "storm": .weather
             case "pollen_weed", "pollen_tree", "pollen_grass", "tag_pets", "tag_mold": .biologics
             case "pm25", "ozone", "smoke_at_point", "tag_smoke", "tag_dust", "tag_cleaningProducts", "tag_strongScents",
                  "tag_cooking": .particulates

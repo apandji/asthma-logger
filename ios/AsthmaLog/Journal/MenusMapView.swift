@@ -171,10 +171,18 @@ struct MenusMapView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
             }
             // Cohesive (April, Nov 20: the count in a ring over a tint "looks vibe coded"): one solid drop of the
-            // trigger's watercolour ink with a paper edge, like the Year blanket's colours, no stroke, no number.
-            // More moments make a bigger drop; the count is in the label when you tap it.
-            let d = min(30, 13 + 3.5 * CGFloat(s.count - 1))
-            Circle().fill(ink)
+            // trigger's watercolour ink with a paper edge, like the Year blanket's colours, no stroke.
+            // Several moments in one spot (April, Nov 20): the count sits in the drop, in a deep shade of its own
+            // ink, so a cluster reads as one; still no ring.
+            let d = s.count > 1 ? min(34, 22 + 2.5 * CGFloat(s.count - 2)) : 13
+            ZStack {
+                Circle().fill(ink)
+                if s.count > 1 {
+                    Text("\(s.count)").font(Theme.Figtree.font(size: d * 0.5, weight: .semibold)).monospacedDigit()
+                        .foregroundStyle(ink.mix(with: .black, by: 0.62))
+                        .minimumScaleFactor(0.6).lineLimit(1)
+                }
+            }
                 .padding(2.5)
                 .background(Circle().fill(Color(uiColor: .secondarySystemGroupedBackground)))
                 .frame(width: d + 5, height: d + 5)

@@ -66,6 +66,19 @@ import Testing
         #expect(AirProfile.Category.of(bin: "combo_stormPollen") == nil)
     }
 
+    @Test func aCombinationIsSaidOnceNotAsItsParts() {
+        // Still and hazy on 8 of 10 inhaler moments, 3 of 30 ordinary ones: the combination, fine particles and
+        // smoky air all pass the gate, but the moment says only the combination.
+        let hazy = ConditionsInput(pm25: 20, temperatureF: 60, windMph: 3)
+        let clear = ConditionsInput(pm25: 5, temperatureF: 60, windMph: 12)
+        let frames = (0..<10).map { Self.frame($0 < 8 ? hazy : clear, .attack) } + (0..<30).map { Self.frame($0 < 3 ? hazy : clear, .baseline) }
+        let report = Lift.compute(frames, gate: .default)
+        #expect(report.gatedRows.contains { $0.bin == "pm25" })
+        let said = TheRead.shared(Self.frame(hazy), rows: report.gatedRows).map(\.bin)
+        #expect(said.contains("combo_stillHazy"))
+        #expect(!said.contains("pm25") && !said.contains("smoke_at_point") && !said.contains("wind"))
+    }
+
     @Test func rareCombinationsStayQuiet() {
         // Only 2 inhaler moments like it: under the gate's 4 in the level.
         let storm = ConditionsInput(temperatureF: 75, pollenGrassRisk: "High", storm: true)

@@ -40,19 +40,20 @@ def open_meteo(lat, lon, start, end):
     aq = get("https://air-quality-api.open-meteo.com/v1/air-quality",
              {"latitude": lat, "longitude": lon, "hourly": "pm2_5,ozone", "start_date": start, "end_date": end, "timezone": "UTC"})
     wx = get("https://api.open-meteo.com/v1/forecast",
-             {"latitude": lat, "longitude": lon, "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m",
+             {"latitude": lat, "longitude": lon, "hourly": "temperature_2m,relative_humidity_2m,wind_speed_10m,pressure_msl",
               "temperature_unit": "fahrenheit", "wind_speed_unit": "mph", "start_date": start, "end_date": end, "timezone": "UTC"})
     hours = {}
     for t, pm, o3 in zip(aq["hourly"]["time"], aq["hourly"]["pm2_5"], aq["hourly"]["ozone"]):
         h = hours.setdefault(epoch(t), {})
         if pm is not None: h["pm25"] = round(pm, 1)
         if o3 is not None: h["ozone"] = round(o3 / 1.96)   # µg/m³ → ppb at 25 °C
-    for t, f, rh, wind in zip(wx["hourly"]["time"], wx["hourly"]["temperature_2m"], wx["hourly"]["relative_humidity_2m"],
-                              wx["hourly"]["wind_speed_10m"]):
+    for t, f, rh, wind, pres in zip(wx["hourly"]["time"], wx["hourly"]["temperature_2m"], wx["hourly"]["relative_humidity_2m"],
+                                    wx["hourly"]["wind_speed_10m"], wx["hourly"]["pressure_msl"]):
         h = hours.setdefault(epoch(t), {})
         if f is not None: h["tempF"] = round(f)
         if rh is not None: h["humidity"] = round(rh)
         if wind is not None: h["wind"] = round(wind, 1)
+        if pres is not None: h["pressure"] = round(pres, 1)
     now = datetime.now(timezone.utc).timestamp()
     return [{"t": t, **v} for t, v in sorted(hours.items()) if t <= now and v]
 

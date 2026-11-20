@@ -11,6 +11,8 @@ public struct NavigatorAir: Codable, Sendable {
         public var tempF: Double?
         public var humidity: Double?
         public var wind: Double?
+        /// Sea-level pressure, hPa.
+        public var pressure: Double?
         public var tree: Double?
         public var grass: Double?
         public var weed: Double?
@@ -150,6 +152,12 @@ public enum NavigatorSet {
                 if city.name == air.ambeeCity, let s = recent[h.t]?.species {
                     c.pollenSpecies = PollenSpecies(tree: s.tree ?? [:], grass: s.grass ?? [:], weed: s.weed ?? [:], others: s.others,
                                                     source: Ambee.source, asOf: h.date)
+                }
+                // The pressure and how far it moved in the three hours before, from the same real series.
+                if let p = h.pressure {
+                    c.observations.append(EnvObservation(signal: .pressure, value: p, unit: "hPa", asOf: h.date, source: openMeteo,
+                                                         spatialScale: .modelGrid, confidence: .medium))
+                    c.pressureChangeHpa = PressureChange.change(at: h.date, in: city.hours.compactMap { x in x.pressure.map { PressurePoint(date: x.date, hPa: $0) } })
                 }
                 // °F fallen over the three hours before, from the same real series.
                 if let now = h.tempF {

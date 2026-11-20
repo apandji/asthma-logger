@@ -802,7 +802,8 @@ struct MenusDetails: View {
                 .init(name: "Temperature", air: Theme.AirInk(core: Theme.AirPalette.coral, glow: Theme.AirPalette.peach), points: series(.temperature), unit: "°F"),
                 .init(name: "Humidity", air: Theme.AirInk(core: Theme.AirPalette.mint, glow: Theme.AirPalette.sky), points: series(.humidity), unit: "%"),
                 .init(name: "Wind", air: Theme.AirInk(core: Theme.AirPalette.sky, glow: Theme.AirPalette.mist), points: series(.windSpeed), unit: "mph"),
-                .init(name: "Pressure", air: Theme.airStorm, points: [], unit: "", note: "Not tracked yet"),
+                // The swing, not the value (owner, Nov 19: a big factor for some people): hPa moved in three hours.
+                .init(name: "Pressure", air: Theme.airStorm, points: pressureSwing, unit: "hPa"),
                 .init(name: "PM2.5", air: Theme.airPM25, points: series(.pm25), unit: "µg"),
                 .init(name: "Ozone", air: Theme.AirInk(core: Theme.AirPalette.pink, glow: Theme.AirPalette.lilac), points: series(.ozone), unit: "ppb"),
                 .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: "% of a high day"),
@@ -848,6 +849,17 @@ struct MenusDetails: View {
         let pad = window.span * 0.5
         let ahead = forecast.filter { $0.0 > now && $0.0 <= window.end.addingTimeInterval(pad) }
             .compactMap { h in h.1.best(s).map { (h.0, $0.value) } }
+        return (logged + ahead).sorted { $0.0 < $1.0 }
+    }
+
+    /// How far the pressure moved in the three hours before, signed (negative = falling): what each moment was
+    /// stamped with, then the forecast hours worked out the same way from their pressures.
+    private var pressureSwing: [(Date, Double)] {
+        let logged = shown.compactMap { e in e.conditions?.pressureChangeHpa.map { (e.loggedAt, $0) } }
+        let pad = window.span * 0.5
+        let points = forecast.compactMap { h in h.1.best(.pressure).map { PressurePoint(date: h.0, hPa: $0.value) } }
+        let ahead = forecast.filter { $0.0 > now && $0.0 <= window.end.addingTimeInterval(pad) }
+            .compactMap { h in PressureChange.change(at: h.0, in: points).map { (h.0, $0) } }
         return (logged + ahead).sorted { $0.0 < $1.0 }
     }
 
@@ -1276,6 +1288,7 @@ struct MenusEnvironment: View {
         case "Temperature": x = abs(v - 65) / 35
         case "Humidity": x = v / 100
         case "Wind": x = v / 25
+        case "Pressure": x = abs(v) / 5   // a swing of 5 hPa in three hours is a lot, either way
         case "PM2.5": x = v / 35
         case "Ozone": x = v / 70
         case "Pollen": x = v / 100   // share of a high day
@@ -1290,6 +1303,7 @@ struct MenusEnvironment: View {
         case "Temperature": Color(red: 0.86, green: 0.36, blue: 0.30)
         case "Humidity": Color(red: 0.20, green: 0.50, blue: 0.56)
         case "Wind": Color(red: 0.42, green: 0.43, blue: 0.45)
+        case "Pressure": Color(red: 0.45, green: 0.40, blue: 0.68)   // violet
         case "PM2.5": Color(red: 0.18, green: 0.42, blue: 0.78)
         case "Ozone": Color(red: 0.86, green: 0.42, blue: 0.56)
         case "Pollen": Color(red: 0.93, green: 0.74, blue: 0.16)   // yellow (owner, Nov 13)
@@ -1329,7 +1343,7 @@ struct MenusEnvironment: View {
         let ws = present.map { weight($0.0.name) }
         // One strict rank each (owner, Nov 19: the higher it sits, the bigger it is): your learned triggers
         // first, ties broken by the profile order, so no two flowers ever share a size or a height.
-        let profile = ["Pollen", "PM2.5", "Ozone", "Humidity", "Temperature", "Wind"]
+        let profile = ["Pollen", "PM2.5", "Ozone", "Humidity", "Temperature", "Pressure", "Wind"]
         let tie = { (i: Int) in profile.firstIndex(of: present[i].0.name) ?? profile.count }
         let order = present.indices.sorted { ws[$0] > ws[$1] + 0.001 || (abs(ws[$0] - ws[$1]) <= 0.001 && tie($0) < tie($1)) }
         var ranks = Array(repeating: 0, count: n)
@@ -1496,7 +1510,7 @@ struct MenusEnvironment: View {
             Text(w.series.name)
                 .font(Theme.Figtree.font(size: 15, weight: .medium))
                 .foregroundStyle(pigment(w.series.name, w.value ?? 0).mix(with: .black, by: 0.25))
-            Text(Self.relativeText(w.value, unit: w.series.unit, usual: w.series.points.map(\.1)))
+            Text(w.series.name == "Pressure" ? Self.pressureText(w.value) : Self.relativeText(w.value, unit: w.series.unit, usual: w.series.points.map(\.1)))
                 .font(Theme.Figtree.font(size: 13).monospacedDigit())
                 .foregroundStyle(.secondary)
             // One layer down (owner, Nov 19): the species behind the pollen total, as counted. Only what was found.
@@ -1524,6 +1538,16 @@ struct MenusEnvironment: View {
 
     /// Room for the species lines, so the label still sits above the flower.
     private func speciesLift(_ w: Swatch) -> CGFloat { CGFloat(speciesLines(w).count) * 8 }
+
+    /// Pressure's label is its direction: "Falling · 3 hPa in 3 hours", "Steady", or "No reading".
+    static func pressureText(_ change: Double?) -> String {
+        guard let change else { return "No reading" }
+        switch PressureChange.band(change) {
+        case .falling: return "Falling · \(Int(abs(change).rounded())) hPa in 3 hours"
+        case .rising: return "Rising · \(Int(abs(change).rounded())) hPa in 3 hours"
+        default: return "Steady"
+        }
+    }
 
     /// The tap label in words (owner, Nov 19, like Apple Weather): pollen as a level, the rest as a reading, and
     /// how it compares with your usual (the middle of this condition's readings on your moments).

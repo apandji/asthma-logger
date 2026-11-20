@@ -55,6 +55,32 @@ public enum Combination: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// The single factors a combination is made of. When the combination is said, these aren't said again.
+    public var partBins: Set<String> {
+        switch self {
+        case .stormPollen: ["storm", "pollen_tree", "pollen_grass", "pollen_weed"]
+        case .wildfireSmoke: ["pm25", "smoke_at_point"]
+        case .hotHazy: ["temp", "ozone", "heat_alert"]
+        case .coldDry: ["temp", "humidity"]
+        case .stillHazy: ["wind", "pm25", "smoke_at_point"]
+        case .windyPollen: ["wind", "pollen_tree", "pollen_grass", "pollen_weed"]
+        case .frontComing: ["pressure_change", "humidity"]
+        }
+    }
+
+    /// The kind of day as a sentence: looking back, now, and ahead (mid-sentence, after "Tomorrow at 2 PM:").
+    public var sentence: (was: String, is: String, ahead: String) {
+        switch self {
+        case .stormPollen: ("There were thunderstorms with pollen up.", "There are thunderstorms with pollen up.", "thunderstorms with pollen up look likely")
+        case .wildfireSmoke: ("There was wildfire smoke in the air.", "There's wildfire smoke in the air.", "wildfire smoke looks likely")
+        case .hotHazy: ("It was hot and hazy.", "It's hot and hazy.", "it looks hot and hazy")
+        case .coldDry: ("It was cold and dry.", "It's cold and dry.", "it looks cold and dry")
+        case .stillHazy: ("The air was still and hazy.", "The air is still and hazy.", "the air looks still and hazy")
+        case .windyPollen: ("It was windy with pollen up.", "It's windy with pollen up.", "it looks windy with pollen up")
+        case .frontComing: ("Weather was moving in.", "Weather is moving in.", "weather looks to be moving in")
+        }
+    }
+
     /// Whether a weather description means a thunderstorm ("Thunderstorms", "Isolated Thunderstorms").
     public static func isStorm(_ condition: String) -> Bool { condition.lowercased().contains("thunder") }
 
@@ -96,5 +122,16 @@ public extension LiftReport {
             guard r.level == "yes", let c = Combination.of(bin: r.bin) else { return nil }
             return (c, r)
         }.sorted { $0.row.lift > $1.row.lift }
+    }
+}
+
+extension Array where Element == LiftRow {
+    /// When a combination is among the rows, the single factors it's made of are left out, so a moment reads
+    /// "The air was still and hazy." and not that plus "smoky" plus "fine particles were high".
+    func droppingPartsOfCombinations() -> [LiftRow] {
+        let said = compactMap { $0.level == "yes" ? Combination.of(bin: $0.bin) : nil }
+        guard !said.isEmpty else { return self }
+        let parts = said.reduce(into: Set<String>()) { $0.formUnion($1.partBins) }
+        return filter { !parts.contains($0.bin) }
     }
 }

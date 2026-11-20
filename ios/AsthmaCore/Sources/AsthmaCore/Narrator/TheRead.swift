@@ -22,6 +22,7 @@ public enum TheRead {
             return rows.first { $0.bin == def.bin && $0.level == level && $0.gated && $0.attackRate > $0.baselineRate }
         }
         .sorted { ($0.attackRate - $0.baselineRate) > ($1.attackRate - $1.baselineRate) }
+        .droppingPartsOfCombinations()
     }
 
     /// "High weed pollen", "A sharp temperature drop", "Exercise".
@@ -125,8 +126,8 @@ public enum TheRead {
         case ("pressure_change", "rising"): return ("The pressure was rising.", "The pressure is rising.", "the pressure looks set to rise")
         case ("storm", "yes"): return ("There were thunderstorms.", "There are thunderstorms.", "thunderstorms are on the way")
         case (let b, "yes") where Combination.of(bin: b) != nil:
-            let t = Combination.of(bin: b)!.title.lowercased()
-            return ("It was \(t).", "It's \(t).", "it looks like \(t)")
+            let s = Combination.of(bin: b)!.sentence
+            return (s.was, s.is, s.ahead)
         case ("wind", "windy"): return ("It was windy.", "It's windy.", "it looks windy")
         case ("wind", "breezy"): return ("It was breezy.", "It's breezy.", "it looks breezy")
         case ("wind", "calm"): return ("The air was still.", "The air is still.", "the air looks still")
@@ -151,6 +152,8 @@ public enum TheRead {
         out += [("temp", "hot"), ("temp", "cold"), ("temp", "mild"), ("humidity", "humid"), ("humidity", "dry"),
                 ("wind", "windy"), ("wind", "breezy"), ("wind", "calm"),
                 ("smoke_at_point", "yes"), ("heat_alert", "yes"), ("temp_drop", "yes"), ("exertion", "yes")]
+        out += [("pressure_change", "falling"), ("pressure_change", "rising"), ("storm", "yes")]
+        out += Combination.allCases.map { ($0.bin, "yes") }
         out += JournalTag.allCases.map { ("tag_\($0.rawValue)", "yes") }
         return out
     }

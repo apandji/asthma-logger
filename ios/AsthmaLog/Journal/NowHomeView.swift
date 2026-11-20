@@ -1438,7 +1438,7 @@ struct NowHomeView: View {
         // the demo's fan sizes are set here, for the picture alone. Real logs always use the gated rows below.
         // Prototype (owner, Nov 19): the same pollen-led profile stands in until your own logs have learned a
         // trigger, so the flowers show the ranking rule from day one. Learned triggers replace it.
-        let prototype: [String: Double] = ["Pollen": 1, "PM2.5": 0.88, "Ozone": 0.7, "Humidity": 0.55, "Temperature": 0.4, "Wind": 0.25]
+        let prototype: [String: Double] = ["Pollen": 1, "PM2.5": 0.88, "Ozone": 0.7, "Humidity": 0.55, "Temperature": 0.4, "Pressure": 0.32, "Wind": 0.25]
         if demo { return prototype }
         var out: [String: Double] = [:]
         for r in rows where r.gated {
@@ -1449,6 +1449,7 @@ struct NowHomeView: View {
             case "temp", "temp_drop", "heat_alert": "Temperature"
             case "humidity": "Humidity"
             case "wind": "Wind"
+            case "pressure_change": "Pressure"
             default: nil
             }
             guard let name else { continue }
@@ -1879,6 +1880,9 @@ struct NowHour: Identifiable, Sendable {
             ]
             if let wind = h.windMph {
                 obs.append(EnvObservation(signal: .windSpeed, value: wind, unit: "mph", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true))
+            }
+            if let p = h.pressureHpa {
+                obs.append(EnvObservation(signal: .pressure, value: p, unit: "hPa", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true))
             }
             let a = ambee[Int(h.date.timeIntervalSince1970 / 3600)]
             obs += a?.observations(source: Ambee.source) ?? []

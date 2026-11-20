@@ -85,7 +85,7 @@ struct NowHomeView: View {
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
     @AppStorage(Crit.TimelineLook.key) private var timelineLook = Crit.TimelineLook.track
-    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.menus
+    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.fallback
     private var healthLook: Bool { appLook.healthLike }
     // Menus look (Oct 30 sketch).
     @State private var menusScale = MenusScale.timeline
@@ -1073,7 +1073,7 @@ struct NowHomeView: View {
     /// The Oct 30 sketch: top bar, then the page for the chosen scale, or Insights in place.
     private var menusPage: some View {
         VStack(alignment: .leading, spacing: 0) {
-            MenusTopBar(scale: $menusScale, openMenu: { withAnimation(Theme.smooth) { showSideMenu = true } })
+            MenusTopBar(scale: $menusScale, openMenu: { withAnimation(Theme.smooth) { showSideMenu = true } }, showInfo: menusTab == .home)
             // Apple's tab bar (owner, Nov 13, after Instagram and Linear): Liquid Glass, a lens you can drag across
             // the tabs, it shrinks as you scroll, and the + is the separate round tab at the end.
             // Pages as native tabs (each keeps its state); the system's bar is hidden for ours (bottomBar), so the
@@ -1136,6 +1136,7 @@ struct NowHomeView: View {
                                            forecast: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
                                            now: now, verdict: menusVerdict, limits: menusLimits, settle: menusSettle,
                                            backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil },
+                                           jump: { t in withAnimation(Theme.smooth) { menusWindow.center = t }; focusTime = t },
                                            titleBelow: combined)
                     ScrollView(.vertical) {
                         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -1158,13 +1159,14 @@ struct NowHomeView: View {
                             }
                             Section {
                                 MenusDetails(window: $menusWindow, events: events, now: now, limits: menusLimits, settle: menusSettle,
-                                             apart: min(1, max(0, (menusScroll - (combined ? 0 : 300)) / 260)), big: combined,
+                                             apart: combined ? 0 : min(1, max(0, (menusScroll - 300) / 260)), big: combined,
                                              forecast: hours.map { ($0.date, $0.conditions) },
                                              triggers: Self.fanWeights(gatedRows, demo: events.contains(where: \.isDemo)),
                                              dayTitle: nil,
                                              // The flowers fill the room between the header and the timeline.
                                              bigBand: menusViewport > 0 ? max(300, menusViewport - 158 - 16 - 20) : MenusEnvironment.bigBand)   // the time is on the timeline now (owner, Nov 13)
-                                    .padding(.bottom, 120)   // clear of the tab bar and the +
+                                    .padding(.bottom, combined ? 0 : 120)   // clear of the tab bar and the +
+                                if combined { soilMap }
                             } header: {
                                 if !combined { strip }
                             }
@@ -1172,7 +1174,22 @@ struct NowHomeView: View {
                     }
                     // With the fans, the timeline sits at the bottom, just above the tab bar (owner, Nov 13).
                     .safeAreaInset(edge: .bottom, spacing: 0) {
-                        if combined { strip.padding(.bottom, 86) }   // clear of the tab bar   // room above and below (owner, Nov 13)
+                        if combined {
+                            // The timeline's paper (owner, Nov 19): a soft fade at its top edge so scrolled content
+                            // slips under it, and solid all the way down behind the tab bar, with no gap.
+                            strip.padding(.bottom, 86)
+                                .background {
+                                    let paper = Color(uiColor: .systemGroupedBackground)
+                                    VStack(spacing: 0) {
+                                        LinearGradient(colors: [paper.opacity(0), paper], startPoint: .top, endPoint: .bottom)
+                                            .frame(height: 44)
+                                        paper
+                                    }
+                                    .padding(.top, -44)
+                                    .ignoresSafeArea(edges: .bottom)
+                                    .allowsHitTesting(false)
+                                }
+                        }   // clear of the tab bar   // room above and below (owner, Nov 13)
                     }
                     .scrollIndicators(.hidden)
                     .scrollDisabled(probing)
@@ -1183,6 +1200,32 @@ struct NowHomeView: View {
                 case .year:
                     MenusYearView(events: events, now: now)
                 }
+    }
+
+    /// Under the flowers' ground (owner, Nov 19): the paper fades into a small map of where the moment at the
+    /// playhead was logged, just that spot and a little around it. Still, so it doesn't fight the scroll; a tap
+    /// opens the Map tab.
+    private var soilMap: some View {
+        let paper = Color(uiColor: .systemGroupedBackground)
+        let c = menusWindow.center
+        // The moment on the playhead, or else the latest one before it that has a place.
+        let placed = moments.filter { $0.latitude != nil && $0.longitude != nil && $0.moment != .note }
+        let here = placed.first { abs($0.loggedAt.timeIntervalSince(c)) < 90 }
+            ?? placed.filter { $0.loggedAt <= c }.max { $0.loggedAt < $1.loggedAt }
+        return MomentPlaceMap(event: here)
+            .frame(height: 280)
+            .overlay {
+                LinearGradient(stops: [.init(color: paper, location: 0), .init(color: paper.opacity(0), location: 0.1),
+                                       .init(color: paper.opacity(0), location: 0.8), .init(color: paper, location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+                    .allowsHitTesting(false)
+            }
+            .padding(.bottom, 24)
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(Theme.snap) { menusTab = .map } }
+            .accessibilityElement()
+            .accessibilityLabel(here?.placeName.map { "Where this moment was: \($0)" } ?? "Where this moment was")
+            .accessibilityAddTraits(.isButton)
     }
 
     /// How far the Menus window can go: the first moment (a week back at least) to the forecast's end.
@@ -1384,12 +1427,13 @@ struct NowHomeView: View {
     /// How much each condition is one of yours, 0…1, for the fans: the strongest gated lift among its bins,
     /// scaled so lift 1.25 (the gate) is small and lift 3 or more is a full-size fan. Empty while still learning.
     static func fanWeights(_ rows: [LiftRow], demo: Bool = false) -> [String: Double] {
-        // Demo week only (owner, Nov 13): a pollen-led person, like someone with a bad seasonal allergy. Demo
-        // pollen is display-only and never makes a lift row, so the demo's fan sizes are set here, for the
-        // picture alone. Real logs always use the gated rows below.
-        if demo {
-            return ["Pollen": 1, "Ozone": 0.7, "PM2.5": 0.45, "Humidity": 0.35, "Temperature": 0.25, "Wind": 0.15]
-        }
+        // Demo week only (owner, Nov 13; Nov 19): a pollen-led person, pollen first and PM2.5 a close second,
+        // like someone with a bad seasonal allergy. Demo pollen is display-only and never makes a lift row, so
+        // the demo's fan sizes are set here, for the picture alone. Real logs always use the gated rows below.
+        // Prototype (owner, Nov 19): the same pollen-led profile stands in until your own logs have learned a
+        // trigger, so the flowers show the ranking rule from day one. Learned triggers replace it.
+        let prototype: [String: Double] = ["Pollen": 1, "PM2.5": 0.88, "Ozone": 0.7, "Humidity": 0.55, "Temperature": 0.4, "Wind": 0.25]
+        if demo { return prototype }
         var out: [String: Double] = [:]
         for r in rows where r.gated {
             let name: String? = switch r.bin {
@@ -1403,7 +1447,7 @@ struct NowHomeView: View {
             guard let name else { continue }
             out[name] = max(out[name] ?? 0, min(1, max(0.2, (r.lift - 1) / 2)))
         }
-        return out
+        return out.isEmpty ? prototype : out
     }
 
     static func yours(_ rows: [LiftRow]) -> [String: Double] {

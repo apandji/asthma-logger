@@ -10,6 +10,7 @@ struct AsthmaLogApp: App {
     @State private var button = ButtonLink()
 
     init() {
+        Crit.AppLook.moveToMenusOnce()
         AppTips.configure()
         ABTest.applyLaunchArguments()
         do { container = try ModelContainer(for: LogEvent.self, InhalerUse.self, VoiceNote.self) }

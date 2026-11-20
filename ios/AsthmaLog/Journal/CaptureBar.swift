@@ -19,7 +19,7 @@ struct CaptureBar: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     /// The + follows the rail to the hand's side.
     @AppStorage(Prefs.railLeft) private var railLeft = false
-    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.menus
+    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.fallback
     /// Apple Health look: Your moments has its own tab and page.
     @State private var showMoments = false
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]

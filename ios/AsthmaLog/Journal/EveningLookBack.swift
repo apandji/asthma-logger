@@ -48,11 +48,35 @@ struct EveningLookBack: View {
         return Array(events.filter { $0.moment == .rescue && !$0.isDemo && needsNote($0) }.sorted { $0.loggedAt < $1.loggedAt }.suffix(2))
     }
 
+    /// Moments of one kind within 5 minutes of the one before are one card (owner, Nov 19): four taps at 11:22
+    /// read as one moment, said as "4 puffs" (or "4 times" for manual ones), not four cards to answer.
+    private var groups: [[LogEvent]] {
+        var out: [[LogEvent]] = []
+        for m in moments {
+            if let last = out.last?.last, last.moment == m.moment, m.loggedAt.timeIntervalSince(last.loggedAt) <= 5 * 60 {
+                out[out.count - 1].append(m)
+            } else {
+                out.append([m])
+            }
+        }
+        return out
+    }
+
+    /// "4 puffs" for an inhaler group (every puff in every use), "4 times" otherwise; nil for one moment of one puff.
+    private func countLine(_ g: [LogEvent]) -> String? {
+        if g.first?.moment == .rescue || g.first?.moment == .maintenance {
+            let puffs = g.reduce(0) { $0 + max(1, $1.uses.reduce(0) { $0 + $1.puffs }) }
+            return puffs > 1 ? "\(puffs) puffs" : nil
+        }
+        return g.count > 1 ? "\(g.count) times" : nil
+    }
+
     private var allToday: Bool { moments.allSatisfy { Calendar.current.isDateInToday($0.loggedAt) } }
 
     private var headline: String {
         let words = ["No moments", "One moment", "Two moments", "Three moments", "Four moments", "Five moments"]
-        let n = moments.count < words.count ? words[moments.count] : "A few moments"
+        let c = groups.count
+        let n = c < words.count ? words[c] : "A few moments"
         // Staged with nothing logged today: the latest moments, said as what they are.
         return allToday ? n + " today." : n.replacingOccurrences(of: "moment", with: "recent moment") + "."
     }
@@ -69,10 +93,10 @@ struct EveningLookBack: View {
                     VStack(alignment: .leading, spacing: 20) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(headline).font(Theme.ui(size: 34, weight: .medium))
-                            Text(moments.count == 1 ? "What was going on?" : "What was going on at each?")
+                            Text(groups.count == 1 ? "What was going on?" : "What was going on at each?")
                                 .font(Theme.ui(.title3)).foregroundStyle(Theme.secondaryText)
                         }
-                        ForEach(moments) { m in card(m) }
+                        ForEach(groups, id: \.first!.id) { g in card(g) }
                     }
                     .padding(.horizontal, 20).padding(.top, 72).padding(.bottom, 16)
                 }
@@ -91,12 +115,17 @@ struct EveningLookBack: View {
         .accessibilityAddTraits(.isModal)
     }
 
-    private func card(_ m: LogEvent) -> some View {
-        let done = !Self.needsNote(m)
+    private func card(_ g: [LogEvent]) -> some View {
+        // The group answers as one: a note goes on its first moment, "Not sure" covers them all.
+        let m = g[0]
+        let done = !g.allSatisfy(Self.needsNote)
         return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
                 Circle().fill(m.moment == .rescue ? Theme.rescue : m.moment == .note ? Color.primary.opacity(0.35) : Theme.standard).frame(width: 10, height: 10)
                 Text(m.moment.title).font(Theme.ui(.headline, weight: .medium))
+                if let count = countLine(g) {
+                    Text(count).font(Theme.ui(.subheadline, weight: .medium)).foregroundStyle(Theme.secondaryText)
+                }
                 Spacer()
                 Text(Calendar.current.isDateInToday(m.loggedAt) ? m.loggedAt.formatted(date: .omitted, time: .shortened)
                      : m.loggedAt.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
@@ -127,7 +156,7 @@ struct EveningLookBack: View {
                     }
                     .accessibilityLabel("Speak a note")
                     // The way out, quiet: plain text, no outline.
-                    Button("Not sure") { m.tagsReviewed = true; try? m.modelContext?.save() }
+                    Button("Not sure") { for e in g { e.tagsReviewed = true }; try? m.modelContext?.save() }
                         .font(Theme.ui(.subheadline, weight: .medium)).foregroundStyle(Theme.secondaryText)
                         .padding(.horizontal, 10).frame(height: 44)
                 }

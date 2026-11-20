@@ -32,8 +32,26 @@ struct MenusMomentsView: View {
     }
 
     var body: some View {
+        // A moment's row opens its editor (owner, Nov 20), pushed like Settings. Its own stack: a destination
+        // inside a tab isn't seen by Home's.
+        NavigationStack {
+            page
+                .toolbarVisibility(.hidden, for: .navigationBar)
+                .navigationDestination(for: UUID.self) { id in
+                    if let e = events.first(where: { $0.id == id }) {
+                        MomentEditor(event: e)
+                            // Light, on the app's paper, like every other screen on this look.
+                            .environment(\.colorScheme, .light)
+                            .preferredColorScheme(.light)
+                            .toolbarColorScheme(.light, for: .navigationBar)
+                    }
+                }
+        }
+    }
+
+    private var page: some View {
         let counts = byDay
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             Picker("View", selection: $mode) {
                 ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -79,9 +97,14 @@ struct MenusMomentsView: View {
                             ForEach(0..<min(c.standard, max(0, 5 - c.rescue)), id: \.self) { _ in Self.pill(filled: false) }
                         }
                     }
-                    .padding(.horizontal, 24).padding(.vertical, 22)
+                    .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 10)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("\(d.formatted(date: .complete, time: .omitted)), \(Self.summary(c))")
+                    // The day's moments, each one tap from its editor.
+                    VStack(spacing: 0) {
+                        ForEach(momentsOn(d)) { e in momentRow(e) }
+                    }
+                    .padding(.bottom, 12)
                     Divider().padding(.horizontal, 16)
                 }
             }
@@ -93,6 +116,38 @@ struct MenusMomentsView: View {
                     .font(Theme.Figtree.font(size: 15)).foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Inhaler and manual moments on a day, latest first. Demo moments stay out (they aren't yours to edit).
+    private func momentsOn(_ day: Date) -> [LogEvent] {
+        events.filter { ($0.moment == .rescue || $0.moment == .maintenance || $0.moment == .note) && !$0.isDemo && cal.isDate($0.loggedAt, inSameDayAs: day) }
+            .sorted { $0.loggedAt > $1.loggedAt }
+    }
+
+    /// Time, kind and puffs, the place under it, and a chevron: tap to edit.
+    private func momentRow(_ e: LogEvent) -> some View {
+        NavigationLink(value: e.id) {
+            HStack(spacing: 12) {
+                Group {
+                    if e.moment == .note { Capsule().strokeBorder(Color.primary.opacity(0.4), style: StrokeStyle(lineWidth: 1.3, dash: [2, 2])) }
+                    else { Self.pill(filled: e.moment == .rescue) }
+                }
+                .frame(width: 8, height: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text([e.loggedAt.formatted(date: .omitted, time: .shortened), e.moment.title, e.puffs > 1 ? "\(e.puffs) puffs" : nil]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(Theme.Figtree.font(size: 16, weight: .medium)).foregroundStyle(.primary)
+                    if let place = e.placeName, !place.isEmpty {
+                        Text(place).font(Theme.Figtree.font(size: 14)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 24).padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle())
     }
 
     static func summary(_ c: (rescue: Int, standard: Int)) -> String {

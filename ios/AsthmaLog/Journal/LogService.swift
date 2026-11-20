@@ -200,6 +200,18 @@ final class LogService {
         }
     }
 
+    /// After an edit (Moments › a moment): Apple Health's sample says the moment's puffs at its time again.
+    /// Only rescue moments are in Health, and only those already written there.
+    func rewriteHealth(_ event: LogEvent, in context: ModelContext) async {
+        guard event.moment == .rescue, health.isAvailable, let old = event.healthSampleID else { return }
+        try? await health.deletePuff(sampleID: old)
+        let id = try? await health.savePuff(at: event.loggedAt, logID: event.id, puffs: max(1, event.puffs))
+        event.healthSampleID = id
+        for u in event.uses { u.healthSampleID = nil }
+        event.uses.max(by: { $0.at < $1.at })?.healthSampleID = id
+        try? context.save()
+    }
+
     func delete(_ event: LogEvent, in context: ModelContext) async {
         if let id = event.healthSampleID {
             try? await health.deletePuff(sampleID: id)

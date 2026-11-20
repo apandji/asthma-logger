@@ -1040,6 +1040,8 @@ struct MenusEnvironment: View {
     /// The portrait's key, shown for the swatch you tap (owner, Nov 13).
     @State private var tapped: (name: String, at: CGPoint)?
     @State private var hideTap: Task<Void, Never>?
+    /// A sideways drag across the garden is under way: the flower under the finger is the one read out.
+    @State private var reading = false
     @State private var canvasSize: CGSize = .zero
     /// The fans' opening tween: from, to, and when it started.
     @State private var openFrom: [String: CGFloat] = [:]
@@ -1085,6 +1087,7 @@ struct MenusEnvironment: View {
         return out
     }
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The portrait's height on home: it's the main visual, a square-ish field in the middle of the screen.
     static let bigBand: CGFloat = 430
     private var inset: CGFloat { edge ? MenusColumns.page + MenusColumns.card : 0 }
@@ -1098,8 +1101,11 @@ struct MenusEnvironment: View {
         let height = edge ? bandH : max(headerH + CGFloat(series.count) * rowH, bandH + (footer == nil ? 40 : 110))
         // The fans ease open and closed as you move between moments (owner, Nov 13): a short tween from where
         // they were to where this moment puts them, picked up mid-way if you keep moving.
-        TimelineView(.animation(paused: Date().timeIntervalSince(openStart) > openDuration + 0.1)) { tl in
-            Canvas { ctx, size in draw(ctx, size, opens: shownOpens(at: tl.date)) }
+        // On home the garden is never quite still (owner, Nov 19): a slow sway, thirty frames a second. With Reduce
+        // Motion, or off home, it only runs while the fans are opening.
+        let sways = edge && !reduceMotion
+        TimelineView(.animation(minimumInterval: sways ? 1.0 / 30 : nil, paused: !sways && Date().timeIntervalSince(openStart) > openDuration + 0.1)) { tl in
+            Canvas { ctx, size in draw(ctx, size, opens: shownOpens(at: tl.date), time: sways ? tl.date.timeIntervalSinceReferenceDate : nil) }
         }
             .onAppear { let t = targetOpens(); openFrom = t; openTo = t }
             .onChange(of: targetOpens()) { _, new in
@@ -1124,11 +1130,37 @@ struct MenusEnvironment: View {
                     withAnimation(.smooth(duration: 0.4)) { tapped = nil }
                 }
             }
+            // Tap a flower, then slide across the garden (owner, Nov 19): the flower nearest your finger is read out,
+            // one after another. The drag only exists while a flower is selected: any drag or hold that is always
+            // on swallows the page's scroll from here, and the garden is most of the screen.
+            .gesture(
+                DragGesture(minimumDistance: 4)
+                    .onChanged { v in
+                        reading = true
+                        let fans = portraitLayout(canvasSize, lift: 0)
+                        guard let w = fans.min(by: { abs($0.base.x - v.location.x) < abs($1.base.x - v.location.x) }) else { return }
+                        hideTap?.cancel()
+                        if tapped?.name != w.series.name {
+                            UISelectionFeedbackGenerator().selectionChanged()
+                            withAnimation(.smooth(duration: 0.2)) { tapped = (w.series.name, CGPoint(x: w.rect.midX, y: w.rect.minY)) }
+                        }
+                    }
+                    .onEnded { _ in
+                        reading = false
+                        hideTap?.cancel()
+                        hideTap = Task {
+                            try? await Task.sleep(for: .seconds(3))
+                            guard !Task.isCancelled else { return }
+                            withAnimation(.smooth(duration: 0.4)) { tapped = nil }
+                        }
+                    },
+                isEnabled: edge && apart < 0.3 && tapped != nil
+            )
             .overlay(alignment: .topLeading) {
                 if let t = tapped, apart < 0.3, let w = portraitLayout(canvasSize, lift: 0).first(where: { $0.series.name == t.name }) {
                     legend(w)
                         .fixedSize()
-                        .position(x: min(max(w.rect.midX, 90), canvasSize.width - 90), y: max(w.rect.minY - 30 - speciesLift(w), 20 + speciesLift(w)))
+                        .position(x: min(max(w.rect.midX, 90), canvasSize.width - 90), y: max(w.rect.minY - 42 - speciesLift(w), 20 + speciesLift(w)))
                         .transition(.opacity.combined(with: .scale(scale: 0.92)))
                         .allowsHitTesting(false)
                 }
@@ -1169,7 +1201,7 @@ struct MenusEnvironment: View {
 
     private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat { a + (b - a) * t }
 
-    private func draw(_ ctx: GraphicsContext, _ size: CGSize, opens: [String: CGFloat], boil: Int? = nil) {
+    private func draw(_ ctx: GraphicsContext, _ size: CGSize, opens: [String: CGFloat], boil: Int? = nil, time: Double? = nil) {
         // Ease the parting so the samples leave the shared band gently and land softly in their rows.
         let t = apart * apart * (3 - 2 * apart)
         let w = size.width
@@ -1191,7 +1223,7 @@ struct MenusEnvironment: View {
         let portrait = edge
         let rowsShown = portrait ? Double(min(1, max(0, t * 1.6 - 0.3))) : 1
         if portrait, t < 0.7 {
-            drawPortrait(ctx, size: size, fade: Double(1 - t / 0.7), lift: t * 60, opens: opens, boil: boil)
+            drawPortrait(ctx, size: size, fade: Double(1 - t / 0.7), lift: t * 60, opens: opens, boil: boil, time: time)
         }
 
         // Each sample is a soft watercolour mark (owner, Nov 13): we only know the air at the moments we
@@ -1430,7 +1462,7 @@ struct MenusEnvironment: View {
     /// threshold, a closed brush when it's low, a full round when it's at or past it.
     /// `boil`: the drawing number while moving. Each drawing's rim wobbles a little differently, like line
     /// boil in hand-drawn animation; nil holds the rim still.
-    private func drawPortrait(_ ctx: GraphicsContext, size: CGSize, fade: Double, lift: CGFloat, opens: [String: CGFloat], boil: Int? = nil) {
+    private func drawPortrait(_ ctx: GraphicsContext, size: CGSize, fade: Double, lift: CGFloat, opens: [String: CGFloat], boil: Int? = nil, time: Double? = nil) {
         let fans = portraitLayout(size, lift: lift, opens: opens)
         guard let ground = fans.first?.ground else { return }
         ctx.drawLayer { paint in
@@ -1445,8 +1477,21 @@ struct MenusEnvironment: View {
                                                                    .init(color: rule, location: 0.75), .init(color: rule.opacity(0), location: 1)]),
                                                   startPoint: CGPoint(x: inset, y: ground), endPoint: CGPoint(x: size.width - inset, y: ground)),
                          lineWidth: 0.6) }
-            for f in fans {
+            for (i, f) in fans.enumerated() {
                 var rng = f.rng
+                // Its own little world: a slow sway about its foot, each on its own beat; the one you're reading
+                // stands a touch larger and sways wider, and the others step back.
+                let chosen = tapped?.name == f.series.name
+                var fp = paint
+                let foot = CGPoint(x: f.base.x, y: ground)
+                fp.translateBy(x: foot.x, y: foot.y)
+                if let time {
+                    let beat = time * (0.55 + 0.08 * Double(i % 4)) + Double(i) * 1.7
+                    fp.rotate(by: .degrees((chosen ? 2.6 : 1.3) * sin(beat) + 0.5 * sin(beat * 2.3)))
+                }
+                if chosen { fp.scaleBy(x: 1.08, y: 1.08) }
+                fp.translateBy(x: -foot.x, y: -foot.y)
+                if tapped != nil, !chosen { fp.opacity = 0.32 }
                 let ink = pigment(f.series.name, f.value ?? 0)
                 // Stem, a little unsteady.
                 // It meets the fan at its pivot; as the fan closes into a full round, it stops at the round's
@@ -1455,7 +1500,7 @@ struct MenusEnvironment: View {
                 let top = CGPoint(x: f.base.x, y: f.base.y + f.reach * 0.93 * o * o * (3 - 2 * o))
                 var stem = Path(); stem.move(to: CGPoint(x: f.base.x, y: ground))
                 stem.addQuadCurve(to: top, control: CGPoint(x: f.base.x + CGFloat.random(in: -3...3, using: &rng), y: (ground + top.y) / 2))
-                paint.stroke(stem, with: .color(ink.opacity(0.7)), lineWidth: 0.8)
+                fp.stroke(stem, with: .color(ink.opacity(0.7)), lineWidth: 0.8)
                 // The fan: closed is a narrow brush (16°), fully open a whole round. Deep where it meets the stem,
                 // thinning towards a rim of a few wide soft bumps with a faint halo, like a cloud's edge
                 // (owner, Nov 13: fade fill, cloud rim).
@@ -1491,7 +1536,7 @@ struct MenusEnvironment: View {
                                     center: f.base, startRadius: 0, endRadius: r)
                 }
                 let shape = wedge(f.reach)
-                paint.fill(shape, with: fade(f.reach))
+                fp.fill(shape, with: fade(f.reach))
                 // No halo round the rim (owner, Nov 13).
             }
         }

@@ -91,9 +91,9 @@ enum DemoScenario: String, CaseIterable, Identifiable {
         switch self {
         case .off, .heat: break
         case .pollen:
-            add = [obs(.pollenTree, 420, "grains/m³"), obs(.pollenGrass, 24, "grains/m³"), obs(.temperature, 68, "°F")]
+            add = [obs(.pollenTree, 420, "particles/m³"), obs(.pollenGrass, 24, "particles/m³"), obs(.temperature, 68, "°F")]
         case .storm:
-            add = [obs(.pollenGrass, 95, "grains/m³"), obs(.pollenWeed, 110, "grains/m³")]
+            add = [obs(.pollenGrass, 95, "particles/m³"), obs(.pollenWeed, 110, "particles/m³")]
             c.weatherCondition = "Thunderstorms"
         case .smoke:
             add = [obs(.pm25, 142, "µg/m³")]

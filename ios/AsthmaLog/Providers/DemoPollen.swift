@@ -4,7 +4,7 @@ import Foundation
 /// Made-up but realistic pollen for demos (Settings › Design crit › Pollen). Display only: it never
 /// enters frames, Insights or patterns, and every surface labels it "Demo".
 ///
-/// Counts are grains/m³ for a Midwest city (St. Louis-like seasons): tree pollen peaks mid-April,
+/// Counts are particles/m³ for a Midwest city (St. Louis-like seasons): tree pollen peaks mid-April,
 /// grass early June, ragweed early September. Each day gets a repeatable random multiplier (most days
 /// are ordinary, a few are bad) and each hour a mid-morning peak. Levels use Ambee's thresholds
 /// (moderate / high from: tree 100 / 213, grass 30 / 61, weed 44 / 80).
@@ -12,7 +12,7 @@ nonisolated struct PollenSample: Sendable {
     struct Kind: Sendable {
         let name: String        // "Tree"
         let species: String     // "Oak"
-        let count: Int          // grains/m³
+        let count: Int          // particles/m³
         let level: WeaveSpec.Level
     }
     let tree: Kind

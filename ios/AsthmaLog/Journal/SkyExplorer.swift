@@ -255,9 +255,9 @@ enum SkyExplorer {
         case "PM10": return obs(.pm10)
         case "NO₂": return obs(.no2)
         case "Ozone": return obs(.ozone)
-        case "Tree pollen": return (pollen.map { "\($0.tree.count)" } ?? "–", "grains/m³")
-        case "Grass pollen": return (pollen.map { "\($0.grass.count)" } ?? "–", "grains/m³")
-        case "Weed pollen": return (pollen.map { "\($0.weed.count)" } ?? "–", "grains/m³")
+        case "Tree pollen": return (pollen.map { "\($0.tree.count)" } ?? "–", "particles/m³")
+        case "Grass pollen": return (pollen.map { "\($0.grass.count)" } ?? "–", "particles/m³")
+        case "Weed pollen": return (pollen.map { "\($0.weed.count)" } ?? "–", "particles/m³")
         default: return ("–", "")
         }
     }

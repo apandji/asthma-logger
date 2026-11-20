@@ -26,9 +26,8 @@ struct ConditionsService {
         // Ambee: pollen and air, live and cached when there's a key; the sample (DemoAmbee, labelled
         // "Ambee (demo)", never in patterns) on a build without one.
         let ambee = await AmbeeClient.current
-        async let am = Self.attempt { () -> [EnvObservation] in
-            let hour = try await ambee.latest(latitude: latitude, longitude: longitude, at: .now)
-            return hour.observations(source: ambee.sourceName)
+        async let am = Self.attempt { () -> AmbeeHour in
+            try await ambee.latest(latitude: latitude, longitude: longitude, at: .now)
         }
 
         var result = Conditions(fetchedAt: .now)
@@ -48,7 +47,10 @@ struct ConditionsService {
         case .failure(let e): result.errors.append("AirNow: \(e.localizedDescription)")
         }
         switch await am {
-        case .success(let v): result.observations += v
+        case .success(let hour):
+            result.observations += hour.observations(source: ambee.sourceName)
+            // The species under the pollen totals, from the live source only (the sample has none).
+            if !Ambee.isDemo(ambee.sourceName) { result.pollenSpecies = hour.species }
         case .failure(let e): result.errors.append("Ambee: \(e.localizedDescription)")
         }
         result.tempFallF = await fall

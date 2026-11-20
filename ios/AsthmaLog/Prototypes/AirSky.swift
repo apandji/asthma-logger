@@ -161,7 +161,7 @@ enum AirSky {
         case .pm10: [0, 10, 55, 155]        // µg/m³, EPA
         case .ozone: [0, 20, 55, 70]        // ppb, Banding.ozone
         case .no2: [0, 10, 54, 101]         // ppb, EPA
-        case .tree: [0, 10, 100, 213]       // grains/m³, Ambee risk
+        case .tree: [0, 10, 100, 213]       // particles/m³, Ambee risk
         case .grass: [0, 5, 30, 61]
         case .weed: [0, 5, 44, 80]
         }
@@ -169,7 +169,7 @@ enum AirSky {
         let unit = switch kind.family {
         case .particles: "µg/m³"
         case .gases: "ppb"
-        case .pollen: "grains/m³"
+        case .pollen: "particles/m³"
         }
         let species: String? = switch kind {
         case .tree: ["Oak", "Birch", "Maple", "Cedar"][Int(rng.next() * 4) % 4]

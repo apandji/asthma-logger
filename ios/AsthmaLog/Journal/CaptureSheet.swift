@@ -18,7 +18,7 @@ struct CaptureSheet: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle(voice ? "Voice memo" : "Felt something?")
+            .navigationTitle(voice ? "Voice memo" : "Add to journal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

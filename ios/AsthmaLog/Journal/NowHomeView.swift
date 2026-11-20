@@ -76,7 +76,7 @@ struct NowHomeView: View {
                            category: cat)
         }
         var add = [obs(.ozone, peak ? 96 : 84, "ppb")]
-        if peak { add += [obs(.pollenWeed, 190, "grains/m³", "High"), obs(.temperature, 93, "°F")] }
+        if peak { add += [obs(.pollenWeed, 190, "particles/m³", "High"), obs(.temperature, 93, "°F")] }
         c.observations.removeAll { o in add.contains { $0.signal == o.signal } }
         c.observations.insert(contentsOf: add, at: 0)
         return NowHour(date: h.date, conditions: c, airCarried: h.airCarried)

@@ -104,6 +104,8 @@ public struct Conditions: Codable, Sendable, Equatable {
     /// `firesChecked` nil = never looked; true with `nearestFireKm` nil = looked, none within 50 km.
     public var firesChecked: Bool?
     public var nearestFireKm: Double?
+    /// The pollen count by species, when the provider sent it. Nil on older moments and outside its regions.
+    public var pollenSpecies: PollenSpecies?
     /// The 48 hours before the moment, in two windows (`LookBack`). Nil until fetched or backfilled.
     public var lookBack: LookBack?
 
@@ -197,6 +199,8 @@ public enum ObservationCopy {
         case "%": return "\(number)%"
         case "AQI": return o.category.map { "\(number) · \($0)" } ?? number
         case "UV": return number
+        // Moments saved before Nov 19, 2026 carry the old label; Ambee's unit is particles/m³.
+        case "grains/m³": return "\(number) particles/m³"
         default: return "\(number) \(o.unit)"
         }
     }

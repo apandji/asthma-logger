@@ -30,6 +30,19 @@ public struct WildfiresNearby: Sendable, Equatable {
                           : "There are \(n) active wildfires \(miles) miles \(direction)."
     }
 
+    /// A fire this close (km) counts as nearby for the wildfire-smoke combination: about 30 miles.
+    public static let nearKm: Double = 50
+
+    /// Distance to the nearest detected fire, km. `around` keeps only fires detected within a day of that time
+    /// (Ambee's list covers about a week), for moments filled in afterwards. Nil when there are none.
+    public static func nearestKm(fires: [Ambee.FireResponse.Fire], latitude: Double, longitude: Double, around: Date? = nil) -> Double? {
+        fires.compactMap { f -> Double? in
+            guard let lat = f.lat, let lng = f.lng else { return nil }
+            if let around, let seen = Ambee.parseDate(f.detectedAt), abs(seen.timeIntervalSince(around)) > 86_400 { return nil }
+            return miles(latitude, longitude, lat, lng) * 1.609344
+        }.min()
+    }
+
     static func miles(_ lat1: Double, _ lon1: Double, _ lat2: Double, _ lon2: Double) -> Double {
         let r = 3958.8, p1 = lat1 * .pi / 180, p2 = lat2 * .pi / 180
         let dp = (lat2 - lat1) * .pi / 180, dl = (lon2 - lon1) * .pi / 180

@@ -107,10 +107,43 @@ public enum Ambee {
             public var humidity: Double?
             public var windSpeed: Double?
             public var precipIntensity: Double?
+            /// Sea-level pressure, hPa.
+            public var pressure: Double?
+            public var windGust: Double?
+            public var visibility: Double?
             public var summary: String?
             public var time: Double?
             public var history: [Payload]?
             public var forecast: [Payload]?
+        }
+    }
+
+    /// `GET /ili/forecast/by-lat-lng`: flu-like illness by week for the metro area (US CBSA). Checked live
+    /// Nov 19, 2026.
+    public struct ILIResponse: Codable, Sendable {
+        public var message: String?
+        public var cbsa_name: String?
+        public var init_ts: String?
+        public var data: [Week]?
+
+        public struct Week: Codable, Sendable {
+            public var epi_week_start_date: String?
+            public var epi_week_end_date: String?
+            public var ili_risk: Double?
+            public var ili_risk_category: String?
+            public var surge_expected: Bool?
+        }
+
+        /// The reading for the week holding `day`, or nil when the forecast doesn't cover it.
+        public func reading(on day: Date, source: String = Ambee.source) -> InfectionReading? {
+            for w in data ?? [] {
+                guard let a = Ambee.parseDate(w.epi_week_start_date), let b = Ambee.parseDate(w.epi_week_end_date),
+                      day >= a, day < b.addingTimeInterval(86_400) else { continue }
+                let level = Infection.level(fromRisk: w.ili_risk_category)
+                guard level != .unknown else { return nil }
+                return InfectionReading(level: level, source: source, asOf: Ambee.parseDate(init_ts) ?? day, day: day)
+            }
+            return nil
         }
     }
 
@@ -125,6 +158,8 @@ public enum Ambee {
             public var frp: Double?
             public var confidence: String?
             public var fireType: String?
+            /// When the satellite saw it, ISO 8601.
+            public var detectedAt: String?
 
             public init(lat: Double?, lng: Double?, frp: Double? = nil, confidence: String? = nil, fireType: String? = nil) {
                 self.lat = lat; self.lng = lng; self.frp = frp; self.confidence = confidence; self.fireType = fireType
@@ -147,6 +182,12 @@ public struct AmbeeHour: Codable, Sendable, Equatable {
     public var treePollen: Double?
     public var grassPollen: Double?
     public var weedPollen: Double?
+    /// Ambee's own word for each count ("Low", "Moderate", "High", "Very High"): what the patterns band on.
+    public var treeRisk: String?
+    public var grassRisk: String?
+    public var weedRisk: String?
+    /// Sea-level pressure, hPa (Ambee weather).
+    public var pressureHpa: Double?
     /// The top species in each group, when Ambee sends them ("Oak", "Ragweed").
     public var treeSpecies: String?
     public var weedSpecies: String?
@@ -176,14 +217,14 @@ public struct AmbeeHour: Codable, Sendable, Equatable {
 
     /// The hour as our readings, each labelled with its source and marked outdoor, model-grid scale.
     public func observations(source: String) -> [EnvObservation] {
-        func o(_ s: Signal, _ v: Double?, _ unit: String) -> EnvObservation? {
+        func o(_ s: Signal, _ v: Double?, _ unit: String, _ category: String? = nil) -> EnvObservation? {
             v.map { EnvObservation(signal: s, value: $0, unit: unit, asOf: date, source: source,
-                                   spatialScale: .modelGrid, confidence: .medium, isForecast: isForecast) }
+                                   spatialScale: .modelGrid, confidence: .medium, category: category, isForecast: isForecast) }
         }
         return [
             o(.pm25, pm25, "µg/m³"), o(.pm10, pm10, "µg/m³"), o(.ozone, ozone, "ppb"), o(.no2, no2, "ppb"),
-            o(.aqi, aqi, "AQI"), o(.pollenTree, treePollen, "grains/m³"), o(.pollenGrass, grassPollen, "grains/m³"),
-            o(.pollenWeed, weedPollen, "grains/m³"), o(.temperature, temperatureF, "°F"), o(.humidity, humidity, "%"),
+            o(.aqi, aqi, "AQI"), o(.pollenTree, treePollen, "grains/m³", treeRisk), o(.pollenGrass, grassPollen, "grains/m³", grassRisk),
+            o(.pollenWeed, weedPollen, "grains/m³", weedRisk), o(.pressure, pressureHpa, "hPa"), o(.temperature, temperatureF, "°F"), o(.humidity, humidity, "%"),
             o(.dewpoint, dewpointF, "°F"), o(.windSpeed, windSpeed, "mph"),
         ].compactMap { $0 }
     }
@@ -220,6 +261,7 @@ extension Ambee {
             guard let d = e.date else { continue }
             upsert(d) {
                 $0.treePollen = e.Count?.tree_pollen; $0.grassPollen = e.Count?.grass_pollen; $0.weedPollen = e.Count?.weed_pollen
+                $0.treeRisk = e.Risk?.tree_pollen; $0.grassRisk = e.Risk?.grass_pollen; $0.weedRisk = e.Risk?.weed_pollen
                 $0.treeSpecies = top(e.Species?.Tree); $0.weedSpecies = top(e.Species?.Weed)
             }
         }
@@ -228,6 +270,7 @@ extension Ambee {
             upsert(Date(timeIntervalSince1970: t)) {
                 $0.temperatureF = w.temperature; $0.humidity = w.humidity; $0.dewpointF = w.dewPoint
                 $0.windSpeed = w.windSpeed; $0.precipitation = w.precipIntensity; $0.summary = w.summary
+                $0.pressureHpa = w.pressure
             }
         }
         return byHour.values.sorted { $0.date < $1.date }
@@ -250,6 +293,8 @@ extension Ambee {
             h.weedSpecies = h.weedSpecies ?? older.weedSpecies; h.temperatureF = h.temperatureF ?? older.temperatureF
             h.humidity = h.humidity ?? older.humidity; h.dewpointF = h.dewpointF ?? older.dewpointF
             h.windSpeed = h.windSpeed ?? older.windSpeed; h.precipitation = h.precipitation ?? older.precipitation
+            h.treeRisk = h.treeRisk ?? older.treeRisk; h.grassRisk = h.grassRisk ?? older.grassRisk
+            h.weedRisk = h.weedRisk ?? older.weedRisk; h.pressureHpa = h.pressureHpa ?? older.pressureHpa
             h.summary = h.summary ?? older.summary
         }
         return h

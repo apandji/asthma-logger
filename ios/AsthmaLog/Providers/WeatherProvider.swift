@@ -12,6 +12,13 @@ struct WeatherProvider {
         return TempDrop.degreesFallen(at: date, in: hours.map(\.tempPoint))
     }
 
+    /// hPa the pressure moved over the last 3 hours, for `Conditions.pressureChangeHpa`. Nil if the hours can't be read.
+    func pressureChange(latitude: Double, longitude: Double, at date: Date = .now) async -> Double? {
+        guard let hours = try? await hourly(latitude: latitude, longitude: longitude, hours: 1,
+                                            pastHours: Int(PressureChange.windowHours) + 1) else { return nil }
+        return PressureChange.change(at: date, in: hours.compactMap(\.pressurePoint))
+    }
+
     static let source = "Apple Weather"
 
     func current(latitude: Double, longitude: Double) async throws -> (observations: [EnvObservation], alerts: [ConditionAlert], condition: String) {
@@ -28,6 +35,7 @@ struct WeatherProvider {
             obs(.dewpoint, now.dewPoint.converted(to: .fahrenheit).value, "°F"),
             obs(.uvIndex, Double(now.uvIndex.value), "UV"),
             obs(.windSpeed, now.wind.speed.converted(to: .milesPerHour).value, "mph"),
+            obs(.pressure, now.pressure.converted(to: .hectopascals).value, "hPa"),
         ]
         let named = (alerts ?? []).map {
             ConditionAlert(name: $0.summary, source: $0.source, severity: String(describing: $0.severity))
@@ -41,6 +49,12 @@ struct WeatherProvider {
         let humidityPct: Double
         /// Wind speed, mph. Nil where the caller had none.
         var windMph: Double? = nil
+        /// Sea-level pressure, hPa.
+        var pressureHpa: Double? = nil
+        /// Apple Weather's description for the hour ("Thunderstorms").
+        var condition: String? = nil
+
+        var pressurePoint: PressurePoint? { pressureHpa.map { PressurePoint(date: date, hPa: $0) } }
 
         var tempPoint: TempPoint { TempPoint(date: date, temperatureF: temperatureF) }
     }
@@ -58,7 +72,8 @@ struct WeatherProvider {
         let forecast = try await WeatherService.shared.weather(for: location, including: .hourly(startDate: start, endDate: end))
         return forecast.map {
             Hour(date: $0.date, temperatureF: $0.temperature.converted(to: .fahrenheit).value, humidityPct: $0.humidity * 100,
-                 windMph: $0.wind.speed.converted(to: .milesPerHour).value)
+                 windMph: $0.wind.speed.converted(to: .milesPerHour).value,
+                 pressureHpa: $0.pressure.converted(to: .hectopascals).value, condition: $0.condition.description)
         }
     }
 }

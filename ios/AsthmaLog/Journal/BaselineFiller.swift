@@ -45,8 +45,21 @@ final class BaselineFiller {
             for (_, group) in byPlace {
                 guard let first = group.first else { continue }
                 let air = await Self.dayOfAir(latitude: first.latitude, longitude: first.longitude, day: day)
+                // Fires for the place, asked once and only if an hour needs them (fine particles raised).
+                var fires: [Ambee.FireResponse.Fire]?
+                var askedFires = false
                 for slot in group {
-                    guard let c = air.conditions(at: slot.date) else { continue }
+                    guard var c = air.conditions(at: slot.date) else { continue }
+                    if let key = Secrets.ambee, [.moderate, .high].contains(Banding.pm25(c.bestReal(.pm25)?.value)) {
+                        if !askedFires {
+                            askedFires = true
+                            fires = await AmbeeClient(key: key).firesOrNil(latitude: first.latitude, longitude: first.longitude)
+                        }
+                        if let fires {
+                            await ConditionsService.stampFires(&c, latitude: slot.latitude, longitude: slot.longitude,
+                                                               around: slot.date, fires: fires)
+                        }
+                    }
                     fetchedAny = true
                     let e = LogEvent(moment: .okay, loggedAt: slot.date)
                     e.conditions = c
@@ -115,6 +128,13 @@ final class BaselineFiller {
             let temps = weather.map(\.tempPoint)
             // The same drop check as a live moment.
             c.tempFallF = TempDrop.degreesFallen(at: t, in: temps)
+            // The same pressure and storm readings as a live moment.
+            c.pressureChangeHpa = PressureChange.change(at: t, in: weather.compactMap(\.pressurePoint))
+            c.weatherCondition = nearest(weather, \.date)?.condition
+            if let w = nearest(weather, \.date), let p = w.pressureHpa {
+                c.observations.append(EnvObservation(signal: .pressure, value: p, unit: "hPa", asOf: w.date,
+                                                     source: WeatherProvider.source, spatialScale: .modelGrid))
+            }
             c.lookBack = LookBack.compute(at: t, pm25: pm25.values, ozone: ozone.values, temps: temps,
                                           pm25Station: pm25.station, ozoneStation: ozone.station)
             return c

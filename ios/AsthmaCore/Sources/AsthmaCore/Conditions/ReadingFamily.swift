@@ -17,7 +17,7 @@ public enum ReadingFamily: String, CaseIterable, Sendable {
     /// the family's summary line, not one of its readings.
     public var signals: [Signal] {
         switch self {
-        case .weather: [.temperature, .humidity, .dewpoint, .windSpeed, .uvIndex]
+        case .weather: [.temperature, .humidity, .dewpoint, .windSpeed, .pressure, .uvIndex]
         case .pollutants: [.pm25, .pm10, .ozone, .no2]
         case .allergens: [.pollenTree, .pollenGrass, .pollenWeed]
         }
@@ -25,7 +25,7 @@ public enum ReadingFamily: String, CaseIterable, Sendable {
 
     public static func of(_ s: Signal) -> ReadingFamily {
         switch s {
-        case .temperature, .humidity, .dewpoint, .windSpeed, .uvIndex: .weather
+        case .temperature, .humidity, .dewpoint, .windSpeed, .uvIndex, .pressure: .weather
         case .pm25, .pm10, .ozone, .no2, .aqi: .pollutants
         case .pollenTree, .pollenGrass, .pollenWeed: .allergens
         }

@@ -58,7 +58,8 @@ struct GoldenTests {
     @Test(arguments: try Fixtures.liftFiles())
     func liftMatchesPrototype(_ url: URL) throws {
         let fx = try Fixtures.load(LiftFixture.self, url)
-        let got = Lift.compute(fx.frames, gate: fx.gate)
+        // The web prototype has no combinations (iOS v8), and they can be read off v1 fields: leave them out.
+        let got = Lift.compute(fx.frames, gate: fx.gate, bins: Bins.all.filter { Combination.of(bin: $0.bin) == nil })
         let want = fx.expected
 
         #expect(got.nAttacks == want.nAttacks)

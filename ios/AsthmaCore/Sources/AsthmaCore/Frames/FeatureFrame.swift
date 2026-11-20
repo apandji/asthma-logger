@@ -7,9 +7,12 @@ import Foundation
 /// v6 adds `ili` (flu-like illness around that day, `Infection`; missing until stamped).
 /// v7 adds `wind` (calm under 8 mph, breezy under 19, windy from 19: Beaufort's light / moderate / fresh; missing
 /// without a wind reading).
+/// v8 adds `pollen_tree` and `pollen_grass`, `pressure_change` (falling or rising 1.6 hPa or more in 3 hours,
+/// `PressureChange`), `storm`, and the combinations (`Combination`: several conditions at once). All read as
+/// missing where a frame can't say.
 /// Bump when any edge changes and regenerate `fixtures/` (fixtures cover the v1 bins only).
 public enum BinSpec {
-    public static let version = 7
+    public static let version = 8
 }
 
 public enum FrameKind: String, Codable, Sendable, CaseIterable {
@@ -73,6 +76,15 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
     /// v7 (iOS only). Unknown without a wind reading for the hour.
     public var windBand: WindBand
 
+    /// v8 (iOS only).
+    public var pollenTree: PollenLevel
+    public var pollenGrass: PollenLevel
+    public var pressureChange: PressureBand
+    /// A thunderstorm in the hour. Nil when the weather's description wasn't kept.
+    public var storm: Bool?
+    /// A detected fire within 50 km while fine particles were raised. Nil when it wasn't looked up.
+    public var fireNearby: Bool?
+
     // v2 (iOS only). Absent → the bin contributes no rows.
     public var place: PlaceKind?
     public var indoorOutdoor: IndoorOutdoor?
@@ -105,6 +117,11 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         heatAlert: Bool = false,
         tempDrop: TempDropBand = .unknown,
         windBand: WindBand = .unknown,
+        pollenTree: PollenLevel = .unknown,
+        pollenGrass: PollenLevel = .unknown,
+        pressureChange: PressureBand = .unknown,
+        storm: Bool? = nil,
+        fireNearby: Bool? = nil,
         place: PlaceKind? = nil,
         indoorOutdoor: IndoorOutdoor? = nil,
         tags: Set<JournalTag> = [],
@@ -125,6 +142,11 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         self.heatAlert = heatAlert
         self.tempDrop = tempDrop
         self.windBand = windBand
+        self.pollenTree = pollenTree
+        self.pollenGrass = pollenGrass
+        self.pressureChange = pressureChange
+        self.storm = storm
+        self.fireNearby = fireNearby
         self.place = place
         self.indoorOutdoor = indoorOutdoor
         self.tags = tags
@@ -135,7 +157,7 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, hourOfDay, season, tempBand, humidityBand, pm25Band, ozoneBand, pollenWeed
-        case smokeAtPoint, heatAlert, tempDrop, windBand, place, indoorOutdoor, tags, tagsReviewed, exerted, infection
+        case smokeAtPoint, heatAlert, tempDrop, windBand, pollenTree, pollenGrass, pressureChange, storm, fireNearby, place, indoorOutdoor, tags, tagsReviewed, exerted, infection
     }
 
     public init(from decoder: Decoder) throws {
@@ -153,6 +175,11 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         heatAlert = try c.decode(Bool.self, forKey: .heatAlert)
         tempDrop = try c.decodeIfPresent(TempDropBand.self, forKey: .tempDrop) ?? .unknown
         windBand = try c.decodeIfPresent(WindBand.self, forKey: .windBand) ?? .unknown
+        pollenTree = try c.decodeIfPresent(PollenLevel.self, forKey: .pollenTree) ?? .unknown
+        pollenGrass = try c.decodeIfPresent(PollenLevel.self, forKey: .pollenGrass) ?? .unknown
+        pressureChange = try c.decodeIfPresent(PressureBand.self, forKey: .pressureChange) ?? .unknown
+        storm = try c.decodeIfPresent(Bool.self, forKey: .storm)
+        fireNearby = try c.decodeIfPresent(Bool.self, forKey: .fireNearby)
         place = try c.decodeIfPresent(PlaceKind.self, forKey: .place)
         indoorOutdoor = try c.decodeIfPresent(IndoorOutdoor.self, forKey: .indoorOutdoor)
         tags = try c.decodeIfPresent(Set<JournalTag>.self, forKey: .tags) ?? []

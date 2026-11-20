@@ -3,8 +3,8 @@ import Testing
 @testable import AsthmaCore
 
 @Suite struct InfectionTests {
-    @Test func offForTheMVP() {
-        #expect(Infection.isEnabled == false)
+    @Test func onAndCounted() {
+        #expect(Infection.isEnabled == true)
         // Counted (v6), so data sets can show it; real moments carry nothing until it's on.
         #expect(Bins.all.contains { $0.bin == Infection.bin })
         #expect(AirProfile.Category.of(bin: Infection.bin) == .infections)

@@ -2,6 +2,8 @@ import Foundation
 
 public enum Signal: String, Codable, Sendable, CaseIterable {
     case temperature, humidity, dewpoint, pm25, ozone, aqi, pollenWeed, uvIndex, windSpeed, pm10, no2, pollenTree, pollenGrass
+    /// Sea-level air pressure, hPa.
+    case pressure
 }
 
 public enum SpatialScale: String, Codable, Sendable {
@@ -95,6 +97,13 @@ public struct Conditions: Codable, Sendable, Equatable {
     /// °F the outdoor temperature fell in the 3 hours before (`TempDrop`), from Apple Weather's past
     /// hours. Nil when those hours couldn't be read, and on older moments.
     public var tempFallF: Double?
+    /// hPa the sea-level pressure changed over the 3 hours before (`PressureChange`): negative = falling. Nil
+    /// when those hours couldn't be read, and on older moments.
+    public var pressureChangeHpa: Double?
+    /// Detected fires near the moment (Ambee `/fire/latest`), looked up only when fine particles were raised.
+    /// `firesChecked` nil = never looked; true with `nearestFireKm` nil = looked, none within 50 km.
+    public var firesChecked: Bool?
+    public var nearestFireKm: Double?
     /// The 48 hours before the moment, in two windows (`LookBack`). Nil until fetched or backfilled.
     public var lookBack: LookBack?
 
@@ -115,6 +124,18 @@ public struct Conditions: Codable, Sendable, Equatable {
         observations.first { $0.signal == signal && !Ambee.isDemo($0.source) }
     }
 
+    /// A detected fire within 50 km while fine particles were raised. Low particles is a known "no" without a
+    /// lookup; raised particles with no lookup is missing.
+    public var fireNearby: Bool? {
+        switch Banding.pm25(bestReal(.pm25)?.value) {
+        case .unknown: return nil
+        case .low: return false
+        case .moderate, .high:
+            guard firesChecked == true else { return nil }
+            return (nearestFireKm ?? .infinity) <= WildfiresNearby.nearKm
+        }
+    }
+
     /// What the patterns see: real sources only (docs/ambee: the sample stands in on screen until the key).
     public var input: ConditionsInput {
         ConditionsInput(
@@ -126,7 +147,12 @@ public struct Conditions: Codable, Sendable, Equatable {
             aqi: bestReal(.aqi).map { Int($0.value.rounded()) },
             alertNames: alerts.map(\.name),
             tempFallF: tempFallF,
-            windMph: bestReal(.windSpeed)?.value
+            windMph: bestReal(.windSpeed)?.value,
+            pollenTreeRisk: bestReal(.pollenTree)?.category,
+            pollenGrassRisk: bestReal(.pollenGrass)?.category,
+            pressureChangeHpa: pressureChangeHpa,
+            storm: weatherCondition.map(Combination.isStorm),
+            fireNearby: fireNearby
         )
     }
 }
@@ -150,6 +176,7 @@ public enum ObservationCopy {
         case .pollenGrass: "Grass pollen"
         case .uvIndex: "UV index"
         case .windSpeed: "Wind"
+        case .pressure: "Pressure"
         }
     }
 

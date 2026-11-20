@@ -12,8 +12,9 @@ import Foundation
 /// here on your flare days", never "you were sick". Ambee has no history, so a level is only known for days
 /// it was stamped as they happened; older moments stay missing, not "low".
 public enum Infection {
-    /// Off for the MVP. While false the app stamps nothing on real moments, so the bin has no rows.
-    public static let isEnabled = false
+    /// On since Nov 19, 2026 (owner: pull in what Ambee gives). With a key, real moments are stamped from
+    /// Ambee's weekly forecast for the metro area; without one the source finds nothing.
+    public static let isEnabled = true
     public static let bin = "ili"
 
     /// A level from a provider's word ("Low", "Moderate", "High", "Very High"). Anything else is unknown.

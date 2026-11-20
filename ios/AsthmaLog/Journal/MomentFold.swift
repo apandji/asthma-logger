@@ -12,12 +12,16 @@ struct MomentFold: View {
     let date: Date
     /// Combinations that passed the gate for this person, to say "one of yours".
     let yours: Set<Combination>
+    /// Start a voice note: for this moment, or (nil) for a new manual moment when the playhead is on Now.
+    var record: ((LogEvent?) -> Void)? = nil
+    /// The playhead is on Now with no moment there: the journal card offers to start one.
+    var canStartNew = false
     /// The pollen rows opened to their species.
     @State private var open: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let event { journal(event) }
+            if let event { journal(event) } else if canStartNew, record != nil { emptyJournal(nil) }
             readings
             before
             kinds
@@ -64,7 +68,8 @@ struct MomentFold: View {
         let said = Self.transcript(e)
         return card("Journal") {
             if said.isEmpty && e.tags.isEmpty {
-                Text("No note on this moment.").font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText)
+                if record != nil { recordRow(e) }
+                else { Text("No note on this moment.").font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText) }
             } else {
                 if !said.isEmpty {
                     Text(Self.marked(said, tags: e.tags)).font(Theme.ui(.body)).fixedSize(horizontal: false, vertical: true)
@@ -75,6 +80,29 @@ struct MomentFold: View {
                 }
             }
         }
+    }
+
+    /// No note yet (owner, Nov 19): the card is the way in. Tap it and the journal opens, already listening.
+    private func emptyJournal(_ e: LogEvent?) -> some View {
+        card("Journal") { recordRow(e) }
+    }
+
+    private func recordRow(_ e: LogEvent?) -> some View {
+        Button { record?(e) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "mic.fill").font(.body.weight(.semibold)).foregroundStyle(.white)
+                    .frame(width: 44, height: 44).background(Circle().fill(.black))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(e == nil ? "Add a moment" : "Add what was going on").font(Theme.ui(.body, weight: .medium)).foregroundStyle(Color.primary)
+                    Text("Tap to start recording. It stays on this iPhone.").font(Theme.ui(.footnote)).foregroundStyle(Theme.secondaryText)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle())
+        .accessibilityLabel(e == nil ? "Add a moment with a voice note" : "Add a voice note to this moment")
+        .accessibilityHint("Opens the journal, listening")
     }
 
     static func transcript(_ e: LogEvent) -> String {

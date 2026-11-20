@@ -74,20 +74,20 @@ public enum AirAdvice {
         switch event {
         case .smoke:
             Warning(headline: "Wildfire smoke is drifting into the area.",
-                    stayingPut: "Close your windows and set your AC to recirculate to keep smoke out.",
-                    goingOut: "If you need to go outside, an N95 mask filters out fine particles.")
+                    stayingPut: "Consider closing windows and setting the AC to recirculate.",
+                    goingOut: "If you go out, an N95 mask may help, since it filters fine particles.")
         case .stormPollen:
             Warning(headline: "Pollen is high and a thunderstorm is on the way.",
-                    stayingPut: "Keep your windows shut until the storm has passed.",
-                    goingOut: "If you've been outside, shower and change clothes when you get in, to rinse off pollen.")
+                    stayingPut: "Consider keeping windows shut until the storm passes.",
+                    goingOut: "After being out, a shower and fresh clothes may help rinse off pollen.")
         case .tempDrop:
             Warning(headline: fallF.map { "The temperature has fallen \(Int($0.rounded()))° in three hours." } ?? "The temperature is dropping fast.",
-                    stayingPut: "Keep the air indoors humidified if you can.",
-                    goingOut: "Bring your inhaler. Breathe through your nose, or wear a loose scarf to warm the air.")
+                    stayingPut: "A humidifier indoors may help, if you have one.",
+                    goingOut: "Consider keeping your inhaler with you. A loose scarf over your nose can warm the air.")
         case .mold:
             Warning(headline: "It's rainy, humid and warm, the kind of day mold grows.",
-                    stayingPut: "A dehumidifier can keep indoor humidity below 50%.",
-                    goingOut: "Watch for damp, shaded spots, where mold spores gather.")
+                    stayingPut: "A dehumidifier may help keep indoor humidity below 50%.",
+                    goingOut: "Consider steering clear of damp, shaded spots, where mold spores gather.")
         }
     }
 
@@ -118,32 +118,32 @@ public enum AirAdvice {
         switch factor {
         case .pm25:
             Warning(headline: "Fine particles are high today.",
-                    stayingPut: "Run your indoor air purifier if you have one.",
-                    goingOut: "Try to avoid walking along busy main roads.")
+                    stayingPut: "Consider running an air purifier, if you have one.",
+                    goingOut: "Consider routes away from busy main roads.")
         case .pm10:
             Warning(headline: "It's a dusty day.",
-                    stayingPut: "A damp cloth clears settled dust from surfaces.",
-                    goingOut: "A standard mask can help filter out coarse dust.")
+                    stayingPut: "A damp cloth may help clear settled dust from surfaces.",
+                    goingOut: "A standard mask may help filter coarse dust.")
         case .no2:
             Warning(headline: "Traffic pollution is high outside.",
-                    stayingPut: "Keep your windows closed during rush hour.",
+                    stayingPut: "Consider keeping windows closed during rush hour.",
                     goingOut: "Consider a route through a park or side streets.")
         case .ozone:
             Warning(headline: "Ozone is high today.",
-                    stayingPut: "Stay indoors during the hottest part of the day.",
-                    goingOut: "Try to move outdoor exercise to the morning.")
+                    stayingPut: "Consider staying in during the hottest part of the day.",
+                    goingOut: "Consider moving outdoor exercise to the morning.")
         case .treePollen:
             Warning(headline: "Tree pollen is high today.",
-                    stayingPut: "Keep your windows closed to keep it out.",
-                    goingOut: "Sunglasses help keep pollen out of your eyes.")
+                    stayingPut: "Consider keeping windows closed to keep it out.",
+                    goingOut: "Consider time outside later in the day, when pollen is often lower.")
         case .grassPollen:
             Warning(headline: "Grass pollen is high today.",
-                    stayingPut: "If you have a lawn, try not to mow it today.",
-                    goingOut: "Shower and change clothes when you get home.")
+                    stayingPut: "If you have a lawn, consider mowing another day.",
+                    goingOut: "A shower and fresh clothes when you get home may help.")
         case .weedPollen:
             Warning(headline: "Weed pollen is high today.",
-                    stayingPut: "Run your indoor air filter if you have one.",
-                    goingOut: "Try to avoid walking through overgrown fields or lots.")
+                    stayingPut: "Consider running an air filter, if you have one.",
+                    goingOut: "Consider steering clear of overgrown fields or lots.")
         }
     }
 

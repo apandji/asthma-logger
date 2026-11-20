@@ -93,6 +93,12 @@ import Testing
         #expect(Interview.first(seed: 0, isRescue: false) != .symptoms)
     }
 
+    @Test func aNoteAsksAboutSymptomsSecond() {
+        var note = Interview.Context(hour: 10, puffs: 0, isRescue: false)
+        note.asked = [.doing]
+        #expect(Interview.next(note) == .symptoms)
+    }
+
     @Test func yesNo() {
         #expect(Interview.yesNo("Yes, around three") == true)
         #expect(Interview.yesNo("yeah it did") == true)

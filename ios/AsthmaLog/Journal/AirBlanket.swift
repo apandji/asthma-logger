@@ -65,10 +65,14 @@ struct AirBlanket: View {
     }
 
     /// Each day of the year that has air: the condition that was highest (strongest across its moments).
-    private var days: [Date: Day] {
+    private var days: [Date: Day] { Self.days(events, year: year) }
+
+    /// What led the air each day (the strongest condition across its moments), shared by Year, Month and Day.
+    static func days(_ events: [LogEvent], year: Int? = nil) -> [Date: Day] {
+        let cal = Calendar.current
         var best: [Date: [String: Double]] = [:]
         var inhaler: Set<Date> = []
-        for e in events where cal.component(.year, from: e.loggedAt) == year {
+        for e in events where year == nil || cal.component(.year, from: e.loggedAt) == year {
             let d = cal.startOfDay(for: e.loggedAt)
             if e.moment == .rescue { inhaler.insert(d) }
             guard let c = e.conditions else { continue }

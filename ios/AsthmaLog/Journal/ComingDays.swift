@@ -16,44 +16,75 @@ struct ComingDays: View {
 
     let days: [Day]
 
+    /// The first day that looks like your inhaler days, if any: the summary and the one set of tips are about it.
+    private var flagged: Day? { days.first { ($0.likeness ?? 0) >= 1 } ?? days.first { ($0.likeness ?? 0) > 0 } }
+
+    /// The forecast in one sentence, like Home's headline (April, Nov 20): "Tomorrow looks like your inhaler
+    /// days, with pollen leading." or "The next few days look like your usual days."
+    private var summary: String {
+        if let f = flagged {
+            let when = Self.dayName(f.date) == "Rest of today" ? "Today" : Self.dayName(f.date)
+            let lead = f.lead.map { ", with \(Self.word($0).lowercased()) leading" } ?? ""
+            return (f.likeness ?? 0) >= 1 ? "\(when) looks like your inhaler days\(lead)." : "\(when) looks a little like your inhaler days\(lead)."
+        }
+        if days.allSatisfy({ $0.likeness == nil }) { return "Still learning which days look like yours." }
+        return "The next few days look like your usual days."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "calendar").font(.system(size: 17, weight: .medium)).frame(width: 22)
-                Text("Coming days").font(Theme.Figtree.font(size: 17, weight: .medium))
+                Image(systemName: "calendar").font(.system(size: 15, weight: .medium)).frame(width: 22)
+                Text("Forecast").font(Theme.Figtree.font(size: 15, weight: .medium))
             }
-            .padding(.vertical, 15)
+            .foregroundStyle(.secondary)
+            .padding(.top, 15)
+            // The forecast, said once, big.
+            Text(summary).font(Theme.Figtree.font(size: 22, weight: .medium))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8).padding(.bottom, 14)
+            // Each day on one line: the day, what leads, and a word.
             ForEach(days) { d in
-                Divider().padding(.leading, 32)
+                Divider()
                 HStack(spacing: 10) {
                     Circle().fill(d.lead.map(AirBlanket.ink) ?? Color.primary.opacity(0.15)).frame(width: 10, height: 10)
-                        .frame(width: 22)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(Self.dayName(d.date)).font(Theme.Figtree.font(size: 16))
-                        Text(d.lead.map { "\(Self.word($0)) leads" } ?? "Nothing stands out")
-                            .font(Theme.Figtree.font(size: 13)).foregroundStyle(.secondary)
-                    }
+                    Text(Self.dayName(d.date)).font(Theme.Figtree.font(size: 16, weight: (d.likeness ?? 0) >= 1 ? .medium : .regular))
+                    Text(d.lead.map(Self.word) ?? "Nothing stands out").font(Theme.Figtree.font(size: 14)).foregroundStyle(.secondary)
                     Spacer(minLength: 8)
-                    Text(Self.likenessWord(d.likeness)).font(Theme.Figtree.font(size: 15, weight: (d.likeness ?? 0) >= 1 ? .medium : .regular))
+                    Text(Self.shortWord(d.likeness)).font(Theme.Figtree.font(size: 14, weight: (d.likeness ?? 0) >= 1 ? .medium : .regular))
                         .foregroundStyle((d.likeness ?? 0) > 0 ? Color.primary : .secondary)
-                        .multilineTextAlignment(.trailing)
                 }
-                .padding(.top, 12).padding(.bottom, Self.note(d) == nil ? 12 : 6)
+                .padding(.vertical, 12)
                 .accessibilityElement(children: .combine)
-                // What might help on a day like your inhaler days, or a calm line on an ordinary one (April, Nov 20).
-                if let note = Self.note(d) {
-                    Text(note).font(Theme.Figtree.font(size: 14)).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.leading, 32).padding(.bottom, 12)
-                }
             }
-            Text(days.contains { ($0.likeness ?? 0) > 0 } ? AirAdvice.disclaimer : "Outdoor forecast. Not a prediction of how you'll feel.")
-                .font(Theme.Figtree.font(size: 13)).foregroundStyle(.secondary)
-                .padding(.leading, 32).padding(.vertical, 12)
+            // What might help, once, for the day it's about.
+            if let f = flagged, let tip = Self.note(f) {
+                Divider()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("For \(Self.dayName(f.date).lowercased() == "rest of today" ? "today" : Self.dayName(f.date).lowercased())")
+                        .font(Theme.Figtree.font(size: 13, weight: .medium)).foregroundStyle(.secondary)
+                    Text(tip).font(Theme.Figtree.font(size: 15)).fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 12)
+            }
+            Text(flagged != nil ? AirAdvice.disclaimer : "Outdoor forecast. Not a prediction of how you'll feel.")
+                .font(Theme.Figtree.font(size: 12)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 14)
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
+    }
+
+    static func shortWord(_ v: Double?) -> String {
+        switch v {
+        case nil: "Learning"
+        // A plain flag, the summary says why (April, Nov 20: "Like yours" didn't read).
+        case let x? where x >= 1: "Heads-up"
+        case let x? where x > 0: "Maybe"
+        default: "Usual"
+        }
     }
 
     /// On a day that looks like your inhaler days: the leading trigger's going-out suggestion (docs/air-advice.md:
@@ -97,7 +128,7 @@ struct ComingDays: View {
         case nil: "Still learning"
         case let x? where x >= 1: "Like your inhaler days"
         case let x? where x > 0: "A little like them"
-        default: "Ordinary"
+        default: "Usual"
         }
     }
 }

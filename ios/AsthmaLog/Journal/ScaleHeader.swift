@@ -103,6 +103,8 @@ extension LogEvent {
 struct MomentTag: View {
     let moment: MomentKind
     var text: String? = nil
+    /// A manual moment with symptoms reads "Symptoms" (April, Nov 20).
+    var symptoms = false
 
     var body: some View {
         if Crit.AppLook.current.healthLike, text == nil, (moment != .okay || Crit.AppLook.current == .menus) {
@@ -122,8 +124,8 @@ struct MomentTag: View {
             : moment == .rescue ? Theme.rescue : Theme.standard
         return HStack(spacing: 6) {
             // A manual moment has no inhaler behind it: a pencil, not the inhaler.
-            Image(systemName: moment == .note ? "pencil" : moment == .okay ? "circle" : "inhaler.fill").font(Theme.Figtree.font(.footnote, weight: .semibold)).foregroundStyle(word)
-            Text(moment.title)
+            Image(systemName: symptoms ? "lungs" : moment == .note ? "pencil" : moment == .okay ? "circle" : "inhaler.fill").font(Theme.Figtree.font(.footnote, weight: .semibold)).foregroundStyle(word)
+            Text(symptoms ? "Symptoms" : moment.title)
                 .font(Theme.Figtree.font(.subheadline, weight: .semibold))
                 .foregroundStyle(word)
                 .lineLimit(1).fixedSize()

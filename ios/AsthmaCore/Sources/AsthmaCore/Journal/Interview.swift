@@ -159,7 +159,8 @@ public enum Interview {
         if c.asked.filter({ $0 != .anythingElse }).count >= limit { return .anythingElse }
         let order: [Question] = c.isRescue
             ? [.symptoms, .exposure, .activity, .night, .reliever, .doing, .place, .around]
-            : [.doing, .place, .around, .symptoms]
+            // A manual moment asks about symptoms second (April, Nov 20: symptoms are tracked, not just puffs).
+            : [.doing, .symptoms, .place, .around]
         for q in order where !c.asked.contains(q) && applies(q, c) && !covered(q, c) {
             return q
         }
@@ -198,7 +199,8 @@ public enum Interview {
         case .night: c.isRescue && (c.hour >= 22 || c.hour < 7)
         case .exposure: c.isRescue && !c.elevated.isEmpty
         case .reliever: c.isRescue
-        case .symptoms, .activity: c.isRescue
+        case .activity: c.isRescue
+        case .symptoms: true
         default: true
         }
     }

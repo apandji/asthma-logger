@@ -728,7 +728,7 @@ struct NowHomeView: View {
                 if let j = justNow {
                     // Just logged: the air, as Now always says it ("It's 65°…"); the panel below says what was logged.
                     // No verdict while it's happening.
-                    VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place, setting: j)),
+                    VerdictHeader(tag: j.moment, symptoms: MenusMomentsView.isSymptoms(j), place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place, setting: j)),
                                   title: diaryRead(j) ?? (here == nil ? AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions) : nowRead),
                                   verdict: nil, tint: nil, isNow: true)
                     // The air arriving for this moment: shimmering while it's fetched, then each reading lands.
@@ -744,7 +744,7 @@ struct NowHomeView: View {
                                   verdict: nil, tint: nil, isNow: true)
                 }
             case .moment(let m):
-                VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName, setting: m)),
+                VerdictHeader(tag: m.moment, symptoms: MenusMomentsView.isSymptoms(m), place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName, setting: m)),
                               title: backRead(m), verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()),
                               around: CalendarReader.shared.around(m.loggedAt)?.line, whenDate: m.loggedAt)
@@ -1109,7 +1109,10 @@ struct NowHomeView: View {
     /// The Oct 30 sketch: top bar, then the page for the chosen scale, or Insights in place.
     private var menusPage: some View {
         VStack(alignment: .leading, spacing: 0) {
-            MenusTopBar(scale: $menusScale, settings: { showSettings = true }, doctor: { showDoctor = true }, showInfo: menusTab == .home)
+            // On the Map the bar floats over the map (April, Nov 20: no solid strip above it).
+            if menusTab != .map {
+                MenusTopBar(scale: $menusScale, settings: { showSettings = true }, doctor: { showDoctor = true }, showInfo: menusTab == .home)
+            }
             // Apple's tab bar (owner, Nov 13, after Instagram and Linear): Liquid Glass, a lens you can drag across
             // the tabs, it shrinks as you scroll, and the + is the separate round tab at the end.
             // Pages as native tabs (each keeps its state); the system's bar is hidden for ours (bottomBar), so the
@@ -1122,7 +1125,10 @@ struct NowHomeView: View {
                 } label: { Self.tabIcon(Self.gridImage, "Moments") }
                 Tab(value: MenusTab.map) {
                     // Where your moments were. Runs under the tab bar.
-                    MenusMapView(events: moments).ignoresSafeArea(edges: .bottom).toolbarVisibility(.hidden, for: .tabBar)
+                    MenusMapView(events: moments).ignoresSafeArea(edges: [.top, .bottom]).toolbarVisibility(.hidden, for: .tabBar)
+                        .overlay(alignment: .top) {
+                            MenusTopBar(scale: $menusScale, settings: { showSettings = true }, doctor: { showDoctor = true }, showInfo: false)
+                        }
                 } label: { Self.tabIcon(Image(systemName: "map"), "Map") }
                 Tab(value: MenusTab.insights) {
                     InsightsView(skyColor: skyColorNow).frame(maxWidth: .infinity, maxHeight: .infinity).toolbarVisibility(.hidden, for: .tabBar)
@@ -1300,7 +1306,6 @@ struct NowHomeView: View {
                         if let acc = here.horizontalAccuracy, acc > 0 {
                             Text("Within about \(Int(acc.rounded())) m").font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText)
                         }
-                        Text("Tap again for the map").font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText).padding(.top, 2)
                     }
                     .padding(.horizontal, 16).padding(.vertical, 10)
                     .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
@@ -2894,6 +2899,7 @@ struct MapZoomSource: ViewModifier {
 /// its height, so nothing jumps while you scrub.
 struct VerdictHeader: View {
     var tag: MomentKind? = nil
+    var symptoms = false
     /// A plain tag in the tag's place ("Forecast").
     var tagText: String? = nil
     let place: AnyView
@@ -2935,7 +2941,7 @@ struct VerdictHeader: View {
             // The context line: tag, place, and the verdict (the place gives way first).
             if !health || hasTag || menus {
             HStack(spacing: 8) {
-                if let tag { MomentTag(moment: tag) } else if let tagText { MomentTag(moment: .okay, text: tagText) }
+                if let tag { MomentTag(moment: tag, symptoms: symptoms) } else if let tagText { MomentTag(moment: .okay, text: tagText) }
                 if !health { place.layoutPriority(0) }
                 if menus {
                     place.font(Theme.Figtree.font(.subheadline)).foregroundStyle(Theme.secondaryText).lineLimit(1)

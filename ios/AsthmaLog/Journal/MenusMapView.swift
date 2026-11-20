@@ -33,6 +33,8 @@ struct MenusMapView: View {
 
     /// How much map is on screen (latitude degrees), for gathering close moments into one flower.
     @State private var span: Double = 0.1
+    /// Changes as the map moves, so the dots above it are placed again.
+    @State private var camera: Double = 0
 
     /// Moments within about a tenth of the screen of each other become one flower with a count (April, Nov 20):
     /// the trigger they share most, at their middle.
@@ -88,16 +90,30 @@ struct MenusMapView: View {
 
     var body: some View {
         let all = spots
-        Map(initialPosition: usesSample ? .region(Self.sampleRegion) : .automatic, interactionModes: interactive ? .all : []) {
-            ForEach(gathered(all)) { s in
-                Annotation("", coordinate: s.coordinate, anchor: .center) { pin(s, dim: only != nil && only != s.lead) }
-                    .annotationTitles(.hidden)
-            }
+        let pins = gathered(all)
+        MapReader { proxy in
+            Map(initialPosition: usesSample ? .region(Self.sampleRegion) : .automatic, interactionModes: interactive ? .all : [])
+                .onMapCameraChange(frequency: .continuous) { ctx in camera = ctx.region.center.latitude + ctx.region.center.longitude * 1000 + ctx.region.span.latitudeDelta }
+                .onMapCameraChange(frequency: .onEnd) { ctx in span = ctx.region.span.latitudeDelta }
+                .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+                .mapControls { if interactive { MapCompass() } }
+                // Quieter (April, Nov 20: "the colour is too much"): most of the colour out of the map tiles, and a
+                // veil of the app's paper over them. The dots sit in their own layer above, so they keep their inks.
+                .saturation(0)
+                .overlay { Color(uiColor: .systemGroupedBackground).opacity(0.45).allowsHitTesting(false) }
+                .overlay {
+                    // Placed from the map's own projection, so they follow pans and zooms.
+                    ZStack {
+                        let _ = camera
+                        ForEach(pins) { s in
+                            if let p = proxy.convert(s.coordinate, to: .local) {
+                                pin(s, dim: only != nil && only != s.lead).position(p)
+                            }
+                        }
+                    }
+                }
+                .allowsHitTesting(interactive)
         }
-        .onMapCameraChange(frequency: .onEnd) { ctx in span = ctx.region.span.latitudeDelta }
-        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
-        .mapControls { if interactive { MapCompass() } }
-        .allowsHitTesting(interactive)
         .overlay(alignment: .top) {
             if interactive {
                 VStack(alignment: .leading, spacing: 2) {
@@ -108,7 +124,7 @@ struct MenusMapView: View {
                 .padding(.horizontal, 16).padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
-                .padding(.horizontal, 16).padding(.top, 8)
+                .padding(.horizontal, 16).padding(.top, 122)
                 .overlay(alignment: .bottom) {
                     // Inside or outside (April, Nov 20).
                     Picker("Where", selection: $setting) {
@@ -158,17 +174,20 @@ struct MenusMapView: View {
             // A single stem from the garden (April, Nov 20): the leading trigger's flower, standing on the spot.
             // Plain dots (April, Nov 20): a solid circle in the trigger's ink, the count inside, sized by count,
             // like Apple Maps' clusters. The garden lives on home; the map stays a map.
-            let d = min(44, 22 + 5 * CGFloat(s.count - 1))
+            // Softer (April, Nov 20: "too much colour"): a pale wash of the ink with a thin ring of it, the count
+            // in the ink's own dark shade, smaller overall.
+            let d = min(36, 18 + 4 * CGFloat(s.count - 1))
             ZStack {
-                Circle().fill(ink)
-                Circle().strokeBorder(.white, lineWidth: 2)
+                Circle().fill(Color.white)
+                Circle().fill(ink.opacity(0.35))
+                Circle().strokeBorder(ink, lineWidth: 1.5)
                 if s.count > 1 {
-                    Text("\(s.count)").font(Theme.Figtree.font(size: d * 0.42, weight: .medium)).monospacedDigit()
-                        .foregroundStyle(.white)
+                    Text("\(s.count)").font(Theme.Figtree.font(size: d * 0.44, weight: .medium)).monospacedDigit()
+                        .foregroundStyle(ink.mix(with: .black, by: 0.55))
                 }
             }
             .frame(width: d, height: d)
-            .shadow(color: .black.opacity(0.15), radius: 3, y: 1)
+            .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
         }
         .opacity(dim ? 0.25 : 1)
         .onTapGesture { withAnimation(Theme.snap) { selected = on ? nil : s.id } }

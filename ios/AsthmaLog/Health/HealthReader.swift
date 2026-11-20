@@ -68,9 +68,9 @@ final class HealthReader {
     /// as unknown (nil), not "not active".
     /// `kind` is the workout's kind, for the moment's line ("a walk"); `note` says what came back, for
     /// Settings › Exertion check.
-    func activity(before date: Date) async -> (workout: Bool?, kind: ExertionSource.WorkoutKind?, steps: Int?, note: String) {
-        guard isAvailable else { return (nil, nil, nil, "Health isn't available on this device.") }
-        guard !(await shouldAsk()) else { return (nil, nil, nil, "Health hasn't been asked yet.") }
+    func activity(before date: Date) async -> (workout: Bool?, kind: ExertionSource.WorkoutKind?, steps: Int?, note: String, detail: String?) {
+        guard isAvailable else { return (nil, nil, nil, "Health isn't available on this device.", nil) }
+        guard !(await shouldAsk()) else { return (nil, nil, nil, "Health hasn't been asked yet.", nil) }
         let hour = HKQuery.predicateForSamples(withStart: date.addingTimeInterval(-3600), end: date)
         let w = HKSampleQueryDescriptor(predicates: [.workout(hour)], sortDescriptors: [SortDescriptor(\.endDate, order: .reverse)], limit: 1)
         let found = (try? await w.result(for: store))?.first
@@ -80,7 +80,7 @@ final class HealthReader {
                                           sortDescriptors: [], limit: 1)
         let hasSteps = ((try? await any.result(for: store)) ?? []).isEmpty == false
         guard hasSteps || workout else {
-            return (nil, nil, nil, "No steps or workouts in the 6 hours before (not shared, or no data), so Health can't say.")
+            return (nil, nil, nil, "No steps or workouts in the 6 hours before (not shared, or no data), so Health can't say.", nil)
         }
         let half = HKQuery.predicateForSamples(withStart: date.addingTimeInterval(-1800), end: date)
         let sum = HKStatisticsQueryDescriptor(predicate: .quantitySample(type: HKQuantityType(.stepCount), predicate: half),
@@ -94,7 +94,38 @@ final class HealthReader {
         } else {
             note += " No workout in the hour before."
         }
-        return (workout, kind, steps, note)
+        // In words for the moment (April, Nov 20): "40 min treadmill run", or the steps when there was no workout.
+        var detail: String?
+        if let found {
+            let indoor = (found.metadata?[HKMetadataKeyIndoorWorkout] as? Bool) == true
+            detail = "\(max(1, Int((found.duration / 60).rounded()))) min " + Self.name(found.workoutActivityType, indoor: indoor)
+        } else if steps >= 1000 {
+            detail = "\(steps.formatted()) steps in the half hour before"
+        }
+        return (workout, kind, steps, note, detail)
+    }
+
+    /// A workout's plain name: "treadmill run", "walk", "HIIT", "yoga".
+    static func name(_ t: HKWorkoutActivityType, indoor: Bool) -> String {
+        switch t {
+        case .running: indoor ? "treadmill run" : "run"
+        case .walking: indoor ? "treadmill walk" : "walk"
+        case .cycling: indoor ? "indoor ride" : "bike ride"
+        case .hiking: "hike"
+        case .swimming: "swim"
+        case .elliptical: "elliptical"
+        case .rowing: "row"
+        case .stairClimbing, .stairs: "stair climb"
+        case .highIntensityIntervalTraining: "HIIT"
+        case .traditionalStrengthTraining, .functionalStrengthTraining: "strength workout"
+        case .yoga: "yoga"
+        case .pilates: "pilates"
+        case .dance, .cardioDance: "dance"
+        case .soccer: "soccer"
+        case .basketball: "basketball"
+        case .tennis: "tennis"
+        default: "workout"
+        }
     }
 
     static func kind(_ t: HKWorkoutActivityType) -> ExertionSource.WorkoutKind {

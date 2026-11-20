@@ -728,8 +728,8 @@ struct NowHomeView: View {
                 if let j = justNow {
                     // Just logged: the air, as Now always says it ("It's 65°…"); the panel below says what was logged.
                     // No verdict while it's happening.
-                    VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place)),
-                                  title: here == nil ? AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions) : nowRead,
+                    VerdictHeader(tag: j.moment, place: AnyView(placeLabel(j.latitude, j.longitude, j.placeName ?? here?.place, setting: j)),
+                                  title: diaryRead(j) ?? (here == nil ? AirWords.sentence(tense: .present, weave: j.weave, conditions: j.conditions) : nowRead),
                                   verdict: nil, tint: nil, isNow: true)
                     // The air arriving for this moment: shimmering while it's fetched, then each reading lands.
                     // Menus look: the flowers show the air, so no readings row here (owner, Nov 13).
@@ -744,7 +744,7 @@ struct NowHomeView: View {
                                   verdict: nil, tint: nil, isNow: true)
                 }
             case .moment(let m):
-                VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName)),
+                VerdictHeader(tag: m.moment, place: AnyView(placeLabel(m.latitude, m.longitude, m.placeName, setting: m)),
                               title: backRead(m), verdict: nil, tint: nil,
                               when: m.loggedAt.formatted(.dateTime.weekday(.wide).month(.abbreviated).day().hour().minute()),
                               around: CalendarReader.shared.around(m.loggedAt)?.line, whenDate: m.loggedAt)
@@ -768,7 +768,7 @@ struct NowHomeView: View {
 
     /// The place as words: Home or Work (with their icon) when it's within 150 m of the saved one, else the
     /// place name. "Here" gets the location arrow; other places get no icon.
-    private func placeLabel(_ lat: Double?, _ lon: Double?, _ name: String?, current: Bool = false) -> some View {
+    private func placeLabel(_ lat: Double?, _ lon: Double?, _ name: String?, current: Bool = false, setting moment: LogEvent? = nil) -> some View {
         let known = Self.knownPlace(lat, lon)
         // Home and Work get their icons; every other place gets the location arrow (filled for where you are now).
         let icon = known?.icon ?? (current ? "location.fill" : "location")
@@ -776,8 +776,23 @@ struct NowHomeView: View {
         return HStack(spacing: 6) {
             Image(systemName: icon).font(.caption)
             Text(text).lineLimit(1)
+            // Inside or outside, next to the place (April, Nov 20). Your answer as said; the phone's guess
+            // only when it's fairly sure, and said as a guess.
+            if let setting = moment.flatMap(Self.settingWord) {
+                Text("·")
+                Text(setting).lineLimit(1).layoutPriority(1)
+            }
         }
         .font(.subheadline.weight(.medium)).foregroundStyle(Theme.secondaryText)
+    }
+
+    /// "Inside", "Outside", "Likely inside"…, or nil when nothing is known.
+    static func settingWord(_ m: LogEvent) -> String? {
+        if let c = m.indoorConfirmedRaw.flatMap(IndoorOutdoor.init(rawValue:)) {
+            return c == .indoor ? "Inside" : c == .outdoor ? "Outside" : nil
+        }
+        guard let g = m.indoorGuess, m.indoorGuessConfidenceRaw != "low" else { return nil }
+        return g == .indoor ? "Likely inside" : g == .outdoor ? "Likely outside" : nil
     }
 
     static func knownPlace(_ lat: Double?, _ lon: Double?) -> (icon: String, name: String)? {
@@ -919,7 +934,8 @@ struct NowHomeView: View {
 
     /// The read a moment's details open with: the same sentence the header shows for it.
     private func detailsRead(_ e: LogEvent) -> String {
-        e.modelContext == nil || e.id == justNow?.id ? nowRead : backRead(e)
+        if let diary = diaryRead(e) { return diary }
+        return e.modelContext == nil || e.id == justNow?.id ? nowRead : backRead(e)
     }
 
     /// The header's read for the playhead, marks and all (what VerdictHeader shows as its title).
@@ -1078,7 +1094,7 @@ struct NowHomeView: View {
                 Tab(value: MenusTab.home) { menusHome.background(Self.paper).toolbarVisibility(.hidden, for: .tabBar) } label: { Self.tabIcon(Self.fanImage, "Home") }
                 Tab(value: MenusTab.moments) {
                     // Your inhaler use by day, month and year.
-                    MenusMomentsView(events: moments, now: now).background(Self.paper).toolbarVisibility(.hidden, for: .tabBar)
+                    MenusMomentsView(events: moments, now: now, air: events).background(Self.paper).toolbarVisibility(.hidden, for: .tabBar)
                 } label: { Self.tabIcon(Self.gridImage, "Moments") }
                 Tab(value: MenusTab.map) {
                     // Where your moments were. Runs under the tab bar.
@@ -1172,6 +1188,8 @@ struct NowHomeView: View {
                                              // The flowers fill the room between the header and the timeline.
                                              bigBand: menusViewport > 0 ? max(300, menusViewport - 158 - 16 - 20) : MenusEnvironment.bigBand)   // the time is on the timeline now (owner, Nov 13)
                                     .padding(.bottom, combined ? 0 : 120)   // clear of the tab bar and the +
+                                    .opacity(quietGarden ? 0.35 : 1)
+                                    .animation(.smooth(duration: 0.35), value: quietGarden)
                                 if combined {
                                     soilMap
                                     // Under the fold: everything felt air holds about the moment on the playhead.
@@ -1728,7 +1746,45 @@ struct NowHomeView: View {
     }
 
     /// Back: Standard is routine; a Note leads with its words; no reading says so (with the reason when known).
+    /// A journaled moment reads as its diary (April, Nov 20): "You were studying and feeling stressed, inside."
+    /// Your own words when that's all there is. The air's read stays in the cards below.
+    private func diaryRead(_ m: LogEvent) -> String? {
+        guard appLook == .menus else { return nil }
+        let diary = JournalSummary.read(m)
+        // Inside or exercising (April, Nov 20): say the outdoor air may not be why, once, after the diary.
+        // What Health saw, when it saw it (April, Nov 20): "Apple Health shows a 40 min treadmill run before this."
+        let seen: String? = m.exertedDetail.map { "Apple Health shows \(Self.article($0)) before this." }
+            ?? m.exertedBy.map { "\($0.from.prefix(1).uppercased() + $0.from.dropFirst()) shows \($0.words) before this." }
+        let why: String? = switch m.cause {
+            case .inside?: "The outdoor air may not be why."
+            case .exercise?: [seen, "Effort may be why, more than the outdoor air."].compactMap { $0 }.joined(separator: " ")
+            case nil: nil
+        }
+        if !diary.sentences.isEmpty { return (diary.sentences + [why].compactMap { $0 }).joined(separator: " ") }
+        if let words = diary.quotes.first { return (["“\(words)”", why].compactMap { $0 }).joined(separator: " ") }
+        switch m.cause {
+        case .inside?: return "You were inside. The outdoor air may not be why."
+        case .exercise?: return why.map { "You were active. " + $0 } ?? "You were active."
+        case nil: return nil
+        }
+    }
+
+    /// "a 40 min treadmill run", "an 8 min walk", "1,800 steps…" (counts need no article).
+    static func article(_ s: String) -> String {
+        guard let f = s.first else { return s }
+        if s.contains("steps") { return s }
+        let an = "aeiou8".contains(f.lowercased()) || s.hasPrefix("11 ") || s.hasPrefix("18 ")
+        return (an ? "an " : "a ") + s
+    }
+
+    /// Option C: on an inside or exercise moment the garden steps back, since it shows the outdoor air.
+    private var quietGarden: Bool {
+        guard appLook == .menus, Crit.MomentCause.current == .grey, case .moment(let m) = focus else { return false }
+        return m.cause != nil
+    }
+
     private func backRead(_ m: LogEvent) -> String {
+        if let diary = diaryRead(m) { return diary }
         if m.moment == .maintenance { return TheRead.standard }
         if m.moment == .note { return TheRead.note(m.voiceTranscript, tags: m.tags.sorted()) }
         guard m.conditions?.input.hasAnyValue == true else {

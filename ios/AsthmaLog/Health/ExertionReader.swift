@@ -13,6 +13,8 @@ enum ExertionReader {
         /// Plain notes on what each source returned, for Settings › Exertion check (Debug only).
         var healthNote: String
         var motionNote: String
+        /// "40 min treadmill run": what Health saw, in words.
+        var detail: String?
     }
 
     static func read(before date: Date) async -> Result {
@@ -20,7 +22,7 @@ enum ExertionReader {
         let m = await MotionService().vigorous(before: date)
         let r = Exertion.Reading(workout: h.workout, workoutKind: h.kind, runningMinutes: m.running,
                                  cyclingMinutes: m.cycling, steps: h.steps)
-        return Result(reading: r, decision: Exertion.decide(r), healthNote: h.note, motionNote: m.note)
+        return Result(reading: r, decision: Exertion.decide(r), healthNote: h.note, motionNote: m.note, detail: h.detail)
     }
 
     /// Stamps a moment. The Settings › Demo triggers switch marks it active from a walk instead (no reads).
@@ -30,9 +32,10 @@ enum ExertionReader {
             e.exertedBy = .workout(.walk)
             return
         }
-        let d = await read(before: e.loggedAt).decision
-        e.exerted = d.active
-        e.exertedBy = d.source
+        let r = await read(before: e.loggedAt)
+        e.exerted = r.decision.active
+        e.exertedBy = r.decision.source
+        e.exertedDetail = r.decision.active == true ? r.detail : nil
     }
 
     static let demoKey = "demo.active"
@@ -48,11 +51,14 @@ enum ExertionReader {
         guard !(await HealthReader.shared.shouldAsk()) || force else { return 0 }
         let all = (try? context.fetch(FetchDescriptor<LogEvent>())) ?? []
         var changed = 0
-        for e in all where !e.isDemo && e.exerted == nil {
-            let d = await read(before: e.loggedAt).decision
+        // Also the active moments stamped before the workout's words were kept.
+        for e in all where !e.isDemo && (e.exerted == nil || (e.exerted == true && e.exertedDetail == nil)) {
+            let r = await read(before: e.loggedAt)
+            let d = r.decision
             guard d.active != nil else { continue }
             e.exerted = d.active
             e.exertedBy = d.source
+            e.exertedDetail = d.active == true ? r.detail : nil
             changed += 1
         }
         try? context.save()

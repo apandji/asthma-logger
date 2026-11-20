@@ -53,7 +53,7 @@ struct MenusProfileFlower: View {
         }
     }
 
-    private static let profileOrder = ["Pollen", "PM2.5", "Ozone", "Humidity", "Temperature", "Wind"]
+    private static let profileOrder = ["Pollen", "PM2.5", "Ozone", "Humidity", "Temperature", "Pressure", "Wind"]
 
     /// Ranked, strongest first; ties keep the profile order (as on home).
     private var ranked: [(name: String, w: Double)] {
@@ -115,38 +115,36 @@ struct MenusProfileFlower: View {
         let labelRoom: CGFloat = 56
         let R = s.width / 2 - labelRoom
         // Size by rank, the same steps as home: the lead clearly biggest.
-        let steps: [CGFloat] = [1, 0.8, 0.68, 0.58, 0.5, 0.44]
+        let steps: [CGFloat] = [1, 0.8, 0.68, 0.58, 0.5, 0.44, 0.4]
         let n = r.count
         // Balanced round the centre: the lead points up, the second down, the rest in pairs either side.
-        let seat: [Int] = n == 6 ? [0, 3, 1, 5, 2, 4] : Array(0..<n)
-        let spread = 2 * Double.pi / Double(max(n, 1)) * 0.98   // just touching, so they meet softly
+        let seat: [Int] = n == 6 ? [0, 3, 1, 5, 2, 4] : n == 7 ? [0, 4, 1, 6, 3, 2, 5] : Array(0..<n)
+        // Each petal is one of home's fans, opened to its share of the round with a little air between.
+        let spread = 2 * Double.pi / Double(max(n, 1)) * 0.86
         var labels: [(String, CGPoint, Color, UnitPoint)] = []
         ctx.drawLayer { paint in
-            // Soft edges, like a wash on paper rather than a cut shape.
-            paint.addFilter(.blur(radius: 1.6))
+            // Home's fans (April, Nov 20): no blur, the colour does the softening; overlaps mix like pigment.
+            paint.blendMode = .multiply
             for (k, item) in r.enumerated() {
                 let ink = Self.ink(item.name)
                 let len = R * steps[min(k, steps.count - 1)] * grow(k, at: t)
                 guard len > 1 else { continue }
                 let mid = -Double.pi / 2 + 2 * Double.pi * Double(seat[k % seat.count]) / Double(n)
-                // The petal: a fan from the centre with a cloud rim of soft bumps (home's fan, one sector).
+                // The petal is home's fan: a wedge from the centre with a rim of wide soft bumps (one per ~40°),
+                // the same 0.93 + 0.07 swell, deep where it meets the centre and fading out to the rim.
                 var p = Path()
                 p.move(to: c)
-                let bumps = 2, stepsN = 60
+                let bumps = max(2, Int((spread * 180 / .pi / 40).rounded())), stepsN = 120
                 for j in 0...stepsN {
                     let u = Double(j) / Double(stepsN)
                     let a = mid - spread / 2 + spread * u
                     let q = (u * Double(bumps)).truncatingRemainder(dividingBy: 1)
-                    // Rounded at the sides, so it reads as a petal and not a slice.
-                    let shoulder = pow(sin(.pi * u), 0.35)
-                    let rr = len * CGFloat((0.9 + 0.1 * (1 - pow(2 * q - 1, 2)).squareRoot()) * shoulder)
+                    let rr = len * CGFloat(0.93 + 0.07 * (1 - pow(2 * q - 1, 2)).squareRoot())
                     p.addLine(to: CGPoint(x: c.x + cos(a) * rr, y: c.y + sin(a) * rr))
                 }
                 p.closeSubpath()
-                // Pale at the very centre (so petals don't darken where they meet), deepest a little way out,
-                // fading to the rim: home's fade, opened up.
-                paint.fill(p, with: .radialGradient(Gradient(stops: [.init(color: ink.opacity(0.15), location: 0), .init(color: ink.opacity(0.85), location: 0.22),
-                                                                     .init(color: ink.opacity(0.5), location: 0.55), .init(color: ink.opacity(0.06), location: 1)]),
+                paint.fill(p, with: .radialGradient(Gradient(stops: [.init(color: ink, location: 0), .init(color: ink.opacity(0.55), location: 0.5),
+                                                                     .init(color: ink.opacity(0.08), location: 1)]),
                                                     center: c, startRadius: 0, endRadius: len))
                 // Names on one ring round the flower (owner, Nov 19), each at its petal's angle.
                 let ring = R + 22

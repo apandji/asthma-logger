@@ -197,7 +197,8 @@ struct ChatCapture: View {
                 // A voice answer with no words written down: say so, rather than an empty bubble.
                 bubble(Label("Voice note", systemImage: "waveform").font(.subheadline).foregroundStyle(Theme.secondaryText))
             } else {
-                bubble(LiveWords(text: text, ink: Theme.rescueSoft, font: .body, lineLimit: nil, hugs: true))
+                // Your answer in plain ink (April, Nov 20): no orange for the words that matched a tag.
+                bubble(Text(text).font(.body).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true))
             }
         case .heard(_, let tags):
             // What felt air picked up, like an assistant's tool result: tap one to untick it.

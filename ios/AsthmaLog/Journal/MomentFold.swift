@@ -111,24 +111,27 @@ struct MomentFold: View {
 
     /// What was said, with the words that became confirmed tags marked, then the tags.
     private func journal(_ e: LogEvent) -> some View {
-        let said = Self.transcript(e)
+        // Read back as a few sentences, like a diary (April, Nov 20), with your own words quoted under them.
+        let read = JournalSummary.read(e)
         return card("Journal") {
-            if said.isEmpty && e.tags.isEmpty {
+            if read.isEmpty {
                 if record != nil { recordRow(e) }
                 else { words("No note on this moment.") }
             } else {
                 Divider().padding(.leading, Self.indent)
-                VStack(alignment: .leading, spacing: 6) {
-                    if !said.isEmpty {
-                        Text(Self.marked(said, tags: e.tags)).font(Theme.Figtree.font(size: 16)).fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 8) {
+                    if !read.sentences.isEmpty {
+                        Text(read.sentences.joined(separator: " ")).font(Theme.Figtree.font(size: 16))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    if !e.tags.isEmpty {
-                        Text(e.tags.sorted().map(\.label).joined(separator: " · "))
-                            .font(Theme.Figtree.font(size: 13, weight: .medium)).foregroundStyle(Theme.secondaryText)
+                    ForEach(read.quotes, id: \.self) { q in
+                        Text("“\(q)”").font(Theme.Figtree.font(size: 15)).italic().foregroundStyle(Theme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(.vertical, 12)
                 .padding(.leading, Self.indent)
+                if record != nil { recordRow(e) }
             }
         }
     }

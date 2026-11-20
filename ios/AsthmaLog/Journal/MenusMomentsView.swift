@@ -5,6 +5,8 @@ import SwiftUI
 struct MenusMomentsView: View {
     let events: [LogEvent]
     let now: Date
+    /// Every moment with air, baselines included, for Year's air blanket.
+    var air: [LogEvent] = []
 
     enum Mode: String, CaseIterable, Identifiable {
         case day = "Day", month = "Month", year = "Year"
@@ -80,34 +82,35 @@ struct MenusMomentsView: View {
             // Only days you used your inhaler (owner, Nov 19): no "No inhaler use" rows.
             .filter { counts[$0] != nil }
         return ScrollView {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: 12) {
                 ForEach(days, id: \.self) { d in
                     let c = counts[d] ?? (0, 0)
-                    HStack(alignment: .center, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(d.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                                .font(Theme.Figtree.font(size: 22, weight: .medium))
-                            Text(Self.summary(c))
-                                .font(Theme.Figtree.font(size: 15))
-                                .foregroundStyle(.secondary)
+                    // A card per day, in the app's one card and type (April, Nov 20: as Home and Insights).
+                    Self.card {
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(d.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                                    .font(Theme.Figtree.font(size: 17, weight: .medium))
+                                Text(Self.summary(c)).font(Theme.Figtree.font(size: 13)).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 8)
+                            HStack(spacing: 4) {
+                                ForEach(0..<min(c.rescue, 5), id: \.self) { _ in Self.pill(filled: true, width: 7, height: 16) }
+                                ForEach(0..<min(c.standard, max(0, 5 - c.rescue)), id: \.self) { _ in Self.pill(filled: false, width: 7, height: 16) }
+                            }
                         }
-                        Spacer(minLength: 8)
-                        HStack(spacing: 4) {
-                            ForEach(0..<min(c.rescue, 5), id: \.self) { _ in Self.pill(filled: true) }
-                            ForEach(0..<min(c.standard, max(0, 5 - c.rescue)), id: \.self) { _ in Self.pill(filled: false) }
+                        .padding(.vertical, 15)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(d.formatted(date: .complete, time: .omitted)), \(Self.summary(c))")
+                        // The day's moments, each one tap from its editor.
+                        ForEach(momentsOn(d)) { e in
+                            Divider()
+                            momentRow(e)
                         }
                     }
-                    .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 10)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(d.formatted(date: .complete, time: .omitted)), \(Self.summary(c))")
-                    // The day's moments, each one tap from its editor.
-                    VStack(spacing: 0) {
-                        ForEach(momentsOn(d)) { e in momentRow(e) }
-                    }
-                    .padding(.bottom, 12)
-                    Divider().padding(.horizontal, 16)
                 }
             }
+            .padding(.horizontal, 16)
             .padding(.bottom, 120)
         }
         .overlay {
@@ -132,22 +135,30 @@ struct MenusMomentsView: View {
                     if e.moment == .note { Capsule().strokeBorder(Color.primary.opacity(0.4), style: StrokeStyle(lineWidth: 1.3, dash: [2, 2])) }
                     else { Self.pill(filled: e.moment == .rescue) }
                 }
-                .frame(width: 8, height: 18)
+                .frame(width: 7, height: 16)
                 VStack(alignment: .leading, spacing: 2) {
                     Text([e.loggedAt.formatted(date: .omitted, time: .shortened), e.moment.title, e.puffs > 1 ? "\(e.puffs) puffs" : nil]
                         .compactMap { $0 }.joined(separator: " · "))
-                        .font(Theme.Figtree.font(size: 16, weight: .medium)).foregroundStyle(.primary)
+                        .font(Theme.Figtree.font(size: 16)).foregroundStyle(.primary)
                     if let place = e.placeName, !place.isEmpty {
-                        Text(place).font(Theme.Figtree.font(size: 14)).foregroundStyle(.secondary).lineLimit(1)
+                        Text(place).font(Theme.Figtree.font(size: 13)).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 24).padding(.vertical, 10)
+            .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
+    }
+
+    /// The app's card (Home, Insights): white on the paper, 22 pt corners, 16 pt sides.
+    static func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) { content() }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
     }
 
     static func summary(_ c: (rescue: Int, standard: Int)) -> String {
@@ -181,17 +192,18 @@ struct MenusMomentsView: View {
     private func monthList(_ counts: [Date: (rescue: Int, standard: Int)]) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 28) {
+                LazyVStack(spacing: 12) {
                     ForEach(months, id: \.self) { m in
-                        VStack(spacing: 14) {
-                            Text(m.formatted(.dateTime.month(.abbreviated).year()))
-                                .font(Theme.Figtree.font(size: 22, weight: .medium))
-                            monthGrid(m, counts, mini: false)
+                        Self.card {
+                            Text(m.formatted(.dateTime.month(.wide).year()))
+                                .font(Theme.Figtree.font(size: 17, weight: .medium))
+                                .padding(.vertical, 15)
+                            monthGrid(m, counts, mini: false).padding(.bottom, 12)
                         }
                         .id(m)
-                        .padding(.horizontal, 16)
                     }
                 }
+                .padding(.horizontal, 16)
                 .padding(.bottom, 120)
             }
             .onAppear { proxy.scrollTo(months.last, anchor: .bottom) }
@@ -277,21 +289,12 @@ struct MenusMomentsView: View {
         ScrollView {
             LazyVStack(spacing: 24) {
                 ForEach(years.reversed(), id: \.self) { y in
-                    VStack(spacing: 18) {
-                        Text(String(y)).font(Theme.Figtree.font(size: 22, weight: .medium))
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14, alignment: .top), count: 3), alignment: .center, spacing: 22) {
-                            ForEach(1...12, id: \.self) { mo in
-                                let m = cal.date(from: DateComponents(year: y, month: mo, day: 1))!
-                                VStack(spacing: 6) {
-                                    Text(m.formatted(.dateTime.month(.wide)))
-                                        .font(Theme.Figtree.font(size: 13, weight: .medium))
-                                        .foregroundStyle(m > now ? Color.secondary : Color.primary)
-                                    monthGrid(m, counts, mini: true)
-                                }
-                            }
-                        }
+                    // The air blanket (April, Nov 20): a stitch per day in the ink that led the air.
+                    Self.card {
+                        AirBlanket(year: y, events: air.isEmpty ? events : air, now: now)
+                            .padding(.bottom, 16)
                     }
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 16)
                 }
             }
             .padding(.bottom, 120)

@@ -48,6 +48,9 @@ final class LogEvent {
     /// Which signal said active (`ExertionSource.rawValue`: "workout.walk", "motion.running", "steps"), so the
     /// moment can say what it came from. Nil when not active, unknown, or stamped before this was kept.
     var exertedByRaw: String?
+    /// What Apple Health saw, in words ("40 min treadmill run", "1,800 steps in the half hour before"). Nil when
+    /// nothing was read, or the moment was stamped before this was kept.
+    var exertedDetail: String?
     /// Later, not MVP (`Infection`, `InfectionStamp`): flu-like illness around that day, as
     /// `InfectionLevel.rawValue`. Nil until stamped: missing, not "low".
     var infectionRaw: String?

@@ -132,6 +132,7 @@ struct DeveloperSettings: View {
     @AppStorage(Crit.TimelineLook.key) private var critTimeline = Crit.TimelineLook.track
     @AppStorage(Crit.AppLook.key) private var critAppLook = Crit.AppLook.fallback
     @AppStorage(Crit.MenusSky.key) private var critMenusSky = Crit.MenusSky.combined
+    @AppStorage(Crit.MomentCause.key) private var critMomentCause = Crit.MomentCause.grey
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false
@@ -234,6 +235,9 @@ struct DeveloperSettings: View {
                 }
                 Picker("Home picture", selection: $critMenusSky) {
                     ForEach(Crit.MenusSky.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Inside or exercise moments", selection: $critMomentCause) {
+                    ForEach(Crit.MomentCause.allCases) { Text($0.title).tag($0) }
                 }
                 Picker("Timeline", selection: $critTimeline) {
                     ForEach(Crit.TimelineLook.allCases) { Text($0.title).tag($0) }

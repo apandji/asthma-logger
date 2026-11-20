@@ -112,6 +112,15 @@ extension LogEvent {
 
     /// Puffs across this moment's uses.
     var puffs: Int { uses.reduce(0) { $0 + $1.puffs } }
+
+    /// Not about the outdoor air (April, Nov 20): you said you were inside, or you were exercising (tagged, or
+    /// Health and Motion saw you active the hour before). The indoor *guess* alone doesn't count.
+    enum Cause { case inside, exercise }
+    var cause: Cause? {
+        if tags.contains(.exercise) || exerted == true { return .exercise }
+        if indoorConfirmedRaw == IndoorOutdoor.indoor.rawValue { return .inside }
+        return nil
+    }
 }
 
 /// The one-time upgrade to uses and notes: every inhaler moment gets one use (one puff, its kind's inhaler,

@@ -204,6 +204,16 @@ enum Crit {
         }
     }
 
+    /// Menus look: how an inside or exercise moment shows on the timeline (April, Nov 20). Grey pill with a quiet
+    /// garden (C), or the black pill with a small house or runner over it (B).
+    enum MomentCause: String, CaseIterable, Identifiable {
+        case grey, glyph
+        var id: String { rawValue }
+        var title: String { self == .grey ? "Grey pill, quiet garden" : "House or runner above" }
+        static let key = "crit.momentCause"
+        static var current: MomentCause { UserDefaults.standard.string(forKey: key).flatMap(MomentCause.init) ?? .grey }
+    }
+
     /// Menus look: the sky as a 3D rounded glass cube of air with physics, or the flat square with a circle.
     enum MenusSky: String, CaseIterable, Identifiable {
         case combined, sketch, island, card, cube, square

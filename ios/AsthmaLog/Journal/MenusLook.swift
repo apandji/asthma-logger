@@ -664,11 +664,21 @@ struct MenusStrip: View {
                 let noted = !(m.voiceTranscript ?? "").isEmpty || shown.contains { $0.moment == .note && abs($0.loggedAt.timeIntervalSince(m.loggedAt)) < 3600 }
                 let cx = x(m.loggedAt), pw = min(r, 7) * 1.1, ph = min(r, 7) * 2.8
                 let pill = Path(roundedRect: CGRect(x: cx - pw / 2, y: mid - ph / 2, width: pw, height: ph), cornerRadius: pw / 2)
+                // Inside or exercise (April, Nov 20): not about the outdoor air. C greys the pill; B keeps it and
+                // puts a small house or runner over it.
+                let style = Crit.MomentCause.current
+                let pillInk = m.cause != nil && style == .grey ? Color(white: 0.62) : ink
                 if m.moment == .rescue {
-                    ctx.fill(pill, with: .color(ink))
+                    ctx.fill(pill, with: .color(pillInk))
                 } else {
                     ctx.stroke(Path(roundedRect: CGRect(x: cx - pw / 2 + 0.6, y: mid - ph / 2 + 0.6, width: pw - 1.2, height: ph - 1.2),
-                                    cornerRadius: (pw - 1.2) / 2), with: .color(ink), lineWidth: 1.2)
+                                    cornerRadius: (pw - 1.2) / 2), with: .color(pillInk), lineWidth: 1.2)
+                }
+                if let cause = m.cause, style == .glyph {
+                    var glyph = ctx.resolve(Image(systemName: cause == .inside ? "house.fill" : "figure.run"))
+                    glyph.shading = .color(Color.secondary)
+                    // Beside the pill's top, clear of the playhead's arrow.
+                    ctx.draw(glyph, in: CGRect(x: cx + pw / 2 + 2, y: mid - ph / 2 - 4, width: 10, height: 10))
                 }
                 if noted {
                     ctx.fill(Path(ellipseIn: CGRect(x: cx + pw / 2 + 2, y: mid - ph / 2, width: 4, height: 4)), with: .color(ink.opacity(0.45)))
@@ -1328,6 +1338,10 @@ struct MenusEnvironment: View {
         return CGFloat(min(1, max(0.15, triggers[name] ?? 0.15)))
     }
 
+    /// The reference garden's flowers by rank (April's screenshot, Nov 20): the name that seeded each rank's
+    /// height nudge and stem. Seeding by rank with these keeps that exact shape for every profile.
+    static let gardenSeeds = ["PM2.5", "Humidity", "Pollen", "Ozone", "Temperature", "Pressure", "Wind"]
+
     /// Where each condition's fan stands, shared by drawing and tapping so a tap finds what you see.
     private func portraitLayout(_ size: CGSize, lift: CGFloat, opens: [String: CGFloat]? = nil) -> [Swatch] {
         // Every condition we track always has its flower (owner, Nov 13). No reading, or a low one: a closed fan.
@@ -1369,11 +1383,12 @@ struct MenusEnvironment: View {
         // the last two never share a size.
         let sizeSteps: [CGFloat] = [1.5, 1.08, 0.82, 0.64, 0.5, 0.42, 0.36]
         var spots: [Spot] = present.enumerated().map { i, sv in
-            let s = sv.0
-            // Seeded by the condition, not the day: each flower keeps its place and stem from day to day,
-            // and only how far it opens changes (owner, Nov 13).
-            var rng = IslandRNG(seed: UInt64(s.name.unicodeScalars.reduce(7) { $0 &* 31 &+ Int($1.value) }.magnitude))
             let rank = ranks[i]
+            // One garden for every profile (April, Nov 20): the shape is seeded by the rank's place, not by
+            // the condition, so heights, sizes and spacing always match the reference garden (PM2.5-led) and
+            // only which colour stands where changes. Still the same from day to day; only the opening moves.
+            let seedName = Self.gardenSeeds[min(rank, Self.gardenSeeds.count - 1)]
+            var rng = IslandRNG(seed: UInt64(seedName.unicodeScalars.reduce(7) { $0 &* 31 &+ Int($1.value) }.magnitude))
             let reach = R0 * sizeSteps[min(rank, sizeSteps.count - 1)]
             // The pivot's height above the ground: 100% for the top trigger, stepping down evenly to 10%.
             // Like a garden, not a chart (owner, Nov 19): each flower's own nudge, up to 40% of a rank step, so
@@ -1389,7 +1404,8 @@ struct MenusEnvironment: View {
         // No two fully open rounds touch (owner, Nov 13). The bigger trigger keeps its spot; the smaller one moves
         // straight down until clear, or up if there's no room below.
         let margin: CGFloat = 8
-        let order2 = spots.indices.sorted { spots[$0].w > spots[$1].w }
+        // Bigger rank keeps its spot (by rank, not weight, so ties can't reshuffle the garden).
+        let order2 = spots.indices.sorted { ranks[$0] < ranks[$1] }
         for _ in 0..<4 {
             for (bi, big) in order2.enumerated() {
                 for small in order2.dropFirst(bi + 1) {

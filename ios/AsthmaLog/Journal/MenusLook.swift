@@ -1092,7 +1092,7 @@ struct MenusEnvironment: View {
                 if let t = tapped, apart < 0.3, let w = portraitLayout(canvasSize, lift: 0).first(where: { $0.series.name == t.name }) {
                     legend(w)
                         .fixedSize()
-                        .position(x: min(max(t.at.x, 70), canvasSize.width - 70), y: max(t.at.y - 34, 20))
+                        .position(x: min(max(w.rect.midX, 70), canvasSize.width - 70), y: max(w.rect.minY - 30, 20))
                         .transition(.opacity.combined(with: .scale(scale: 0.92)))
                         .allowsHitTesting(false)
                 }
@@ -1320,7 +1320,9 @@ struct MenusEnvironment: View {
         for (k, i) in order.enumerated() { slots[i] = slotsByRank[k] }
 
         struct Spot { var x: CGFloat; var y: CGFloat; let r: CGFloat; let w: CGFloat; var rng: IslandRNG }
-        let H = ground - 10
+        // Headroom above the tallest round for its tap label (owner, Nov 19: the name sits on top, like the rest).
+        let headroom: CGFloat = 52
+        let H = ground - headroom
         // The biggest round: about one slot wide, and never more than a seventh of the height.
         let R0 = min(gap * 1.0, H * 0.14)
         // The top trigger stands out (owner, Nov 19): a third bigger than the rest's scale.
@@ -1340,7 +1342,7 @@ struct MenusEnvironment: View {
             let nudge = CGFloat.random(in: -0.4...0.4, using: &rng) * step
             let f: CGFloat = 1 - CGFloat(rank) * step + (rank == 0 ? -abs(nudge) * 0.5 : nudge)
             let x = left + gap * (CGFloat(slots[i]) + 0.5) + CGFloat.random(in: -9...9, using: &rng)
-            let y = min(max(ground - (H - R0) * f, reach + 10), ground - reach - 14)
+            let y = min(max(ground - (H - R0) * f, reach + headroom), ground - reach - 14)
             return Spot(x: x, y: y, r: reach, w: ws[i], rng: rng)
         }
         // No two fully open rounds touch (owner, Nov 13). The bigger trigger keeps its spot; the smaller one moves
@@ -1356,7 +1358,7 @@ struct MenusEnvironment: View {
                     guard dx < need, hypot(b.x - sm.x, b.y - sm.y) < need else { continue }
                     let dy = (need * need - dx * dx).squareRoot()
                     let below = b.y + dy, above = b.y - dy
-                    let floor = ground - sm.r - 14, ceiling = sm.r + 10
+                    let floor = ground - sm.r - 14, ceiling = sm.r + headroom
                     if below <= floor { spots[small].y = below }
                     else if above >= ceiling { spots[small].y = above }
                     else {
@@ -1400,10 +1402,11 @@ struct MenusEnvironment: View {
             var g = Path(); g.move(to: CGPoint(x: inset, y: ground)); g.addLine(to: CGPoint(x: size.width - inset, y: ground))
             // Fading out at both ends (owner, Nov 19), so the ground melts into the paper.
             let rule = Color.secondary.opacity(0.3)
-            paint.stroke(g, with: .linearGradient(Gradient(stops: [.init(color: rule.opacity(0), location: 0), .init(color: rule, location: 0.25),
+            // On home the map starts right under the stems, so no ground line there (owner, Nov 19).
+            if !edge { paint.stroke(g, with: .linearGradient(Gradient(stops: [.init(color: rule.opacity(0), location: 0), .init(color: rule, location: 0.25),
                                                                    .init(color: rule, location: 0.75), .init(color: rule.opacity(0), location: 1)]),
                                                   startPoint: CGPoint(x: inset, y: ground), endPoint: CGPoint(x: size.width - inset, y: ground)),
-                         lineWidth: 0.6)
+                         lineWidth: 0.6) }
             for f in fans {
                 var rng = f.rng
                 let ink = pigment(f.series.name, f.value ?? 0)
@@ -1469,7 +1472,7 @@ struct MenusEnvironment: View {
             Text(w.series.name)
                 .font(Theme.Figtree.font(size: 15, weight: .medium))
                 .foregroundStyle(pigment(w.series.name, w.value ?? 0).mix(with: .black, by: 0.25))
-            Text(Self.readingText(w.value, unit: w.series.unit))
+            Text(Self.relativeText(w.value, unit: w.series.unit, usual: w.series.points.map(\.1)))
                 .font(Theme.Figtree.font(size: 13).monospacedDigit())
                 .foregroundStyle(.secondary)
         }
@@ -1477,6 +1480,26 @@ struct MenusEnvironment: View {
         .shadow(color: Color(uiColor: .systemGroupedBackground), radius: 3)
         .shadow(color: Color(uiColor: .systemGroupedBackground), radius: 6)
         .multilineTextAlignment(.center)
+    }
+
+    /// The tap label in words (owner, Nov 19, like Apple Weather): pollen as a level, the rest as a reading, and
+    /// how it compares with your usual (the middle of this condition's readings on your moments).
+    /// "High · above usual", "62 °F · about usual", or "No reading".
+    static func relativeText(_ v: Double?, unit: String, usual points: [Double]) -> String {
+        guard let v else { return "No reading" }
+        let reading: String
+        if unit.hasPrefix("%") {
+            // Pollen, as a share of a high day.
+            reading = v < 20 ? "Low" : v < 50 ? "Moderate" : v < 100 ? "High" : "Very high"
+        } else {
+            reading = readingText(v, unit: unit)
+        }
+        guard points.count >= 3 else { return reading }
+        let sorted = points.sorted()
+        let mid = sorted[sorted.count / 2]
+        let spread = max(abs(mid) * 0.12, (sorted.last! - sorted.first!) * 0.1, 0.5)
+        let compare = v > mid + spread ? "above usual" : v < mid - spread ? "below usual" : "about usual"
+        return "\(reading) · \(compare)"
     }
 
     /// "62 °F", "33 ppb", "90% of a high day", or "No reading".

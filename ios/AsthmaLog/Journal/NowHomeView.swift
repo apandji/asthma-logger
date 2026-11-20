@@ -1184,12 +1184,12 @@ struct NowHomeView: View {
         return MomentPlaceMap(event: here)
             .frame(height: 280)
             .overlay {
-                LinearGradient(stops: [.init(color: paper, location: 0), .init(color: paper.opacity(0), location: 0.35),
+                LinearGradient(stops: [.init(color: paper, location: 0), .init(color: paper.opacity(0), location: 0.1),
                                        .init(color: paper.opacity(0), location: 0.8), .init(color: paper, location: 1)],
                                startPoint: .top, endPoint: .bottom)
                     .allowsHitTesting(false)
             }
-            .padding(.top, 8).padding(.bottom, 24)
+            .padding(.bottom, 24)
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(Theme.snap) { menusTab = .map } }
             .accessibilityElement()

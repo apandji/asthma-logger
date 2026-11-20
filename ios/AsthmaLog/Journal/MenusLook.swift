@@ -1323,7 +1323,8 @@ struct MenusEnvironment: View {
         let H = ground - 10
         // The biggest round: about one slot wide, and never more than a seventh of the height.
         let R0 = min(gap * 1.0, H * 0.14)
-        let sizeSteps: [CGFloat] = [1, 0.91, 0.82, 0.72, 0.63, 0.54]
+        // The top trigger stands out (owner, Nov 19): a third bigger than the rest's scale.
+        let sizeSteps: [CGFloat] = [1.3, 0.92, 0.8, 0.7, 0.62, 0.54]
         var spots: [Spot] = present.enumerated().map { i, sv in
             let s = sv.0
             // Seeded by the condition, not the day: each flower keeps its place and stem from day to day,
@@ -1331,10 +1332,11 @@ struct MenusEnvironment: View {
             var rng = IslandRNG(seed: UInt64(s.name.unicodeScalars.reduce(7) { $0 &* 31 &+ Int($1.value) }.magnitude))
             let rank = ranks[i]
             let reach = R0 * sizeSteps[min(rank, sizeSteps.count - 1)]
-            // The pivot's height above the ground: 100% for the top trigger, stepping down evenly to 30%.
+            // The pivot's height above the ground: 100% for the top trigger, stepping down evenly to 10%.
             // Like a garden, not a chart (owner, Nov 19): each flower's own nudge, up to 40% of a rank step, so
             // heights vary but the ranking still reads. Seeded by name, so it stands the same every day.
-            let step = 0.7 / CGFloat(max(n - 1, 1))
+            // Spread over 90% of the height (owner, Nov 19), so the low ones sit near the ground, not on long bare stems.
+            let step = 0.9 / CGFloat(max(n - 1, 1))
             let nudge = CGFloat.random(in: -0.4...0.4, using: &rng) * step
             let f: CGFloat = 1 - CGFloat(rank) * step + (rank == 0 ? -abs(nudge) * 0.5 : nudge)
             let x = left + gap * (CGFloat(slots[i]) + 0.5) + CGFloat.random(in: -9...9, using: &rng)

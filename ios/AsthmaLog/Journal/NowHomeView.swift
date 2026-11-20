@@ -1177,7 +1177,11 @@ struct NowHomeView: View {
                                     soilMap
                                     // Under the fold: everything felt air holds about the moment on the playhead.
                                     MomentFold(event: foldSubject.event, conditions: foldSubject.conditions, date: foldSubject.date,
-                                               yours: Set(gatedRows.compactMap { $0.level == "yes" ? Combination.of(bin: $0.bin) : nil }))
+                                               yours: Set(gatedRows.compactMap { $0.level == "yes" ? Combination.of(bin: $0.bin) : nil }),
+                                               // No note yet: the journal card starts one, listening. On Now with no
+                                               // moment, it makes a manual moment first, like the +.
+                                               record: { e in if let e { openCapture(e, listen: true) } else { felt(true) } },
+                                               canStartNew: { if case .now = focus { true } else { false } }())
                                         .padding(.bottom, 32)
                                 }
                             } header: {

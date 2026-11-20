@@ -1,3 +1,4 @@
+import AsthmaCore
 import SwiftUI
 
 /// Insights on the Menus look (owner, Nov 19): your trigger profile drawn as one flower in the home's language.
@@ -21,7 +22,34 @@ struct MenusProfileFlower: View {
         case "PM2.5": Color(red: 0.18, green: 0.42, blue: 0.78)
         case "Ozone": Color(red: 0.86, green: 0.42, blue: 0.56)
         case "Pollen": Color(red: 0.93, green: 0.74, blue: 0.16)
+        case "Pressure": Color(red: 0.45, green: 0.40, blue: 0.68)
         default: Color(red: 0.50, green: 0.40, blue: 0.70)
+        }
+    }
+
+    /// A pattern bin's flower ink ("pm25" → PM2.5 blue), or nil when no flower stands for it.
+    static func ink(bin: String) -> Color? {
+        switch bin {
+        case "pm25", "smoke_at_point": ink("PM2.5")
+        case "ozone": ink("Ozone")
+        case "pollen_weed", "pollen_tree", "pollen_grass": ink("Pollen")
+        case "temp", "temp_drop", "heat_alert": ink("Temperature")
+        case "humidity": ink("Humidity")
+        case "wind", "storm": ink("Wind")
+        case "pressure_change": ink("Pressure")
+        default: nil
+        }
+    }
+
+    /// A family's ink on Insights: its leading reading's flower, else the flower that stands for the family.
+    static func ink(_ a: AirProfile.Axis) -> Color {
+        guard a.status == .pattern || a.status == .early else { return Color(white: 0.6) }
+        if let bin = a.lead?.bin, let c = ink(bin: bin) { return c }
+        switch a.category {
+        case .particulates: return ink("PM2.5")
+        case .biologics: return ink("Pollen")
+        case .weather: return ink("Temperature")
+        case .exertion, .infections: return Color(white: 0.45)
         }
     }
 

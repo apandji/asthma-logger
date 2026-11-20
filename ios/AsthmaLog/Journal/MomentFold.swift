@@ -27,11 +27,10 @@ struct MomentFold: View {
             kinds
             if let event { bodyCard(event) }
             card("What felt air can't see") {
-                Text("Indoor air, and anything in the room with you. Every reading here is outdoors.")
-                    .font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText).fixedSize(horizontal: false, vertical: true)
+                words("Indoor air, and anything in the room with you. Every reading here is outdoors.")
             }
             Text("Outdoor air only. Not medical advice.")
-                .font(Theme.ui(.footnote)).foregroundStyle(Theme.secondaryText)
+                .font(Theme.Figtree.font(size: 13)).foregroundStyle(Theme.secondaryText)
                 .padding(.horizontal, 4).padding(.top, 4)
         }
         .padding(.horizontal, 16)
@@ -39,26 +38,73 @@ struct MomentFold: View {
 
     // MARK: Pieces
 
-    private func card<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(Theme.ui(.footnote, weight: .medium)).foregroundStyle(Theme.secondaryText)
-            content()
+    // Insights' type and rhythm (April, Nov 20): the card's title at 17, a name at 16, a value at 15, notes at 13;
+    // every row 12 pt above and below with a thin rule between, so Home and Insights read as one app.
+
+    /// Each card's icon and ink (April, Nov 20: "something for the eyes to anchor to"), the same symbols and
+    /// flower inks as Insights' families. Cards that aren't the air stay in ink.
+    private static func mark(_ title: String) -> (symbol: String, ink: Color) {
+        switch title {
+        case "Weather": (Icons.category(.weather), MenusProfileFlower.ink("Humidity"))
+        case "Irritants and pollution": (Icons.category(.particulates), MenusProfileFlower.ink("PM2.5"))
+        case "Allergens": (Icons.category(.biologics), MenusProfileFlower.ink("Pollen"))
+        case "Journal": ("book.closed", .primary)
+        case "The two days before": ("clock.arrow.circlepath", .primary)
+        case "Kind of day": ("square.stack.3d.up", .primary)
+        case "Body": (Icons.category(.exertion), .primary)
+        case "What felt air can't see": ("eye.slash", Color.secondary)
+        default: ("circle.dotted", .secondary)
         }
-        .padding(16)
+    }
+
+    private func card<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        let m = Self.mark(title)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: m.symbol).font(.system(size: 17, weight: .medium)).foregroundStyle(m.ink).frame(width: 22)
+                Text(title).font(Theme.Figtree.font(size: 17, weight: .medium)).foregroundStyle(.primary)
+            }
+            .padding(.vertical, 15)
+            content()
+            Color.clear.frame(height: 4)
+        }
+        .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
     }
 
-    private func line(_ name: String, _ value: String, note: String? = nil, dim: Bool = false) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(Theme.ui(.subheadline, weight: .medium)).foregroundStyle(dim ? Theme.secondaryText : Color.primary)
-                if let note { Text(note).font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText) }
+    /// A row: name (and where it came from) on the left, the reading on the right, a rule above.
+    private func line(_ name: String, _ value: String, note: String? = nil, dim: Bool = false, sub: Bool = false, rule: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if rule { Divider().padding(.leading, Self.indent + (sub ? 14 : 0)) }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name).font(Theme.Figtree.font(size: sub ? 15 : 16))
+                        .foregroundStyle(dim ? Theme.secondaryText : sub ? Theme.secondaryText : Color.primary)
+                    if let note { Text(note).font(Theme.Figtree.font(size: 13)).foregroundStyle(Theme.secondaryText) }
+                }
+                Spacer(minLength: 8)
+                Text(value).font(Theme.Figtree.font(size: 15).monospacedDigit())
+                    .foregroundStyle(dim ? Theme.secondaryText : Color.primary)
+                    .multilineTextAlignment(.trailing)
             }
-            Spacer(minLength: 8)
-            Text(value).font(Theme.ui(.subheadline).monospacedDigit()).foregroundStyle(dim ? Theme.secondaryText : Color.primary)
-                .multilineTextAlignment(.trailing)
+            .padding(.vertical, 12)
+            .padding(.leading, Self.indent + (sub ? 14 : 0))
         }
+    }
+
+    /// Rows start under the title's text, past the icon column (as on Insights).
+    static let indent: CGFloat = 32
+
+    /// Plain words in a card, under a rule: 16 pt, quiet.
+    private func words(_ text: String, small: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+            Text(text).font(Theme.Figtree.font(size: small ? 13 : 16)).foregroundStyle(Theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 12)
+        }
+        .padding(.leading, Self.indent)
     }
 
     // MARK: Journal
@@ -69,32 +115,41 @@ struct MomentFold: View {
         return card("Journal") {
             if said.isEmpty && e.tags.isEmpty {
                 if record != nil { recordRow(e) }
-                else { Text("No note on this moment.").font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText) }
+                else { words("No note on this moment.") }
             } else {
-                if !said.isEmpty {
-                    Text(Self.marked(said, tags: e.tags)).font(Theme.ui(.body)).fixedSize(horizontal: false, vertical: true)
+                Divider().padding(.leading, Self.indent)
+                VStack(alignment: .leading, spacing: 6) {
+                    if !said.isEmpty {
+                        Text(Self.marked(said, tags: e.tags)).font(Theme.Figtree.font(size: 16)).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if !e.tags.isEmpty {
+                        Text(e.tags.sorted().map(\.label).joined(separator: " · "))
+                            .font(Theme.Figtree.font(size: 13, weight: .medium)).foregroundStyle(Theme.secondaryText)
+                    }
                 }
-                if !e.tags.isEmpty {
-                    Text(e.tags.sorted().map(\.label).joined(separator: " · "))
-                        .font(Theme.ui(.footnote, weight: .medium)).foregroundStyle(Theme.secondaryText)
-                }
+                .padding(.vertical, 12)
+                .padding(.leading, Self.indent)
             }
         }
     }
 
     private func recordRow(_ e: LogEvent?) -> some View {
+        VStack(spacing: 0) {
+        Divider().padding(.leading, Self.indent)
         Button { record?(e) } label: {
             // The same row as a moment's page (April, Nov 20): "Add to journal" with the write icon, and the
             // same flow as the +, where you type, tap or speak.
-            HStack(spacing: 12) {
-                Image(systemName: "square.and.pencil").font(.title3).foregroundStyle(Color.primary).frame(width: 28)
-                Text("Add to journal").font(Theme.ui(.body)).foregroundStyle(Color.primary)
+            HStack(spacing: 10) {
+                Image(systemName: "square.and.pencil").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.primary).frame(width: 22)
+                Text("Add to journal").font(Theme.Figtree.font(size: 16)).foregroundStyle(Color.primary)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(.tertiary)
             }
+            .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
+        }
         .accessibilityLabel("Add to journal")
         .accessibilityHint(e == nil ? "Starts a moment now and opens the journal" : "Opens the journal for this moment")
     }
@@ -139,11 +194,18 @@ struct MomentFold: View {
                             let key = "more-" + family.rawValue
                             let isOpen = open.contains(key)
                             if isOpen { ForEach(rest, id: \.signal) { o in reading(o, in: c) } }
+                            Divider().padding(.leading, Self.indent)
                             Button { withAnimation(Theme.smooth) { if isOpen { open.remove(key) } else { open.insert(key) } } } label: {
-                                Text(isOpen ? "Fewer readings" : "More readings")
-                                    .font(Theme.ui(.footnote, weight: .medium)).foregroundStyle(Theme.secondaryText)
-                                    .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)
-                                    .contentShape(Rectangle())
+                                HStack {
+                                    Text(isOpen ? "Fewer readings" : "More readings")
+                                        .font(Theme.Figtree.font(size: 15, weight: .medium)).foregroundStyle(Theme.secondaryText)
+                                    Spacer()
+                                    Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold)).foregroundStyle(.tertiary)
+                                        .rotationEffect(.degrees(isOpen ? 180 : 0))
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.leading, Self.indent)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }
@@ -151,9 +213,7 @@ struct MomentFold: View {
                 }
             }
         } else {
-            card("Readings") {
-                Text("No reading for this hour.").font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText)
-            }
+            card("Readings") { words("No reading for this hour.") }
         }
     }
 
@@ -186,13 +246,12 @@ struct MomentFold: View {
     @ViewBuilder private var before: some View {
         if let b = conditions?.lookBack {
             card("The two days before") {
-                Text("The highest reading in each stretch.").font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText)
+                Text("The highest reading in each stretch.").font(Theme.Figtree.font(size: 13)).foregroundStyle(Theme.secondaryText)
+                    .padding(.top, -8).padding(.bottom, 10).padding(.leading, Self.indent)
                 peaks("Fine particles", now: b.pm25Now, earlier: b.pm25Earlier, unit: "µg/m³") { Self.word(EnvObservation(signal: .pm25, value: $0, unit: "", asOf: .now, source: "", spatialScale: .modelGrid)) }
                 peaks("Ozone", now: b.ozoneNow, earlier: b.ozoneEarlier, unit: "ppb") { Self.word(EnvObservation(signal: .ozone, value: $0, unit: "", asOf: .now, source: "", spatialScale: .modelGrid)) }
                 peaks("Biggest temperature fall", now: b.tempFallNow, earlier: b.tempFallEarlier, unit: "°F in 3 hours") { TempDrop.band($0) == .sharp ? "Sharp" : nil }
-                if let station = b.pm25Station ?? b.ozoneStation {
-                    Text("From \(station).").font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText)
-                }
+                if let station = b.pm25Station ?? b.ozoneStation { words("From \(station).", small: true) }
             }
         }
     }
@@ -205,17 +264,18 @@ struct MomentFold: View {
         }
         let hasNow = LookBack.isCovered(now, windowHours: LookBack.nowHours)
         let hasEarlier = LookBack.isCovered(earlier, windowHours: LookBack.spanHours - LookBack.nowHours)
-        return VStack(alignment: .leading, spacing: 3) {
+        return VStack(alignment: .leading, spacing: 0) {
             if !hasNow && !hasEarlier {
                 // Nothing to show for either window: one quiet line, not two.
                 line(name, "Not enough readings", dim: true)
             } else {
-                Text(name).font(Theme.ui(.subheadline, weight: .medium))
-                line("Last 6 hours", text(now, hours: LookBack.nowHours), dim: !hasNow)
-                line("Before that", text(earlier, hours: LookBack.spanHours - LookBack.nowHours), dim: !hasEarlier)
+                // The reading's name, then its two stretches set in under it.
+                Divider().padding(.leading, Self.indent)
+                Text(name).font(Theme.Figtree.font(size: 16)).padding(.top, 12).padding(.leading, Self.indent)
+                line("Last 6 hours", text(now, hours: LookBack.nowHours), dim: !hasNow, sub: true, rule: false)
+                line("Before that", text(earlier, hours: LookBack.spanHours - LookBack.nowHours), dim: !hasEarlier, sub: true)
             }
         }
-        .padding(.bottom, 4)
     }
 
     @ViewBuilder private func reading(_ o: EnvObservation, in c: Conditions) -> some View {
@@ -228,9 +288,9 @@ struct MomentFold: View {
         if let species {
             let isOpen = open.contains(name)
             Button { withAnimation(Theme.smooth) { if isOpen { open.remove(name) } else { open.insert(name) } } } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .center, spacing: 6) {
                     line(name, value, note: note)
-                    Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(Theme.secondaryText)
+                    Image(systemName: "chevron.down").font(.system(size: 12, weight: .semibold)).foregroundStyle(.tertiary)
                         .rotationEffect(.degrees(isOpen ? 180 : 0))
                 }
                 .contentShape(Rectangle())
@@ -238,7 +298,7 @@ struct MomentFold: View {
             .buttonStyle(.plain)
             .accessibilityHint(isOpen ? "Hides the species" : "Shows the count for each species")
             if isOpen {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 6) {
                     ForEach(species) { s in
                         HStack {
                             Text(s.name)
@@ -247,10 +307,10 @@ struct MomentFold: View {
                         }
                         .foregroundStyle(s.count > 0 ? Color.primary : Theme.secondaryText)
                     }
-                    Text("A zero was looked for and not found.").foregroundStyle(Theme.secondaryText)
+                    Text("A zero was looked for and not found.").font(Theme.Figtree.font(size: 13)).foregroundStyle(Theme.secondaryText)
                 }
-                .font(Theme.ui(.caption))
-                .padding(.leading, 12)
+                .font(Theme.Figtree.font(size: 14))
+                .padding(.leading, Self.indent + 14).padding(.bottom, 12)
                 .transition(.opacity)
             }
         } else {
@@ -278,7 +338,7 @@ struct MomentFold: View {
         } ?? []
         return card("Kind of day") {
             if present.isEmpty {
-                Text("Nothing in combination.").font(Theme.ui(.subheadline)).foregroundStyle(Theme.secondaryText)
+                words("Nothing in combination.")
             } else {
                 ForEach(present) { k in
                     line(k.title, yours.contains(k) ? "Often on your inhaler days" : "Not one of yours", note: k.parts, dim: false)

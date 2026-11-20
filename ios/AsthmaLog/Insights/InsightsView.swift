@@ -13,6 +13,7 @@ struct InsightsView: View {
     /// The factor's bin within it, for the row's highlight.
     var focusBin: String? = nil
     @Query(sort: \LogEvent.loggedAt) private var events: [LogEvent]
+    @Environment(\.modelContext) private var modelContext
     @AppStorage(Prefs.useDemoData) private var demo = false
     @State private var model = InsightsModel()
     @AppStorage(Crit.InsightsState.key) private var forced = Crit.InsightsState.auto
@@ -205,7 +206,7 @@ struct InsightsView: View {
                 }
                 .padding(.horizontal, 16).padding(.vertical, 14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular, in: .rect(cornerRadius: 22))
+                .insightCard()
                 Text("Several things in the air at once. Everyone gets these days. These are the ones that came up more on yours.")
                     .font(Theme.ui(.footnote)).foregroundStyle(Theme.secondaryText)
             }
@@ -236,6 +237,13 @@ struct InsightsView: View {
         let mark: String? = focus == a.category ? focusBin : nil
         return VStack(spacing: 10) {
           CategoryCard(axis: a, triggers: triggers, starred: starred, selected: picked == a.category,
+                       syncHealth: a.category == .exertion ? {
+                           // Exercise comes from Apple Health's workouts and steps (and Motion): ask once, then
+                           // look back over every moment that couldn't say before.
+                           await HealthReader.shared.ask()
+                           await ExertionReader.restampIfNeeded(in: modelContext, force: true)
+                           model.rebuild(events: events, demo: demo)
+                       } : nil,
                             expanded: opened.contains(a.category), highlight: mark) {
             withAnimation(Theme.snap) {
                 var next = opened

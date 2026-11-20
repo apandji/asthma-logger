@@ -33,7 +33,7 @@ struct PersonalEdgeCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 22))
+        .insightCard()
         .accessibilityElement(children: .combine)
     }
 

@@ -105,7 +105,7 @@ struct MomentTag: View {
     var text: String? = nil
 
     var body: some View {
-        if Crit.AppLook.current.healthLike, text == nil, moment == .rescue || moment == .maintenance {
+        if Crit.AppLook.current.healthLike, text == nil, (moment != .okay || Crit.AppLook.current == .menus) {
             healthTag
         } else {
             feltAirTag
@@ -121,7 +121,8 @@ struct MomentTag: View {
         let word = menus ? (moment == .rescue ? Color(uiColor: .systemBackground) : Color.primary)
             : moment == .rescue ? Theme.rescue : Theme.standard
         return HStack(spacing: 6) {
-            Image(systemName: "inhaler.fill").font(Theme.Figtree.font(.footnote, weight: .semibold)).foregroundStyle(word)
+            // A manual moment has no inhaler behind it: a pencil, not the inhaler.
+            Image(systemName: moment == .note ? "pencil" : moment == .okay ? "circle" : "inhaler.fill").font(Theme.Figtree.font(.footnote, weight: .semibold)).foregroundStyle(word)
             Text(moment.title)
                 .font(Theme.Figtree.font(.subheadline, weight: .semibold))
                 .foregroundStyle(word)

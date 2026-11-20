@@ -150,6 +150,10 @@ struct NowHomeView: View {
 
     /// Inhaler moments only; baseline moments stay in the comparison, not on the track.
     private var moments: [LogEvent] { events.filter { $0.moment != .okay } }
+    /// Everything the playhead can rest on in the flowers look (owner, Nov 19): inhaler and manual moments, and
+    /// the baseline moments everyone has beside them. Oldest first, like `events`.
+    private var landable: [LogEvent] { appLook == .menus ? events : moments }
+    private var baselines: [LogEvent] { events.filter { $0.moment == .okay && !$0.isDemo } }
 
     var body: some View {
         NavigationStack {
@@ -459,7 +463,8 @@ struct NowHomeView: View {
 
     /// A moment logged in the last couple of minutes: Now shows it, not the live reading.
     private var justNow: LogEvent? {
-        guard let m = moments.last(where: { $0.moment != .note }), now.timeIntervalSince(m.loggedAt) < 120 else { return nil }
+        // A manual moment counts in the flowers look: the + makes one, and the header should say so.
+        guard let m = moments.last(where: { appLook == .menus || $0.moment != .note }), now.timeIntervalSince(m.loggedAt) < 120 else { return nil }
         return m
     }
 
@@ -605,12 +610,12 @@ struct NowHomeView: View {
 
     private var focus: Focus {
         guard let t = focusTime else { return .now }
-        if let m = moments.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }),
+        if let m = landable.min(by: { abs($0.loggedAt.timeIntervalSince(t)) < abs($1.loggedAt.timeIntervalSince(t)) }),
            abs(m.loggedAt.timeIntervalSince(t)) < 20 * 60 { return .moment(m) }
         if t > now, let h = hours.min(by: { abs($0.date.timeIntervalSince(t)) < abs($1.date.timeIntervalSince(t)) }) { return .hour(h) }
         // Behind now, between moments: the nearest earlier moment's air stands in (there's no reading of
         // its own), with the playhead's time.
-        if t < now, let m = moments.last(where: { $0.loggedAt <= t }) ?? moments.first { return .moment(m) }
+        if t < now, let m = landable.last(where: { $0.loggedAt <= t }) ?? landable.first { return .moment(m) }
         return .now
     }
 
@@ -1132,7 +1137,7 @@ struct NowHomeView: View {
                     // Combined chart (owner, Nov 13): no sky; the conditions' combined chart under the timeline is
                     // the main visual, and scrolling parts its lines into rows.
                     let combined = Crit.MenusSky.current == .combined
-                    let strip = MenusStrip(window: $menusWindow, moments: moments,
+                    let strip = MenusStrip(window: $menusWindow, moments: moments, baselines: baselines,
                                            forecast: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
                                            now: now, verdict: menusVerdict, limits: menusLimits, settle: menusSettle,
                                            backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil },
@@ -1249,7 +1254,7 @@ struct NowHomeView: View {
             withAnimation(Theme.smooth) { menusWindow.center = now }
             focusTime = nil
         } else if c < now {
-            if let m = moments.filter({ $0.moment != .note }).min(by: { abs($0.loggedAt.timeIntervalSince(c)) < abs($1.loggedAt.timeIntervalSince(c)) }),
+            if let m = landable.min(by: { abs($0.loggedAt.timeIntervalSince(c)) < abs($1.loggedAt.timeIntervalSince(c)) }),
                abs(m.loggedAt.timeIntervalSince(c)) < near {
                 withAnimation(Theme.smooth) { menusWindow.center = m.loggedAt }
                 focusTime = m.loggedAt
@@ -1263,10 +1268,11 @@ struct NowHomeView: View {
         }
     }
 
-    /// "Felt something?": log a rescue, then a voice memo (listening) or written symptoms.
+    /// The +: a manual moment (no inhaler: only the felt button and the watch log those; owner, Nov 19), then
+    /// a voice memo (listening) or written notes. It gets the air like any moment and stays out of the patterns.
     private func felt(_ voice: Bool) {
         Task {
-            let e = await services.press(.rescue, device: .phone, in: context).event
+            let e = await services.log(.note, in: context, writeToHealth: false)
             openCapture(e, listen: voice)
         }
     }

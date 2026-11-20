@@ -70,7 +70,7 @@ struct MenusMapView: View {
             withAnimation(Theme.snap) { selected = on ? nil : PersistentIdentifierBox(id: e.persistentModelID) }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(e.moment == .rescue ? "Rescue" : "Standard"), \(e.loggedAt.formatted(date: .abbreviated, time: .shortened))\(e.placeName.map { ", \($0)" } ?? "")")
+        .accessibilityLabel("\(e.moment == .rescue ? "Inhaler" : "Standard"), \(e.loggedAt.formatted(date: .abbreviated, time: .shortened))\(e.placeName.map { ", \($0)" } ?? "")")
         .accessibilityAddTraits(.isButton)
     }
 }

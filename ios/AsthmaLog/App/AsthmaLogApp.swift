@@ -26,8 +26,8 @@ struct AsthmaLogApp: App {
         // iOS relaunches the app in the background to deliver a visit: the log has to be listening from launch.
         VisitLog.shared.start()
         QuickRecordLive.shared.install(container: container) { id in
-            let health = UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true
-            Task { _ = await services.log(.rescue, id: id, in: container.mainContext, writeToHealth: health) }
+            // From the Lock Screen it's a manual moment, like the + (owner, Nov 19): no inhaler, nothing to Health.
+            Task { _ = await services.log(.note, id: id, in: container.mainContext, writeToHealth: false) }
         }
     }
 

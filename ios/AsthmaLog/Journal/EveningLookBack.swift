@@ -19,7 +19,7 @@ struct EveningLookBack: View {
     /// Today's rescue and standard moments still without a note or reviewed tags. Demo moments never ask.
     static func open(_ events: [LogEvent], now: Date, calendar: Calendar = .current) -> [LogEvent] {
         events.filter {
-            ($0.moment == .rescue || $0.moment == .maintenance) && !$0.isDemo && calendar.isDate($0.loggedAt, inSameDayAs: now)
+            ($0.moment == .rescue || $0.moment == .maintenance || $0.moment == .note) && !$0.isDemo && calendar.isDate($0.loggedAt, inSameDayAs: now)
         }.sorted { $0.loggedAt < $1.loggedAt }
     }
 
@@ -94,7 +94,7 @@ struct EveningLookBack: View {
         let done = !Self.needsNote(m)
         return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                Circle().fill(m.moment == .rescue ? Theme.rescue : Theme.standard).frame(width: 10, height: 10)
+                Circle().fill(m.moment == .rescue ? Theme.rescue : m.moment == .note ? Color.primary.opacity(0.35) : Theme.standard).frame(width: 10, height: 10)
                 Text(m.moment.title).font(Theme.ui(.headline, weight: .medium))
                 Spacer()
                 Text(Calendar.current.isDateInToday(m.loggedAt) ? m.loggedAt.formatted(date: .omitted, time: .shortened)

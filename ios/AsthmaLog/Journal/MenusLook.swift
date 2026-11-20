@@ -562,6 +562,8 @@ struct MenusDayTitle: View {
 struct MenusStrip: View {
     @Binding var window: MenusWindow
     let moments: [LogEvent]
+    /// Real baseline moments (ordinary hours, no inhaler): empty rings at their own times.
+    var baselines: [LogEvent] = []
     let forecast: [(Date, Double?)]
     let now: Date
     let verdict: String?
@@ -667,11 +669,19 @@ struct MenusStrip: View {
             }
             // Baseline captures (owner, Nov 13, for now): a small dot every day at 9 am and 6 pm, the ordinary
             // moments the patterns compare against. Ahead of now they're faint, still to come. Under the pills.
+            // Behind now, the real ones (owner, Nov 19): each baseline moment at its own time, an empty ring, never
+            // filled, so it can't be mistaken for inhaler use. The 9 and 6 rings stay only for what's still to come.
+            for b in baselines where b.loggedAt >= window.start.addingTimeInterval(-3600) && b.loggedAt <= window.end.addingTimeInterval(3600) {
+                let d: CGFloat = 6
+                ctx.stroke(Path(ellipseIn: CGRect(x: x(b.loggedAt) - d / 2, y: mid - d / 2, width: d, height: d)),
+                           with: .color(ink.opacity(0.6)), lineWidth: 1)
+            }
             var bDay = cal.startOfDay(for: window.start.addingTimeInterval(-86_400))
             while bDay <= window.end {
                 for hour in [9, 18] {
                     guard let b = cal.date(bySettingHour: hour, minute: 0, second: 0, of: bDay),
-                          b >= window.start.addingTimeInterval(-3600), b <= window.end.addingTimeInterval(3600) else { continue }
+                          b >= window.start.addingTimeInterval(-3600), b <= window.end.addingTimeInterval(3600),
+                          baselines.isEmpty || b > now else { continue }
                     // An empty ring (owner, Nov 13).
                     let d: CGFloat = 5
                     ctx.stroke(Path(ellipseIn: CGRect(x: x(b) - d / 2, y: mid - d / 2, width: d, height: d)),
@@ -696,6 +706,11 @@ struct MenusStrip: View {
                 if noted {
                     ctx.fill(Path(ellipseIn: CGRect(x: cx + pw / 2 + 2, y: mid - ph / 2, width: 4, height: 4)), with: .color(ink.opacity(0.45)))
                 }
+            }
+            // A manual moment on its own (the +, the Lock Screen): a small solid dot on the line, not a pill.
+            for m in shown where m.moment == .note {
+                let near = shown.contains { ($0.moment == .rescue || $0.moment == .maintenance) && abs($0.loggedAt.timeIntervalSince(m.loggedAt)) < 3600 }
+                if !near { ctx.fill(Path(ellipseIn: CGRect(x: x(m.loggedAt) - 3, y: mid - 3, width: 6, height: 6)), with: .color(ink)) }
             }
             // Now, and the playhead in the middle.
             if now >= window.start, now <= window.end {
@@ -1691,6 +1706,6 @@ struct MenusSkySquare<Field: View, Map: View>: View {
         .overlay(alignment: .topTrailing) {
             if noted { Circle().fill(Color.primary).frame(width: 9, height: 9).offset(x: 8, y: -2) }
         }
-        .accessibilityLabel(felt == .rescue ? "Rescue" : felt == .standard ? "Standard" : "Nothing logged")
+        .accessibilityLabel(felt == .rescue ? "Inhaler" : felt == .standard ? "Standard" : "Nothing logged")
     }
 }

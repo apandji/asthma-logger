@@ -59,8 +59,8 @@ nonisolated enum QuickRecordCommand: Sendable {
 /// Starts a voice note for the moment on the card. With no moment (standby card, Lock Screen control, Action
 /// button): attaches to a moment logged in the last 10 minutes, otherwise logs a rescue first.
 struct QuickRecordStartIntent: AudioRecordingIntent, LiveActivityIntent {
-    static let title: LocalizedStringResource = "Rescue voice note"
-    static let description = IntentDescription("Logs a rescue (unless you just logged one) and records what's going on.")
+    static let title: LocalizedStringResource = "Voice note"
+    static let description = IntentDescription("Adds a moment (unless you just logged one) and records what's going on.")
     static let openAppWhenRun = false
 
     @Parameter(title: "Moment") var momentID: String?

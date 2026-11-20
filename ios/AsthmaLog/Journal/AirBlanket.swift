@@ -53,7 +53,7 @@ struct AirBlanket: View {
         return switch name {
         case "Pollen": hex(0xE9C35A)
         case "Cold air": hex(0xA6C8E0)
-        case "Wind": hex(0xB3B0C7)
+        case "Wind": hex(0xC8AE8C)   // warm sand (April, Nov 20: the grey read as "no reading")
         case "Ozone": hex(0xE59AB2)
         case "PM2.5": hex(0x7097D6)
         case "Humidity": hex(0x7FBDB6)
@@ -89,7 +89,20 @@ struct AirBlanket: View {
     }
 
     /// Too few of your own days to show seasons: a sample year stands in, labelled as such.
-    private var usesSample: Bool { days.values.filter { !$0.lead.isEmpty }.count < 45 }
+    private var usesSample: Bool { Self.demoAir || days.values.filter { !$0.lead.isEmpty }.count < 45 }
+
+    /// The demo (April, Nov 20): Year and Month both show the sample seasons, so the colours vary believably.
+    /// On for the presentation; "demo.air" off shows your own days.
+    static var demoAir: Bool { UserDefaults.standard.object(forKey: "demo.air") as? Bool ?? true }
+
+    /// The demo's sample seasons with your own inhaler days on them, so Year's ticks match Month's pills.
+    /// Without any inhaler days of your own, the sample's stay.
+    static func withInhaler(_ sample: [Date: Day], from yours: [Date: Day]) -> [Date: Day] {
+        guard demoAir, yours.values.contains(where: \.inhaler) else { return sample }
+        var out = sample
+        for k in out.keys { out[k]?.inhaler = yours[k]?.inhaler ?? false }
+        return out
+    }
 
     /// A made-up Midwest year, so the blanket shows what it's for (April, Nov 20): tree pollen in April, grass in
     /// late May, storms through spring, ozone and heat waves in summer, wildfire smoke drifting in late July to
@@ -104,11 +117,15 @@ struct AirBlanket: View {
         }
         let start = cal.date(from: DateComponents(year: year, month: 1, day: 1))!
         var out: [Date: Day] = [:]
-        var smokeRun = 0, heatRun = 0
+        var smokeRun = 0, heatRun = 0, front = 0, warm = 0
         for i in 0..<365 {
             let d = Double(i)
             if (205...245).contains(i), smokeRun == 0, rnd() < 0.12 { smokeRun = 3 + Int(rnd() * 5) }
             if (185...225).contains(i), heatRun == 0, rnd() < 0.08 { heatRun = 4 + Int(rnd() * 4) }
+            // Autumn (April, Nov 20: more variety for the demo, still believable): fronts every week or two, each
+            // a pressure swing, then a damp day, then wind behind it; and a few warm spells in early October.
+            if (265...340).contains(i), front == 0, rnd() < 0.16 { front = 3 }
+            if (268...292).contains(i), warm == 0, front == 0, rnd() < 0.1 { warm = 2 + Int(rnd() * 3) }
             var v: [String: Double] = [:]
             v["Pollen"] = max(0.95 * bump(d, 103, 20), 0.85 * bump(d, 145, 16), 0.9 * bump(d, 250, 17))
             v["Temperature"] = heatRun > 0 ? 0.95 : 0.45 * bump(d, 200, 30)
@@ -116,13 +133,23 @@ struct AirBlanket: View {
             v["Ozone"] = 0.7 * bump(d, 190, 32)
             v["Humidity"] = 0.12 + 0.5 * bump(d, 205, 38)
             v["Pressure"] = (95...180).contains(i) && rnd() < 0.18 ? 0.75 + 0.25 * rnd() : 0.1
-            v["Wind"] = 0.2 + 0.5 * max(bump(d, 75, 22), bump(d, 310, 22)) * rnd()
+            // Wind leads only on blustery days (March, and behind the autumn fronts), not most of autumn.
+            v["Wind"] = 0.15 + 0.4 * bump(d, 75, 22) * rnd()
             // A cold or flu going around is a short spell, not the whole winter: two spells of about a week.
             v["Flu"] = (8...15).contains(i) || (40...46).contains(i) ? 0.9 : 0
             // Winter is cold air (and dry, still days), not illness.
             // Winter is cold air, with autumn's first cold snaps in November.
             v["Cold air"] = max(0.85 * max(bump(d, 20, 32), bump(d, 350, 22)), 0.65 * bump(d, 315, 16))
+            switch front {
+            case 3: v["Pressure"] = 0.9
+            case 2: v["Humidity"] = 0.85
+            case 1: v["Wind"] = 0.85
+            default: break
+            }
+            if warm > 0 { v["Temperature"] = 0.8; v["Ozone"] = max(v["Ozone"]!, 0.6) }
             for k in v.keys { v[k] = min(1, max(0, v[k]! * (0.85 + 0.3 * rnd()))) }
+            if front > 0 { front -= 1 }
+            if warm > 0 { warm -= 1 }
             if smokeRun > 0 { smokeRun -= 1 }
             if heatRun > 0 { heatRun -= 1 }
             let lead = v.max { $0.value < $1.value }!
@@ -136,7 +163,7 @@ struct AirBlanket: View {
 
     var body: some View {
         let sample = usesSample
-        let data = sample ? Self.sample(year: year) : days
+        let data = sample ? Self.withInhaler(Self.sample(year: year), from: days) : days
         let today = sample ? .distantFuture : cal.startOfDay(for: now)
         VStack(alignment: .leading, spacing: 0) {
             // The card's title, as on Day and Month: the year, and what you're looking at.
@@ -163,8 +190,9 @@ struct AirBlanket: View {
                         let dates = (0..<count).map { cal.date(byAdding: .day, value: $0, to: first)! }
                         ZStack(alignment: .topLeading) {
                             // Flat, no blur (April, Nov 20: the blur shaded the band like a tube): one even
-                            // wash across the month, days blending only into their neighbours, on a faint track.
-                            RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.primary.opacity(0.04))
+                            // wash across the month, days blending only into their neighbours. No reading is white,
+                            // not grey (April, Nov 20).
+                            RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.white)
                                 .frame(width: w, height: Self.band)
                             RoundedRectangle(cornerRadius: 5, style: .continuous).fill(LinearGradient(stops: dates.enumerated().map { i, d in
                                     .init(color: wash(data[d], future: d > today), location: (CGFloat(i) + 0.5) / CGFloat(count))
@@ -182,7 +210,6 @@ struct AirBlanket: View {
                 }
                 .frame(height: Self.band + 10)
             }
-            legend(data).padding(.top, 12)
         }
         }
         .accessibilityElement(children: .ignore)
@@ -216,7 +243,7 @@ struct AirBlanket: View {
                 Text("Inhaler").font(Theme.Figtree.font(size: 12)).foregroundStyle(.secondary)
             }
             HStack(spacing: 5) {
-                Capsule().fill(Color.primary.opacity(0.06)).frame(width: 14, height: 8)
+                Capsule().fill(Color.white).overlay(Capsule().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5)).frame(width: 14, height: 8)
                 Text("No reading").font(Theme.Figtree.font(size: 12)).foregroundStyle(.secondary)
             }
         }

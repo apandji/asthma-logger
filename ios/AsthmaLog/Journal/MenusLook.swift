@@ -33,7 +33,10 @@ struct MenusTopBar: View {
     let doctor: () -> Void
     /// Home only (owner, Nov 19): ⓘ on the right, how the flowers are made.
     var showInfo = false
+    /// Moments (April, Nov 20): the ⓘ opens the one colour key for Day, Month and Year instead.
+    var showKey = false
     @State private var info = false
+    @State private var key = false
 
     var body: some View {
         HStack {
@@ -58,7 +61,16 @@ struct MenusTopBar: View {
             .accessibilityLabel("Menu")
             Spacer()
             // No scale menu (owner, Nov 13): Moments has its own Day, Month and Year.
-            if showInfo {
+            if showKey {
+                Button { key = true } label: {
+                    Image(systemName: "info").font(Theme.Figtree.font(.subheadline, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .accessibilityLabel("What the colours mean")
+                .transition(.opacity)
+            } else if showInfo {
                 Button { info = true } label: {
                     Image(systemName: "info").font(Theme.Figtree.font(.subheadline, weight: .semibold))
                         .frame(width: 22, height: 22)
@@ -71,6 +83,52 @@ struct MenusTopBar: View {
         }
         .padding(.horizontal, 20)
         .sheet(isPresented: $info) { MenusHowItWorks() }
+        .sheet(isPresented: $key) { MomentsKey().presentationDetents([.medium, .large]) }
+    }
+}
+
+/// The one key for Moments (April, Nov 20: a key on every month was too much): each colour is what led the air
+/// that day, then the marks.
+struct MomentsKey: View {
+    private let inks: [(String, String)] = [
+        ("Pollen", "Tree, grass or weed pollen"), ("Ozone", "Ozone, mostly on hot sunny days"),
+        ("PM2.5", "Fine particles, like smoke or haze"), ("Humidity", "Damp, humid air"),
+        ("Temperature", "A hot day"), ("Cold air", "Cold, dry air"), ("Pressure", "A swing in air pressure"),
+        ("Wind", "A windy day"), ("Flu", "Flu-like illness going around"),
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("What the colours mean").font(Theme.Figtree.font(size: 22, weight: .medium)).padding(.bottom, 4)
+                Text("Each day takes the colour of what led the air. Outdoor readings near you.")
+                    .font(Theme.Figtree.font(size: 15)).foregroundStyle(.secondary).padding(.bottom, 16)
+                ForEach(inks, id: \.0) { name, line in
+                    row(AnyView(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(AirBlanket.ink(name).opacity(0.7))
+                        .frame(width: 22, height: 14)), name, line)
+                }
+                row(AnyView(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.white)
+                    .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+                    .frame(width: 22, height: 14)), "No reading", "No air recorded that day")
+                Divider().padding(.vertical, 8)
+                row(AnyView(MenusMomentsView.pill(filled: true, width: 6, height: 14)), "Inhaler", "You used your rescue inhaler")
+                row(AnyView(MenusMomentsView.pill(filled: false, width: 6, height: 14)), "Standard", "Your daily inhaler")
+                row(AnyView(MenusMomentsView.symptomMark(size: 14)), "Symptoms", "You noted symptoms")
+            }
+            .padding(24)
+        }
+    }
+
+    private func row(_ mark: AnyView, _ name: String, _ line: String) -> some View {
+        HStack(spacing: 14) {
+            mark.frame(width: 26)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name).font(Theme.Figtree.font(size: 16))
+                Text(line).font(Theme.Figtree.font(size: 13)).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 7)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -336,10 +394,10 @@ struct MenusBottomBar: View {
             HStack(spacing: 0) {
                 // Home (the flowers), Moments as a grid of rings, the Map, then Insights (owner, Nov 13).
                 // One optical size for every icon.
-                segment(firstLabel, AnyView(FanIcon(size: 23)), .home)
+                segment(firstLabel, AnyView(Image(systemName: "house").font(.system(size: 20, weight: .medium))), .home)   // a house (April, Nov 20), not the fan
                 segment("Moments", AnyView(MomentsGridIcon(size: 20)), .moments)
                 segment("Map", AnyView(Image(systemName: "map").font(.system(size: 20, weight: .medium))), .map)
-                segment("Insights", AnyView(Image(systemName: "sparkles").font(.system(size: 20, weight: .medium))), .insights)
+                segment("Insights", AnyView(Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 20, weight: .medium))), .insights)
             }
             .padding(5)
             .frame(height: barH)
@@ -532,6 +590,9 @@ struct MenusStrip: View {
     /// Real baseline moments (ordinary hours, no inhaler): empty rings at their own times.
     var baselines: [LogEvent] = []
     let forecast: [(Date, Double?)]
+    /// Each forecast hour's leading trigger, in its watercolour ink (April, Nov 20: colour the forecast by what
+    /// leads it). Hours with nothing standing out stay grey.
+    var forecastInks: [Date: Color] = [:]
     let now: Date
     let verdict: String?
     let limits: ClosedRange<Date>
@@ -629,7 +690,7 @@ struct MenusStrip: View {
                 }
                 t = t.addingTimeInterval(minor)
             }
-            // The forecast ahead (April, Nov 20): one soft grey band, no stripes. A touch deeper over the hours that
+            // The forecast ahead (April, Nov 20): one soft band, no stripes, in the ink of what leads each hour. A touch deeper over the hours that
             // look like your inhaler days, fading out where the forecast ends.
             let ahead = forecast.filter { $0.0 >= now }.sorted { $0.0 < $1.0 }
             if let first = ahead.first, let last = ahead.last, last.0 > first.0 {
@@ -637,9 +698,13 @@ struct MenusStrip: View {
                 if x1 > x0 {
                     let span = last.0.timeIntervalSince(first.0)
                     let stops: [Gradient.Stop] = ahead.map { d, v in
-                        let a = 0.10 + 0.22 * (v ?? 0)
-                        return .init(color: ink.opacity(a), location: d.timeIntervalSince(first.0) / span)
-                    } + [.init(color: ink.opacity(0), location: 1)]
+                        let at = d.timeIntervalSince(first.0) / span
+                        if let c = forecastInks[d] {
+                            // The trigger's ink, deeper over the hours that look like your inhaler days.
+                            return .init(color: c.opacity(0.45 + 0.4 * (v ?? 0)), location: at)
+                        }
+                        return .init(color: ink.opacity(0.10 + 0.22 * (v ?? 0)), location: at)
+                    } + [.init(color: (forecastInks[last.0] ?? ink).opacity(0), location: 1)]
                     let band = Path(roundedRect: CGRect(x: x(first.0), y: mid - 5.5, width: x(last.0) - x(first.0), height: 11), cornerRadius: 5.5)
                     ctx.fill(band, with: .linearGradient(Gradient(stops: stops), startPoint: CGPoint(x: x(first.0), y: mid),
                                                           endPoint: CGPoint(x: x(last.0), y: mid)))

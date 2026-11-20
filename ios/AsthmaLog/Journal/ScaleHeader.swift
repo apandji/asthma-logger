@@ -124,7 +124,7 @@ struct MomentTag: View {
             : moment == .rescue ? Theme.rescue : Theme.standard
         return HStack(spacing: 6) {
             // A manual moment has no inhaler behind it: a pencil, not the inhaler.
-            Image(systemName: symptoms ? "lungs" : moment == .note ? "pencil" : moment == .okay ? "circle" : "inhaler.fill").font(Theme.Figtree.font(.footnote, weight: .semibold)).foregroundStyle(word)
+            Image(systemName: symptoms ? "circle.fill" : moment == .note ? "pencil" : moment == .okay ? "circle" : "inhaler.fill").font(Theme.Figtree.font(.footnote, weight: .semibold)).foregroundStyle(word).imageScale(symptoms ? .small : .medium)
             Text(symptoms ? "Symptoms" : moment.title)
                 .font(Theme.Figtree.font(.subheadline, weight: .semibold))
                 .foregroundStyle(word)

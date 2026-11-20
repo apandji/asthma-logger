@@ -161,7 +161,6 @@ struct MenusMapView: View {
             if on {
                 VStack(alignment: .leading, spacing: 1) {
                     Text((s.lead.isEmpty ? "No reading" : s.lead) + (s.count > 1 ? " · \(s.count) moments" : "")).font(Theme.Figtree.font(size: 13, weight: .medium))
-                        .foregroundStyle(ink.mix(with: .black, by: 0.35))
                     Text([s.when.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()), s.place].compactMap { $0 }.joined(separator: " · "))
                         .font(Theme.Figtree.font(size: 12)).foregroundStyle(.secondary)
                 }
@@ -171,23 +170,16 @@ struct MenusMapView: View {
                 .offset(y: -40 - 2.5 * CGFloat(min(s.count, 5)))
                 .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
             }
-            // A single stem from the garden (April, Nov 20): the leading trigger's flower, standing on the spot.
-            // Plain dots (April, Nov 20): a solid circle in the trigger's ink, the count inside, sized by count,
-            // like Apple Maps' clusters. The garden lives on home; the map stays a map.
-            // Softer (April, Nov 20: "too much colour"): a pale wash of the ink with a thin ring of it, the count
-            // in the ink's own dark shade, smaller overall.
-            let d = min(36, 18 + 4 * CGFloat(s.count - 1))
-            ZStack {
-                Circle().fill(Color.white)
-                Circle().fill(ink.opacity(0.35))
-                Circle().strokeBorder(ink, lineWidth: 1.5)
-                if s.count > 1 {
-                    Text("\(s.count)").font(Theme.Figtree.font(size: d * 0.44, weight: .medium)).monospacedDigit()
-                        .foregroundStyle(ink.mix(with: .black, by: 0.55))
-                }
-            }
-            .frame(width: d, height: d)
-            .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+            // Cohesive (April, Nov 20: the count in a ring over a tint "looks vibe coded"): one solid drop of the
+            // trigger's watercolour ink with a paper edge, like the Year blanket's colours, no stroke, no number.
+            // More moments make a bigger drop; the count is in the label when you tap it.
+            let d = min(30, 13 + 3.5 * CGFloat(s.count - 1))
+            Circle().fill(ink)
+                .padding(2.5)
+                .background(Circle().fill(Color(uiColor: .secondarySystemGroupedBackground)))
+                .frame(width: d + 5, height: d + 5)
+                .scaleEffect(on ? 1.15 : 1)
+                .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
         }
         .opacity(dim ? 0.25 : 1)
         .onTapGesture { withAnimation(Theme.snap) { selected = on ? nil : s.id } }

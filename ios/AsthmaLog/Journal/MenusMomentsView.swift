@@ -13,6 +13,9 @@ struct MenusMomentsView: View {
         var id: String { rawValue }
     }
     @State private var mode: Mode = .day
+    /// A day tapped in Month: Day opens on it.
+    @State private var jumpTo: Date?
+    @State private var path = NavigationPath()
     private let cal = Calendar.current
 
     /// Inhaler use by day: how many rescue and standard.
@@ -22,7 +25,15 @@ struct MenusMomentsView: View {
     }
 
     /// What led the air each day, in the air blanket's inks (April, Nov 20: Day and Month carry Year's colours).
-    private var leads: [Date: AirBlanket.Day] { AirBlanket.days(air.isEmpty ? events : air) }
+    /// What led the air each day. In the demo (AirBlanket.demoAir) the same sample seasons as Year, so Month and
+    /// Year read as one blanket; otherwise your own days.
+    private var leads: [Date: AirBlanket.Day] {
+        if AirBlanket.demoAir {
+            let years = Set(months.map { cal.component(.year, from: $0) })
+            return years.reduce(into: [:]) { out, y in out.merge(AirBlanket.sample(year: y)) { a, _ in a } }
+        }
+        return AirBlanket.days(air.isEmpty ? events : air)
+    }
 
     /// Days with a symptoms moment.
     private var symptomDays: Set<Date> { Set(events.filter(Self.isSymptoms).map { cal.startOfDay(for: $0.loggedAt) }) }
@@ -48,9 +59,16 @@ struct MenusMomentsView: View {
     var body: some View {
         // A moment's row opens its editor (owner, Nov 20), pushed like Settings. Its own stack: a destination
         // inside a tab isn't seen by Home's.
-        NavigationStack {
+        NavigationStack(path: $path) {
             page
                 .toolbarVisibility(.hidden, for: .navigationBar)
+                // A date tapped in Month: the day zoomed in (April, Nov 20).
+                .navigationDestination(for: Date.self) { d in
+                    MomentDayView(day: d, moments: momentsOn(d), air: (air.isEmpty ? events : air).filter { cal.isDate($0.loggedAt, inSameDayAs: d) })
+                        .environment(\.colorScheme, .light)
+                        .preferredColorScheme(.light)
+                        .toolbarColorScheme(.light, for: .navigationBar)
+                }
                 .navigationDestination(for: UUID.self) { id in
                     if let e = events.first(where: { $0.id == id }) {
                         MomentEditor(event: e)
@@ -95,7 +113,8 @@ struct MenusMomentsView: View {
             .compactMap { cal.date(byAdding: .day, value: -$0, to: today) }
             // Only days you used your inhaler (owner, Nov 19): no "No inhaler use" rows.
             .filter { counts[$0] != nil }
-        return ScrollView {
+        return ScrollViewReader { proxy in
+        ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(days, id: \.self) { d in
                     let c = counts[d] ?? (0, 0)
@@ -109,8 +128,7 @@ struct MenusMomentsView: View {
                                 // The day's air, as on Year: its ink and what led.
                                 if let lead = dayLeads[d], !lead.lead.isEmpty {
                                     HStack(spacing: 6) {
-                                        RoundedRectangle(cornerRadius: 3).fill(AirBlanket.ink(lead.lead).opacity(0.45 + 0.55 * lead.strength))
-                                            .frame(width: 18, height: 8)
+                                        Self.airDot(lead, size: 14)
                                         Text("\(ComingDays.word(lead.lead)) led the air").font(Theme.Figtree.font(size: 13)).foregroundStyle(.secondary)
                                     }
                                     .padding(.top, 2)
@@ -128,10 +146,16 @@ struct MenusMomentsView: View {
                             momentRow(e)
                         }
                     }
+                    .id(d)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 120)
+        }
+        .onAppear {
+            guard let d = jumpTo else { return }
+            DispatchQueue.main.async { proxy.scrollTo(d, anchor: .top); jumpTo = nil }
+        }
         }
         .overlay {
             if days.isEmpty {
@@ -151,17 +175,14 @@ struct MenusMomentsView: View {
     private func momentRow(_ e: LogEvent) -> some View {
         NavigationLink(value: e.id) {
             HStack(spacing: 12) {
-                Group {
-                    // Symptoms take the same lungs as Home's tag (April, Nov 20).
-                    if Self.isSymptoms(e) { Self.symptomMark(size: 14) }
-                    else if e.moment == .note { Capsule().strokeBorder(Color.primary.opacity(0.4), style: StrokeStyle(lineWidth: 1.3, dash: [2, 2])) }
-                    else { Self.pill(filled: e.moment == .rescue, width: 7, height: 16) }
-                }
-                .frame(width: 20, height: 18)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text([e.loggedAt.formatted(date: .omitted, time: .shortened), Self.isSymptoms(e) ? "Symptoms" : e.moment.title, e.puffs > 1 ? "\(e.puffs) puffs" : nil]
-                        .compactMap { $0 }.joined(separator: " · "))
-                        .font(Theme.Figtree.font(size: 16)).foregroundStyle(.primary)
+                // The time and Home's chip (April, Nov 20: no pill here, the chip says the kind as on Home).
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(e.loggedAt.formatted(date: .omitted, time: .shortened))
+                            .font(Theme.Figtree.font(size: 16)).foregroundStyle(.primary)
+                        MomentTag(moment: e.moment, symptoms: Self.isSymptoms(e))
+                        if e.puffs > 1 { Text("\(e.puffs) puffs").font(Theme.Figtree.font(size: 14)).foregroundStyle(.secondary) }
+                    }
                     // Symptoms said in words under the time; otherwise the place.
                     let felt = e.tags.filter { $0.kind == .symptom }.sorted().map(\.label)
                     if !felt.isEmpty {
@@ -177,6 +198,16 @@ struct MenusMomentsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
+    }
+
+    /// The day's air as a soft dot (April, Nov 20: the bar read oddly): the ink that led, deepest at the centre
+    /// and fading to its edge, like one drop of Year's blanket.
+    static func airDot(_ lead: AirBlanket.Day, size: CGFloat) -> some View {
+        let ink = AirBlanket.ink(lead.lead)
+        return Circle()
+            .fill(RadialGradient(colors: [ink.opacity(0.75 + 0.25 * lead.strength), ink.opacity(0.3)],
+                                 center: .center, startRadius: 0, endRadius: size / 2))
+            .frame(width: size, height: size)
     }
 
     /// The app's card (Home, Insights): white on the paper, 22 pt corners, 16 pt sides.
@@ -195,9 +226,9 @@ struct MenusMomentsView: View {
         return parts.isEmpty ? "No inhaler use" : parts.joined(separator: " · ")
     }
 
-    /// A symptoms moment's mark: the lungs, as on Home's tag.
+    /// A symptoms moment's mark: a small solid dot (April, Nov 20: the lungs felt out of place), as on Home's tag.
     static func symptomMark(size: CGFloat) -> some View {
-        Image(systemName: "lungs").font(.system(size: size, weight: .semibold)).foregroundStyle(Color.primary)
+        Circle().fill(Color.primary).frame(width: size * 0.5, height: size * 0.5)
     }
 
     /// The timeline's mark: rescue filled, standard an outline.
@@ -262,22 +293,71 @@ struct MenusMomentsView: View {
         let lead = (cal.component(.weekday, from: month) - cal.firstWeekday + 7) % 7
         let today = cal.startOfDay(for: now)
         let cells: [Date?] = Array(repeating: nil, count: lead) + (0..<days).map { cal.date(byAdding: .day, value: $0, to: month) }
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
-        return LazyVGrid(columns: columns, spacing: mini ? 4 : 10) {
-            ForEach(cells.indices, id: \.self) { i in
-                if let d = cells[i] {
-                    let c = counts[d] ?? (0, 0)
-                    if mini { miniDay(d, c, today: today) } else { fullDay(d, c, today: today, lead: leads[d]) }
-                } else {
-                    Color.clear.frame(height: mini ? 16 : 56)
+        if mini {
+            let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+            return AnyView(LazyVGrid(columns: columns, spacing: 4) {
+                ForEach(cells.indices, id: \.self) { i in
+                    if let d = cells[i] { miniDay(d, counts[d] ?? (0, 0), today: today) } else { Color.clear.frame(height: 16) }
                 }
-            }
+            })
         }
+        // Full size, a week to a row, so each row can lay the air under its days (April, Nov 20): a soft wash in
+        // the colour that led each day, running on unbroken across days that share it and blending where it
+        // changes, like a row of Year's blanket.
+        let padded = cells + Array(repeating: nil, count: (7 - cells.count % 7) % 7)
+        let weeks = stride(from: 0, to: padded.count, by: 7).map { Array(padded[$0..<$0 + 7]) }
+        return AnyView(VStack(spacing: 6) {
+            ForEach(weeks.indices, id: \.self) { w in
+                let week = weeks[w]
+                HStack(spacing: 0) {
+                    ForEach(0..<7, id: \.self) { i in
+                        if let d = week[i] { fullDay(d, counts[d] ?? (0, 0), today: today) }
+                        else { Color.clear.frame(maxWidth: .infinity, minHeight: 56).padding(.vertical, 4) }
+                    }
+                }
+                .background { Self.airWash(week.map { d in d.flatMap { $0 > today ? nil : leads[$0] } }) }
+            }
+        })
     }
 
-    private func fullDay(_ d: Date, _ c: (rescue: Int, standard: Int), today: Date, lead: AirBlanket.Day? = nil) -> some View {
+    /// One week's air under its days: each run of days with air is one rounded band, its colour moving from day to
+    /// day (a gradient with a stop at each day's centre), so days that share a colour join into one soft field.
+    static func airWash(_ days: [AirBlanket.Day?]) -> some View {
+        GeometryReader { g in
+            let cw = g.size.width / 7
+            // Runs of consecutive days that have a lead.
+            let runs: [Range<Int>] = {
+                var out: [Range<Int>] = [], start: Int?
+                for i in 0...7 {
+                    let has = i < 7 && !(days[i]?.lead.isEmpty ?? true)
+                    if has, start == nil { start = i }
+                    if !has, let s = start { out.append(s..<i); start = nil }
+                }
+                return out
+            }()
+            ForEach(runs, id: \.lowerBound) { r in
+                let stops: [Gradient.Stop] = r.map { i in
+                    let d = days[i]!
+                    return .init(color: AirBlanket.ink(d.lead).opacity(0.38 + 0.3 * d.strength),
+                                 location: r.count == 1 ? 0.5 : (Double(i - r.lowerBound) + 0.5) / Double(r.count))
+                }
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(LinearGradient(stops: r.count == 1 ? stops + [.init(color: stops[0].color, location: 1)] : stops,
+                                         startPoint: .leading, endPoint: .trailing))
+                    .frame(width: cw * CGFloat(r.count) - 4, height: g.size.height - 4)
+                    .position(x: cw * (CGFloat(r.lowerBound) + CGFloat(r.count) / 2), y: g.size.height / 2)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func fullDay(_ d: Date, _ c: (rescue: Int, standard: Int), today: Date) -> some View {
         let future = d > today
         return VStack(spacing: 8) {
+            Text("\(cal.component(.day, from: d))")
+                .font(Theme.Figtree.font(size: 17, weight: d == today ? .medium : .regular).monospacedDigit())
+                .foregroundStyle(future ? Color.secondary : Color.primary)
+            // Marks under the date, as Apple's Calendar and Year do (April, Nov 20).
             ZStack {
                 HStack(spacing: 3) {
                     if c.rescue > 0 { Self.pill(filled: true) } else if c.standard > 0 { Self.pill(filled: false) }
@@ -286,19 +366,14 @@ struct MenusMomentsView: View {
                 }
             }
             .frame(height: 18)
-            Text("\(cal.component(.day, from: d))")
-                .font(Theme.Figtree.font(size: 17, weight: d == today ? .medium : .regular).monospacedDigit())
-                .foregroundStyle(future ? Color.secondary : Color.primary)
         }
         .frame(maxWidth: .infinity, minHeight: 56)
         .padding(.vertical, 4)
-        // The day's air (April, Nov 20): a soft tile in the ink that led, as on Year's blanket.
-        .background {
-            if let lead, !lead.lead.isEmpty, !future {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(AirBlanket.ink(lead.lead).opacity(0.18 + 0.32 * lead.strength))
-                    .padding(.horizontal, 2)
-            }
+        // A day with moments opens on the Day list, at that day (April, Nov 20).
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard c.rescue + c.standard > 0 || symptomDays.contains(d) else { return }
+            path.append(d)
         }
         // Today: an outline round the day, like the timeline's playhead.
         .overlay {

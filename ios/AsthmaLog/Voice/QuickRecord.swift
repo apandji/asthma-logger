@@ -50,6 +50,7 @@ final class QuickRecordCenter: NSObject, UNUserNotificationCenterDelegate {
     /// otherwise a notification: "Rescue logged · Add what was going on, while it's fresh."
     func notify(for event: LogEvent) {
         guard enabled, event.moment != .okay else { return }
+        notifyCare(after: event)
         if QuickRecordLive.shared.begin(for: event) { scheduleEvening(); return }
         let c = UNMutableNotificationContent()
         c.title = "\(event.moment == .rescue ? "Inhaler" : "Standard") logged"
@@ -67,6 +68,7 @@ final class QuickRecordCenter: NSObject, UNUserNotificationCenterDelegate {
     /// there's one banner that counts up, not a stack. Silent in the app, where the ink drop says it.
     func notifyPuff(for event: LogEvent) {
         guard enabled, event.moment != .okay else { return }
+        notifyCare(after: event)
         let puffs = event.uses.last?.puffs ?? 1
         let c = UNMutableNotificationContent()
         c.title = "Puff added"
@@ -77,6 +79,28 @@ final class QuickRecordCenter: NSObject, UNUserNotificationCenterDelegate {
         c.userInfo = ["moment": event.id.uuidString]
         c.threadIdentifier = "moments"
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: event.id.uuidString, content: c, trigger: nil))
+    }
+
+    /// After an inhaler press with the app closed: the guidelines' line on rescue use (RelieverUse), as its own
+    /// notification beside the Lock Screen card. "Again within 4 hours" each time it holds; "more than 2 days
+    /// this week" once a day at most. Home shows the same words as a card. Real moments only.
+    func notifyCare(after event: LogEvent) {
+        guard event.moment == .rescue, !event.isDemo, let ctx = container?.mainContext else { return }
+        let since = Date.now.addingTimeInterval(-8 * 86_400)
+        let rescue = MomentKind.rescue.rawValue
+        let recent = (try? ctx.fetch(FetchDescriptor<LogEvent>(predicate: #Predicate { $0.loggedAt >= since && $0.kindRaw == rescue }))) ?? []
+        guard let check = RelieverUse.check(rescues: recent.filter { !$0.isDemo }.map(\.loggedAt), now: .now) else { return }
+        if check == .moreThanTwoDaysThisWeek {
+            let day = Calendar.current.startOfDay(for: .now).timeIntervalSince1970
+            guard UserDefaults.standard.double(forKey: "care.notifiedWeek") != day else { return }
+            UserDefaults.standard.set(day, forKey: "care.notifiedWeek")
+        }
+        let c = UNMutableNotificationContent()
+        c.title = check.title
+        c.body = check.body + " Not medical advice."
+        c.sound = .default
+        c.threadIdentifier = "care"
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "care", content: c, trigger: nil))
     }
 
     /// One nudge at 6 pm for today's rescue moments that have no note or reviewed tags.

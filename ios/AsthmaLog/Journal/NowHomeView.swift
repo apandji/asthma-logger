@@ -879,6 +879,18 @@ struct NowHomeView: View {
         }
     }
 
+    /// Each forecast hour's leading trigger as its ink, the same lead the Forecast card names for the day.
+    private var forecastInks: [Date: Color] {
+        let cal = Calendar.current
+        var out: [Date: Color] = [:]
+        for h in hours where h.date > now {
+            if Self.demoForecast, cal.isDateInTomorrow(h.date) { out[h.date] = AirBlanket.ink("Pollen"); continue }
+            let scores = AirBlanket.scores(h.conditions.input, flu: nil).filter { $0.value >= 0.45 }
+            if let lead = scores.max(by: { $0.value < $1.value })?.key { out[h.date] = AirBlanket.ink(lead) }
+        }
+        return out
+    }
+
     /// The demo's forecast story, on for the presentation (Settings › Demo can turn it off later).
     static var demoForecast: Bool { UserDefaults.standard.object(forKey: "demo.forecast") as? Bool ?? true }
 
@@ -1111,14 +1123,14 @@ struct NowHomeView: View {
         VStack(alignment: .leading, spacing: 0) {
             // On the Map the bar floats over the map (April, Nov 20: no solid strip above it).
             if menusTab != .map {
-                MenusTopBar(scale: $menusScale, settings: { showSettings = true }, doctor: { showDoctor = true }, showInfo: menusTab == .home)
+                MenusTopBar(scale: $menusScale, settings: { showSettings = true }, doctor: { showDoctor = true }, showInfo: menusTab == .home, showKey: menusTab == .moments)
             }
             // Apple's tab bar (owner, Nov 13, after Instagram and Linear): Liquid Glass, a lens you can drag across
             // the tabs, it shrinks as you scroll, and the + is the separate round tab at the end.
             // Pages as native tabs (each keeps its state); the system's bar is hidden for ours (bottomBar), so the
             // + can stand apart in its own glass.
             TabView(selection: $menusTab) {
-                Tab(value: MenusTab.home) { menusHome.background(Self.paper).toolbarVisibility(.hidden, for: .tabBar) } label: { Self.tabIcon(Self.fanImage, "Home") }
+                Tab(value: MenusTab.home) { menusHome.background(Self.paper).toolbarVisibility(.hidden, for: .tabBar) } label: { Self.tabIcon(Image(systemName: "house"), "Home") }
                 Tab(value: MenusTab.moments) {
                     // Your inhaler use by day, month and year.
                     MenusMomentsView(events: moments, now: now, air: events).background(Self.paper).toolbarVisibility(.hidden, for: .tabBar)
@@ -1132,7 +1144,7 @@ struct NowHomeView: View {
                 } label: { Self.tabIcon(Image(systemName: "map"), "Map") }
                 Tab(value: MenusTab.insights) {
                     InsightsView(skyColor: skyColorNow).frame(maxWidth: .infinity, maxHeight: .infinity).toolbarVisibility(.hidden, for: .tabBar)
-                } label: { Self.tabIcon(Image(systemName: "sparkles"), "Insights") }
+                } label: { Self.tabIcon(Image(systemName: "point.3.connected.trianglepath.dotted"), "Insights") }
             }
             .toolbarVisibility(.hidden, for: .tabBar)
             .tint(.primary)
@@ -1164,7 +1176,6 @@ struct NowHomeView: View {
     }
 
     /// The custom marks as template images, so the tab bar can tint them like SF Symbols.
-    private static let fanImage = render(FanIcon(size: 26))
     private static let gridImage = render(MomentsGridIcon(size: 22))
     private static func render(_ view: some View) -> Image {
         let r = ImageRenderer(content: view.foregroundStyle(.black))
@@ -1186,6 +1197,7 @@ struct NowHomeView: View {
                     let combined = Crit.MenusSky.current == .combined
                     let strip = MenusStrip(window: $menusWindow, moments: moments, baselines: baselines,
                                            forecast: hours.map { ($0.date, verdictStrength(outlook(at: $0.date).tint)) },
+                                           forecastInks: forecastInks,
                                            now: now, verdict: menusVerdict, limits: menusLimits, settle: menusSettle,
                                            backToNow: { withAnimation(Theme.smooth) { menusWindow.center = now }; focusTime = nil },
                                            jump: { t in withAnimation(Theme.smooth) { menusWindow.center = t }; focusTime = t },
@@ -1196,9 +1208,23 @@ struct NowHomeView: View {
                                 // A fixed height for the header (owner, Nov 13), so the fans below stay put whether
                                 // the line above is one line or three.
                                 // One block (header is a Group: a frame on it would apply to each child).
-                                VStack(alignment: .leading, spacing: 0) { header }
+                                // The guidelines' line on rescue use, when it holds: right under the headline, until
+                                // "Got it". The header gives up its fixed height so the card sits close under the words.
+                                if case .now = focus, let card = careCard, case .care(let check) = card {
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        header
+                                        MenusCareCard(check: check) {
+                                            UserDefaults.standard.set(Date(), forKey: "care.seen.\(check.title)")
+                                            withAnimation(Theme.smooth) { now = Date() }
+                                        }
+                                        .padding(.horizontal, 16).padding(.top, 16)
+                                    }
                                     .padding(.top, 8)
-                                    .frame(height: 158, alignment: .top)
+                                } else {
+                                    VStack(alignment: .leading, spacing: 0) { header }
+                                        .padding(.top, 8)
+                                        .frame(height: 158, alignment: .top)
+                                }
                                 Color.clear.frame(height: 16)
                             } else {
                                 VStack(alignment: .leading, spacing: 20) {
@@ -2933,7 +2959,17 @@ struct VerdictHeader: View {
     private var menus: Bool { Crit.AppLook.current == .menus }
     /// The sentence without its pattern marks (private-use characters), as plain words.
     static func unmarked(_ s: String) -> String {
-        String(String.UnicodeScalarView(s.unicodeScalars.filter { !(0xE000...0xF8FF).contains($0.value) }))
+        var t = String(String.UnicodeScalarView(s.unicodeScalars.filter { !(0xE000...0xF8FF).contains($0.value) }))
+        // The mark sat behind a no-break space: without it, that space and the next one left a double gap
+        // ("still and hazy  and it was humid", April, Nov 20). One plain space, none before punctuation.
+        // A no-break space that was only there to hold the mark goes too; ones between words stay.
+        for gap in ["\u{00A0} ", " \u{00A0}"] { t = t.replacingOccurrences(of: gap, with: " ") }
+        while t.contains("  ") { t = t.replacingOccurrences(of: "  ", with: " ") }
+        for p in [".", ",", ";", ":", "?", "!"] {
+            t = t.replacingOccurrences(of: " " + p, with: p).replacingOccurrences(of: "\u{00A0}" + p, with: p)
+        }
+        if t.hasSuffix("\u{00A0}") { t.removeLast() }
+        return t.trimmingCharacters(in: .whitespaces)
     }
 
     var body: some View {
@@ -3578,7 +3614,7 @@ struct CareCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(check.title, systemImage: "stethoscope")
+            Label(check.title, systemImage: "exclamationmark.triangle")
                 .font(.subheadline.weight(.semibold)).lineLimit(2)
             Text(check.body).font(.subheadline).fixedSize(horizontal: false, vertical: true)
             HStack {
@@ -3594,6 +3630,37 @@ struct CareCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
         .glassEffect(.regular, in: .rect(cornerRadius: 20))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The guidelines' line on rescue use in the Menus look: a flat card like the Forecast, Figtree, no glass.
+struct MenusCareCard: View {
+    let check: RelieverUse.Check
+    let gotIt: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle").font(.system(size: 15, weight: .medium)).frame(width: 22)
+                Text(check.title).font(Theme.Figtree.font(size: 15, weight: .medium))
+            }
+            .foregroundStyle(.secondary)
+            Text(check.body).font(Theme.Figtree.font(size: 17)).fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(check.source) · Not medical advice").font(Theme.Figtree.font(size: 12)).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Button(action: gotIt) {
+                    Text("Got it").font(Theme.Figtree.font(size: 15, weight: .medium)).foregroundStyle(.primary)
+                        .padding(.horizontal, 14).padding(.vertical, 7)
+                        .background(Capsule().fill(Color.primary.opacity(0.08)))
+                }
+                .buttonStyle(PressStyle())
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
         .accessibilityElement(children: .combine)
     }
 }

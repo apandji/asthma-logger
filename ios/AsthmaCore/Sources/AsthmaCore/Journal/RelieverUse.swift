@@ -18,8 +18,8 @@ public enum RelieverUse {
 
         public var title: String {
             switch self {
-            case .againWithin4Hours: "Rescue inhaler again within 4 hours"
-            case .moreThanTwoDaysThisWeek: "Rescue inhaler on more than 2 days this week"
+            case .againWithin4Hours: "Inhaler again within 4 hours"
+            case .moreThanTwoDaysThisWeek: "Inhaler on more than 2 days this week"
             }
         }
 
@@ -28,7 +28,7 @@ public enum RelieverUse {
             case .againWithin4Hours:
                 "Many asthma action plans say needing it more than every 4 hours is a sign to get help now. Follow your action plan. If it isn't helping or breathing is hard, call 911."
             case .moreThanTwoDaysThisWeek:
-                "Guidelines say using it on more than 2 days a week can mean asthma isn't well controlled. It's worth checking in with your doctor about your plan."
+                "Guidelines say using it on more than 2 days a week can mean asthma isn't well controlled. Consider checking in with your doctor about your plan."
             }
         }
 

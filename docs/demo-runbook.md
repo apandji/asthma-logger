@@ -30,7 +30,7 @@ What is real and what is made up:
   ```
   Pick the iPhone, press ⌘R. Check Signing on the AsthmaLog and AsthmaLogWatch targets if Xcode complains.
 - [ ] The look is now April's by default (light, flowers). If the phone still shows the old dark look, it has an old switch saved: Demo and development › More › Design switches › App look › **felt air (flowers, the default)**.
-- [ ] Tap **Presentation › 1** once and log a rescue, so the Apple Health sheet appears now and not in front of the room.
+- [ ] Tap **Presentation › 1** once and press the watch's inhaler button (or Stage a moment › **Log an inhaler press**), so the Apple Health sheet appears now and not in front of the room.
 - [ ] Run steps 1 to 5 once, in order.
 - [ ] Charge the phone, the watch and the felt button.
 
@@ -60,11 +60,11 @@ If the card doesn't appear, the notification is the fallback: "Rescue logged · 
 
 ## The script
 
-**1 · Now, then log a puff** (Presentation › 1)
+**1 · Now, then log a moment** (Presentation › 1)
 > "This is a travel nurse, two weeks into St. Louis. The flowers are the outdoor air right now: taller means more of it."
 
-Tap **+**, log a rescue, add a voice note. Say something with a trigger in it ("I ran for the bus in the cold").
-> "It wrote down when, where and the outdoor air. It suggests tags from my words, and I choose. It never decides how I felt."
+Press the watch or the felt button: that is an **Inhaler** moment (filled mark). No hardware to hand: Stage a moment › **Log an inhaler press**. Then tap **+**: that is a **Manual** moment, with its journal. Say something with a trigger in it ("I ran for the bus in the cold"). Drag the timeline back onto an empty ring: a **Baseline** moment, an ordinary hour the app filled in.
+> "Three kinds of moment. Inhaler, from a press. Manual, from me. Baseline, the ordinary hours it compares against. Each one wrote down when, where and the outdoor air. It suggests tags from my words, and I choose. It never decides how I felt."
 
 **2 · Look back at a moment** (Presentation › 2)
 > "One of her inhaler moments. The sentence is what the air was. Open it and every reading says where it came from and how far away."

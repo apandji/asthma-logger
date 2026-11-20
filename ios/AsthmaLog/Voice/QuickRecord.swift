@@ -52,7 +52,7 @@ final class QuickRecordCenter: NSObject, UNUserNotificationCenterDelegate {
         guard enabled, event.moment != .okay else { return }
         if QuickRecordLive.shared.begin(for: event) { scheduleEvening(); return }
         let c = UNMutableNotificationContent()
-        c.title = "\(event.moment == .rescue ? "Rescue" : "Standard") logged"
+        c.title = "\(event.moment == .rescue ? "Inhaler" : "Standard") logged"
         c.subtitle = event.placeName ?? ""
         c.body = "Add what was going on, while it's fresh."
         c.sound = .default

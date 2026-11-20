@@ -36,8 +36,8 @@ struct Loadout: Identifiable {
 
     /// The Nov 20 presentation, in order (docs/demo-runbook.md): one person, the navigator, on real air.
     static let presentation: [Loadout] = [
-        Loadout(id: "talk-1", group: "Presentation", title: "1 · Now, then log a puff",
-                note: "The navigator, two weeks into St. Louis. Tap + for a rescue, then add a voice note.", navigator: true),
+        Loadout(id: "talk-1", group: "Presentation", title: "1 · Now, then log a moment",
+                note: "The navigator, two weeks into St. Louis. Press the watch or the felt button for an inhaler moment (or Stage a moment › Log an inhaler press). The + adds a manual moment and its journal.", navigator: true),
         Loadout(id: "talk-2", group: "Presentation", title: "2 · Look back at a moment",
                 note: "Her last rescue that fits her pattern. Tap the picture for the details and where each reading came from.",
                 navigator: true, land: .lastRescue),

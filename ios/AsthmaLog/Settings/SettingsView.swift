@@ -114,6 +114,7 @@ struct DeveloperSettings: View {
     let close: () -> Void
     @Environment(\.modelContext) private var context
     @Environment(ButtonLink.self) private var button
+    @Environment(LogService.self) private var services
     @AppStorage(Prefs.useDemoData) private var demo = false
     @AppStorage(DataSets.activeKey) private var activeDataSet: String?
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
@@ -162,6 +163,10 @@ struct DeveloperSettings: View {
 
             // 3 · Things to stage on cue.
             Section {
+                Button("Log an inhaler press") {
+                    close()
+                    Task { _ = await services.press(.rescue, device: .button, in: context) }
+                }
                 Toggle("Evening look-back at any hour", isOn: $demoEvening)
                 Picker("Air on Now", selection: $demoScenario) {
                     ForEach(DemoScenario.allCases) { Text($0.title).tag($0) }
@@ -178,7 +183,7 @@ struct DeveloperSettings: View {
             } header: {
                 Text("Stage a moment")
             } footer: {
-                Text("Evening look-back opens when you close Settings, and each time felt air comes to the front, until you turn it off. Air on Now stages a day (smoke, a storm, a cold snap, a pollen day); its readings never count toward patterns. Demo calendar stands in for your own events.")
+                Text("Log an inhaler press stands in for the felt button or the watch: the + only makes manual moments. Evening look-back opens when you close Settings, and each time felt air comes to the front, until you turn it off. Air on Now stages a day (smoke, a storm, a cold snap, a pollen day); its readings never count toward patterns. Demo calendar stands in for your own events.")
             }
 
             // 4 · Everything else, one level down.

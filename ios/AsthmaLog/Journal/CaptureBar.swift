@@ -359,7 +359,7 @@ struct LoggedToast: View {
     var body: some View {
         HStack(spacing: 12) {
             MomentDot(moment: event.moment, size: 9)
-            Text("\(event.moment == .rescue ? "Rescue" : "Standard") logged").font(.subheadline.weight(.semibold))
+            Text("\(event.moment == .rescue ? "Inhaler" : "Standard") logged").font(.subheadline.weight(.semibold))
             Spacer()
             if let note {
                 Button(action: note) { Label("Note", systemImage: "mic.fill") }.font(.subheadline.weight(.semibold))

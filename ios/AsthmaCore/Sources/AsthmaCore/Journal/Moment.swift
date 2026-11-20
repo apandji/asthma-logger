@@ -11,8 +11,9 @@ public enum MomentKind: String, Codable, Sendable, CaseIterable {
     case maintenance
     /// A baseline sample (ordinary moment, no inhaler), captured automatically or as first capture.
     case okay = "baseline"
-    /// Something you said with no inhaler logged (Voice on Now): kept in the journal with the air, never in
-    /// the patterns (owner, Oct 17).
+    /// A manual moment: made by hand, from the + in the app or the Lock Screen, with no inhaler press behind it
+    /// (owner, Nov 19: only a press on the felt button or the watch makes an inhaler moment). Kept in the
+    /// journal with the air, never in the patterns (owner, Oct 17).
     case note
 
     public init(_ kind: FrameKind) {
@@ -30,10 +31,11 @@ public enum MomentKind: String, Codable, Sendable, CaseIterable {
 
     public var title: String {
         switch self {
-        case .rescue: "Rescue"
+        // "Inhaler", not "Rescue" (owner, Nov 19: people found "Rescue" confusing).
+        case .rescue: "Inhaler"
         case .maintenance: "Standard"
         case .okay: "Baseline"
-        case .note: "Note"
+        case .note: "Manual"
         }
     }
 }

@@ -141,7 +141,8 @@ final class LogService {
         let (e, isNew) = await press(moment, at: packet.pressedAt(receivedAt: receivedAt),
                                      lateNote: "Pressed on your felt button while your iPhone was away, so there's no air reading.",
                                      device: .button, deviceID: deviceID?.uuidString, in: context)
-        if isNew { QuickRecordCenter.shared.notify(for: e) }
+        // Every press gets word back (owner, Nov 19): a new moment, or one more puff in it (no new air lookup).
+        if isNew { QuickRecordCenter.shared.notify(for: e) } else { QuickRecordCenter.shared.notifyPuff(for: e) }
     }
 
     /// Onboarding's first press (or tap): a baseline moment with its own label, air and place stamped.

@@ -63,6 +63,22 @@ final class QuickRecordCenter: NSObject, UNUserNotificationCenterDelegate {
         scheduleEvening()
     }
 
+    /// Another press within two minutes: the same moment, one more puff. Replaces the moment's notification so
+    /// there's one banner that counts up, not a stack. Silent in the app, where the ink drop says it.
+    func notifyPuff(for event: LogEvent) {
+        guard enabled, event.moment != .okay else { return }
+        let puffs = event.uses.last?.puffs ?? 1
+        let c = UNMutableNotificationContent()
+        c.title = "Puff added"
+        c.subtitle = event.placeName ?? ""
+        c.body = "\(event.moment == .rescue ? "Rescue" : "Standard") at \(event.loggedAt.formatted(date: .omitted, time: .shortened)), \(puffs) puffs. Same moment."
+        c.sound = .default
+        c.categoryIdentifier = Self.category
+        c.userInfo = ["moment": event.id.uuidString]
+        c.threadIdentifier = "moments"
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: event.id.uuidString, content: c, trigger: nil))
+    }
+
     /// One nudge at 6 pm for today's rescue moments that have no note or reviewed tags.
     func scheduleEvening() {
         guard enabled, let ctx = container?.mainContext else { return }

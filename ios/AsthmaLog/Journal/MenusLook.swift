@@ -29,14 +29,27 @@ enum MenusTab: Hashable { case home, moments, map, insights, log }
 /// ≡ on the left opens the side menu; the scale menu on the right.
 struct MenusTopBar: View {
     @Binding var scale: MenusScale
-    let openMenu: () -> Void
+    let settings: () -> Void
+    let doctor: () -> Void
     /// Home only (owner, Nov 19): ⓘ on the right, how the flowers are made.
     var showInfo = false
     @State private var info = false
 
     var body: some View {
         HStack {
-            Button(action: openMenu) {
+            // The app menu (owner, Nov 19): the system's glass menu, growing out of the button like the tab bar
+            // and sheets do, instead of a drawer.
+            Menu {
+                Section {
+                    Button("Settings", systemImage: "gearshape", action: settings)
+                    Button("Table for your doctor", systemImage: "tablecells", action: doctor)
+                }
+                Section {
+                    Button {} label: { Label { Text("Sign in"); Text("Not available yet") } icon: { Image(systemName: "person.crop.circle") } }
+                        .disabled(true)
+                }
+                Section("felt air is a diary, not a medical device.") {}
+            } label: {
                 Image(systemName: "line.3.horizontal").font(Theme.Figtree.font(.subheadline, weight: .semibold))
                     .frame(width: 22, height: 22)
             }
@@ -389,56 +402,6 @@ struct MenusBottomBar: View {
 // MARK: Side menu
 
 /// Slides in from the left over the page: Settings, sign-in (not built yet) and the extras.
-struct MenusSideMenu: View {
-    let close: () -> Void
-    let settings: () -> Void
-    let doctor: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("felt air").font(Theme.Figtree.font(.title2, weight: .bold))
-                Spacer()
-                Button(action: close) { Image(systemName: "xmark").font(Theme.Figtree.font(.body, weight: .semibold)).frame(width: 44, height: 44) }
-                    .foregroundStyle(.primary)
-                    .accessibilityLabel("Close menu")
-            }
-            .padding(.bottom, 16)
-            row("person.crop.circle", "Sign in", note: "Not available yet", action: nil)
-            Divider().padding(.vertical, 8)
-            row("gearshape", "Settings", action: { close(); settings() })
-            row("tablecells", "Table for your doctor", action: { close(); doctor() })
-            Spacer()
-            Text("felt air is a diary, not a medical device.")
-                .font(Theme.Figtree.font(.footnote)).foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 60).padding(.bottom, 40)
-        .frame(width: 300, alignment: .leading)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color(uiColor: .systemGroupedBackground))
-        .shadow(color: .black.opacity(0.15), radius: 20, x: 4)
-    }
-
-    private func row(_ symbol: String, _ title: String, note: String? = nil, action: (() -> Void)?) -> some View {
-        Button { action?() } label: {
-            HStack(spacing: 14) {
-                Image(systemName: symbol).font(Theme.Figtree.font(.body)).frame(width: 24)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(Theme.Figtree.font(.body))
-                    if let note { Text(note).font(Theme.Figtree.font(.caption)).foregroundStyle(.secondary) }
-                }
-                Spacer()
-            }
-            .padding(.vertical, 12).padding(.horizontal, 14)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
-            .contentShape(Rectangle())
-        }
-        .foregroundStyle(action == nil ? Color.secondary : Color.primary)
-        .disabled(action == nil)
-    }
-}
-
 // MARK: Below the fold
 
 /// The columns every row below Now shares, so the strip and each chart sit on one time axis: the page's 16 pt
@@ -476,11 +439,23 @@ struct MenusWindowGestures: ViewModifier {
     let limits: ClosedRange<Date>
     let settle: () -> Void
     var enabled = true
+    /// Pinch only (no sideways drag): for home's flowers, where a drag would fight the page's scroll.
+    var pinchOnly = false
     @State private var panFrom: Date?
     @State private var zoomFrom: TimeInterval?
 
     func body(content: Content) -> some View {
-        if enabled { gestures(content) } else { content }
+        if !enabled { content } else if pinchOnly { content.simultaneousGesture(pinch) } else { gestures(content) }
+    }
+
+    private var pinch: some Gesture {
+        MagnifyGesture()
+            .onChanged { v in
+                let from = zoomFrom ?? window.span
+                zoomFrom = from
+                window.span = min(max(from / v.magnification, MenusWindow.minSpan), MenusWindow.maxSpan)
+            }
+            .onEnded { _ in zoomFrom = nil; settle() }
     }
 
     private func gestures(_ content: Content) -> some View {
@@ -496,15 +471,7 @@ struct MenusWindowGestures: ViewModifier {
                     }
                     .onEnded { _ in if panFrom != nil { panFrom = nil; settle() } }
             )
-            .simultaneousGesture(
-                MagnifyGesture()
-                    .onChanged { v in
-                        let from = zoomFrom ?? window.span
-                        zoomFrom = from
-                        window.span = min(max(from / v.magnification, MenusWindow.minSpan), MenusWindow.maxSpan)
-                    }
-                    .onEnded { _ in zoomFrom = nil; settle() }
-            )
+            .simultaneousGesture(pinch)
     }
 }
 
@@ -839,7 +806,7 @@ struct MenusDetails: View {
         }
         // No pan or pinch here (owner, Nov 19): inside the page's vertical scroll they fought it for the same
         // finger, so scrolls sometimes panned or did nothing. The timeline below pans and zooms the window.
-        .modifier(MenusWindowGestures(window: $window, width: chartWidth, limits: limits, settle: settle, enabled: !big))
+        .modifier(MenusWindowGestures(window: $window, width: chartWidth, limits: limits, settle: settle, pinchOnly: big))   // home: pinch the flowers to zoom the timeline too (owner, Nov 19)
     }
 
     // MARK: Data

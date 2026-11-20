@@ -38,7 +38,13 @@ struct InsightsView: View {
                         .font(Theme.ui(.title2, weight: .semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.top, 8)
-                    if learned, let p = profile {
+                    if Crit.AppLook.current == .menus {
+                        // Menus look (owner, Nov 19): your profile as one flower in home's language, ranked the
+                        // same way as home's fans (the sample profile until your own triggers are learned).
+                        let rows = model.report?.gatedRows ?? []
+                        MenusProfileFlower(weights: NowHomeView.fanWeights(rows), sample: rows.isEmpty)
+                        if learned, let p = profile { categories(p) }
+                    } else if learned, let p = profile {
                         archetypeBlock(Archetype(profile: p, learned: true))
                             // The name is the last thing to arrive, so the eye lands on it after the page.
                             .opacity(shownName ? 1 : 0).offset(y: shownName ? 0 : 6)

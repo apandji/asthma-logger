@@ -94,7 +94,11 @@ struct NowHomeView: View {
     /// The + that the log sheet zooms out of, and which way in it was (voice or written).
     @Namespace private var logSource
     @State private var logVoice = false
-    @State private var showSideMenu = false
+    /// Menus look: the moment the felt button or watch just logged, dropping in (owner, Nov 19).
+    @State private var inkDrop: LogEvent?
+    /// Bumps for every drop, so a second press on the same moment drops again.
+    @State private var inkDropKey = 0
+    @Environment(ButtonLink.self) private var buttonLink
     @State private var showDoctor = false
     /// Menus look: the air cube's one 3D scene, and where its slot sits on the page.
     @State private var cubeWorld = CubeWorld()
@@ -297,22 +301,7 @@ struct NowHomeView: View {
                         .navigationTransition(.zoom(sourceID: "log", in: logSource))
                 }
             }
-            // Menus look: the side menu slides in from the left over everything, a scrim behind it.
-            .overlay {
-                if showSideMenu {
-                    Color.black.opacity(0.25).ignoresSafeArea()
-                        .onTapGesture { withAnimation(Theme.smooth) { showSideMenu = false } }
-                        .transition(.opacity)
-                }
-            }
-            .overlay(alignment: .leading) {
-                if showSideMenu {
-                    MenusSideMenu(close: { withAnimation(Theme.smooth) { showSideMenu = false } },
-                                  settings: { showSettings = true }, doctor: { showDoctor = true })
-                        .ignoresSafeArea()
-                        .transition(.move(edge: .leading))
-                }
-            }
+            // Menus look: a moment from the felt button or the watch drops in, ink in water (owner, Nov 19).
             .sheet(isPresented: $showDoctor) { DoctorSheet(events: events) }
             .environment(\.airCubeWorld, cubeWorld)
             .environment(\.airCubeSlot) { id, rect in
@@ -1078,7 +1067,7 @@ struct NowHomeView: View {
     /// The Oct 30 sketch: top bar, then the page for the chosen scale, or Insights in place.
     private var menusPage: some View {
         VStack(alignment: .leading, spacing: 0) {
-            MenusTopBar(scale: $menusScale, openMenu: { withAnimation(Theme.smooth) { showSideMenu = true } }, showInfo: menusTab == .home)
+            MenusTopBar(scale: $menusScale, settings: { showSettings = true }, doctor: { showDoctor = true }, showInfo: menusTab == .home)
             // Apple's tab bar (owner, Nov 13, after Instagram and Linear): Liquid Glass, a lens you can drag across
             // the tabs, it shrinks as you scroll, and the + is the separate round tab at the end.
             // Pages as native tabs (each keeps its state); the system's bar is hidden for ours (bottomBar), so the
@@ -1106,6 +1095,16 @@ struct NowHomeView: View {
             if abs(menusWindow.center.timeIntervalSince(target)) > 1 { withAnimation(Theme.smooth) { menusWindow.center = target } }
         }
         .onChange(of: now) { _, n in if focusTime == nil { menusWindow.center = n } }
+        .overlay { inkDropLayer }
+        .onChange(of: events.last?.id) { _, _ in dropIn(events.last) }
+        // Every felt button press drops in, a new moment or one more puff in the last one (owner, Nov 19).
+        .onChange(of: buttonLink.lastPress) { _, _ in
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))   // once the press is saved
+                let fresh = events.last { ($0.moment == .rescue || $0.moment == .maintenance) && Date().timeIntervalSince($0.uses.last?.lastPressAt ?? $0.loggedAt) < 10 }
+                if let fresh { dropIn(fresh, retry: false, fromButton: true) }
+            }
+        }
     }
 
     /// The app's grey paper behind every tab (the system's grouped background).
@@ -1313,6 +1312,39 @@ struct NowHomeView: View {
     }
 
     /// Swiped away rather than closed: keep what's there, or drop an empty one, the same as the close button.
+    @ViewBuilder private var inkDropLayer: some View {
+        if appLook == .menus, let e = inkDrop {
+            let key = inkDropKey
+            MenusInkDrop(event: e, puffs: e.uses.last?.puffs ?? 1) { if inkDropKey == key { inkDrop = nil } }
+                .id(key)
+        }
+    }
+
+    /// A fresh moment from the felt button or the watch: go to it on the timeline, then let it land.
+    private func dropIn(_ e: LogEvent?, retry: Bool = true, fromButton: Bool = false) {
+        guard appLook == .menus, let e, e.moment == .rescue || e.moment == .maintenance,
+              Date().timeIntervalSince(e.loggedAt) < 120 else { return }
+        if fromButton {
+            withAnimation(Theme.smooth) { menusWindow.center = e.loggedAt }
+            focusTime = e.loggedAt
+            inkDropKey += 1
+            inkDrop = e
+            return
+        }
+        guard inkDrop?.id != e.id else { return }
+        // The moment can arrive a beat before its inhaler use (which says where the press came from).
+        guard let device = e.uses.last?.deviceRaw else {
+            if retry { Task { try? await Task.sleep(for: .milliseconds(400)); dropIn(e, retry: false) } }
+            return
+        }
+        // The button drops in from its own press (above); here, the watch.
+        guard device == "watch" else { return }
+        withAnimation(Theme.smooth) { menusWindow.center = e.loggedAt }
+        focusTime = e.loggedAt
+        inkDropKey += 1
+        inkDrop = e
+    }
+
     private func closeMenusCapture() {
         guard let s = capture else { return }
         if s.listening { Task { await s.stopListening(); if s.hasAnything { s.save(context: context) } else { s.discard() } } }

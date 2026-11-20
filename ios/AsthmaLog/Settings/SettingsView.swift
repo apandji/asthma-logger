@@ -71,10 +71,13 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Picker("Appearance", selection: $appearance) {
-                        Text("Match iPhone").tag("system")
-                        Text("Light").tag("light")
-                        Text("Dark").tag("dark")
+                    // The Menus look is light only.
+                    if Crit.AppLook.current != .menus {
+                        Picker("Appearance", selection: $appearance) {
+                            Text("Match iPhone").tag("system")
+                            Text("Light").tag("light")
+                            Text("Dark").tag("dark")
+                        }
                     }
                     Picker("Rail", selection: $railLeft) {
                         Text("Right").tag(false)

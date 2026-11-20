@@ -256,7 +256,7 @@ struct SmallBox: View {
                     }
                 }
                 .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))
-                .environment(\.colorScheme, .dark)
+                .environment(\.colorScheme, Crit.AppLook.current == .menus ? .light : .dark)
                 .frame(height: 96)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .accessibilityHidden(true)

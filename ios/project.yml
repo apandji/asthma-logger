@@ -93,6 +93,8 @@ targets:
       - QuickRecordActivity
       - path: AsthmaLog/Theme/Fonts/Recursive.ttf
         buildPhase: resources
+      - path: AsthmaLog/Theme/Fonts/Figtree.ttf
+        buildPhase: resources
     dependencies:
       - package: AsthmaCore
       - sdk: WidgetKit.framework
@@ -113,7 +115,7 @@ targets:
         CFBundleDisplayName: felt air
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        UIAppFonts: [Recursive.ttf]
+        UIAppFonts: [Recursive.ttf, Figtree.ttf]
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
 

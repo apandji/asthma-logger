@@ -114,14 +114,16 @@ struct RootView: View {
         content
             // Settings › Appearance: light is linen paper, dark is black paper; "system" follows the phone.
             // Status bar and system sheets match the chosen paper ("system" leaves the phone in charge).
-            .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
+            // The Menus look is always light paper (April, Nov 20: no dark-mode remnants).
+            .preferredColorScheme(Crit.AppLook.current == .menus ? .light
+                                  : appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
             .onAppear(perform: syncPaper)
             .onChange(of: systemScheme) { _, _ in syncPaper() }
             .onChange(of: appearance) { _, _ in syncPaper() }
     }
 
     private func syncPaper() {
-        let light = appearance == "light" || (appearance == "system" && systemScheme == .light)
+        let light = Crit.AppLook.current == .menus || appearance == "light" || (appearance == "system" && systemScheme == .light)
         UserDefaults.standard.set((light ? Crit.Paper.linen : .black).rawValue, forKey: Crit.Paper.key)
     }
 

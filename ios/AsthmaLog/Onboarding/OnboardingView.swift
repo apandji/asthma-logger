@@ -52,14 +52,21 @@ struct OnboardingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
-            ZStack {
-                LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), .black], startPoint: .top, endPoint: .bottom)
-                SkyGrain(responds: false).opacity(0.5)
+            // Light paper on the Menus look (April, Nov 20), the dark sky on the older looks.
+            Group {
+                if Crit.AppLook.current == .menus {
+                    Color(uiColor: .systemGroupedBackground)
+                } else {
+                    ZStack {
+                        LinearGradient(colors: [pageTop, pageTop.mix(with: .black, by: 0.6), .black], startPoint: .top, endPoint: .bottom)
+                        SkyGrain(responds: false).opacity(0.5)
+                    }
+                }
             }
             .ignoresSafeArea()
             .animation(.easeInOut(duration: 0.6), value: step)
         }
-        .environment(\.colorScheme, .dark)
+        .environment(\.colorScheme, Crit.AppLook.current == .menus ? .light : .dark)
         .animation(Theme.smooth, value: step)
         .onChange(of: button.syncPresses) { _, n in
             guard n > 0, step == .pair, first == nil, !fetching, !softButton else { return }
@@ -333,8 +340,9 @@ struct OnboardingView: View {
     private func primary(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 14)
-                .foregroundStyle(.black)
-                .background(Capsule().fill(.white))
+                // The + button's black on the Menus look; white on the older dark looks.
+                .foregroundStyle(Crit.AppLook.current == .menus ? Color.white : .black)
+                .background(Capsule().fill(Crit.AppLook.current == .menus ? Color.black : .white))
         }
         .buttonStyle(PressStyle())
         .padding(.top, 4)
@@ -351,7 +359,7 @@ struct OnboardingView: View {
     private var pageDots: some View {
         HStack(spacing: 7) {
             ForEach(Step.allCases, id: \.self) { s in
-                Circle().fill(.white.opacity(s == step ? 0.95 : 0.3)).frame(width: 6, height: 6)
+                Circle().fill(Color.primary.opacity(s == step ? 0.95 : 0.3)).frame(width: 6, height: 6)
             }
         }
         .frame(maxWidth: .infinity)
@@ -373,10 +381,10 @@ struct Listening: View {
                     let phase = (t / 2.6 + Double(k) / 3).truncatingRemainder(dividingBy: 1)
                     let rr = 14 + 150 * phase
                     ctx.stroke(Path(ellipseIn: CGRect(x: c.x - rr, y: c.y - rr, width: rr * 2, height: rr * 2)),
-                               with: .color(.white.opacity((quiet ? 0.3 : 0.6) * (1 - phase))), lineWidth: 1.5)
+                               with: .color(Color.primary.opacity((quiet ? 0.3 : 0.6) * (1 - phase))), lineWidth: 1.5)
                 }
                 if !quiet {
-                    ctx.fill(Path(ellipseIn: CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10)), with: .color(.white))
+                    ctx.fill(Path(ellipseIn: CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10)), with: .color(Color.primary))
                 }
             }
         }

@@ -14,49 +14,49 @@ struct AsthmaLogWidgets: WidgetBundle {
     }
 }
 
-/// The Lock Screen recorder, in the app's language: black page, riso dots, the Recursive question,
-/// the moment's tag, glass-white controls. Colour only on the dots (the inhaler's pastel).
+/// The Lock Screen recorder in the app's look (April, Nov 20): light paper, Figtree, black ink, the + button's
+/// black circle, Home's black moment tag and the journal's grey chips. The Dynamic Island stays dark (it's
+/// the system's), in the same type.
 struct QuickRecordLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: QuickRecordAttributes.self) { context in
             QuickRecordLockView(state: context.state, isStale: context.isStale)
-                .activityBackgroundTint(.black)
-                .activitySystemActionForegroundColor(.white)
+                .activityBackgroundTint(Ink.paper)
+                .activitySystemActionForegroundColor(.black)
                 .widgetURL(Copy.url(context.state))
         } dynamicIsland: { context in
             let s = context.state
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    KindTag(state: s).padding(.leading, 4)
+                    KindTag(state: s, dark: true).padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    MainButton(state: s, size: 44)
+                    MainButton(state: s, size: 44, dark: true)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(Copy.title(s.phase)).font(Ink.sentence(20)).foregroundStyle(.white)
-                        Copy.detail(s).font(.caption).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                        Text(Copy.title(s.phase)).font(Ink.figtree(18, .medium)).foregroundStyle(.white)
+                        Copy.detail(s).font(Ink.figtree(13)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } compactLeading: {
-                // On standby the island stays quiet: a small grey mic.
                 Image(systemName: s.phase == .recording ? "waveform" : "mic.fill")
-                    .foregroundStyle(s.phase == .standby ? Color.white.opacity(0.4) : Ink.pastel(s))
+                    .foregroundStyle(s.phase == .standby ? Color.white.opacity(0.4) : Color.white)
             } compactTrailing: {
                 if s.phase == .standby {
                     EmptyView()
                 } else if s.phase == .recording, let start = s.startedAt {
                     Text(timerInterval: start...start.addingTimeInterval(QuickRecordAttributes.maxSeconds), countsDown: false)
-                        .monospacedDigit().frame(width: 40).foregroundStyle(Ink.pastel(s))
+                        .monospacedDigit().frame(width: 40).foregroundStyle(.white)
                 } else {
-                    Text(s.kind ?? "").foregroundStyle(Ink.pastel(s))
+                    Text(s.kind ?? "").font(Ink.figtree(13, .medium)).foregroundStyle(.white)
                 }
             } minimal: {
-                Image(systemName: "mic.fill").foregroundStyle(s.phase == .standby ? Color.white.opacity(0.4) : Ink.pastel(s))
+                Image(systemName: "mic.fill").foregroundStyle(s.phase == .standby ? Color.white.opacity(0.4) : Color.white)
             }
             .widgetURL(Copy.url(s))
-            .keylineTint(Ink.pastel(s))
+            .keylineTint(.white)
         }
     }
 }
@@ -67,91 +67,83 @@ struct QuickRecordLockView: View {
 
     var body: some View {
         // A Lock Screen Live Activity is at most 160 pt tall: everything is sized to fit that.
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 if state.phase == .standby {
-                    Text("felt air").font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.6))
+                    Text("felt air").font(Ink.figtree(13, .medium)).foregroundStyle(Ink.secondary)
                 } else {
-                    KindTag(state: state)
+                    KindTag(state: state, dark: false)
                 }
-                Text(state.whenAndWhere ?? "").font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                Text(state.whenAndWhere ?? "").font(Ink.figtree(13, .medium)).foregroundStyle(Ink.secondary).lineLimit(1)
                 Spacer(minLength: 0)
                 if state.phase != .saved {
                     Button(intent: QuickRecordDismissIntent()) {
-                        Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.white.opacity(0.6))
-                            .frame(width: 24, height: 24).background(Circle().fill(.white.opacity(0.12)))
+                        Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Ink.secondary)
+                            .frame(width: 24, height: 24).background(Circle().fill(.black.opacity(0.06)))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Not now")
                 }
             }
             HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(isStale && state.phase == .ready ? "Still want to add a note?" : Copy.title(state.phase))
-                        .font(Ink.sentence(22)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.75)
-                    Copy.detail(state).font(.footnote).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(isStale && state.phase == .ready ? "Still want to add to your journal?" : Copy.title(state.phase))
+                        .font(Ink.figtree(20, .medium)).foregroundStyle(.black).lineLimit(1).minimumScaleFactor(0.75)
+                    Copy.detail(state).font(Ink.figtree(13)).foregroundStyle(Ink.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                ZStack {
-                    // Standby is a waiting card: grey, barely a ring. Colour arrives with a moment.
-                    DotRing(ink: state.phase == .standby ? .white : Ink.pastel(state),
-                            strength: state.phase == .recording ? 1 : state.phase == .writing ? 0.6 : state.phase == .standby ? 0.06 : 0.35)
-                        .frame(width: 68, height: 68)
-                    MainButton(state: state, size: 46)
-                }
+                MainButton(state: state, size: 48, dark: false)
             }
             if state.phase == .ready || state.phase == .review || state.phase == .needsMic {
                 Chips(state: state)
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 12)
+        .padding(.horizontal, 16).padding(.vertical, 14)
     }
 }
 
-/// Record / stop / save: the one big control. White when it's the next step.
+/// Record / stop / save: the one control, the + button's black circle.
 private struct MainButton: View {
     let state: QuickRecordAttributes.ContentState
     let size: CGFloat
+    /// In the Dynamic Island (dark): white circle, black symbol.
+    let dark: Bool
 
     var body: some View {
         switch state.phase {
         case .standby:
             // Logs a rescue (or uses one from the last 10 minutes) and listens.
-            Button(intent: QuickRecordStartIntent(momentID: nil)) { circle("mic.fill", filled: false) }
+            Button(intent: QuickRecordStartIntent(momentID: nil)) { circle("mic.fill") }
                 .buttonStyle(.plain).accessibilityLabel("Log a rescue and record a voice note")
         case .ready, .needsMic:
-            Button(intent: QuickRecordStartIntent(momentID: state.momentID)) {
-                circle("mic.fill", filled: false)
-            }
-            .buttonStyle(.plain).accessibilityLabel("Record a voice note")
+            Button(intent: QuickRecordStartIntent(momentID: state.momentID)) { circle("mic.fill") }
+                .buttonStyle(.plain).accessibilityLabel("Record a voice note")
         case .recording:
-            Button(intent: QuickRecordStopIntent()) { circle("stop.fill", filled: true) }
+            Button(intent: QuickRecordStopIntent()) { circle("stop.fill") }
                 .buttonStyle(.plain).accessibilityLabel("Stop")
         case .writing:
-            ProgressView().tint(.white).frame(width: size, height: size)
+            ProgressView().tint(dark ? .white : .black).frame(width: size, height: size)
         case .review:
             Button(intent: QuickRecordSaveIntent()) {
-                Text("Save").font(.subheadline.weight(.semibold)).foregroundStyle(.black)
-                    .frame(width: size + 12, height: size * 0.7).background(Capsule().fill(.white))
+                Text("Save").font(Ink.figtree(15, .medium)).foregroundStyle(dark ? .black : .white)
+                    .frame(width: size + 16, height: size * 0.72).background(Capsule().fill(dark ? .white : .black))
             }
             .buttonStyle(.plain)
         case .saved:
-            Image(systemName: "checkmark").font(.title3.weight(.semibold)).foregroundStyle(.black)
-                .frame(width: size, height: size).background(Circle().fill(Ink.pastel(state)))
+            circle("checkmark")
         }
     }
 
-    private func circle(_ symbol: String, filled: Bool) -> some View {
+    private func circle(_ symbol: String) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: size * 0.38, weight: .semibold))
-            .foregroundStyle(filled ? .black : .white)
+            .font(.system(size: size * 0.38, weight: .medium))
+            .foregroundStyle(dark ? .black : .white)
             .frame(width: size, height: size)
-            .background(Circle().fill(filled ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.16))))
-            .overlay(Circle().strokeBorder(.white.opacity(filled ? 0 : 0.25), lineWidth: 1))
+            .background(Circle().fill(dark ? .white : .black))
     }
 }
 
-/// Quick tags on the first screen; after the note, the suggested ones first.
+/// Quick tags, as the journal's chips: grey, black when chosen. After the note, the suggested ones first.
 private struct Chips: View {
     let state: QuickRecordAttributes.ContentState
     static let quick: [JournalTag] = [.exercise, .coldAir, .pets, .smoke]
@@ -165,13 +157,13 @@ private struct Chips: View {
             ForEach(shown, id: \.self) { t in
                 let on = state.selected.contains(t.rawValue)
                 Button(intent: QuickRecordTagIntent(tag: t.rawValue)) {
-                    Text(t.label).font(.caption.weight(.semibold)).lineLimit(1)
-                        .foregroundStyle(on ? .black : .white)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(Capsule().fill(on ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.14))))
+                    Text(t.label).font(Ink.figtree(13, .medium)).lineLimit(1)
+                        .foregroundStyle(on ? .white : .black)
+                        .padding(.horizontal, 11).padding(.vertical, 6)
+                        .background(Capsule().fill(on ? AnyShapeStyle(.black) : AnyShapeStyle(.black.opacity(0.07))))
                         .overlay {
                             if suggested.contains(t) && !on {
-                                Capsule().strokeBorder(.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                                Capsule().strokeBorder(.black.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                             }
                         }
                 }
@@ -182,42 +174,18 @@ private struct Chips: View {
     }
 }
 
+/// Home's moment tag: a black pill with the inhaler symbol (white in the dark island).
 private struct KindTag: View {
     let state: QuickRecordAttributes.ContentState
+    let dark: Bool
     var body: some View {
-        Text(state.kind ?? "").font(.caption.weight(.semibold)).foregroundStyle(.white)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(RoundedRectangle(cornerRadius: 6).fill(.white.opacity(0.14)))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.2), lineWidth: 1))
-    }
-}
-
-/// The app's riso grain gathered into a ring: a hex grid of dots, swollen and inked near the ring.
-/// Still (Live Activities don't animate continuously); fuller while listening.
-private struct DotRing: View {
-    let ink: Color
-    let strength: Double
-
-    var body: some View {
-        Canvas { ctx, size in
-            let c = CGPoint(x: size.width / 2, y: size.height / 2)
-            let ring = min(size.width, size.height) * 0.36
-            let spacing: CGFloat = 5
-            let n = Int(size.width / spacing) + 2
-            for i in -n...n {
-                for j in -n...n {
-                    let x = c.x + CGFloat(i) * spacing + CGFloat(j % 2) * spacing / 2
-                    let y = c.y + CGFloat(j) * spacing * 0.866
-                    let d = hypot(x - c.x, y - c.y)
-                    guard d < size.width / 2 else { continue }
-                    let near = max(0, 1 - abs(d - ring) / (7 + 6 * strength))
-                    let r = 0.45 + near * near * (1.1 + 1.0 * strength)
-                    let color = near > 0.05 ? ink.opacity(0.15 + 0.85 * near * (0.5 + 0.5 * strength)) : .white.opacity(0.1)
-                    ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)), with: .color(color))
-                }
-            }
+        HStack(spacing: 4) {
+            Image(systemName: state.isRescue ? "inhaler" : "circle.dashed").font(.system(size: 11, weight: .semibold))
+            Text(state.kind ?? "").font(Ink.figtree(13, .medium))
         }
-        .accessibilityHidden(true)
+        .foregroundStyle(dark ? .black : .white)
+        .padding(.horizontal, 9).padding(.vertical, 4)
+        .background(Capsule().fill(dark ? .white : .black))
     }
 }
 
@@ -225,11 +193,11 @@ private enum Copy {
     static func title(_ p: QuickRecordAttributes.Phase) -> String {
         switch p {
         case .standby: "Here if you need it."
-        case .ready: "What's going on?"
+        case .ready: "What was going on?"
         case .recording: "Listening…"
         case .writing: "Writing it down…"
         case .review: "Anything else?"
-        case .saved: "Saved."
+        case .saved: "In your journal."
         case .needsMic: "Microphone is off"
         }
     }
@@ -241,7 +209,7 @@ private enum Copy {
 
     @ViewBuilder static func detail(_ s: QuickRecordAttributes.ContentState) -> some View {
         switch s.phase {
-        case .standby: Text("The mic logs a rescue and listens.")
+        case .standby: Text("The mic logs a moment and listens.")
         case .ready: Text("Where you were, what you were doing.")
         case .recording:
             if let start = s.startedAt {
@@ -250,29 +218,26 @@ private enum Copy {
             }
         case .writing: Text("On this iPhone.")
         case .review:
-            if let w = s.words { Text("“\(w)”").italic() } else { Text("Tap what counts, then Save.") }
-        case .saved: Text("In your journal, on this iPhone.")
-        case .needsMic: Text("Open felt air to allow it, or tap a tag.")
+            if let w = s.words { Text("“\(w)”").italic() } else { Text("Tap what fits, then Save.") }
+        case .saved: Text("Saved on this iPhone.")
+        case .needsMic: Text("Open felt air to allow it, or tap what fits.")
         }
     }
 }
 
 /// Widget-side copies of the few tokens the Lock Screen needs (the extension can't see the app's Theme).
 enum Ink {
-    /// Theme.rescueSoft / Theme.standardSoft, dark values.
-    static func pastel(_ s: QuickRecordAttributes.ContentState) -> Color {
-        s.isRescue ? Color(red: 1, green: 0xC9 / 255, blue: 0xA3 / 255) : Color(red: 0xB4 / 255, green: 0xDC / 255, blue: 0xF7 / 255)
-    }
+    /// The app's paper (systemGroupedBackground, light).
+    static let paper = Color(red: 0.949, green: 0.949, blue: 0.969)
+    static let secondary = Color(red: 0.24, green: 0.24, blue: 0.26).opacity(0.6)
 
-    /// Recursive at the "plain" voice (a little casual, no cursive), as the app's sentence. Falls back to New York.
-    static func sentence(_ size: CGFloat) -> Font {
-        guard let base = UIFont(name: "Recursive-SansLinearLight", size: size) else {
-            return .system(size: size, weight: .regular, design: .serif)
-        }
-        func tag(_ s: String) -> UInt32 { s.utf8.reduce(0) { $0 << 8 | UInt32($1) } }
-        let variations: [UInt32: CGFloat] = [tag("CASL"): 0.25, tag("MONO"): 0, tag("wght"): 400, tag("slnt"): 0, tag("CRSV"): 0]
-        let key = UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String)
-        return Font(UIFont(descriptor: base.fontDescriptor.addingAttributes([key: variations]), size: size) as CTFont)
+    /// Figtree, as the app sets it: the variable font's weight axis, medium the heaviest. Falls back to SF.
+    static func figtree(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        let w: CGFloat = weight == .medium || weight == .semibold || weight == .bold ? 500 : 400
+        let desc = UIFontDescriptor(fontAttributes: [.family: "Figtree"])
+            .addingAttributes([UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [0x77676874: w]])
+        let font = UIFont(descriptor: desc, size: size)
+        return font.familyName == "Figtree" ? Font(font) : .system(size: size, weight: weight)
     }
 }
 

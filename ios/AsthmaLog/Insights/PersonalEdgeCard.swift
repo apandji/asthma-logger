@@ -45,11 +45,9 @@ struct PersonalEdgeCard: View {
     }
 }
 
-/// The risk highlight: a highlighter swipe behind the words, the ink stays primary.
+/// The edge, said plainly (April, Nov 20: no highlighter swipe): the same ink, a touch heavier.
 private func highlight(_ s: String) -> Text {
-    var a = AttributedString(s)
-    a.backgroundColor = Theme.riskHighlight.opacity(0.55)
-    return Text(a)
+    Text(s).fontWeight(.semibold)
 }
 
 /// A tally on a colder → warmer line: flare moments stack up, usual days stack down. The side past that point

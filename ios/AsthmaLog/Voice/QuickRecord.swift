@@ -228,10 +228,14 @@ struct QuickRecordView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Light paper on the Menus look (April, Nov 20), dark on the older looks.
         .background {
-            ZStack { Color.black; SkyGrain(responds: false).opacity(0.5) }.ignoresSafeArea()
+            Group {
+            if Crit.AppLook.current == .menus { Color(uiColor: .systemGroupedBackground) } else { ZStack { Color.black; SkyGrain(responds: false).opacity(0.5) } }
+            }
+            .ignoresSafeArea()
         }
-        .environment(\.colorScheme, .dark)
+        .environment(\.colorScheme, Crit.AppLook.current == .menus ? .light : .dark)
         .animation(Theme.smooth, value: phase)
         .onAppear { confirmed = event.tags; transcript = event.voiceTranscript ?? "" }
         .onDisappear { if phase == .recording { notes.stopRecording() } }
@@ -325,7 +329,7 @@ struct QuickRecordView: View {
                 }
                 Button(action: save) {
                     Text("Save").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 14)
-                        .foregroundStyle(.black).background(Capsule().fill(.white))
+                        .foregroundStyle(Crit.AppLook.current == .menus ? Color.white : .black).background(Capsule().fill(Crit.AppLook.current == .menus ? Color.black : .white))
                 }
                 .buttonStyle(PressStyle())
                 Text("Your note and words stay on this iPhone.").font(.caption).foregroundStyle(Theme.secondaryText)
@@ -377,11 +381,11 @@ struct TagChip: View {
         Button(action: action) {
             Text(tag.label)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(on ? Color.black : .primary)
+                .foregroundStyle(on ? Color(uiColor: .systemBackground) : .primary)
                 .padding(.horizontal, 12).padding(.vertical, 8)
-                .background { if on { Capsule().fill(.white) } }
+                .background { if on { Capsule().fill(Color.primary) } }
                 .glassEffect(on ? .identity : .regular.interactive(), in: .capsule)
-                .overlay { if highlighted && !on { Capsule().strokeBorder(.white.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 3])) } }
+                .overlay { if highlighted && !on { Capsule().strokeBorder(Color.primary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3])) } }
         }
         .buttonStyle(PressStyle())
         .accessibilityAddTraits(on ? .isSelected : [])
@@ -483,12 +487,12 @@ struct VoiceGrain: View {
                         let width = 18 + 30 * lv
                         let near = max(0, 1 - abs(d - ring) / width)
                         var r: CGFloat = 0.6
-                        var color = Color.white.opacity(0.12)
+                        var color = Color.primary.opacity(0.12)
                         if listening || near > 0.5 {
                             r += near * near * (2.6 + 3 * lv)
-                            color = (near > 0.05 ? ink : .white).opacity(0.12 + 0.8 * Double(near))
+                            color = (near > 0.05 ? ink : Color.primary).opacity(0.12 + 0.8 * Double(near))
                         } else if d < ring {
-                            color = Color.white.opacity(0.16)
+                            color = Color.primary.opacity(0.16)
                         }
                         guard r > 0.2, x > -4, y > -4, x < size.width + 4, y < size.height + 4 else { continue }
                         ctx.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)), with: .color(color))

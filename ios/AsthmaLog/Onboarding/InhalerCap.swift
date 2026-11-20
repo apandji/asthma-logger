@@ -106,7 +106,7 @@ struct InhalerCap: View {
         return ZStack(alignment: .topLeading) {
             body.fill(Color(white: 0.55).opacity(0.22))
             body.stroke(Color(white: 0.72), lineWidth: Geo.line)
-            Capsule().fill(.white.opacity(0.4))
+            Capsule().fill(Color.primary.opacity(0.15))
                 .frame(width: 2.5, height: r.height * 0.6)
                 .offset(x: r.width * 0.22, y: r.height * 0.24)
         }
@@ -124,7 +124,7 @@ struct InhalerCap: View {
                     let t = tl.date.timeIntervalSinceReferenceDate
                     let breath = reduceMotion ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * sin(t * 2 * .pi / 2.6))
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .strokeBorder(.white.opacity(0.75 * breath), style: StrokeStyle(lineWidth: 2, dash: [4, 5]))
+                        .strokeBorder(Color.primary.opacity(0.6 * breath), style: StrokeStyle(lineWidth: 2, dash: [4, 5]))
                 }
             } else {
                 RoundedRectangle(cornerRadius: 11, style: .continuous).fill(ink)

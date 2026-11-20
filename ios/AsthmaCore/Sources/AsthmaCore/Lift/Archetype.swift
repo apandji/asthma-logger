@@ -220,10 +220,10 @@ public extension AirProfile {
     }
 
     /// What each family will track that isn't measured yet, so the detail area shows the whole family, not
-    /// only what has data: pollen kinds and mould spores until Ambee, pressure and wind until they're bins,
+    /// only what has data: pollen kinds and mould spores until Ambee, pressure until it's a bin,
     /// PM10 and NO₂ (read on the rail, not yet in the table).
     public static let notYet: [Category: [String]] = [
-        .weather: ["Pressure swings", "Wind", "Thunderstorms"],
+        .weather: ["Pressure swings", "Thunderstorms"],
         .biologics: ["Tree pollen", "Grass pollen", "Mould spores"],
         .particulates: ["Coarse dust (PM10)", "Traffic fumes (NO₂)"],
         .exertion: [],

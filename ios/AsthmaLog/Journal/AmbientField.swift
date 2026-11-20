@@ -298,7 +298,7 @@ enum WeatherColor {
     /// Heat is the hot end of the temperature scale, cold the cold end; pollutants and pollen their layer inks.
     /// Nil for what isn't the air (journal tags, time, place): the family's own ink stands in.
     static func ink(bin: String, level: String) -> Color? {
-        if print, ["temp", "temp_drop", "heat_alert", "humidity"].contains(bin) { return weatherInk }
+        if print, ["temp", "temp_drop", "heat_alert", "humidity", "wind"].contains(bin) { return weatherInk }
         let c: Color? = switch bin {
         case "temp": temperature(level == "hot" ? 88 : level == "cold" ? 30 : 62)
         case "temp_drop": temperature(32)

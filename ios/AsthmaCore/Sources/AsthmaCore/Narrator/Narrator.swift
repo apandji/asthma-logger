@@ -125,6 +125,7 @@ public enum Narrator {
         case "smoke_at_point": return level == "yes" ? "there were signs of smoke in the air" : "there were no signs of smoke in the air"
         case "heat_alert": return level == "yes" ? "there was a heat alert" : "there was no heat alert"
         case "temp_drop": return level == "yes" ? "the temperature had dropped sharply" : "the temperature was steady"
+        case "wind": return level == "calm" ? "the air was still" : "it was \(level)"
         case "hour": return "it was \(level)"
         case "place":
             switch level {

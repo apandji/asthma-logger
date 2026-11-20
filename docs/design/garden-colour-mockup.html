@@ -1,0 +1,348 @@
+<title>Garden Colour System</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column of three studies. Each study is a phone on one side and its few controls and notes on the other. */
+:root {
+  --bg: #fafafa; --surface: #ffffff; --fg: #17171a; --muted: #6b6b73; --line: #e4e4e8; --chip: #efeff2;
+  --accent: #e8701f;                       /* felt air's orange: "yours", and nothing else */
+  --drkm: 0;
+  /* The app is always light, so the phone keeps its own fixed inks in both themes. */
+  --phone-bg: #f2f2f7; --phone-ink: #121214; --phone-muted: #6e6e76; --phone-card: #ffffff; --phone-body: #121214;
+  --ui: "ABC Areal Superfamily Variable", "ABC Areal", "Areal", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --app: "Figtree", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111113; --surface: #19191c; --fg: #ededf0; --muted: #9a9aa3; --line: #2b2b30; --chip: #232327; --accent: #ff8a3d; --drkm: 1; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111113; --surface: #19191c; --fg: #ededf0; --muted: #9a9aa3; --line: #2b2b30; --chip: #232327; --accent: #ff8a3d; --drkm: 1; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--ui); font-variation-settings: "MONO" 0, "DRKM" var(--drkm);
+  font-size: 15px; line-height: 1.5; padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+header h1 { font-size: 28px; font-weight: 520; letter-spacing: -0.01em; margin: 0 0 8px; text-wrap: balance; }
+header p, .notes p { color: var(--muted); max-width: 62ch; margin: 0; }
+.eyebrow { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+h2 { font-size: 19px; font-weight: 520; margin: 0 0 8px; text-wrap: balance; }
+.study { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 40px; align-items: start; border-top: 1px solid var(--line); padding-top: 32px; }
+@media (max-width: 760px) { .study { grid-template-columns: minmax(0, 1fr); gap: 24px; } .phone { margin: 0 auto; } }
+.notes { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.controls { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.row > span { font-size: 12px; color: var(--muted); width: 72px; }
+button.seg { font: inherit; font-size: 13px; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+button.seg:hover { background: var(--chip); }
+button.seg[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; }
+.tablebox { overflow-x: auto; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
+ol.steps { margin: 0; padding-left: 20px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; max-width: 60ch; }
+ol.steps b { color: var(--fg); font-weight: 500; }
+
+/* The phone: fixed light look. */
+.phone { width: 100%; max-width: 340px; background: var(--phone-body); border-radius: 46px; padding: 9px; }
+.screen { background: var(--phone-bg); color: var(--phone-ink); border-radius: 38px; overflow: hidden; font-family: var(--app); position: relative; }
+.head { padding: 26px 20px 0; min-height: 104px; }
+.where { font-size: 12px; color: var(--phone-muted); display: flex; gap: 8px; align-items: center; min-height: 22px; }
+.pill { background: var(--phone-ink); color: #fff; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 500; opacity: 0; transition: opacity .3s; }
+.pill.on { opacity: 1; }
+.read { font-size: 19px; font-weight: 500; line-height: 1.2; margin-top: 6px; letter-spacing: -0.01em; }
+.read span { opacity: 0; transition: opacity .25s; } .read span.on { opacity: 1; }
+svg.garden { display: block; width: 100%; height: auto; }
+svg text { font-family: var(--app); }
+.plus { position: absolute; right: 14px; bottom: 14px; width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--phone-ink); color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
+.plus:active { transform: scale(.94); }
+.bar { height: 76px; }
+/* Insights sample */
+.card { background: var(--phone-card); border-radius: 18px; margin: 0 14px 18px; padding: 12px 14px; font-size: 13px; }
+.card h3 { font-size: 14px; font-weight: 500; margin: 0 0 6px; display: flex; justify-content: space-between; }
+.card h3 em { font-style: normal; color: var(--phone-muted); font-weight: 400; font-size: 12px; }
+.ins { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+.ins svg { flex: none; } .ins i { margin-left: auto; font-style: normal; color: var(--phone-muted); font-size: 12px; }
+.ins.dim { color: var(--phone-muted); }
+.ins { cursor: pointer; border-radius: 8px; }
+.ins:focus-visible { outline: 2px solid #e8701f; outline-offset: 2px; }
+.more { font-size: 12px; color: var(--phone-muted); padding: 2px 0 8px 26px; line-height: 1.45; }
+.more b { color: var(--phone-ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.ins.mine { font-weight: 600; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">felt air · design study · Nov 19, 2026</p>
+    <h1>One colour system for the garden and Insights</h1>
+    <p>A proposal, not the app. Each visual property means one thing, on both screens. Switch between today's colours and the family colours (red for irritants, green for allergens, blue for weather), change the day, then press + to see a moment captured.</p>
+  </header>
+
+  <section class="study">
+    <div class="phone" aria-label="Phone mockup of the garden">
+      <div class="screen">
+        <div class="head">
+          <div class="where"><span class="pill" id="pill">Rescue</span><span>St. Louis, MO</span></div>
+          <div class="read" id="read"></div>
+        </div>
+        <svg class="garden" id="garden" viewBox="0 0 340 380" role="img" aria-label="Flowers for each reading, a timeline below"></svg>
+        <div class="bar"></div>
+        <button class="plus" id="plus" aria-label="Log a puff">+</button>
+      </div>
+    </div>
+    <div class="notes">
+      <div>
+        <p class="eyebrow">Study 1 and 2</p>
+        <h2>The garden, and the moment of capture</h2>
+        <p>Tap a flower to read it. Press + on the phone to log a puff.</p>
+      </div>
+      <div class="controls">
+        <div class="row" id="modeRow"><span>Colours</span>
+          <button class="seg" id="mode-family" data-mode="family" aria-pressed="true">By family</button>
+          <button class="seg" id="mode-today" data-mode="today" aria-pressed="false">Today's six</button></div>
+        <div class="row" id="dayRow"><span>The day</span>
+          <button class="seg" id="day-haze" data-day="haze" aria-pressed="true">Hazy afternoon</button>
+          <button class="seg" id="day-cold" data-day="cold" aria-pressed="false">Cold snap</button>
+          <button class="seg" id="day-pollen" data-day="pollen" aria-pressed="false">Spring pollen</button>
+          <button class="seg" id="day-calm" data-day="calm" aria-pressed="false">Calm</button></div>
+        <div class="row" id="stageRow"><span>Stage</span>
+          <button class="seg" id="stage-listening" data-stage="listening" aria-pressed="false">Listening</button>
+          <button class="seg" id="stage-yours" data-stage="yours" aria-pressed="true">Learned</button></div>
+      </div>
+      <div class="tablebox"><table>
+        <thead><tr><th>Property</th><th>Means</th></tr></thead>
+        <tbody>
+          <tr><td>Hue</td><td><span class="sw" style="background:#2b6fd6"></span>Weather <span class="sw" style="background:#d93a3a;margin-left:8px"></span>Irritants <span class="sw" style="background:#2f8f5b;margin-left:8px"></span>Allergens</td></tr>
+          <tr><td>Shade</td><td>Which reading inside the family</td></tr>
+          <tr><td>Size and height</td><td>How much it is one of yours</td></tr>
+          <tr><td>How far it opens</td><td>How much is in the air now. For temperature and humidity: how far from normal, either way</td></tr>
+          <tr><td>Lean</td><td>Temperature and humidity only. Left is below normal, right is above</td></tr>
+          <tr><td><span class="sw" style="background:var(--accent)"></span>Orange</td><td>You: your inhaler moments on the timeline. Not used on the flowers</td></tr>
+          <tr><td>Grey, closed</td><td>No reading for this hour</td></tr>
+        </tbody>
+      </table></div>
+      <ol class="steps">
+        <li><b>Hold.</b> The garden stops for a beat.</li>
+        <li><b>Petals.</b> Each flower with a reading gives one petal, named by its source, with one haptic tick.</li>
+        <li><b>Mark.</b> The petals land on the timeline as the moment.</li>
+        <li><b>Gaps show.</b> A flower with no reading gives nothing.</li>
+        <li><b>Sentence.</b> The words arrive last.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="study">
+    <div class="phone" aria-label="Phone mockup of an Insights card">
+      <div class="screen" style="padding-top:22px">
+        <div class="card"><h3>Irritants and pollution <em>Often</em></h3>
+          <div class="ins mine"><span data-glyph="pm25"></span>Fine particles<i>Often</i></div>
+          <div class="ins"><span data-glyph="ozone"></span>Ozone<i>Maybe</i></div>
+          <div class="ins dim"><span data-glyph="none"></span>Traffic fumes<i>Not tracked yet</i></div></div>
+        <div class="card"><h3>Weather <em>Sometimes</em></h3>
+          <div class="ins mine"><span data-glyph="humidity"></span>More humid than usual<i>Sometimes</i></div>
+          <div class="ins"><span data-glyph="temp"></span>Colder than usual<i>Maybe</i></div>
+          <div class="ins"><span data-glyph="wind"></span>Wind<i>Not much</i></div></div>
+        <div class="card"><h3>Allergens <em>Not much</em></h3>
+          <div class="ins"><span data-glyph="tree"></span>Tree pollen<i>Not much</i></div>
+          <div class="ins"><span data-glyph="grass"></span>Grass pollen<i>Not much</i></div>
+          <div class="ins"><span data-glyph="weed"></span>Weed pollen<i>Not much</i></div></div>
+      </div>
+    </div>
+    <div class="notes">
+      <div>
+        <p class="eyebrow">Study 3</p>
+        <h2>Insights keeps its neutral ink</h2>
+        <p>The page stays neutral. The link back to the garden is the small flower beside each row, in its garden colour, and bigger when it is one of yours, the same as in the garden. Exercise and Colds and flu have no flower: they are about you, not the air.</p>
+        <p>Tap a row for a second layer: the typical reading on inhaler days beside ordinary days, with units. Words first, readings if you ask. The values here are examples.</p>
+      </div>
+      <div>
+        <p class="eyebrow">Open questions</p>
+        <ol class="steps">
+          <li><b>Normal is decided.</b> Normal for this place and this week (owner, Nov 19). It comes from the app's own recent hours at this place and time of day, not from long-term averages.</li>
+          <li><b>Red beside orange.</b> Irritants in red sit near the orange of your inhaler moments on the timeline. Far enough apart?</li>
+          <li><b>Eight flowers.</b> Splitting pollen into three makes eight. Too many for the phone?</li>
+          <li><b>How deep do the layers go?</b> Words, then typical readings. A third layer with counts ("8 of 14 inhaler days") was ruled out on Oct 17. Reopen it?</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n, a = {}, t) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (t != null) e.textContent = t; return e; };
+
+// Each reading: family, both colour sets, its source, and whether it reads as distance from normal.
+const F = [
+  { id: 'temp',     name: 'Temperature', short: 'Temp',     fam: '#2b6fd6', today: '#db5c4d', src: 'Apple Weather', delta: true,  lo: 'colder than usual', hi: 'warmer than usual' },
+  { id: 'humidity', name: 'Humidity',    short: 'Humidity', fam: '#6fa3e8', today: '#33808f', src: 'Apple Weather', delta: true,  lo: 'drier than usual',  hi: 'more humid than usual' },
+  { id: 'wind',     name: 'Wind',        short: 'Wind',     fam: '#a9bedd', today: '#6b6e73', src: 'Apple Weather' },
+  { id: 'pm25',     name: 'Fine particles', short: 'PM2.5', fam: '#d93a3a', today: '#2e6bc7', src: 'Ambee' },
+  { id: 'ozone',    name: 'Ozone',       short: 'Ozone',    fam: '#ee8a85', today: '#db6b8f', src: 'Ambee' },
+  { id: 'tree',     name: 'Tree pollen', short: 'Tree',     fam: '#2f8f5b', today: '#edbd29', src: 'Ambee', pollen: true },
+  { id: 'grass',    name: 'Grass pollen', short: 'Grass',   fam: '#6db56b', today: '#edbd29', src: 'Ambee', pollen: true },
+  { id: 'weed',     name: 'Weed pollen', short: 'Weed',     fam: '#a9cf8e', today: '#edbd29', src: 'Ambee', pollen: true },
+];
+// Values 0…1; temperature and humidity are signed distance from normal (−1…1). null = no reading.
+const DAYS = {
+  haze:   { v: { temp: .45, humidity: .5, wind: .12, pm25: .85, ozone: .7, tree: 0, grass: 0, weed: .22 }, read: 'Fine particles and ozone are up.' },
+  cold:   { v: { temp: -.9, humidity: -.6, wind: .7, pm25: .3, ozone: .1, tree: null, grass: null, weed: null }, read: "It's much colder and drier than usual." },
+  pollen: { v: { temp: .2, humidity: 0, wind: .5, pm25: .2, ozone: .3, tree: .9, grass: .5, weed: .1 }, read: 'Tree pollen is high.' },
+  calm:   { v: { temp: .08, humidity: -.1, wind: .2, pm25: .15, ozone: .2, tree: 0, grass: 0, weed: .12 }, read: 'Nothing in the air stands out.' },
+};
+// The navigator, learned: fine particles first, then humid air.
+const YOURS = { pm25: 1, humidity: .62, ozone: .36, temp: .3, wind: .15, tree: .15, grass: .15, weed: .2 };
+const state = { mode: 'family', day: 'haze', stage: 'yours', picked: null, busy: false, marked: false };
+const svg = document.getElementById('garden'), read = document.getElementById('read'), pill = document.getElementById('pill');
+const GROUND = 284, TL = 348, W = 340;
+
+function flowers() {
+  const v = DAYS[state.day].v;
+  let list = F;
+  if (state.mode === 'today') {   // today's six: one Pollen flower, the highest of the three
+    const p = ['tree', 'grass', 'weed'].map(k => v[k]);
+    const any = p.some(x => x != null);
+    list = F.filter(f => !f.pollen).concat([{ id: 'pollen', name: 'Pollen', short: 'Pollen', fam: '#edbd29', today: '#edbd29', src: 'Ambee',
+      val: any ? Math.max(...p.map(x => x ?? 0)) : null, w: Math.max(YOURS.tree, YOURS.grass, YOURS.weed) }]);
+  }
+  const n = list.length, gap = (W - 28) / n;
+  return list.map((f, i) => {
+    const val = f.val !== undefined ? f.val : v[f.id];
+    const w = state.stage === 'yours' ? (f.w ?? YOURS[f.id]) : .45;
+    const open = val == null ? 0 : Math.min(1, Math.abs(val));
+    const r = 15 + 27 * w * (n > 6 ? .9 : 1);
+    const jitter = [0, 26, 8, 0, 30, 12, 34, 4][i % 8] * (state.stage === 'yours' ? .5 : 1);
+    const h = 70 + 150 * w + jitter;
+    return { ...f, val, w, open, r, x: 14 + gap * (i + .5), y: GROUND - h,
+             tilt: f.delta && val != null ? 26 * Math.sign(val) * Math.min(1, Math.abs(val) * 1.4) : 0,
+             color: val == null ? '#b9b9c0' : (state.mode === 'family' ? f.fam : f.today) };
+  });
+}
+
+function fanPath(x, y, r, open, tilt) {
+  const span = 16 + 150 * open, a0 = (-90 - span / 2 + tilt) * Math.PI / 180, a1 = (-90 + span / 2 + tilt) * Math.PI / 180;
+  const p = a => `${(x + r * Math.cos(a)).toFixed(1)} ${(y + r * Math.sin(a)).toFixed(1)}`;
+  return `M ${x} ${y} L ${p(a0)} A ${r} ${r} 0 ${span > 180 ? 1 : 0} 1 ${p(a1)} Z`;
+}
+
+function words(f) {
+  if (f.val == null) return 'no reading';
+  if (f.delta) return Math.abs(f.val) < .15 ? 'about normal' : (f.val < 0 ? f.lo : f.hi);
+  return f.val < .25 ? 'low' : f.val < .6 ? 'up a little' : 'high';
+}
+
+function render() {
+  svg.replaceChildren();
+  const defs = el('defs'); svg.append(defs);
+  const fs = flowers();
+  // Timeline: a hairline, ticks, earlier moments, the playhead.
+  svg.append(el('line', { x1: 14, x2: W - 14, y1: TL, y2: TL, stroke: '#c9c9d1', 'stroke-width': 1 }));
+  for (let i = 0; i < 9; i++) svg.append(el('line', { x1: 30 + i * 35, x2: 30 + i * 35, y1: TL - 4, y2: TL + 4, stroke: '#c9c9d1', 'stroke-width': 1 }));
+  [62, 118].forEach(x => svg.append(el('rect', { x: x - 3, y: TL - 8, width: 6, height: 16, rx: 3, fill: '#121214' })));
+  svg.append(el('line', { x1: W / 2, x2: W / 2, y1: TL - 14, y2: TL + 14, stroke: '#121214', 'stroke-width': 2 }));
+  svg.append(el('text', { x: W / 2, y: TL - 22, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 500, fill: '#121214' }, 'Now'));
+  svg.append(el('rect', { id: 'mark', x: W / 2 - 4, y: TL - 10, width: 8, height: 20, rx: 4, fill: '#e8701f', opacity: state.marked ? 1 : 0 }));
+  svg.append(el('circle', { id: 'ring', cx: W / 2, cy: TL, r: 6, fill: 'none', stroke: '#e8701f', 'stroke-width': 1.5, opacity: 0 }));
+
+  fs.forEach(f => {
+    const g = el('g', { 'data-id': f.id, style: 'cursor:pointer' });
+    const grad = el('radialGradient', { id: 'g-' + f.id, gradientUnits: 'userSpaceOnUse', cx: f.x, cy: f.y, r: f.r });
+    grad.append(el('stop', { offset: 0, 'stop-color': f.color, 'stop-opacity': .98 }), el('stop', { offset: .55, 'stop-color': f.color, 'stop-opacity': .62 }),
+                el('stop', { offset: 1, 'stop-color': f.color, 'stop-opacity': .2 }));
+    defs.append(grad);
+    g.append(el('line', { x1: f.x, x2: f.x, y1: GROUND, y2: f.y, stroke: f.color, 'stroke-width': 1, opacity: .8 }));
+    g.append(el('path', { d: fanPath(f.x, f.y, f.r, f.open, f.tilt), fill: `url(#g-${f.id})` }));
+    g.append(el('text', { x: f.x, y: GROUND + 14, 'text-anchor': 'middle', 'font-size': 8.5, fill: '#6e6e76' }, f.short));
+    g.append(el('rect', { x: f.x - 18, y: f.y - f.r - 4, width: 36, height: GROUND - f.y + f.r + 20, fill: 'transparent' }));
+    g.addEventListener('click', () => { state.picked = state.picked === f.id ? null : f.id; render(); });
+    svg.append(g);
+    if (state.picked === f.id) {
+      const lx = Math.min(W - 70, Math.max(70, f.x));
+      svg.append(el('text', { x: lx, y: f.y - f.r - 20, 'text-anchor': 'middle', 'font-size': 11, 'font-weight': 600, fill: '#121214' }, f.name));
+      const line = el('text', { x: lx, y: f.y - f.r - 8, 'text-anchor': 'middle', 'font-size': 10, fill: '#6e6e76' }, words(f) + ' · ');
+      line.append(el('tspan', {}, f.src));
+      svg.append(line);
+    }
+  });
+  if (!state.busy) setRead(true);
+}
+
+function setRead(shown) {
+  read.replaceChildren(...DAYS[state.day].read.split(' ').flatMap((w, i) => {
+    const s = document.createElement('span'); s.textContent = w; if (shown) s.className = 'on'; return [s, ' '];
+  }));
+}
+
+const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+async function capture() {
+  if (state.busy) return;
+  state.busy = true; state.picked = null; state.marked = false; pill.classList.remove('on'); render(); setRead(false);
+  const fs = flowers(), mark = svg.querySelector('#mark'), ring = svg.querySelector('#ring');
+  if (calm) { state.marked = true; pill.classList.add('on'); state.busy = false; render(); return; }
+  await wait(260);                                         // the hold
+  const giving = fs.filter(f => f.val != null);
+  giving.forEach((f, i) => setTimeout(() => {
+    const sx = f.x, sy = f.y - f.r * .55, tx = W / 2, ty = TL;
+    const petal = el('ellipse', { cx: sx, cy: sy, rx: 4.5, ry: 6.5, fill: f.color, opacity: .95 });
+    const label = el('text', { x: sx, y: sy - 12, 'text-anchor': 'middle', 'font-size': 8, fill: '#6e6e76' }, f.src);
+    svg.append(petal, label);
+    const t0 = performance.now(), dur = 620;
+    (function step(now) {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      const x = sx + (tx - sx) * e, y = sy + (ty - sy) * e - Math.sin(k * Math.PI) * 26;   // a small arc
+      petal.setAttribute('cx', x); petal.setAttribute('cy', y); petal.setAttribute('opacity', .95 - .35 * k);
+      label.setAttribute('x', x); label.setAttribute('y', y - 12); label.setAttribute('opacity', Math.max(0, 1 - k * 1.6));
+      if (k < 1) return requestAnimationFrame(step);
+      petal.remove(); label.remove();
+      mark.setAttribute('opacity', Math.min(1, +mark.getAttribute('opacity') + 1 / giving.length + .05));
+      ring.animate([{ r: 6, opacity: .7 }, { r: 20, opacity: 0 }], { duration: 380, easing: 'ease-out' });   // the tick
+    })(t0);
+  }, i * 110));
+  await wait(giving.length * 110 + 720);
+  mark.setAttribute('opacity', 1); state.marked = true; pill.classList.add('on');
+  setRead(false);
+  for (const s of read.querySelectorAll('span')) { s.classList.add('on'); await wait(70); }
+  state.busy = false;
+}
+
+function bind(rowId, key, attr) {
+  document.getElementById(rowId).addEventListener('click', e => {
+    const b = e.target.closest('button.seg'); if (!b || state.busy) return;
+    state[key] = b.dataset[attr]; state.picked = null; state.marked = false; pill.classList.remove('on');
+    b.parentElement.querySelectorAll('button.seg').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    render();
+  });
+}
+bind('modeRow', 'mode', 'mode'); bind('dayRow', 'day', 'day'); bind('stageRow', 'stage', 'stage');
+document.getElementById('plus').addEventListener('click', capture);
+
+// Second layer: tap a row for the readings behind the word. Typical (median) reading on inhaler days and on
+// ordinary days, with units. Example values.
+const BEHIND = {
+  'Fine particles': ['19 µg/m³', '7 µg/m³'], 'Ozone': ['34 ppb', '29 ppb'], 'More humid than usual': ['78%', '61%'],
+  'Colder than usual': ['41°F', '47°F'], 'Wind': ['9 mph', '8 mph'],
+};
+document.querySelectorAll('.ins').forEach(row => {
+  const name = [...row.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join('');
+  const more = document.createElement('div'); more.className = 'more'; more.hidden = true;
+  const v = BEHIND[name];
+  more.innerHTML = v ? `Typical on inhaler days <b>${v[0]}</b><br>Typical on ordinary days <b>${v[1]}</b>`
+    : (row.classList.contains('dim') ? 'No readings kept for this yet.' : 'Too few readings above zero to compare.');
+  row.after(more); row.tabIndex = 0; row.setAttribute('role', 'button'); row.setAttribute('aria-expanded', 'false');
+  const toggle = () => { more.hidden = !more.hidden; row.setAttribute('aria-expanded', String(!more.hidden)); };
+  row.addEventListener('click', toggle);
+  row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+});
+
+// The small flowers beside each Insights row, in their garden colour.
+document.querySelectorAll('[data-glyph]').forEach(s => {
+  const f = F.find(x => x.id === s.dataset.glyph), c = f ? f.fam : '#b9b9c0';
+  const big = s.closest('.mine') ? 24 : 18;   // yours: a bigger flower, as in the garden
+  const g = el('svg', { width: big, height: big * 20 / 18, viewBox: '0 0 18 20' });
+  g.append(el('line', { x1: 9, x2: 9, y1: 20, y2: 11, stroke: c, 'stroke-width': 1 }), el('path', { d: fanPath(9, 11, 9, f ? .62 : .05, 0), fill: c, opacity: .85 }));
+  s.replaceWith(g);
+});
+render();
+</script>

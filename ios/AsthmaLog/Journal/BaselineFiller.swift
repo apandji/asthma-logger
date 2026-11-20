@@ -96,6 +96,11 @@ final class BaselineFiller {
                                           source: WeatherProvider.source, spatialScale: .modelGrid))
                 obs.append(EnvObservation(signal: .humidity, value: w.humidityPct, unit: "%", asOf: w.date,
                                           source: WeatherProvider.source, spatialScale: .modelGrid))
+                // Wind too, so ordinary hours have it to compare inhaler moments against (the `wind` bin).
+                if let wind = w.windMph {
+                    obs.append(EnvObservation(signal: .windSpeed, value: wind, unit: "mph", asOf: w.date,
+                                              source: WeatherProvider.source, spatialScale: .modelGrid))
+                }
             }
             if let p = nearest(pm25.values, \.date) {
                 obs.append(EnvObservation(signal: .pm25, value: p.value, unit: "µg/m³", asOf: p.date, source: "OpenAQ",

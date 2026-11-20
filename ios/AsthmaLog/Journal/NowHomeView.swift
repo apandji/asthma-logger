@@ -1442,6 +1442,7 @@ struct NowHomeView: View {
             case "pollen_weed", "pollen_tree", "pollen_grass": "Pollen"
             case "temp", "temp_drop", "heat_alert": "Temperature"
             case "humidity": "Humidity"
+            case "wind": "Wind"
             default: nil
             }
             guard let name else { continue }
@@ -1462,7 +1463,7 @@ struct NowHomeView: View {
             case "pollen_grass": ["Grass pollen"]
             case "smoke_at_point": ["Smoke", "PM2.5"]
             case "temp_drop": ["Drop", "Weather"]
-            case "temp", "humidity", "heat_alert": ["Weather"]
+            case "temp", "humidity", "heat_alert", "wind": ["Weather"]
             default: []
             }
             for n in names { out[n] = max(out[n] ?? 0, s) }
@@ -1870,6 +1871,9 @@ struct NowHour: Identifiable, Sendable {
                 EnvObservation(signal: .temperature, value: h.temperatureF, unit: "°F", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true),
                 EnvObservation(signal: .humidity, value: h.humidityPct, unit: "%", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true),
             ]
+            if let wind = h.windMph {
+                obs.append(EnvObservation(signal: .windSpeed, value: wind, unit: "mph", asOf: h.date, source: source, spatialScale: .modelGrid, isForecast: true))
+            }
             let a = ambee[Int(h.date.timeIntervalSince1970 / 3600)]
             obs += a?.observations(source: Ambee.source) ?? []
             let day = a == nil ? aq[AirNowProvider.dayString(h.date)] : nil

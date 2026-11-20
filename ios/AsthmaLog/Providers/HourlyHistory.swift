@@ -46,7 +46,8 @@ struct HourlyHistory: Sendable {
                 for: CLLocation(latitude: lat, longitude: lon), including: .hourly(startDate: from, endDate: to))
             return .success(forecast.map {
                 WeatherProvider.Hour(date: $0.date, temperatureF: $0.temperature.converted(to: .fahrenheit).value,
-                                     humidityPct: $0.humidity * 100)
+                                     humidityPct: $0.humidity * 100,
+                                     windMph: $0.wind.speed.converted(to: .milesPerHour).value)
             })
         } catch { return .failure(error) }
     }

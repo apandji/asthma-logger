@@ -57,6 +57,15 @@ public enum Banding {
         return .ok
     }
 
+    /// Wind speed (mph), on Beaufort's steps: under 8 is light air to a gentle breeze, 8 to under 19 a moderate
+    /// breeze, 19 and up a fresh breeze or more (small trees sway, dust and pollen lift).
+    public static func wind(mph: Double?) -> WindBand {
+        guard let v = mph, v.isFinite, v >= 0 else { return .unknown }
+        if v < 8 { return .calm }
+        if v < 19 { return .breezy }
+        return .windy
+    }
+
     public static func pollen(risk: String?) -> PollenLevel {
         guard let risk, !risk.isEmpty else { return .unknown }
         let r = risk.lowercased()
@@ -115,6 +124,8 @@ public struct ConditionsInput: Sendable, Equatable {
     public var alertNames: [String]
     /// °F fallen in the 3 hours before (`TempDrop.degreesFallen`). Nil = no hourly history.
     public var tempFallF: Double?
+    /// Wind speed, mph. Nil = no wind reading.
+    public var windMph: Double?
 
     public init(
         pm25: Double? = nil,
@@ -125,8 +136,10 @@ public struct ConditionsInput: Sendable, Equatable {
         aqi: Int? = nil,
         isExtremeTemp: Bool? = nil,
         alertNames: [String] = [],
-        tempFallF: Double? = nil
+        tempFallF: Double? = nil,
+        windMph: Double? = nil
     ) {
+        self.windMph = windMph
         self.pm25 = pm25
         self.ozonePpb = ozonePpb
         self.temperatureF = temperatureF
@@ -172,6 +185,7 @@ public enum FrameBuilder {
             smokeAtPoint: Banding.smokeAtPoint(pm25: c.pm25, aqi: c.aqi),
             heatAlert: Banding.heatAlert(isExtremeTemp: c.isExtremeTemp, alertNames: c.alertNames),
             tempDrop: TempDrop.band(c.tempFallF),
+            windBand: Banding.wind(mph: c.windMph),
             place: place,
             indoorOutdoor: indoorOutdoor == .unknown ? nil : indoorOutdoor,
             tags: tags,
@@ -214,9 +228,12 @@ public struct ForecastConditions: Sendable, Equatable {
     public var alertNames: [String]
     /// °F fallen in the 3 hours before this hour, from the hourly forecast (plus recent past hours).
     public var tempFallF: Double?
+    /// Forecast wind speed, mph.
+    public var windMph: Double?
 
     public init(temperatureF: Double? = nil, humidityPct: Double? = nil, pm25Category: Int? = nil,
-                ozoneCategory: Int? = nil, alertNames: [String] = [], tempFallF: Double? = nil) {
+                ozoneCategory: Int? = nil, alertNames: [String] = [], tempFallF: Double? = nil, windMph: Double? = nil) {
+        self.windMph = windMph
         self.temperatureF = temperatureF
         self.humidityPct = humidityPct
         self.pm25Category = pm25Category
@@ -249,6 +266,7 @@ extension FrameBuilder {
             smokeAtPoint: worstCategory >= 2,
             heatAlert: Banding.heatAlert(isExtremeTemp: extreme, alertNames: c.alertNames),
             tempDrop: TempDrop.band(c.tempFallF),
+            windBand: Banding.wind(mph: c.windMph),
             place: place
         )
     }

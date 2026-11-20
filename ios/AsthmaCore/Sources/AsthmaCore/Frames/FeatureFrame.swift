@@ -5,9 +5,11 @@ import Foundation
 /// v4 adds `temp_drop` (a fall of 10°F or more in the 3 hours before, `TempDrop`);
 /// v5 adds `exertion` (active in the hour before: a workout, running or cycling, or a burst of steps; `Exertion`).
 /// v6 adds `ili` (flu-like illness around that day, `Infection`; missing until stamped).
+/// v7 adds `wind` (calm under 8 mph, breezy under 19, windy from 19: Beaufort's light / moderate / fresh; missing
+/// without a wind reading).
 /// Bump when any edge changes and regenerate `fixtures/` (fixtures cover the v1 bins only).
 public enum BinSpec {
-    public static let version = 6
+    public static let version = 7
 }
 
 public enum FrameKind: String, Codable, Sendable, CaseIterable {
@@ -27,6 +29,10 @@ public enum TempBand: String, Codable, Sendable, CaseIterable {
 
 public enum HumidityBand: String, Codable, Sendable, CaseIterable {
     case dry, ok, humid, unknown
+}
+
+public enum WindBand: String, Codable, Sendable, CaseIterable {
+    case calm, breezy, windy, unknown
 }
 
 public enum PollutantBand: String, Codable, Sendable, CaseIterable {
@@ -64,6 +70,9 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
     /// v4 (iOS only). Unknown when there were no hourly temperatures around the frame.
     public var tempDrop: TempDropBand
 
+    /// v7 (iOS only). Unknown without a wind reading for the hour.
+    public var windBand: WindBand
+
     // v2 (iOS only). Absent → the bin contributes no rows.
     public var place: PlaceKind?
     public var indoorOutdoor: IndoorOutdoor?
@@ -95,6 +104,7 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         smokeAtPoint: Bool = false,
         heatAlert: Bool = false,
         tempDrop: TempDropBand = .unknown,
+        windBand: WindBand = .unknown,
         place: PlaceKind? = nil,
         indoorOutdoor: IndoorOutdoor? = nil,
         tags: Set<JournalTag> = [],
@@ -114,6 +124,7 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         self.smokeAtPoint = smokeAtPoint
         self.heatAlert = heatAlert
         self.tempDrop = tempDrop
+        self.windBand = windBand
         self.place = place
         self.indoorOutdoor = indoorOutdoor
         self.tags = tags
@@ -124,7 +135,7 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, hourOfDay, season, tempBand, humidityBand, pm25Band, ozoneBand, pollenWeed
-        case smokeAtPoint, heatAlert, tempDrop, place, indoorOutdoor, tags, tagsReviewed, exerted, infection
+        case smokeAtPoint, heatAlert, tempDrop, windBand, place, indoorOutdoor, tags, tagsReviewed, exerted, infection
     }
 
     public init(from decoder: Decoder) throws {
@@ -141,6 +152,7 @@ public struct FeatureFrame: Codable, Sendable, Equatable, Identifiable {
         smokeAtPoint = try c.decode(Bool.self, forKey: .smokeAtPoint)
         heatAlert = try c.decode(Bool.self, forKey: .heatAlert)
         tempDrop = try c.decodeIfPresent(TempDropBand.self, forKey: .tempDrop) ?? .unknown
+        windBand = try c.decodeIfPresent(WindBand.self, forKey: .windBand) ?? .unknown
         place = try c.decodeIfPresent(PlaceKind.self, forKey: .place)
         indoorOutdoor = try c.decodeIfPresent(IndoorOutdoor.self, forKey: .indoorOutdoor)
         tags = try c.decodeIfPresent(Set<JournalTag>.self, forKey: .tags) ?? []

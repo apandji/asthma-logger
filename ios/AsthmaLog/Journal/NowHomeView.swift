@@ -85,7 +85,7 @@ struct NowHomeView: View {
     /// Where the playhead is. Nil means now.
     @State private var focusTime: Date?
     @AppStorage(Crit.TimelineLook.key) private var timelineLook = Crit.TimelineLook.track
-    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.feltAir
+    @AppStorage(Crit.AppLook.key) private var appLook = Crit.AppLook.menus
     private var healthLook: Bool { appLook.healthLike }
     // Menus look (Oct 30 sketch).
     @State private var menusScale = MenusScale.timeline
@@ -103,6 +103,9 @@ struct NowHomeView: View {
     /// The Menus look's shared time window: the strip and every chart below it.
     @State private var menusWindow = MenusWindow(center: .now, span: 3 * 86_400)
     @State private var showInsights = false
+    /// The evening look-back (EveningLookBack): after 6 pm with today's moments missing a note, or staged.
+    @State private var showEvening = false
+    @AppStorage(EveningLookBack.demoKey) private var demoEvening = false
     /// Bumps each time the patterns are re-learned, so a loadout's landing can wait for the new person's.
     @State private var rebuilt = 0
     /// A loadout's landing (Settings › Demo and development › Loadouts): an hour tomorrow, or Insights.
@@ -348,7 +351,23 @@ struct NowHomeView: View {
                         if let m = best { withAnimation(Theme.smooth) { focusTime = m.loggedAt } }
                     }
                     if parts.contains("open=insights") { showInsights = true }
+                    if parts.contains("open=evening") {
+                        for _ in 0..<40 where EveningLookBack.shown(events, now: .now).isEmpty { try? await Task.sleep(for: .milliseconds(250)) }
+                        guard pendingLoadout == v else { return }
+                        withAnimation(Theme.smooth) { showEvening = true }
+                    }
                     pendingLoadout = ""
+                }
+            }
+            .overlay {
+                if showEvening {
+                    EveningLookBack(moments: EveningLookBack.shown(events, now: now), add: { e in
+                        withAnimation(Theme.smooth) { showEvening = false }
+                        // After the wash has cleared, so the capture rises over Now.
+                        Task { try? await Task.sleep(for: .milliseconds(350)); openCapture(e, listen: true) }
+                    }, close: { withAnimation(Theme.smooth) { showEvening = false } })
+                    .transition(.opacity)
+                    .zIndex(10)
                 }
             }
             .sheet(isPresented: $showInsights, onDismiss: { insightsFocus = nil }) {
@@ -361,7 +380,9 @@ struct NowHomeView: View {
                     .presentationBackground(healthLook ? Color(uiColor: .systemGroupedBackground) : Theme.paper(paper))
                     .presentationCornerRadius(32)
             }
-            .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showSettings, onDismiss: {
+                Task { try? await Task.sleep(for: .milliseconds(600)); offerEvening() }
+            }) { SettingsView() }
             .onChange(of: focusKey) { _, _ in if !scrubbing, hasMark { noticed += 1 } }
             .onChange(of: scrubbing) { _, s in if !s, hasMark { noticed += 1 } }
             // Refresh the big statement when Settings › Type flips; do not remount (sheet would dismiss).
@@ -380,6 +401,7 @@ struct NowHomeView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .task { await load() }
+            .task { try? await Task.sleep(for: .milliseconds(1500)); offerEvening() }
             // Back in the foreground with no place yet (the first fix timed out): try again.
             .onChange(of: scenePhase) { _, p in reloadIfNeeded(p) }
             // Re-runs when the location arrives, not only when the event changes.
@@ -1002,7 +1024,16 @@ struct NowHomeView: View {
     }
 
     /// Back in the foreground with no place yet (the first fix timed out): try again.
+    /// Shows the evening look-back when it's due, once the screen is free of other sheets.
+    private func offerEvening() {
+        guard didOnboard, !showEvening, !showInsights, !showSettings, capture == nil, pendingLoadout.isEmpty,
+              EveningLookBack.isDue(events, now: .now), !EveningLookBack.shown(events, now: .now).isEmpty else { return }
+        EveningLookBack.markShown(now: .now)
+        withAnimation(Theme.smooth) { showEvening = true }
+    }
+
     private func reloadIfNeeded(_ phase: ScenePhase) {
+        if phase == .active { Task { try? await Task.sleep(for: .milliseconds(900)); offerEvening() } }
         guard phase == .active, here == nil else { return }
         Task { await load() }
     }

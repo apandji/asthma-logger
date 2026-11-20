@@ -183,15 +183,15 @@ enum Crit {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .feltAir: "felt air"
+            case .feltAir: "Riso (earlier look)"
             case .health: "Apple Health"
-            case .menus: "Menus (Oct 30 sketch)"
+            case .menus: "felt air (flowers, the default)"
             }
         }
         /// Menus is built on the Apple Health look (grey sky, pills, Health colours) with its own structure.
         var healthLike: Bool { self != .feltAir }
         static let key = "crit.appLook"
-        static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? .feltAir }
+        static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? .menus }
     }
 
     /// Menus look: the sky as a 3D rounded glass cube of air with physics, or the flat square with a circle.

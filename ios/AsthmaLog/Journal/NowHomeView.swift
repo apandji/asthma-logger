@@ -109,6 +109,8 @@ struct NowHomeView: View {
     @State private var showInsights = false
     /// The evening look-back (EveningLookBack): after 6 pm with today's moments missing a note, or staged.
     @State private var showEvening = false
+    /// The map under the flowers was tapped once: it's showing the place and its coordinates.
+    @State private var showPlaceInfo = false
     @AppStorage(EveningLookBack.demoKey) private var demoEvening = false
     /// Bumps each time the patterns are re-learned, so a loadout's landing can wait for the new person's.
     @State private var rebuilt = 0
@@ -1170,7 +1172,17 @@ struct NowHomeView: View {
                                              // The flowers fill the room between the header and the timeline.
                                              bigBand: menusViewport > 0 ? max(300, menusViewport - 158 - 16 - 20) : MenusEnvironment.bigBand)   // the time is on the timeline now (owner, Nov 13)
                                     .padding(.bottom, combined ? 0 : 120)   // clear of the tab bar and the +
-                                if combined { soilMap }
+                                if combined {
+                                    soilMap
+                                    // Under the fold: everything felt air holds about the moment on the playhead.
+                                    MomentFold(event: foldSubject.event, conditions: foldSubject.conditions, date: foldSubject.date,
+                                               yours: Set(gatedRows.compactMap { $0.level == "yes" ? Combination.of(bin: $0.bin) : nil }),
+                                               // No note yet: the journal card starts one, listening. On Now with no
+                                               // moment, it makes a manual moment first, like the +.
+                                               record: { e in if let e { openCapture(e, listen: true) } else { felt(true) } },
+                                               canStartNew: { if case .now = focus { true } else { false } }())
+                                        .padding(.bottom, 32)
+                                }
                             } header: {
                                 if !combined { strip }
                             }
@@ -1209,6 +1221,15 @@ struct NowHomeView: View {
     /// Under the flowers' ground (owner, Nov 19): the paper fades into a small map of where the moment at the
     /// playhead was logged, just that spot and a little around it. Still, so it doesn't fight the scroll; a tap
     /// opens the Map tab.
+    /// What the fold describes: the moment on the playhead, or the air of Now or of a forecast hour.
+    private var foldSubject: (event: LogEvent?, conditions: Conditions?, date: Date) {
+        switch focus {
+        case .moment(let m): (m, m.conditions, m.loggedAt)
+        case .hour(let h): (nil, h.conditions, h.date)
+        case .now: (justNow, justNow?.conditions ?? here?.conditions, now)
+        }
+    }
+
     private var soilMap: some View {
         let paper = Color(uiColor: .systemGroupedBackground)
         let c = menusWindow.center
@@ -1224,12 +1245,40 @@ struct NowHomeView: View {
                                startPoint: .top, endPoint: .bottom)
                     .allowsHitTesting(false)
             }
+            // First tap (owner, Nov 19): where this was, in words and coordinates. Second tap: the Map tab.
+            .overlay(alignment: .bottom) {
+                if showPlaceInfo, let here, let la = here.latitude, let lo = here.longitude {
+                    VStack(spacing: 2) {
+                        Text(here.placeName ?? "Where this was").font(Theme.ui(.subheadline, weight: .medium))
+                        Text(Self.coordinates(la, lo)).font(Theme.ui(.footnote).monospacedDigit()).foregroundStyle(Theme.secondaryText)
+                        if let acc = here.horizontalAccuracy, acc > 0 {
+                            Text("Within about \(Int(acc.rounded())) m").font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText)
+                        }
+                        Text("Tap again for the map").font(Theme.ui(.caption)).foregroundStyle(Theme.secondaryText).padding(.top, 2)
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
+                    .padding(.bottom, 44)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    .allowsHitTesting(false)
+                }
+            }
             .padding(.bottom, 24)
             .contentShape(Rectangle())
-            .onTapGesture { withAnimation(Theme.snap) { menusTab = .map } }
+            .onTapGesture {
+                if showPlaceInfo || here?.latitude == nil { showPlaceInfo = false; withAnimation(Theme.snap) { menusTab = .map } }
+                else { withAnimation(Theme.smooth) { showPlaceInfo = true } }
+            }
+            .onChange(of: here?.id) { _, _ in showPlaceInfo = false }
             .accessibilityElement()
             .accessibilityLabel(here?.placeName.map { "Where this moment was: \($0)" } ?? "Where this moment was")
+            .accessibilityHint(showPlaceInfo ? "Opens the map" : "Shows the place and its coordinates")
             .accessibilityAddTraits(.isButton)
+    }
+
+    /// "38.5958° N, 90.2552° W": four places, about ten metres.
+    static func coordinates(_ lat: Double, _ lon: Double) -> String {
+        String(format: "%.4f° %@, %.4f° %@", abs(lat), lat >= 0 ? "N" : "S", abs(lon), lon >= 0 ? "E" : "W")
     }
 
     /// How far the Menus window can go: the first moment (a week back at least) to the forecast's end.

@@ -60,6 +60,21 @@ final class LogService {
         return event
     }
 
+    /// A manual moment from the + (owner, Nov 19): saved and handed back at once, so its sheet opens on the tap,
+    /// and the air is noted behind it. `log` waits for the location fix and the air, a few seconds on a slow
+    /// network, and the + felt dead meanwhile (only the logged tick played).
+    func begin(_ moment: MomentKind, in context: ModelContext) -> LogEvent {
+        lastError = nil
+        let event = LogEvent(moment: moment, loggedAt: .now)
+        context.insert(event)
+        try? context.save()
+        Task {
+            await enrich(event)
+            try? context.save()
+        }
+        return event
+    }
+
     /// Moments left "noting the air" when the app was closed: retry if still fresh, otherwise say so.
     func resumePending(in context: ModelContext) async {
         let pending = EnvStatus.pending.rawValue

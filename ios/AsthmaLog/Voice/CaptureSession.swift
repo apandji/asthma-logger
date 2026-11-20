@@ -215,7 +215,20 @@ final class CaptureSession: Identifiable {
             if question == .exposure { exposure(false) }
             post("No")
         case .none: post("None of these")
+        case .inside: saidOutdoors = false; post("Inside")
+        case .outside: saidOutdoors = true; post("Outside")
+        // The map opens from the view (ChatCapture); its pin comes back through `moved(to:)`.
+        case .elsewhere: break
         }
+    }
+
+    /// You picked where you were on the map: the moment moves there, and the answer says the place.
+    /// The air stays as stamped (outdoor readings are regional, a few streets either way read the same).
+    func moved(latitude: Double, longitude: Double, name: String?) {
+        event.latitude = latitude
+        event.longitude = longitude
+        event.placeName = name
+        post(name ?? "Somewhere else")
     }
 
     /// The tags picked for this question, sent as the answer.

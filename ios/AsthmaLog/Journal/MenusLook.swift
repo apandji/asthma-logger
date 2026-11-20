@@ -1095,7 +1095,7 @@ struct MenusEnvironment: View {
                 if let t = tapped, apart < 0.3, let w = portraitLayout(canvasSize, lift: 0).first(where: { $0.series.name == t.name }) {
                     legend(w)
                         .fixedSize()
-                        .position(x: min(max(w.rect.midX, 90), canvasSize.width - 90), y: max(w.rect.minY - 30 - speciesLift(w), 20 + speciesLift(w)))
+                        .position(x: min(max(w.rect.midX, legendHalf(w) + 10), canvasSize.width - legendHalf(w) - 10), y: max(w.rect.minY - 30 - speciesLift(w), 20 + speciesLift(w)))
                         .transition(.opacity.combined(with: .scale(scale: 0.92)))
                         .allowsHitTesting(false)
                 }
@@ -1329,9 +1329,11 @@ struct MenusEnvironment: View {
         let headroom: CGFloat = 52
         let H = ground - headroom
         // The biggest round: about one slot wide, and never more than a seventh of the height.
-        let R0 = min(gap * 1.0, H * 0.14)
-        // The top trigger stands out (owner, Nov 19): a third bigger than the rest's scale.
-        let sizeSteps: [CGFloat] = [1.3, 0.92, 0.8, 0.7, 0.62, 0.54]
+        let R0 = min(gap * 1.1, H * 0.15)
+        // The top trigger stands out (owner, Nov 19), and every step down is plainly smaller (owner, Nov 19:
+        // "more drastic", the lead about four times the last). One step per flower, seven with pressure, so
+        // the last two never share a size.
+        let sizeSteps: [CGFloat] = [1.5, 1.08, 0.82, 0.64, 0.5, 0.42, 0.36]
         var spots: [Spot] = present.enumerated().map { i, sv in
             let s = sv.0
             // Seeded by the condition, not the day: each flower keeps its place and stem from day to day,
@@ -1503,6 +1505,15 @@ struct MenusEnvironment: View {
         return lines
     }
 
+    /// Half the tap label's width, roughly, from its longest line: it centres on its flower and only moves in
+    /// as far as it must to stay on screen (it used to stop 90 pt in, off centre for flowers near the edge).
+    private func legendHalf(_ w: Swatch) -> CGFloat {
+        let reading = w.series.name == "Pressure" ? Self.pressureText(w.value) : Self.relativeText(w.value, unit: w.series.unit, usual: w.series.points.map(\.1))
+        let widest = max(CGFloat(w.series.name.count) * 8.2, CGFloat(reading.count) * 6.9,
+                         speciesLines(w).map { CGFloat($0.count) * 6.4 }.max() ?? 0)
+        return widest / 2
+    }
+
     /// Room for the species lines, so the label still sits above the flower.
     private func speciesLift(_ w: Swatch) -> CGFloat { CGFloat(speciesLines(w).count) * 8 }
 
@@ -1518,7 +1529,7 @@ struct MenusEnvironment: View {
 
     /// The tap label in words (owner, Nov 19, like Apple Weather): pollen as a level, the rest as a reading, and
     /// how it compares with your usual (the middle of this condition's readings on your moments).
-    /// "High · above usual", "62 °F · about usual", or "No reading".
+    /// "High ↑", "62 °F" (about usual), "33 ppb ↓", or "No reading".
     static func relativeText(_ v: Double?, unit: String, usual points: [Double]) -> String {
         guard let v else { return "No reading" }
         let reading: String
@@ -1532,8 +1543,8 @@ struct MenusEnvironment: View {
         let sorted = points.sorted()
         let mid = sorted[sorted.count / 2]
         let spread = max(abs(mid) * 0.12, (sorted.last! - sorted.first!) * 0.1, 0.5)
-        let compare = v > mid + spread ? "above usual" : v < mid - spread ? "below usual" : "about usual"
-        return "\(reading) · \(compare)"
+        // An arrow, not words (owner, Nov 19): up above usual, down below, nothing when it's about usual.
+        return v > mid + spread ? "\(reading) ↑" : v < mid - spread ? "\(reading) ↓" : reading
     }
 
     /// "62 °F", "33 ppb", "90% of a high day", or "No reading".

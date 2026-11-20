@@ -9,8 +9,9 @@ import SwiftUI
 struct EveningLookBack: View {
     /// Today's inhaler moments, oldest first.
     let moments: [LogEvent]
-    /// Add a note to this moment (the sheet closes first).
-    let add: (LogEvent) -> Void
+    /// Add a note to this moment (the wash clears first). `listen`: start with the mic on; otherwise it opens
+    /// the journal, where you type, tap what fits, or press the mic yourself.
+    let add: (LogEvent, _ listen: Bool) -> Void
     let close: () -> Void
 
     static let demoKey = "demo.evening"
@@ -110,16 +111,25 @@ struct EveningLookBack: View {
                 Label("Note added", systemImage: "checkmark").font(Theme.ui(.subheadline, weight: .medium))
                     .foregroundStyle(Theme.secondaryText)
             } else {
+                // Your choice of how (owner, Nov 19): voice isn't for everyone or every place. "Add a note" opens
+                // the journal to type or tap; the mic beside it starts speaking straight away.
                 HStack(spacing: 8) {
-                    Button { add(m) } label: {
-                        Label("Add a voice note", systemImage: "mic.fill").font(Theme.ui(.subheadline, weight: .medium))
-                            .padding(.horizontal, 16).frame(height: 44)
+                    // The note fills the row (owner, Nov 19), so the card's width is used and it reads as the thing to do.
+                    Button { add(m, false) } label: {
+                        Label("Add a note", systemImage: "square.and.pencil").font(Theme.ui(.subheadline, weight: .medium))
+                            .frame(maxWidth: .infinity).frame(height: 44)
                             .foregroundStyle(.white).background(Capsule().fill(.black))
                     }
+                    Button { add(m, true) } label: {
+                        Image(systemName: "mic.fill").font(Theme.ui(.subheadline, weight: .medium))
+                            .foregroundStyle(.primary).frame(width: 44, height: 44)
+                            .background(Circle().strokeBorder(Color.primary.opacity(0.15)))
+                    }
+                    .accessibilityLabel("Speak a note")
+                    // The way out, quiet: plain text, no outline.
                     Button("Not sure") { m.tagsReviewed = true; try? m.modelContext?.save() }
-                        .font(Theme.ui(.subheadline, weight: .medium)).foregroundStyle(.primary)
-                        .padding(.horizontal, 16).frame(height: 44)
-                        .background(Capsule().strokeBorder(Color.primary.opacity(0.15)))
+                        .font(Theme.ui(.subheadline, weight: .medium)).foregroundStyle(Theme.secondaryText)
+                        .padding(.horizontal, 10).frame(height: 44)
                 }
                 .buttonStyle(PressStyle())
             }

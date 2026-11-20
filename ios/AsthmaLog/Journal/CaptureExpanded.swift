@@ -135,6 +135,7 @@ struct ChatCapture: View {
     @State private var typing = false
     @State private var typed = ""
     @FocusState private var focused: Bool
+    @State private var pickingPlace = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -163,6 +164,9 @@ struct ChatCapture: View {
                 .onChange(of: session.live) { _, _ in proxy.scrollTo("live", anchor: .bottom) }
             }
             composer
+        }
+        .sheet(isPresented: $pickingPlace) {
+            MomentPlacePicker(event: session.event) { lat, lon, name in session.moved(latitude: lat, longitude: lon, name: name) }
         }
     }
 
@@ -236,6 +240,8 @@ struct ChatCapture: View {
                         switch r {
                         case .tag(let t):
                             CaptureChip(tag: t, on: session.chosen.contains(t), suggested: session.suggested.contains(t)) { session.reply(r) }
+                        case .elsewhere:
+                            CaptureChip(label: r.label, on: false) { pickingPlace = true }
                         default:
                             CaptureChip(label: r.label, on: false) { session.reply(r) }
                         }

@@ -354,10 +354,10 @@ struct NowHomeView: View {
             }
             .overlay {
                 if showEvening {
-                    EveningLookBack(moments: EveningLookBack.shown(events, now: now), add: { e in
+                    EveningLookBack(moments: EveningLookBack.shown(events, now: now), add: { e, listen in
                         withAnimation(Theme.smooth) { showEvening = false }
                         // After the wash has cleared, so the capture rises over Now.
-                        Task { try? await Task.sleep(for: .milliseconds(350)); openCapture(e, listen: true) }
+                        Task { try? await Task.sleep(for: .milliseconds(350)); openCapture(e, listen: listen) }
                     }, close: { withAnimation(Theme.smooth) { showEvening = false } })
                     .transition(.opacity)
                     .zIndex(10)
@@ -1270,10 +1270,10 @@ struct NowHomeView: View {
     /// The +: a manual moment (no inhaler: only the felt button and the watch log those; owner, Nov 19), then
     /// a voice memo (listening) or written notes. It gets the air like any moment and stays out of the patterns.
     private func felt(_ voice: Bool) {
-        Task {
-            let e = await services.log(.note, in: context, writeToHealth: false)
-            openCapture(e, listen: voice)
-        }
+        // One sheet at a time: a second tap while it rises doesn't make a second moment.
+        guard capture == nil else { return }
+        let e = services.begin(.note, in: context)
+        openCapture(e, listen: voice)
     }
 
     /// One sky at a time; the next settles in with a breath, not a cut. Self slides the map away.

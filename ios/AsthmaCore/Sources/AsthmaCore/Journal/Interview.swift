@@ -58,6 +58,10 @@ public enum Interview {
         case yes
         case no
         case none
+        /// Where were you (owner, Nov 19): inside or outside, or somewhere else picked on a map.
+        case inside
+        case outside
+        case elsewhere
 
         public var label: String {
             switch self {
@@ -65,6 +69,9 @@ public enum Interview {
             case .yes: "Yes"
             case .no: "No"
             case .none: "None of these"
+            case .inside: "Inside"
+            case .outside: "Outside"
+            case .elsewhere: "Somewhere else"
             }
         }
     }
@@ -166,7 +173,7 @@ public enum Interview {
         case .activity, .night, .exposure: [.yes, .no]
         case .reliever: [.yes, .no]
         case .doing: [.tag(.exercise), .tag(.cooking), .tag(.cleaningProducts), .tag(.stress), .tag(.laughingOrCrying)]
-        case .place: []
+        case .place: [.inside, .outside, .elsewhere]
         case .around: [.tag(.pets), .tag(.smoke), .tag(.dust), .tag(.mold), .tag(.coldAir), .tag(.strongScents)]
         case .anythingElse: [.tag(.coldOrFlu), .tag(.urgentVisit), .tag(.oralSteroids), .none]
         }

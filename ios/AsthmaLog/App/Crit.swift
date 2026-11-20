@@ -191,7 +191,17 @@ enum Crit {
         /// Menus is built on the Apple Health look (grey sky, pills, Health colours) with its own structure.
         var healthLike: Bool { self != .feltAir }
         static let key = "crit.appLook"
-        static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? .feltAir }
+        /// The look a fresh install starts on: Menus (owner, Nov 19).
+        static let fallback: AppLook = .menus
+        static var current: AppLook { UserDefaults.standard.string(forKey: key).flatMap(AppLook.init) ?? fallback }
+        /// Once per install (owner, Nov 19): phones that saved an older look move to Menus. After that the
+        /// picker in Settings is yours again.
+        static func moveToMenusOnce() {
+            let d = UserDefaults.standard, done = "crit.appLook.menusDefault"
+            guard !d.bool(forKey: done) else { return }
+            d.set(AppLook.menus.rawValue, forKey: key)
+            d.set(true, forKey: done)
+        }
     }
 
     /// Menus look: the sky as a 3D rounded glass cube of air with physics, or the flat square with a circle.

@@ -129,7 +129,7 @@ struct DeveloperSettings: View {
     @AppStorage(DemoScenario.key) private var demoScenario = DemoScenario.off
     @AppStorage(Crit.Inks.key) private var critInks = Crit.Inks.print
     @AppStorage(Crit.TimelineLook.key) private var critTimeline = Crit.TimelineLook.track
-    @AppStorage(Crit.AppLook.key) private var critAppLook = Crit.AppLook.feltAir
+    @AppStorage(Crit.AppLook.key) private var critAppLook = Crit.AppLook.fallback
     @AppStorage(Crit.MenusSky.key) private var critMenusSky = Crit.MenusSky.combined
     @AppStorage(DemoCalendar.key) private var demoCalendar = false
     @AppStorage("demo.care") private var demoCare = ""

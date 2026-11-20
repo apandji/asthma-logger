@@ -30,6 +30,9 @@ enum MenusTab: Hashable { case home, moments, map, insights, log }
 struct MenusTopBar: View {
     @Binding var scale: MenusScale
     let openMenu: () -> Void
+    /// Home only (owner, Nov 19): ⓘ on the right, how the flowers are made.
+    var showInfo = false
+    @State private var info = false
 
     var body: some View {
         HStack {
@@ -42,8 +45,19 @@ struct MenusTopBar: View {
             .accessibilityLabel("Menu")
             Spacer()
             // No scale menu (owner, Nov 13): Moments has its own Day, Month and Year.
+            if showInfo {
+                Button { info = true } label: {
+                    Image(systemName: "info").font(Theme.Figtree.font(.subheadline, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .accessibilityLabel("How the flowers work")
+                .transition(.opacity)
+            }
         }
         .padding(.horizontal, 20)
+        .sheet(isPresented: $info) { MenusHowItWorks() }
     }
 }
 
@@ -461,10 +475,15 @@ struct MenusWindowGestures: ViewModifier {
     let width: CGFloat
     let limits: ClosedRange<Date>
     let settle: () -> Void
+    var enabled = true
     @State private var panFrom: Date?
     @State private var zoomFrom: TimeInterval?
 
     func body(content: Content) -> some View {
+        if enabled { gestures(content) } else { content }
+    }
+
+    private func gestures(_ content: Content) -> some View {
         content
             .simultaneousGesture(
                 DragGesture(minimumDistance: 12)
@@ -549,6 +568,9 @@ struct MenusStrip: View {
     let limits: ClosedRange<Date>
     let settle: () -> Void
     let backToNow: () -> Void
+    /// The arrows land the playhead on a moment and hold it there (no settle, which snaps back to Now when
+    /// the moment is only minutes old).
+    var jump: ((Date) -> Void)? = nil
     /// With the combined chart (owner, Nov 13) the day's title sits below the chart instead of above the ticks.
     var titleBelow = false
     @Environment(\.colorScheme) private var scheme
@@ -563,14 +585,55 @@ struct MenusStrip: View {
             // The whole width is the timeline (owner, Nov 6): the span sits in the line above.
             track
                 .padding(.horizontal, titleBelow ? 0 : MenusColumns.page + MenusColumns.card)   // edge to edge with the combined chart (owner, Nov 13)
+                // The track fades out under the arrows, so marks don't peek round them.
+                .mask {
+                    HStack(spacing: 0) {
+                        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .clear, location: 0.5), .init(color: .black, location: 1)], startPoint: .leading, endPoint: .trailing).frame(width: 84)
+                        Color.black
+                        LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .clear, location: 0.5), .init(color: .clear, location: 1)], startPoint: .leading, endPoint: .trailing).frame(width: 84)
+                    }
+                }
+                // Arrows either side (owner, Nov 19): skip to the previous or next logged moment.
+                .overlay(alignment: .leading) { skip(-1) }
+                .overlay(alignment: .trailing) { skip(1) }
         }
         .padding(.top, 8)
         .frame(maxWidth: .infinity)
-        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea(edges: .top))
+        // With the fans the page draws the timeline's paper itself, faded at the top and down to the bottom edge.
+        .background { if !titleBelow { Color(uiColor: .systemGroupedBackground).ignoresSafeArea(edges: .top) } }
         .sensoryFeedback(.selection, trigger: cal.startOfDay(for: window.center))
     }
 
     private var title: String { MenusDayTitle.title(window.center) }
+
+    /// The logged moment just before (-1) or after (1) the playhead, if any.
+    private func neighbour(_ dir: Int) -> LogEvent? {
+        let logged = moments.filter { $0.moment == .rescue || $0.moment == .maintenance }
+        let c = window.center
+        return dir < 0
+            ? logged.filter { $0.loggedAt < c.addingTimeInterval(-30) }.max { $0.loggedAt < $1.loggedAt }
+            : logged.filter { $0.loggedAt > c.addingTimeInterval(30) }.min { $0.loggedAt < $1.loggedAt }
+    }
+
+    private func skip(_ dir: Int) -> some View {
+        let target = neighbour(dir)
+        return Button {
+            guard let m = target else { return }
+            if let jump { jump(m.loggedAt) } else { withAnimation(Theme.smooth) { window.center = m.loggedAt }; settle() }
+        } label: {
+            Image(systemName: dir < 0 ? "chevron.left" : "chevron.right")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(target == nil ? 0.2 : 0.8))
+                .frame(width: 34, height: 34)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(target == nil)
+        // On the tick line (its middle sits 74 pt down a 104 pt track).
+        .offset(y: 22)
+        .padding(.horizontal, 10)
+        .accessibilityLabel(dir < 0 ? "Previous moment" : "Next moment")
+    }
     private var spanLabel: String { MenusDayTitle.spanLabel(window.span) }
 
     private var track: some View {
@@ -724,7 +787,8 @@ struct MenusDetails: View {
                 .init(name: "Pollen", air: Theme.airPollen, points: pollen, unit: "% of a high day"),
                 .init(name: "Flu and illness", air: Theme.airIllness, points: [], unit: "", note: "Not tracked yet"),
             ], width: $chartWidth, footer: dayTitle, edge: big, now: now, triggers: triggers, airMissing: airMissing)
-            section("Body", "From your logs and Apple Health") {
+            // On home the flowers stand alone above the soil and the map (owner, Nov 19); Body lives elsewhere.
+            if !big { section("Body", "From your logs and Apple Health") {
                 VStack(spacing: 0) {
                     dots("Inhaler use", shown.filter { $0.moment == .rescue || $0.moment == .maintenance }
                         .map { ($0.loggedAt, Color.primary, $0.moment != .rescue) })
@@ -733,7 +797,7 @@ struct MenusDetails: View {
                     empty("Activity", "From Apple Health, not connected yet")
                     empty("Heart and breathing", "Heart rate and respiratory rate, empty for now")
                 }
-            }
+            } }
         }
         .padding(.horizontal, MenusColumns.page)
         .padding(.top, 20)   // the combined chart sits just under the strip (owner, Nov 13); inside the playhead's overlay
@@ -751,7 +815,9 @@ struct MenusDetails: View {
             }
             .allowsHitTesting(false)
         }
-        .modifier(MenusWindowGestures(window: $window, width: chartWidth, limits: limits, settle: settle))
+        // No pan or pinch here (owner, Nov 19): inside the page's vertical scroll they fought it for the same
+        // finger, so scrolls sometimes panned or did nothing. The timeline below pans and zooms the window.
+        .modifier(MenusWindowGestures(window: $window, width: chartWidth, limits: limits, settle: settle, enabled: !big))
     }
 
     // MARK: Data
@@ -944,15 +1010,12 @@ struct MenusEnvironment: View {
     @State private var openFrom: [String: CGFloat] = [:]
     @State private var openTo: [String: CGFloat] = [:]
     @State private var openStart: Date = .distantPast
-    private static let openDuration: TimeInterval = 0.75
-    /// Hand-drawn timing (owner, Nov 13): the fans move at 12 drawings a second, not smoothly.
-    private static let fps: Double = 12
-
-    /// Which drawing of the tween we're on, or nil when it's done (then the fans hold still).
-    private func frame(at t: Date) -> Int? {
-        let e = t.timeIntervalSince(openStart)
-        return e < Self.openDuration ? Int(e * Self.fps) : nil
-    }
+    /// Smooth and snappy (owner, Nov 19): a short, continuous ease-out, no flipbook steps or line boil.
+    /// Like flowers blooming (owner, Nov 19): each fan springs open with a soft bounce, one after another
+    /// from the left, and swells a little as it opens.
+    private static let bloomDuration: TimeInterval = 0.75
+    private static let bloomStagger: TimeInterval = 0.06
+    private var openDuration: TimeInterval { Self.bloomDuration + Self.bloomStagger * Double(series.count) }
 
     /// How far each fan should be open at the playhead, 0…1 (closed with no reading). "__stem" is how tall the
     /// stems stand: shorter when there's no reading at all (owner, Nov 13). Both ease with the same tween.
@@ -970,12 +1033,20 @@ struct MenusEnvironment: View {
 
     /// The opening at a moment in the tween, eased in and out.
     private func shownOpens(at t: Date) -> [String: CGFloat] {
-        // Stepped to whole drawings, so it moves in small jumps like a flipbook.
-        let held = (t.timeIntervalSince(openStart) * Self.fps).rounded(.down) / Self.fps
-        let p = CGFloat(min(1, max(0, held / Self.openDuration)))
-        let e = p * p * (3 - 2 * p)
+        let elapsed = t.timeIntervalSince(openStart)
+        let order = Dictionary(series.enumerated().map { ($1.name, $0) }, uniquingKeysWith: { a, _ in a })
         var out: [String: CGFloat] = [:]
-        for (k, to) in openTo { out[k] = (openFrom[k] ?? to) + (to - (openFrom[k] ?? to)) * e }
+        for (k, to) in openTo {
+            let from = openFrom[k] ?? to
+            // Left to right, a beat apart; the stems move all together.
+            let delay = Self.bloomStagger * Double(order[k] ?? 0)
+            let p = CGFloat(min(1, max(0, (elapsed - delay) / Self.bloomDuration)))
+            // A damped spring: out past where it's going, then settling back (about 10% over).
+            let e = p >= 1 ? 1 : 1 - exp(-6 * p) * cos(9 * p)
+            out[k] = min(1, max(0, from + (to - from) * e))
+            // The swell: a little bigger mid-bloom, back to size as it settles.
+            if k != "__stem", abs(to - from) > 0.01 { out["__pop:" + k] = 0.07 * sin(.pi * p) * min(1, abs(to - from) * 2) }
+        }
         return out
     }
     @Environment(\.colorScheme) private var scheme
@@ -988,11 +1059,12 @@ struct MenusEnvironment: View {
 
     var body: some View {
         // Tall enough for the rows, and for the shared band while it's together.
-        let height = max(headerH + CGFloat(series.count) * rowH, bandH + (footer == nil ? 40 : 110))
+        // On home just the flowers (owner, Nov 19): they no longer part into rows, the soil and map follow.
+        let height = edge ? bandH : max(headerH + CGFloat(series.count) * rowH, bandH + (footer == nil ? 40 : 110))
         // The fans ease open and closed as you move between moments (owner, Nov 13): a short tween from where
         // they were to where this moment puts them, picked up mid-way if you keep moving.
-        TimelineView(.animation(minimumInterval: 1 / Self.fps, paused: Date().timeIntervalSince(openStart) > Self.openDuration + 0.1)) { tl in
-            Canvas { ctx, size in draw(ctx, size, opens: shownOpens(at: tl.date), boil: frame(at: tl.date)) }
+        TimelineView(.animation(paused: Date().timeIntervalSince(openStart) > openDuration + 0.1)) { tl in
+            Canvas { ctx, size in draw(ctx, size, opens: shownOpens(at: tl.date)) }
         }
             .onAppear { let t = targetOpens(); openFrom = t; openTo = t }
             .onChange(of: targetOpens()) { _, new in
@@ -1140,15 +1212,25 @@ struct MenusEnvironment: View {
             }
         }
 
-        // Paper grain over the washes, so they read as printed pigment rather than a gradient.
-        var grain = Path()
-        var g = IslandRNG(seed: 0xFE17)
+        // Paper grain over the washes (owner, Nov 19: more natural, no white specks). Fine, uneven pigment
+        // granules in a few sizes and strengths, multiplied in, plus a scatter of paper tooth: faint and soft.
         let top = lerp(0, headerH, t), bottom = lerp(bandH, size.height, t)
-        for _ in 0..<Int(w * (bottom - top) / 55) {
-            let x = CGFloat.random(in: 0...w, using: &g), y = CGFloat.random(in: top...bottom, using: &g)
-            grain.addEllipse(in: CGRect(x: x, y: y, width: 0.9, height: 0.9))
+        ctx.drawLayer { grainLayer in
+            grainLayer.blendMode = scheme == .dark ? .screen : .multiply
+            grainLayer.addFilter(.blur(radius: 0.35))
+            var g = IslandRNG(seed: 0xFE17)
+            var tiers = [Path(), Path(), Path()]
+            for _ in 0..<Int(w * (bottom - top) / 38) {
+                let x = CGFloat.random(in: 0...w, using: &g), y = CGFloat.random(in: top...bottom, using: &g)
+                let r = CGFloat.random(in: 0.35...1.25, using: &g)
+                let k = Int.random(in: 0...9, using: &g)
+                tiers[k < 6 ? 0 : k < 9 ? 1 : 2].addEllipse(in: CGRect(x: x, y: y, width: r * CGFloat.random(in: 0.7...1.3, using: &g), height: r))
+            }
+            let speck: Color = scheme == .dark ? .white : Color(red: 0.35, green: 0.3, blue: 0.25)
+            grainLayer.fill(tiers[0], with: .color(speck.opacity(0.06)))
+            grainLayer.fill(tiers[1], with: .color(speck.opacity(0.11)))
+            grainLayer.fill(tiers[2], with: .color(speck.opacity(0.18)))
         }
-        ctx.fill(grain, with: .color(paper.opacity(0.45)))
 
         for (text, at, anchor, opacity) in labels where opacity > 0.01 {
             ctx.drawLayer { l in
@@ -1217,41 +1299,47 @@ struct MenusEnvironment: View {
         let ground = bandH - (edge ? 4 : 34) - lift
         let left = inset + 20, right = size.width - inset - 20
         let gap = (right - left) / CGFloat(max(n, 1))
-        // Big and small alternate along the row, so the two biggest fans stand well apart (owner, Nov 13:
-        // no overlaps): biggest second from the left, the next one second from the right, and so on.
-        let order = present.indices.sorted { weight(present[$0].0.name) > weight(present[$1].0.name) }
-        let pattern = n == 6 ? [1, 4, 3, 0, 5, 2] : n == 5 ? [1, 3, 2, 0, 4] : Array(0..<n)
+        // Ranked (owner, Nov 19): height and size both follow how much each condition is one of your triggers.
+        // The top half stand in a high row on the odd slots, the rest in a low row between them, so each
+        // neighbour is far above or below and no two rounds touch even fully open.
+        let ws = present.map { weight($0.0.name) }
+        // One strict rank each (owner, Nov 19: the higher it sits, the bigger it is): your learned triggers
+        // first, ties broken by the profile order, so no two flowers ever share a size or a height.
+        let profile = ["Pollen", "PM2.5", "Ozone", "Humidity", "Temperature", "Wind"]
+        let tie = { (i: Int) in profile.firstIndex(of: present[i].0.name) ?? profile.count }
+        let order = present.indices.sorted { ws[$0] > ws[$1] + 0.001 || (abs(ws[$0] - ws[$1]) <= 0.001 && tie($0) < tie($1)) }
+        var ranks = Array(repeating: 0, count: n)
+        for (k, i) in order.enumerated() { ranks[i] = k }
+        let tallCount = (n + 1) / 2
+        let odd = Array(stride(from: 1, to: n, by: 2)), even = Array(stride(from: 0, to: n, by: 2))
+        // Six flowers (the usual): a looser garden order than a strict high-low zigzag (owner, Nov 19), still
+        // with the 2nd and 3rd swapped for the picture (owner, Nov 19). Left to right the ranks run 4, 0, 3, 2, 5, 1;
+        // the no-touch pass below keeps the 3rd and 4th apart.
+        let slotsByRank = n == 6 ? [1, 5, 3, 2, 0, 4] : Array(odd.prefix(tallCount)) + even + Array(odd.dropFirst(tallCount))
         var slots = Array(repeating: 0, count: n)
-        for (rank, i) in order.enumerated() { slots[i] = pattern[rank] }
+        for (k, i) in order.enumerated() { slots[i] = slotsByRank[k] }
 
         struct Spot { var x: CGFloat; var y: CGFloat; let r: CGFloat; let w: CGFloat; var rng: IslandRNG }
-        let W = right - left
+        let H = ground - 10
+        // The biggest round: about one slot wide, and never more than a seventh of the height.
+        let R0 = min(gap * 1.0, H * 0.14)
+        let sizeSteps: [CGFloat] = [1, 0.91, 0.82, 0.72, 0.63, 0.54]
         var spots: [Spot] = present.enumerated().map { i, sv in
             let s = sv.0
-            // Seeded by the condition, not the day: each flower keeps its place, stem and size from day to day,
+            // Seeded by the condition, not the day: each flower keeps its place and stem from day to day,
             // and only how far it opens changes (owner, Nov 13).
             var rng = IslandRNG(seed: UInt64(s.name.unicodeScalars.reduce(7) { $0 &* 31 &+ Int($1.value) }.magnitude))
-            let w = weight(s.name)
-            let slot = slots[i]
-            // Sized so that, fully open, every round fits the row without touching (owner, Nov 13 sketch).
-            let reach = min(W * (0.055 + 0.17 * w), (bandH - 40) * 0.3)
-            // Bigger triggers stand taller; the small ones rise to staggered heights.
-            let rise: [CGFloat] = [0.1, 0.4, 0.22, 0.5, 0.06, 0.32]
-            let stem = (bandH - 60) * (0.12 + 0.78 * w * w) + (bandH - 60) * rise[slot % rise.count] * (1 - w)
-                + CGFloat.random(in: -6...6, using: &rng)
-            let x = left + gap * (CGFloat(slot) + 0.5) + CGFloat.random(in: -4...4, using: &rng)
-            // Planned as a full round: wholly above the ground and below the top.
-            var y = min(max(ground - stem, reach + 10), ground - reach - 14)
-            // Your biggest trigger stands highest, near the top (owner, Nov 13).
-            if i == order.first { y = reach + 10 }
-            return Spot(x: x, y: y, r: reach, w: w, rng: rng)
-        }
-        // The rest stand clearly lower than your biggest trigger, at least a third of the way down from it.
-        if let top = order.first {
-            let floorTop = spots[top].y + (ground - spots[top].y) * 0.34
-            for k in spots.indices where k != top {
-                spots[k].y = min(max(spots[k].y, floorTop), ground - spots[k].r - 14)
-            }
+            let rank = ranks[i]
+            let reach = R0 * sizeSteps[min(rank, sizeSteps.count - 1)]
+            // The pivot's height above the ground: 100% for the top trigger, stepping down evenly to 30%.
+            // Like a garden, not a chart (owner, Nov 19): each flower's own nudge, up to 40% of a rank step, so
+            // heights vary but the ranking still reads. Seeded by name, so it stands the same every day.
+            let step = 0.7 / CGFloat(max(n - 1, 1))
+            let nudge = CGFloat.random(in: -0.4...0.4, using: &rng) * step
+            let f: CGFloat = 1 - CGFloat(rank) * step + (rank == 0 ? -abs(nudge) * 0.5 : nudge)
+            let x = left + gap * (CGFloat(slots[i]) + 0.5) + CGFloat.random(in: -9...9, using: &rng)
+            let y = min(max(ground - (H - R0) * f, reach + 10), ground - reach - 14)
+            return Spot(x: x, y: y, r: reach, w: ws[i], rng: rng)
         }
         // No two fully open rounds touch (owner, Nov 13). The bigger trigger keeps its spot; the smaller one moves
         // straight down until clear, or up if there's no room below.
@@ -1290,7 +1378,8 @@ struct MenusEnvironment: View {
             let base = CGPoint(x: p.x, y: p.y)
             let below = open > 0.5 ? p.r * (open - 0.5) * 2 : 0
             let rect = CGRect(x: p.x - p.r, y: base.y - p.r, width: p.r * 2, height: p.r + max(below, 12))
-            return Swatch(series: s, value: v, strength: open, weight: p.w, base: base, reach: p.r, ground: ground, rect: rect, rng: p.rng)
+            let reach = p.r * (1 + (opens?["__pop:" + s.name] ?? 0))
+            return Swatch(series: s, value: v, strength: open, weight: p.w, base: base, reach: reach, ground: ground, rect: rect, rng: p.rng)
         }
     }
 
@@ -1307,7 +1396,12 @@ struct MenusEnvironment: View {
             paint.blendMode = scheme == .dark ? .screen : .multiply
             // The ground: a faint pencil rule the stems stand on.
             var g = Path(); g.move(to: CGPoint(x: inset, y: ground)); g.addLine(to: CGPoint(x: size.width - inset, y: ground))
-            paint.stroke(g, with: .color(.secondary.opacity(0.25)), lineWidth: 0.6)
+            // Fading out at both ends (owner, Nov 19), so the ground melts into the paper.
+            let rule = Color.secondary.opacity(0.3)
+            paint.stroke(g, with: .linearGradient(Gradient(stops: [.init(color: rule.opacity(0), location: 0), .init(color: rule, location: 0.25),
+                                                                   .init(color: rule, location: 0.75), .init(color: rule.opacity(0), location: 1)]),
+                                                  startPoint: CGPoint(x: inset, y: ground), endPoint: CGPoint(x: size.width - inset, y: ground)),
+                         lineWidth: 0.6)
             for f in fans {
                 var rng = f.rng
                 let ink = pigment(f.series.name, f.value ?? 0)

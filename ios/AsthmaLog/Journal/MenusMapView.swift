@@ -7,6 +7,8 @@ import SwiftUI
 /// the phone; the map tiles are Apple's.
 struct MenusMapView: View {
     let events: [LogEvent]
+    /// Off on home's soil map (owner, Nov 19): inside the page's scroll a pannable map would fight it.
+    var interactive = true
     @State private var selected: PersistentIdentifierBox?
 
     /// Inhaler moments that have a place.
@@ -15,7 +17,7 @@ struct MenusMapView: View {
     }
 
     var body: some View {
-        Map(initialPosition: .automatic) {
+        Map(initialPosition: .automatic, interactionModes: interactive ? .all : []) {
             ForEach(placed, id: \.persistentModelID) { e in
                 Annotation("", coordinate: CLLocationCoordinate2D(latitude: e.latitude!, longitude: e.longitude!), anchor: .bottom) {
                     pin(e)
@@ -24,9 +26,10 @@ struct MenusMapView: View {
             }
         }
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
-        .mapControls { MapCompass() }
+        .mapControls { if interactive { MapCompass() } }
+        .allowsHitTesting(interactive)
         .overlay(alignment: .top) {
-            if placed.isEmpty {
+            if placed.isEmpty && interactive {
                 Text("Moments you log show up here, where they happened.")
                     .font(Theme.Figtree.font(.subheadline))
                     .padding(.horizontal, 14).padding(.vertical, 10)
@@ -128,5 +131,49 @@ struct FanIcon: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
+    }
+}
+
+/// Home's little map (owner, Nov 19): only where one moment was logged, a small circle round it and its pill.
+/// It follows the playhead. Still (no pan or zoom), so it sits inside the page's scroll.
+struct MomentPlaceMap: View {
+    let event: LogEvent?
+    @State private var position: MapCameraPosition = .automatic
+
+    private var coordinate: CLLocationCoordinate2D? {
+        guard let e = event, let la = e.latitude, let lo = e.longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: la, longitude: lo)
+    }
+
+    var body: some View {
+        Map(position: $position, interactionModes: []) {
+            if let c = coordinate, let e = event {
+                MapCircle(center: c, radius: 220)
+                    .foregroundStyle(Color.black.opacity(0.06))
+                    .stroke(Color.black.opacity(0.25), lineWidth: 1)
+                Annotation("", coordinate: c, anchor: .center) {
+                    ZStack {
+                        Circle().fill(.white).frame(width: 24, height: 24)
+                            .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+                        if e.moment == .rescue {
+                            Capsule().fill(Color.black).frame(width: 7, height: 14)
+                        } else {
+                            Capsule().strokeBorder(Color.black, lineWidth: 1.4).frame(width: 7, height: 14)
+                        }
+                    }
+                }
+                .annotationTitles(.hidden)
+            }
+        }
+        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+        .allowsHitTesting(false)
+        .onAppear { recenter(animated: false) }
+        .onChange(of: event?.persistentModelID) { _, _ in recenter(animated: true) }
+    }
+
+    private func recenter(animated: Bool) {
+        guard let c = coordinate else { return }
+        let region = MapCameraPosition.region(MKCoordinateRegion(center: c, latitudinalMeters: 900, longitudinalMeters: 900))
+        if animated { withAnimation(Theme.smooth) { position = region } } else { position = region }
     }
 }

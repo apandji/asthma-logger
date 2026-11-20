@@ -59,6 +59,8 @@ struct MenusMomentsView: View {
         let today = cal.startOfDay(for: now)
         let days = stride(from: 0, through: cal.dateComponents([.day], from: firstDay, to: today).day ?? 0, by: 1)
             .compactMap { cal.date(byAdding: .day, value: -$0, to: today) }
+            // Only days you used your inhaler (owner, Nov 19): no "No inhaler use" rows.
+            .filter { counts[$0] != nil }
         return ScrollView {
             LazyVStack(spacing: 0) {
                 ForEach(days, id: \.self) { d in
@@ -84,6 +86,12 @@ struct MenusMomentsView: View {
                 }
             }
             .padding(.bottom, 120)
+        }
+        .overlay {
+            if days.isEmpty {
+                Text("Days you use your inhaler show up here.")
+                    .font(Theme.Figtree.font(size: 15)).foregroundStyle(.secondary)
+            }
         }
     }
 

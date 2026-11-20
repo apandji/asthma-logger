@@ -22,14 +22,18 @@ final class QuickRecordLive {
     private var container: ModelContainer?
     /// Starts logging a rescue with this id (LogService: stamps the air, writes Health per Settings).
     private var logRescue: ((UUID) -> Void)?
+    /// Rewrites a moment's Health sample after its puffs change (LogService).
+    private var rewriteHealth: ((LogEvent) async -> Void)?
     private var autoStop: Task<Void, Never>?
     private var idle: Task<Void, Never>?
     private let log = Logger(subsystem: "felt-air", category: "QuickRecordLive")
 
     /// Called from the app's init, so the intents work when the Lock Screen wakes the app in the background.
-    func install(container: ModelContainer, logRescue: @escaping (UUID) -> Void) {
+    func install(container: ModelContainer, logRescue: @escaping (UUID) -> Void,
+                 rewriteHealth: @escaping (LogEvent) async -> Void) {
         self.container = container
         self.logRescue = logRescue
+        self.rewriteHealth = rewriteHealth
         QuickRecordBridge.handle = { [weak self] command in await self?.handle(command) }
     }
 
@@ -68,13 +72,15 @@ final class QuickRecordLive {
 
     /// After a rescue or standard moment. True when the card now shows it; false when there's no card and iOS
     /// won't start one (background), so the caller sends the notification.
+    /// `alert`: false when a notification already says it (April, Nov 20: every press from outside the app gets the
+    /// notification too), so the card changes quietly instead of sounding twice.
     @discardableResult
-    func begin(for e: LogEvent) -> Bool {
+    func begin(for e: LogEvent, alert alerting: Bool = true) -> Bool {
         guard QuickRecordCenter.shared.enabled, e.moment != .okay else { return false }
         let state = momentState(e, phase: .ready)
         if let c = current {
             if [.recording, .writing].contains(c.content.state.phase) { return true }
-            let alert = AlertConfiguration(title: "\(e.moment.title) logged", body: "What's going on? Tap the mic to say.", sound: .default)
+            let alert = alerting ? AlertConfiguration(title: "\(e.moment.title) logged", body: "What's going on? Tap the mic to say.", sound: .default) : nil
             let id = c.id, next = content(state)
             Task { await Self.update(id, next, alert: alert) }
             returnToStandby(after: 30 * 60)
@@ -83,6 +89,30 @@ final class QuickRecordLive {
         guard ActivityAuthorizationInfo().areActivitiesEnabled, request(state) else { return false }
         returnToStandby(after: 30 * 60)
         return true
+    }
+
+    /// Another press in the same moment: the card shows the new puff count, quietly (the notification sounds).
+    func addPuff(for e: LogEvent, alert alerting: Bool = false) {
+        guard let c = current, c.content.state.momentID == e.id.uuidString,
+              ![.recording, .writing].contains(c.content.state.phase) else { return }
+        var s = c.content.state
+        s.puffs = momentState(e, phase: s.phase, keeping: s).puffs
+        let id = c.id, next = content(s)
+        let alert = alerting ? AlertConfiguration(title: "Puff added", body: "\(s.puffs ?? 1) puffs, same moment.", sound: .default) : nil
+        Task { await Self.update(id, next, alert: alert) }
+    }
+
+    /// − / + on the card: one puff more or fewer in its moment, never below one; Health follows.
+    private func changePuffs(_ delta: Int) async {
+        guard let c = current, let e = event(c.content.state.momentID), let use = e.uses.last else { return }
+        let n = max(1, use.puffs + delta)
+        guard n != use.puffs else { return }
+        use.puffs = n
+        try? container?.mainContext.save()
+        await rewriteHealth?(e)
+        var s = c.content.state
+        s.puffs = n
+        await Self.update(c.id, content(s), alert: nil)
     }
 
     // MARK: Buttons
@@ -100,6 +130,7 @@ final class QuickRecordLive {
                 if let e = event(id.uuidString) ?? latestMoment(within: 30) { _ = begin(for: e); return }
                 try? await Task.sleep(for: .milliseconds(25))
             }
+        case .puffs(let delta): await changePuffs(delta)
         case .stop: await stop()
         case .toggle(let tag): await toggle(tag)
         case .save: await save()
@@ -269,6 +300,8 @@ final class QuickRecordLive {
     private func momentState(_ e: LogEvent, phase: QuickRecordAttributes.Phase, keeping old: State? = nil) -> State {
         var s = State(phase: phase, momentID: e.id.uuidString, kind: e.moment.title, isRescue: e.moment == .rescue,
                       whenAndWhere: e.whenAndWhere)
+        // The − / + count on the card (inhaler moments only).
+        s.puffs = e.uses.last?.puffs
         let same = old?.momentID == e.id.uuidString
         s.selected = same ? old?.selected ?? [] : e.tags.map(\.rawValue)
         s.suggested = same ? old?.suggested ?? [] : []

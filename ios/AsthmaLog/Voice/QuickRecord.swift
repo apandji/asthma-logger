@@ -47,33 +47,57 @@ final class QuickRecordCenter: NSObject, UNUserNotificationCenterDelegate {
     var enabled: Bool { UserDefaults.standard.object(forKey: Prefs.quickRecord) as? Bool ?? true }
 
     /// After a press from the button or the watch: the Lock Screen recorder (Live Activity) when iOS allows it,
-    /// otherwise a notification: "Rescue logged · Add what was going on, while it's fresh."
+    /// …and a notification for every press from outside the app (April, Nov 20: the card alone was easy to miss), so
+    /// the card updates quietly and the banner is the one sound: "Inhaler logged · 1 puff at 2:20 PM."
     func notify(for event: LogEvent) {
         guard enabled, event.moment != .okay else { return }
         notifyCare(after: event)
-        if QuickRecordLive.shared.begin(for: event) { scheduleEvening(); return }
+        Task {
+            // Without notification permission (onboarding skipped, or turned off), the Lock Screen card alerts
+            // instead, so a press from outside the app always gets a banner or the Dynamic Island.
+            guard await notificationsAllowed() else { QuickRecordLive.shared.begin(for: event, alert: true); return }
+            QuickRecordLive.shared.begin(for: event, alert: false)
+            post(for: event)
+        }
+        scheduleEvening()
+    }
+
+    private func notificationsAllowed() async -> Bool {
+        let s = await UNUserNotificationCenter.current().notificationSettings()
+        return [.authorized, .provisional, .ephemeral].contains(s.authorizationStatus) && s.alertSetting != .disabled
+    }
+
+    private func post(for event: LogEvent) {
         let c = UNMutableNotificationContent()
         c.title = "\(event.moment == .rescue ? "Inhaler" : "Standard") logged"
         c.subtitle = event.placeName ?? ""
-        c.body = "Add what was going on, while it's fresh."
+        c.body = "1 puff at \(event.loggedAt.formatted(date: .omitted, time: .shortened)). Add what was going on, while it's fresh."
         c.sound = .default
         c.categoryIdentifier = Self.category
         c.userInfo = ["moment": event.id.uuidString]
         c.threadIdentifier = "moments"
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: event.id.uuidString, content: c, trigger: nil))
-        scheduleEvening()
     }
 
     /// Another press within two minutes: the same moment, one more puff. Replaces the moment's notification so
-    /// there's one banner that counts up, not a stack. Silent in the app, where the ink drop says it.
+    /// there's one banner that counts up, not a stack, and the Lock Screen card shows the count. Silent in the app,
+    /// where the ink drop says it.
     func notifyPuff(for event: LogEvent) {
         guard enabled, event.moment != .okay else { return }
         notifyCare(after: event)
+        Task {
+            guard await notificationsAllowed() else { QuickRecordLive.shared.addPuff(for: event, alert: true); return }
+            QuickRecordLive.shared.addPuff(for: event)
+            postPuff(for: event)
+        }
+    }
+
+    private func postPuff(for event: LogEvent) {
         let puffs = event.uses.last?.puffs ?? 1
         let c = UNMutableNotificationContent()
         c.title = "Puff added"
         c.subtitle = event.placeName ?? ""
-        c.body = "\(event.moment == .rescue ? "Rescue" : "Standard") at \(event.loggedAt.formatted(date: .omitted, time: .shortened)), \(puffs) puffs. Same moment."
+        c.body = "\(event.moment == .rescue ? "Inhaler" : "Standard") at \(event.loggedAt.formatted(date: .omitted, time: .shortened)), \(puffs) puffs. Same moment."
         c.sound = .default
         c.categoryIdentifier = Self.category
         c.userInfo = ["moment": event.id.uuidString]

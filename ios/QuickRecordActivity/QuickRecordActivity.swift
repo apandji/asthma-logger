@@ -26,10 +26,12 @@ nonisolated struct QuickRecordAttributes: ActivityAttributes {
         /// Tags (JournalTag raw values) the words suggested, and the ones switched on.
         var suggested: [String] = []
         var selected: [String] = []
+        /// Puffs in this inhaler use, for the − / + on the card (nil for a manual moment).
+        var puffs: Int?
     }
 
     enum Phase: String, Codable, Hashable {
-        /// Waiting for a moment: the mic logs a rescue and listens.
+        /// Waiting for a moment: a shortcut for logging. The mic logs an inhaler moment, then listens.
         case standby
         case ready, recording, writing, review, saved
         /// The microphone isn't allowed yet; that can only be asked in the app.
@@ -49,6 +51,8 @@ nonisolated enum QuickRecordCommand: Sendable {
     case toggle(tag: String)
     case save
     case dismiss
+    /// One puff more or fewer in the card's moment (never below one).
+    case puffs(delta: Int)
 }
 
 /// Set by the app at launch. Empty in the widget extension, which never performs these intents.
@@ -83,6 +87,21 @@ struct LogRescueIntent: LiveActivityIntent {
 
     @MainActor func perform() async throws -> some IntentResult {
         await QuickRecordBridge.handle?(.logRescue)
+        return .result()
+    }
+}
+
+/// − / + on the card: fix the puff count when presses came quickly (April, Nov 20).
+struct QuickRecordPuffIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Change puffs"
+    static let openAppWhenRun = false
+    @Parameter(title: "Change") var delta: Int
+
+    init() {}
+    init(delta: Int) { self.delta = delta }
+
+    @MainActor func perform() async throws -> some IntentResult {
+        await QuickRecordBridge.handle?(.puffs(delta: delta))
         return .result()
     }
 }

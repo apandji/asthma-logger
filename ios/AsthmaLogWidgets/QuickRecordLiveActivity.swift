@@ -34,14 +34,18 @@ struct QuickRecordLiveActivity: Widget {
                     MainButton(state: s, size: 44, dark: true)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(Copy.title(s.phase)).font(Ink.figtree(18, .medium)).foregroundStyle(.white)
-                        Copy.detail(s).font(Ink.figtree(13)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                    HStack(alignment: .center, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(Copy.title(s.phase)).font(Ink.figtree(18, .medium)).foregroundStyle(.white)
+                            Copy.detail(s).font(Ink.figtree(13)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        if let p = s.puffs, p > 1 { PuffStepper(puffs: p, dark: true) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } compactLeading: {
-                Image(systemName: s.phase == .recording ? "waveform" : "mic.fill")
+                Image(systemName: s.phase == .recording ? "waveform" : s.phase == .standby ? "plus" : "square.and.pencil")
                     .foregroundStyle(s.phase == .standby ? Color.white.opacity(0.4) : Color.white)
             } compactTrailing: {
                 if s.phase == .standby {
@@ -49,11 +53,13 @@ struct QuickRecordLiveActivity: Widget {
                 } else if s.phase == .recording, let start = s.startedAt {
                     Text(timerInterval: start...start.addingTimeInterval(QuickRecordAttributes.maxSeconds), countsDown: false)
                         .monospacedDigit().frame(width: 40).foregroundStyle(.white)
+                } else if let p = s.puffs, p > 1 {
+                    Text("\(p) puffs").font(Ink.figtree(13, .medium)).foregroundStyle(.white)
                 } else {
                     Text(s.kind ?? "").font(Ink.figtree(13, .medium)).foregroundStyle(.white)
                 }
             } minimal: {
-                Image(systemName: "mic.fill").foregroundStyle(s.phase == .standby ? Color.white.opacity(0.4) : Color.white)
+                Image(systemName: s.phase == .standby ? "plus" : "square.and.pencil").foregroundStyle(s.phase == .standby ? Color.white.opacity(0.4) : Color.white)
             }
             .widgetURL(Copy.url(s))
             .keylineTint(.white)
@@ -76,6 +82,8 @@ struct QuickRecordLockView: View {
                 }
                 Text(state.whenAndWhere ?? "").font(Ink.figtree(13, .medium)).foregroundStyle(Ink.secondary).lineLimit(1)
                 Spacer(minLength: 0)
+                // Presses that came quickly (April, Nov 20): − / + to set the puffs right.
+                if let p = state.puffs, p > 1 { PuffStepper(puffs: p, dark: false) }
                 if state.phase != .saved {
                     Button(intent: QuickRecordDismissIntent()) {
                         Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Ink.secondary)
@@ -102,6 +110,31 @@ struct QuickRecordLockView: View {
     }
 }
 
+/// − 2 puffs +: fixes the count when presses came quickly. Never below one.
+private struct PuffStepper: View {
+    let puffs: Int
+    let dark: Bool
+
+    var body: some View {
+        let ink: Color = dark ? .white : .black
+        HStack(spacing: 2) {
+            Button(intent: QuickRecordPuffIntent(delta: -1)) { mark("minus", ink) }
+                .buttonStyle(.plain).accessibilityLabel("One puff fewer")
+            Text("\(puffs) puffs").font(Ink.figtree(13, .medium)).monospacedDigit().foregroundStyle(ink)
+                .fixedSize()
+            Button(intent: QuickRecordPuffIntent(delta: 1)) { mark("plus", ink) }
+                .buttonStyle(.plain).accessibilityLabel("One puff more")
+        }
+        .padding(.horizontal, 2)
+        .background(Capsule().fill(ink.opacity(0.08)))
+    }
+
+    private func mark(_ symbol: String, _ ink: Color) -> some View {
+        Image(systemName: symbol).font(.system(size: 11, weight: .bold)).foregroundStyle(ink)
+            .frame(width: 26, height: 26)
+    }
+}
+
 /// Record / stop / save: the one control, the + button's black circle.
 private struct MainButton: View {
     let state: QuickRecordAttributes.ContentState
@@ -112,12 +145,17 @@ private struct MainButton: View {
     var body: some View {
         switch state.phase {
         case .standby:
-            // Logs a rescue (or uses one from the last 10 minutes) and listens.
-            Button(intent: QuickRecordStartIntent(momentID: nil)) { circle("mic.fill") }
-                .buttonStyle(.plain).accessibilityLabel("Log a rescue and record a voice note")
+            // The shortcut for logging (April, Nov 20): the app's +, which logs a manual moment (inhaler moments
+            // come from the felt button and the Watch) and turns the card to "What was going on?".
+            Button(intent: LogRescueIntent()) { circle("plus") }
+                .buttonStyle(.plain).accessibilityLabel("Log a moment")
         case .ready, .needsMic:
-            Button(intent: QuickRecordStartIntent(momentID: state.momentID)) { circle("mic.fill") }
-                .buttonStyle(.plain).accessibilityLabel("Record a voice note")
+            // The journal, not only a voice memo (April, Nov 20): opens the moment's journal in the app, where
+            // you type, tap what fits, or speak.
+            if let url = Copy.url(state) {
+                Link(destination: url) { circle("square.and.pencil") }
+                    .accessibilityLabel("Add to your journal")
+            }
         case .recording:
             Button(intent: QuickRecordStopIntent()) { circle("stop.fill") }
                 .buttonStyle(.plain).accessibilityLabel("Stop")
@@ -152,7 +190,7 @@ private struct Chips: View {
         let suggested = state.suggested.compactMap(JournalTag.init(rawValue:))
         let selected = state.selected.compactMap(JournalTag.init(rawValue:))
         // Stable order (a tapped chip doesn't jump): suggested, the quick four, then anything else switched on.
-        let shown = Array((suggested + Self.quick + selected).uniqued().prefix(4))
+        let shown = Array((suggested + Self.quick + selected).uniqued().prefix(3))   // three, then Something else
         HStack(spacing: 6) {
             ForEach(shown, id: \.self) { t in
                 let on = state.selected.contains(t.rawValue)
@@ -169,6 +207,14 @@ private struct Chips: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(on ? .isSelected : [])
+            }
+            // Anything the quick ones don't cover (April, Nov 20): opens the journal, as in the app.
+            if let url = Copy.url(state) {
+                Link(destination: url) {
+                    Text("Something else").font(Ink.figtree(13, .medium)).lineLimit(1).foregroundStyle(.black)
+                        .padding(.horizontal, 11).padding(.vertical, 6)
+                        .background(Capsule().fill(.black.opacity(0.07)))
+                }
             }
         }
     }
@@ -192,7 +238,7 @@ private struct KindTag: View {
 private enum Copy {
     static func title(_ p: QuickRecordAttributes.Phase) -> String {
         switch p {
-        case .standby: "Here if you need it."
+        case .standby: "Log a moment"
         case .ready: "What was going on?"
         case .recording: "Listening…"
         case .writing: "Writing it down…"
@@ -209,8 +255,8 @@ private enum Copy {
 
     @ViewBuilder static func detail(_ s: QuickRecordAttributes.ContentState) -> some View {
         switch s.phase {
-        case .standby: Text("The mic logs a moment and listens.")
-        case .ready: Text("Where you were, what you were doing.")
+        case .standby: Text("Tap + to log it, then add to your journal.")
+        case .ready: EmptyView()
         case .recording:
             if let start = s.startedAt {
                 Text(timerInterval: start...start.addingTimeInterval(QuickRecordAttributes.maxSeconds), countsDown: false)

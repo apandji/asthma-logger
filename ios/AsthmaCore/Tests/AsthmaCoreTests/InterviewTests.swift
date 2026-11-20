@@ -88,15 +88,24 @@ import Testing
     }
 
     @Test func aNoteNeverAsksAboutSymptomsFirst() {
-        let note = Interview.Context(hour: 10, puffs: 0, isRescue: false)
+        var note = Interview.Context(hour: 10, puffs: 0, isRescue: false)
+        note.asked = [.inhaler]
         #expect(Interview.next(note) == .doing)
         #expect(Interview.first(seed: 0, isRescue: false) != .symptoms)
     }
 
     @Test func aNoteAsksAboutSymptomsSecond() {
         var note = Interview.Context(hour: 10, puffs: 0, isRescue: false)
-        note.asked = [.doing]
+        note.asked = [.inhaler, .doing]
         #expect(Interview.next(note) == .symptoms)
+    }
+
+    @Test func aManualMomentFirstAsksAboutTheInhaler() {
+        #expect(Interview.first(seed: 7, isRescue: false) == .inhaler)
+        #expect(Interview.next(Interview.Context(hour: 10, puffs: 0, isRescue: false)) == .inhaler)
+        #expect(Interview.replies(.inhaler) == [.yes, .no])
+        // An inhaler moment never asks it.
+        #expect(Interview.first(seed: 7, isRescue: true) != .inhaler)
     }
 
     @Test func yesNo() {

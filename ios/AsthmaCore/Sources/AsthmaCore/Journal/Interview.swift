@@ -12,6 +12,8 @@ import Foundation
 public enum Interview {
     public enum Question: String, Sendable, CaseIterable, Identifiable {
         case doing, place, symptoms, exposure, activity, night, reliever, around, anythingElse
+        /// A manual moment, first (April, Nov 20): it could be inhaler use or only symptoms.
+        case inhaler
         public var id: String { rawValue }
 
         public var text: String {
@@ -26,6 +28,7 @@ public enum Interview {
             case .reliever: "Did the puff help?"
             case .around: "What was around you?"
             case .anythingElse: "Anything else?"
+            case .inhaler: "Did you use your inhaler?"
             }
         }
 
@@ -147,7 +150,9 @@ public enum Interview {
     /// The opening question. Rotates per moment so the same person doesn't always start the same way; a
     /// rescue opens on what was going on or how it felt, a note on what was going on or where.
     public static func first(seed: Int, isRescue: Bool) -> Question {
-        let pool: [Question] = isRescue ? [.doing, .symptoms, .around] : [.doing, .place, .around]
+        // A manual moment always opens on whether you used your inhaler: the answer decides what it is.
+        guard isRescue else { return .inhaler }
+        let pool: [Question] = [.doing, .symptoms, .around]
         return pool[abs(seed) % pool.count]
     }
 
@@ -160,7 +165,7 @@ public enum Interview {
         let order: [Question] = c.isRescue
             ? [.symptoms, .exposure, .activity, .night, .reliever, .doing, .place, .around]
             // A manual moment asks about symptoms second (April, Nov 20: symptoms are tracked, not just puffs).
-            : [.doing, .symptoms, .place, .around]
+            : [.inhaler, .doing, .symptoms, .place, .around]
         for q in order where !c.asked.contains(q) && applies(q, c) && !covered(q, c) {
             return q
         }
@@ -171,7 +176,7 @@ public enum Interview {
     public static func replies(_ q: Question) -> [Reply] {
         switch q {
         case .symptoms: [.tag(.wheezing), .tag(.coughing), .tag(.chestTightness), .tag(.shortOfBreath), .none]
-        case .activity, .night, .exposure: [.yes, .no]
+        case .activity, .night, .exposure, .inhaler: [.yes, .no]
         case .reliever: [.yes, .no]
         case .doing: [.tag(.exercise), .tag(.cooking), .tag(.cleaningProducts), .tag(.stress), .tag(.laughingOrCrying)]
         case .place: [.inside, .outside, .elsewhere]
@@ -200,6 +205,7 @@ public enum Interview {
         case .exposure: c.isRescue && !c.elevated.isEmpty
         case .reliever: c.isRescue
         case .activity: c.isRescue
+        case .inhaler: !c.isRescue && c.puffs == 0
         case .symptoms: true
         default: true
         }
@@ -220,7 +226,7 @@ public enum Interview {
             if c.elevated.first == .cold, c.tags.contains(.coldAir) { return true }
             return [" outside", " outdoors", " inside", " indoors"].contains { w.contains($0) }
         case .around: return c.tags.contains { $0.kind == .trigger && ![.exercise, .stress, .laughingOrCrying].contains($0) }
-        case .anythingElse: return false
+        case .anythingElse, .inhaler: return false
         }
     }
 

@@ -39,6 +39,9 @@ final class CaptureSession: Identifiable {
     let elevated: [Interview.Elevated]
     /// Outdoors or indoors, when an exposure answer said so: it corrects the moment's indoor guess on save.
     @ObservationIgnored private var saidOutdoors: Bool?
+    /// A manual moment's first answer (April, Nov 20): yes makes it an inhaler moment on save; no keeps it a
+    /// symptom log.
+    @ObservationIgnored private var usedInhaler: Bool?
     private(set) var turns: [Turn] = []
     private(set) var question: Interview.Question?
     private(set) var listening = false
@@ -195,6 +198,7 @@ final class CaptureSession: Identifiable {
         beforeAnswer = nil
         hear(words)
         if question == .exposure, let yes = Interview.yesNo(words) { exposure(yes) }
+        if question == .inhaler, let yes = Interview.yesNo(words) { usedInhaler = yes }
         answers.append(Answer(question: question, text: words, file: file, at: startedAt ?? .now))
         turns.append(.answer(UUID(), words.isEmpty ? "…" : words))
         let heard = chosen.union(suggested).subtracting(before)
@@ -209,10 +213,12 @@ final class CaptureSession: Identifiable {
         case .yes:
             if let t = question?.yesTag { chosen.insert(t); removed.remove(t) }
             if question == .exposure { exposure(true) }
+            if question == .inhaler { usedInhaler = true }
             post("Yes")
         case .no:
             if let t = question?.yesTag { chosen.remove(t) }
             if question == .exposure { exposure(false) }
+            if question == .inhaler { usedInhaler = false }
             post("No")
         case .none: post("None of these")
         case .inside: saidOutdoors = false; post("Inside")
@@ -328,12 +334,29 @@ final class CaptureSession: Identifiable {
         }
         event.tags = chosen
         event.tagsReviewed = true
+        if usedInhaler == true { becomeInhalerMoment() }
         // Your answer beats the guess (a correction is a label, AGENTS.md › Indoor / outdoor).
         if let out = saidOutdoors { event.indoorConfirmedRaw = (out ? IndoorOutdoor.outdoor : .indoor).rawValue }
         try? context.save()
         QuickRecordCenter.shared.scheduleEvening()
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         answers = []
+    }
+
+    /// "Did you use your inhaler?" Yes: the manual moment becomes an inhaler moment, one puff from the phone, and
+    /// Apple Health gets it when that's on, like a press. It then counts in the patterns.
+    private func becomeInhalerMoment() {
+        guard event.moment == .note, event.uses.isEmpty else { return }
+        event.kindRaw = MomentKind.rescue.rawValue
+        event.uses.append(InhalerUse(at: event.loggedAt, kind: .rescue, inhaler: Inhaler.current(.rescue), device: .phone))
+        guard UserDefaults.standard.object(forKey: Prefs.writeToHealth) as? Bool ?? true else { return }
+        let e = event
+        Task {
+            let health = HealthWriter()
+            guard health.isAvailable, let id = try? await health.savePuff(at: e.loggedAt, logID: e.id) else { return }
+            e.healthSampleID = id
+            e.uses.first?.healthSampleID = id
+        }
     }
 
     /// Nothing said and nothing ticked: throw the recordings away.

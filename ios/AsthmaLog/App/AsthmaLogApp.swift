@@ -1,6 +1,7 @@
 import AsthmaCore
 import SwiftData
 import SwiftUI
+import UserNotifications
 
 @main
 struct AsthmaLogApp: App {
@@ -25,10 +26,10 @@ struct AsthmaLogApp: App {
         QuickRecordCenter.shared.container = container
         // iOS relaunches the app in the background to deliver a visit: the log has to be listening from launch.
         VisitLog.shared.start()
-        QuickRecordLive.shared.install(container: container) { id in
+        QuickRecordLive.shared.install(container: container, logRescue: { id in
             // From the Lock Screen it's a manual moment, like the + (owner, Nov 19): no inhaler, nothing to Health.
             Task { _ = await services.log(.note, id: id, in: container.mainContext, writeToHealth: false) }
-        }
+        }, rewriteHealth: { e in await services.rewriteHealth(e, in: container.mainContext) })
     }
 
     var body: some Scene {
@@ -38,6 +39,12 @@ struct AsthmaLogApp: App {
                 .environment(button)
                 .tint(Theme.tint)
                 .task {
+                    // Notifications (April, Nov 20): asked once at launch if never asked, so a press from outside
+                    // the app can say it was logged even when onboarding was skipped.
+                    if QuickRecordCenter.shared.enabled,
+                       await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .notDetermined {
+                        _ = await QuickRecordCenter.shared.requestPermission()
+                    }
                     // The speech model for voice notes, fetched ahead so the first note is transcribed well.
                     Task.detached(priority: .utility) { await LiveTranscriber.prepare() }
                     let context = container.mainContext

@@ -162,6 +162,43 @@ enum DataSets {
         active = preset.title
     }
 
+    /// The navigator (`NavigatorSet`): a travel nurse across three cities, on the real air bundled in
+    /// navigator-air.json. Nothing loads if the file is missing.
+    static var navigatorAir: NavigatorAir? {
+        guard let url = Bundle.main.url(forResource: "navigator-air", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(NavigatorAir.self, from: data)
+    }
+
+    @discardableResult
+    static func loadNavigator(context: ModelContext) -> Bool {
+        guard let air = navigatorAir else { return false }
+        keepOwnData(context)
+        wipeMoments(context)
+        for m in NavigatorSet.moments(air: air) {
+            let e = LogEvent(moment: m.kind, loggedAt: m.at)
+            e.conditions = m.conditions
+            e.envStatus = .ready
+            e.tags = m.tags
+            e.tagsReviewed = m.tagsReviewed
+            e.voiceTranscript = m.note
+            (e.latitude, e.longitude) = DemoRoute.coordinate(
+                for: DemoRoute.Place(name: m.place.name, lat: m.place.latitude, lon: m.place.longitude, outdoor: m.place.outdoor), at: m.at)
+            e.horizontalAccuracy = 15
+            e.placeName = m.place.name
+            e.indoorGuessRaw = (m.place.outdoor ? IndoorOutdoor.outdoor : .indoor).rawValue
+            if m.kind == .rescue {
+                e.uses.append(InhalerUse(at: m.at, kind: .rescue, inhaler: Inhaler.current(.rescue), device: .phone, deviceID: nil, puffs: m.puffs))
+            }
+            context.insert(e)
+        }
+        try? context.save()
+        ModelUpgrade.run(context, force: true)
+        UserDefaults.standard.removeObject(forKey: "profileHistory")
+        active = NavigatorSet.title
+        return true
+    }
+
     /// One moment at a time, so the context drops them and their uses and notes cascade. A batch
     /// `delete(model:)` can fail quietly once moments have uses and notes, and then the next data set lands on
     /// top of the old one (every archetype read "Mixed" on the phone). Orphaned uses and notes go too.
@@ -204,6 +241,7 @@ struct DataSetsView: View {
     @State private var saved = DataSets.saved()
     @State private var confirmSaved: DataSets.Saved?
     @State private var confirmPreset: DataSetPreset?
+    @State private var confirmNavigator = false
 
     var body: some View {
         List {
@@ -225,6 +263,22 @@ struct DataSetsView: View {
             } header: {
                 Text("Saved on this phone")
             }
+            if let air = DataSets.navigatorAir {
+                Section {
+                    Button { confirmNavigator = true } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(NavigatorSet.title).font(.body.weight(.medium))
+                            Text("Fresno, Denver, St. Louis over six weeks. Her moments are made up. The air is real, pulled \(Date(timeIntervalSince1970: air.pulledAt).formatted(.dateTime.month(.abbreviated).day())).")
+                                .font(.caption).foregroundStyle(Theme.secondaryText)
+                        }
+                    }
+                    .foregroundStyle(.primary)
+                } header: {
+                    Text("On real air")
+                } footer: {
+                    Text("Open-Meteo for the six weeks, Ambee for the last two days in St. Louis. Each reading names its source.")
+                }
+            }
             Section {
                 ForEach(DataSetPreset.allCases) { p in
                     Button { confirmPreset = p } label: {
@@ -245,6 +299,9 @@ struct DataSetsView: View {
         .navigationTitle("Load a data set")
         .confirmationDialog("Replace the Journal with “\(confirmSaved?.name ?? "")”?", isPresented: Binding(get: { confirmSaved != nil }, set: { if !$0 { confirmSaved = nil } }), titleVisibility: .visible) {
             Button("Load") { if let s = confirmSaved { DataSets.load(s, context: context); dismiss() } }
+        }
+        .confirmationDialog("Replace the Journal with “\(NavigatorSet.title)”?", isPresented: $confirmNavigator, titleVisibility: .visible) {
+            Button("Load") { DataSets.loadNavigator(context: context); dismiss() }
         }
         .confirmationDialog("Replace the Journal with “\(confirmPreset?.title ?? "")”?", isPresented: Binding(get: { confirmPreset != nil }, set: { if !$0 { confirmPreset = nil } }), titleVisibility: .visible) {
             Button("Load") { if let p = confirmPreset { DataSets.load(p, context: context); dismiss() } }

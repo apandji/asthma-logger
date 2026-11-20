@@ -6,7 +6,7 @@ import SwiftUI
 /// staged situation, and where to land (an hour on the timeline, Insights, or onboarding). Settings › Demo and
 /// development › Loadouts. `-loadout riskAD` (Debug) applies one at launch.
 struct Loadout: Identifiable {
-    enum Land { case now, insights, onboarding, pair, lastRescue }
+    enum Land { case now, insights, onboarding, pair, lastRescue, evening }
 
     let id: String
     let group: String
@@ -15,6 +15,8 @@ struct Loadout: Identifiable {
     /// Nil keeps whatever is loaded; `mine` goes back to your own data.
     var dataSet: DataSetPreset? = nil
     var mine = false
+    /// The navigator on real air (`NavigatorSet`) instead of a made-up preset.
+    var navigator = false
     /// Crit and A/B settings on top of the defaults (key → raw value).
     var settings: [String: String] = [:]
     var ring: Crit.InsightsState = .auto
@@ -31,6 +33,24 @@ struct Loadout: Identifiable {
         Loadout(id: "risk-\(c.rawValue)", group: "Risk colour", title: title, note: note, dataSet: .stillLearning,
                 settings: [Crit.RiskColor.key: c.rawValue], ring: .learned, tomorrowAt: 14)
     }
+
+    /// The Nov 20 presentation, in order (docs/demo-runbook.md): one person, the navigator, on real air.
+    static let presentation: [Loadout] = [
+        Loadout(id: "talk-1", group: "Presentation", title: "1 · Now, then log a puff",
+                note: "The navigator, two weeks into St. Louis. Tap + for a rescue, then add a voice note.", navigator: true),
+        Loadout(id: "talk-2", group: "Presentation", title: "2 · Look back at a moment",
+                note: "Her last rescue that fits her pattern. Tap the picture for the details and where each reading came from.",
+                navigator: true, land: .lastRescue),
+        Loadout(id: "talk-3", group: "Presentation", title: "3 · Timeline to calendar",
+                note: "Lands on Now. Open Moments for Day, Month, Year: three cities in six weeks. Then Map.", navigator: true),
+        Loadout(id: "talk-4", group: "Presentation", title: "4 · Insights",
+                note: "What her inhaler days share, in every city: fine particles.", navigator: true, land: .insights),
+        Loadout(id: "talk-5", group: "Presentation", title: "5 · Evening look-back",
+                note: "What felt air recorded today, and the ask for what it couldn't see. Keeps the Journal as it is, so a puff from step 1 is the moment it asks about.",
+                land: .evening),
+        Loadout(id: "talk-6", group: "Presentation", title: "Fallback · Still learning",
+                note: "A week in, made up: the ring filling, when and where so far.", dataSet: .stillLearning, land: .insights),
+    ]
 
     /// Friday's MVP walk-through, in the order of the journey (docs/design/mvp-demo.md).
     static let demoRun: [Loadout] = [
@@ -54,7 +74,7 @@ struct Loadout: Identifiable {
                 dataSet: .stillLearning, ring: .learned, tomorrowAt: 14),
     ]
 
-    static let all: [Loadout] = demoRun + [
+    static let all: [Loadout] = presentation + demoRun + [
         Loadout(id: "mine", group: "Start", title: "My data, as designed",
                 note: "Your own moments, real air, every switch at its default.", mine: true),
         Loadout(id: "onboarding", group: "Start", title: "Onboarding",
@@ -79,7 +99,9 @@ struct Loadout: Identifiable {
                 note: "The same person, said with the number.", dataSet: .coldBelow40, land: .insights),
     ]
 
-    static let groups = ["Demo run", "Start", "Risk colour", "Insights"]
+    static let groups = ["Presentation", "Demo run", "Start", "Risk colour", "Insights"]
+    /// The groups behind "Earlier demos and loadouts".
+    static let earlier = ["Demo run", "Start", "Risk colour", "Insights"]
 
     /// Everything back to default, then this loadout. `close` dismisses Settings; Now finishes the landing.
     @MainActor func apply(context: ModelContext) {
@@ -89,8 +111,13 @@ struct Loadout: Identifiable {
         d.set(ring.rawValue, forKey: Crit.InsightsState.key)
         scenario.choose()
         for k in ["demo.care", "demo.priming", "demo.active"] { d.removeObject(forKey: k) }
+        d.set(land == .evening, forKey: EveningLookBack.demoKey)
+        // A loadout lands where it says: the evening look-back doesn't come up on its own over it tonight.
+        EveningLookBack.markShown(now: .now)
         if mine {
             if let own = DataSets.saved().first(where: { $0.name == DataSets.ownData }) { DataSets.load(own, context: context) }
+        } else if navigator {
+            DataSets.loadNavigator(context: context)
         } else if let dataSet {   // always fresh: a puff logged in an earlier step must not become "the last rescue"
             DataSets.load(dataSet, context: context)
         }
@@ -98,6 +125,7 @@ struct Loadout: Identifiable {
         if let tomorrowAt { pending.append("focus=\(tomorrowAt)") }
         if land == .insights { pending.append("open=insights") }
         if land == .lastRescue { pending.append("focus=last") }
+        if land == .evening { pending.append("open=evening") }
         d.set(pending.isEmpty ? "" : pending.joined(separator: ";") + ";\(UUID().uuidString.prefix(6))", forKey: Self.pendingKey)
         if land == .pair { d.set(true, forKey: Self.pairKey) }
     }
@@ -125,13 +153,14 @@ struct Loadout: Identifiable {
 
 /// The Loadouts section: one row per loadout, grouped. A tap applies it and closes Settings.
 struct LoadoutsSection: View {
+    var groups = Loadout.groups
     let close: () -> Void
     @Environment(\.modelContext) private var context
     @AppStorage(Prefs.didOnboard) private var didOnboard = true
     @AppStorage("loadout.last") private var last = ""
 
     var body: some View {
-        ForEach(Loadout.groups, id: \.self) { g in
+        ForEach(groups, id: \.self) { g in
             Section {
                 ForEach(Loadout.all.filter { $0.group == g }) { l in
                     Button {
@@ -154,8 +183,9 @@ struct LoadoutsSection: View {
                     }
                 }
             } header: {
-                Text(g == "Demo run" ? "Demo run" : g == "Start" ? "Loadouts" : g)
+                Text(g == "Start" ? "Loadouts" : g)
             } footer: {
+                if g == "Presentation" { Text("Nov 20, in order. Each step loads the navigator fresh and lands you on the right screen. Every design switch goes back to its default first.") }
                 if g == "Demo run" { Text("The MVP walk-through, in order. Each step loads its person and lands you on the right screen.") }
                 if g == "Start" { Text("One tap sets the data set, the switches and the staged day, then lands you there. Every switch goes back to its default first.") }
             }

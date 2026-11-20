@@ -183,9 +183,9 @@ enum Crit {
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .feltAir: "felt air"
+            case .feltAir: "Riso (earlier look)"
             case .health: "Apple Health"
-            case .menus: "Menus (Oct 30 sketch)"
+            case .menus: "felt air (flowers, the default)"
             }
         }
         /// Menus is built on the Apple Health look (grey sky, pills, Health colours) with its own structure.

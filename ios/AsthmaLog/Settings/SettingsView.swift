@@ -22,7 +22,7 @@ struct SettingsView: View {
                 Section {
                     NavigationLink("Demo and development") { DeveloperSettings(close: { dismiss() }) }
                 } footer: {
-                    Text("Loadouts, data sets, design switches and prototypes. Not part of felt air.")
+                    Text("The presentation steps, whose data is showing, and things to stage. Not part of felt air.")
                 }
 
                 Section {
@@ -135,28 +135,22 @@ struct DeveloperSettings: View {
     @AppStorage("demo.care") private var demoCare = ""
     @AppStorage("demo.priming") private var demoPriming = false
     @AppStorage("demo.active") private var demoActive = false
+    @AppStorage(EveningLookBack.demoKey) private var demoEvening = false
 
     var body: some View {
         Form {
-            LoadoutsSection(close: close)
+            // 1 · The presentation, one tap per step.
+            LoadoutsSection(groups: ["Presentation"], close: close)
 
-            // Every open design question in one place, grouped by screen (docs/design/ab-tests.md). In every build,
-            // so a TestFlight session can be set up on the phone.
-            Section {
-                NavigationLink("What we’re testing") { ABTestsView() }
-            } footer: {
-                Text("Each open design question, by screen: what it asks, the options, and which one is on. Colour, Now, Insights, Logging, Words.")
-            }
-
+            // 2 · Who is on the phone.
             Section {
                 LabeledContent("Showing", value: activeDataSet ?? "Your own data")
                 NavigationLink("Load a data set") { DataSetsView() }
                 Button("Save current as…") { naming = true }
-                Button("Fresh start", role: .destructive) { confirmFresh = true }
             } header: {
-                Text("Data sets")
+                Text("Whose data")
             } footer: {
-                Text("Your own profile, saved, or a made-up person for a demo (Still learning, Allergen-led, Hot hazy days…). Loading replaces the Journal; your own data is kept as “My data” first. Fresh start erases everything and opens onboarding; iOS keeps granted permissions until the app is deleted (ios/scripts/fresh-install.sh).")
+                Text("The navigator on real air, a made-up person, or a Journal saved on this phone. Loading replaces the Journal; your own data is kept as “My data” first.")
             }
             .alert("Save the Journal as", isPresented: $naming) {
                 TextField("Name", text: $setName)
@@ -164,6 +158,45 @@ struct DeveloperSettings: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Kept on this phone, not shared anywhere.")
+            }
+
+            // 3 · Things to stage on cue.
+            Section {
+                Toggle("Evening look-back at any hour", isOn: $demoEvening)
+                Picker("Air on Now", selection: $demoScenario) {
+                    ForEach(DemoScenario.allCases) { Text($0.title).tag($0) }
+                }
+                .onChange(of: demoScenario) { _, s in s.choose() }
+                Picker("Rescue-use check", selection: $demoCare) {
+                    Text("Off (real moments)").tag("")
+                    Text("Again within 4 hours").tag("again")
+                    Text("More than 2 days this week").tag("week")
+                }
+                Toggle("Presses look like test sprays", isOn: $demoPriming)
+                Toggle("New moments count as active", isOn: $demoActive)
+                Toggle("Demo calendar", isOn: $demoCalendar)
+            } header: {
+                Text("Stage a moment")
+            } footer: {
+                Text("Evening look-back opens when you close Settings, and each time felt air comes to the front, until you turn it off. Air on Now stages a day (smoke, a storm, a cold snap, a pollen day); its readings never count toward patterns. Demo calendar stands in for your own events.")
+            }
+
+            // 4 · Everything else, one level down.
+            Section {
+                NavigationLink("Earlier demos and loadouts") {
+                    Form { LoadoutsSection(groups: Loadout.earlier, close: close) }
+                        .navigationTitle("Earlier demos").navigationBarTitleDisplayMode(.inline)
+                }
+                NavigationLink("Design switches") { designSwitches }
+                NavigationLink("Demo week and tools") { tools }
+            } header: {
+                Text("More")
+            }
+
+            Section {
+                Button("Fresh start", role: .destructive) { confirmFresh = true }
+            } footer: {
+                Text("Erases everything and opens onboarding. Your own data is saved as “My data” first. iOS keeps granted permissions until the app is deleted (ios/scripts/fresh-install.sh).")
             }
             .confirmationDialog("Erase everything and start onboarding?", isPresented: $confirmFresh, titleVisibility: .visible) {
                 Button("Fresh start", role: .destructive) {
@@ -176,7 +209,50 @@ struct DeveloperSettings: View {
             } message: {
                 Text("Moments, voice notes, settings and the paired button are erased. Your own data is saved as “My data” first, and saved data sets stay.")
             }
+        }
+        .tint(Theme.standard)
+        .navigationTitle("Demo and development")
+        .navigationBarTitleDisplayMode(.inline)
+    }
 
+    /// Open design questions and the looks kept for comparison.
+    private var designSwitches: some View {
+        Form {
+            Section {
+                NavigationLink("What we’re testing") { ABTestsView() }
+            } footer: {
+                Text("Each open design question, by screen: what it asks, the options, and which one is on.")
+            }
+            Section {
+                Picker("App look", selection: $critAppLook) {
+                    ForEach(Crit.AppLook.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Home picture", selection: $critMenusSky) {
+                    ForEach(Crit.MenusSky.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Timeline", selection: $critTimeline) {
+                    ForEach(Crit.TimelineLook.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Inks", selection: $critInks) {
+                    ForEach(Crit.Inks.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("Insights state", selection: $critInsightsState) {
+                    ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
+                }
+            } header: {
+                Text("Looks")
+            } footer: {
+                Text("The default look is felt air with the flowers. The others are kept for comparison. Insights state forces learning or learned.")
+            }
+        }
+        .tint(Theme.standard)
+        .navigationTitle("Design switches")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The labelled demo week, onboarding replays and test tools.
+    private var tools: some View {
+        Form {
             Section {
                 Button("Add a demo week to the Journal") { demoNote = "Added \(DemoSeeder.add(in: context)) demo moments." }
                 Button("Remove demo moments", role: .destructive) {
@@ -184,44 +260,11 @@ struct DeveloperSettings: View {
                     demoNote = n == 0 ? nil : "Removed \(n) demo moments."
                 }
                 Toggle("Show demo data in Insights", isOn: $demo)
-                #if DEBUG
-                // One switch for the air of a day worth showing (it sets pollen and the air event underneath).
-                Picker("Air on Now", selection: $demoScenario) {
-                    ForEach(DemoScenario.allCases) { Text($0.title).tag($0) }
-                }
-                .onChange(of: demoScenario) { _, s in s.choose() }
-                // A stand-in week for "what was on" and "what you'll be doing" (the real thing is your calendar).
-                Toggle("Demo calendar", isOn: $demoCalendar)
-                Picker("Inks", selection: $critInks) {
-                    ForEach(Crit.Inks.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("App look", selection: $critAppLook) {
-                    ForEach(Crit.AppLook.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Menus sky", selection: $critMenusSky) {
-                    ForEach(Crit.MenusSky.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Timeline", selection: $critTimeline) {
-                    ForEach(Crit.TimelineLook.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Insights state", selection: $critInsightsState) {
-                    ForEach(Crit.InsightsState.allCases) { Text($0.title).tag($0) }
-                }
-                Picker("Rescue-use check", selection: $demoCare) {
-                    Text("Off (real moments)").tag("")
-                    Text("Again within 4 hours").tag("again")
-                    Text("More than 2 days this week").tag("week")
-                }
-                Toggle("Presses look like test sprays", isOn: $demoPriming)
-                Toggle("New moments count as active", isOn: $demoActive)
-                #endif
             } header: {
-                Text("Staged for a demo")
+                Text("Demo week")
             } footer: {
-                Text(demoNote ?? "Made up for showing felt air, never used for patterns. Demo moments fill the Journal. Air on Now stages a day (smoke, a storm, a cold snap, a pollen day). Insights ring forces learning or learned. Rescue-use check shows the card on Now. Test sprays makes the logged panel ask. Active stamps new moments as after a walk.")
+                Text(demoNote ?? "Made up for showing felt air, never used for patterns.")
             }
-
-            #if DEBUG
             Section {
                 Button("Play onboarding") {
                     close()
@@ -239,21 +282,27 @@ struct DeveloperSettings: View {
                     close()
                     Task { try? await Task.sleep(for: .milliseconds(450)); didOnboard = false }
                 }
+            } header: {
+                Text("Onboarding")
+            } footer: {
+                Text("Reset forgets the paired button and brings the tips back; your moments stay.")
+            }
+            #if DEBUG
+            Section {
                 NavigationLink("Exertion check") { ExertionCheckView() }
                 Toggle("Performance readout", isOn: $perfHUD)
                 NavigationLink("Prototypes") { PrototypesView() }
             } header: {
                 Text("Tools")
             } footer: {
-                Text("Reset forgets the paired button and brings the tips back; your moments stay. Exertion check shows what Health and Motion return. Prototypes are early sketches, not the app. Debug builds only.")
+                Text("Exertion check shows what Health and Motion return. Prototypes are early sketches, not the app. Debug builds only.")
             }
             #endif
         }
         .tint(Theme.standard)
-        .navigationTitle("Demo and development")
+        .navigationTitle("Demo week and tools")
         .navigationBarTitleDisplayMode(.inline)
     }
-
 }
 
 #if DEBUG

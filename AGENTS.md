@@ -64,6 +64,9 @@ Each one comes from the docs. Follow the link before you change anything in that
 | Infections (flu-like illness around) | **Later, not MVP** (owner, Oct 21). Hook-ups only: `Infection` / `InfectionSource` in core, `FeatureFrame.infection`, `LogEvent.infectionRaw`, `InfectionStamp` (off), the `ili` bin in `Bins.later` | Planned source: Ambee ILI (weekly, US metro, no history). Plan: [docs/research/trigger-lens.md](docs/research/trigger-lens.md) |
 | Pollen until Ambee | None. The bin reads `unknown` and Insights says "Pollen not included yet" | |
 | Photos | Later, opt-in, on-device only. Not in the first build | |
+| Default look | April's Menus look (light, watercolor flowers, Home / Moments / Map / Insights) is the default (owner, Nov 19). The riso look stays as a design switch | `Crit.AppLook` |
+| Demo person on real air | "The navigator": a made-up travel nurse across Fresno, Denver and St. Louis, on real hourly air. **Open-Meteo** (owner approved Nov 19, build script only, city-centre coordinates) for six weeks, Ambee for the last two days. The app itself never calls Open-Meteo | `NavigatorSet`, `ios/scripts/pull-navigator-air.py`, [docs/demo-runbook.md](docs/demo-runbook.md) |
+| Evening look-back | After 6 pm, with today's inhaler moments missing a note: one sheet with what was recorded (time, place, calendar, air in words) and the ask. Once an evening. Staged at any hour from Demo and development | `EveningLookBack` |
 
 ## Shared contracts
 

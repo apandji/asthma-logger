@@ -52,7 +52,8 @@ struct EveningLookBack: View {
     /// read as one moment, said as "4 puffs" (or "4 times" for manual ones), not four cards to answer.
     private var groups: [[LogEvent]] {
         var out: [[LogEvent]] = []
-        for m in moments {
+        // Only what still needs a note (April, Nov 20): journaled moments drop out, and a card leaves once answered.
+        for m in moments where Self.needsNote(m) {
             if let last = out.last?.last, last.moment == m.moment, m.loggedAt.timeIntervalSince(last.loggedAt) <= 5 * 60 {
                 out[out.count - 1].append(m)
             } else {
@@ -112,6 +113,9 @@ struct EveningLookBack: View {
             }
         }
         .environment(\.colorScheme, .light)   // the flowers look is always light
+        // Everything answered: the wash goes by itself.
+        .onAppear { if groups.isEmpty { close() } }
+        .onChange(of: groups.count) { _, n in if n == 0 { close() } }
         .accessibilityAddTraits(.isModal)
     }
 

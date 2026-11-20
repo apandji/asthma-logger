@@ -858,6 +858,30 @@ struct NowHomeView: View {
         return verdictStrength(outlook(at: t).tint) ?? 0
     }
 
+    /// The forecast by day: the condition that leads it most hours, and the strongest likeness to your inhaler
+    /// days across its hours (the same outlook the timeline's chip uses).
+    private var comingDays: [ComingDays.Day] {
+        let cal = Calendar.current
+        let ahead = hours.filter { $0.date > now }
+        let byDay = Dictionary(grouping: ahead) { cal.startOfDay(for: $0.date) }
+        return byDay.keys.sorted().prefix(5).map { day in
+            let hs = byDay[day]!
+            var totals: [String: Double] = [:]
+            for h in hs {
+                for (k, v) in AirBlanket.scores(h.conditions.input, flu: nil) where v >= 0.45 { totals[k, default: 0] += v }
+            }
+            let lead = totals.max { $0.value < $1.value }?.key
+            let likeness = hs.compactMap { verdictStrength(outlook(at: $0.date).tint) }.max()
+            // Demo (April, Nov 20): tomorrow looks like your inhaler days, pollen leading, so the card shows its
+            // suggestion. Real days the rest of the time; "Ordinary" while still learning.
+            if Self.demoForecast, cal.isDateInTomorrow(day) { return ComingDays.Day(date: day, lead: "Pollen", likeness: 1) }
+            return ComingDays.Day(date: day, lead: lead, likeness: likeness ?? (Self.demoForecast ? 0 : nil))
+        }
+    }
+
+    /// The demo's forecast story, on for the presentation (Settings › Demo can turn it off later).
+    static var demoForecast: Bool { UserDefaults.standard.object(forKey: "demo.forecast") as? Bool ?? true }
+
     private func verdictStrength(_ tint: Color?) -> Double? {
         switch tint {
         case Verdict.green?: 0
@@ -1192,6 +1216,10 @@ struct NowHomeView: View {
                                     .animation(.smooth(duration: 0.35), value: quietGarden)
                                 if combined {
                                     soilMap
+                                    // The next days at a glance (April, Nov 20), from the timeline's forecast.
+                                    if !comingDays.isEmpty {
+                                        ComingDays(days: comingDays).padding(.horizontal, 16).padding(.bottom, 12)
+                                    }
                                     // Under the fold: everything felt air holds about the moment on the playhead.
                                     MomentFold(event: foldSubject.event, conditions: foldSubject.conditions, date: foldSubject.date,
                                                yours: Set(gatedRows.compactMap { $0.level == "yes" ? Combination.of(bin: $0.bin) : nil }),
@@ -1999,7 +2027,17 @@ struct NowHour: Identifiable, Sendable {
     /// publish in ozone season), today's PM2.5 and ozone are carried forward, marked low confidence.
     static func forecast(latitude: Double, longitude: Double, now: Conditions? = nil) async -> [NowHour] {
         guard let all = try? await WeatherProvider().hourly(latitude: latitude, longitude: longitude, hours: 48,
-                                                            pastHours: Int(TempDrop.windowHours)) else { return [] }
+                                                            pastHours: Int(TempDrop.windowHours)) else {
+            // No Apple Weather (it fails in the simulator, and can fail on a phone): Ambee's own 48 hours of air
+            // and pollen stand in, so the forecast still shows (April, Nov 20).
+            guard AmbeeClient.isLive,
+                  let f = try? await AmbeeClient.current.forecast(latitude: latitude, longitude: longitude, from: .now, hours: 48) else { return [] }
+            return f.filter { $0.date > Date().addingTimeInterval(-3600) }.map { a in
+                var c = Conditions()
+                c.observations = a.observations(source: Ambee.source).map { var o = $0; o.isForecast = true; return o }
+                return NowHour(date: a.date, conditions: c)
+            }
+        }
         let temps = all.map(\.tempPoint)
         let hours = all.filter { $0.date > Date().addingTimeInterval(-3600) }
         var aq: [String: (pm25: Int?, ozone: Int?)] = [:]

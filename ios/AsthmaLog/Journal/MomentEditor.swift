@@ -12,6 +12,26 @@ struct MomentEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var pickingPlace = false
     @State private var confirmDelete = false
+    @State private var confirmClear = false
+
+    private var hasJournal: Bool {
+        !event.notes.isEmpty || !(event.voiceTranscript ?? "").isEmpty || !event.tags.isEmpty || event.voiceNoteFile != nil
+    }
+
+    /// The words, the recordings and the picked tags go; the moment, its air and its inhaler use stay.
+    private func clearJournal() {
+        for n in event.notes {
+            if let f = n.audioFile { try? FileManager.default.removeItem(at: VoiceNotes.shared.url(f)) }
+            context.delete(n)
+        }
+        if let f = event.voiceNoteFile { try? FileManager.default.removeItem(at: VoiceNotes.shared.url(f)) }
+        event.notes = []
+        event.voiceTranscript = nil
+        event.voiceNoteFile = nil
+        event.tags = []
+        event.tagsReviewed = false
+        try? context.save()
+    }
     @State private var journal: CaptureSession?
     @AppStorage(Crit.CaptureStyle.key) private var captureStyle = Crit.CaptureStyle.chat
     @AppStorage(Crit.AutoSelect.key) private var autoSelect = Crit.AutoSelect.ticked
@@ -75,6 +95,11 @@ struct MomentEditor: View {
             }
 
             Section {
+                // Takes the journal off the moment and keeps the moment (April, Nov 20).
+                if hasJournal {
+                    Button("Remove journal", role: .destructive) { confirmClear = true }
+                        .frame(maxWidth: .infinity)
+                }
                 Button("Delete moment", role: .destructive) { confirmDelete = true }
                     .frame(maxWidth: .infinity)
             }
@@ -96,6 +121,11 @@ struct MomentEditor: View {
             if let s = journal {
                 CaptureSheet(session: s, chat: captureStyle == .chat, voice: false) { journal = nil }
             }
+        }
+        .confirmationDialog("Remove this moment's journal?", isPresented: $confirmClear, titleVisibility: .visible) {
+            Button("Remove journal", role: .destructive) { clearJournal() }
+        } message: {
+            Text("The words, the recording and the tags are deleted from this iPhone. The moment and its air stay. This can't be undone.")
         }
         .confirmationDialog("Delete this moment?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {

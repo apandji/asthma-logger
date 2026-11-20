@@ -598,8 +598,8 @@ struct MenusStrip: View {
         }
         .buttonStyle(.plain)
         .disabled(target == nil)
-        // On the tick line (its middle sits 74 pt down a 104 pt track).
-        .offset(y: 22)
+        // On the tick line (its middle sits 84 pt down a 116 pt track).
+        .offset(y: 26)
         .padding(.horizontal, 10)
         .accessibilityLabel(dir < 0 ? "Previous moment" : "Next moment")
     }
@@ -607,7 +607,8 @@ struct MenusStrip: View {
 
     private var track: some View {
         Canvas { ctx, size in
-            let w = size.width, mid: CGFloat = 74
+            // A size up (April, Nov 20: "a bit tiny"): marks, ticks and the playhead about a third larger.
+            let w = size.width, mid: CGFloat = 84
             let x = { (d: Date) in window.x(d, width: w) }
             let ink = Color.primary
             // Ticks: hours when zoomed in, days when out, weeks when far out; labels above the major ones.
@@ -618,7 +619,7 @@ struct MenusStrip: View {
                 if t >= window.start {
                     let isMajor = major == 7 * 86_400 ? cal.component(.weekday, from: t) == cal.firstWeekday && cal.component(.hour, from: t) == 0
                         : Int(t.timeIntervalSince(cal.startOfDay(for: t))) % Int(major) == 0
-                    let h: CGFloat = isMajor ? 14 : 6
+                    let h: CGFloat = isMajor ? 19 : 8
                     // A baseline ring sits at 9 am and 6 pm: no small tick through it.
                     let hr = cal.component(.hour, from: t)
                     if !isMajor, cal.component(.minute, from: t) == 0, hr == 9 || hr == 18 { t = t.addingTimeInterval(minor); continue }
@@ -628,18 +629,28 @@ struct MenusStrip: View {
                 }
                 t = t.addingTimeInterval(minor)
             }
-            // The forecast ahead: a slot per hour in the verdict's colour.
-            let slot = max(1, w * CGFloat(3600 / window.span))
-            for (d, v) in forecast where d >= now && d <= window.end {
-                let c: Color = v == nil ? ink.opacity(0.08) : (v! >= 1 ? Verdict.red : v! >= 0.5 ? Verdict.yellow : Verdict.green).opacity(0.7)
-                ctx.fill(Path(CGRect(x: x(d), y: mid - 4, width: max(1, slot - 1), height: 8)), with: .color(c))
+            // The forecast ahead (April, Nov 20): one soft grey band, no stripes. A touch deeper over the hours that
+            // look like your inhaler days, fading out where the forecast ends.
+            let ahead = forecast.filter { $0.0 >= now }.sorted { $0.0 < $1.0 }
+            if let first = ahead.first, let last = ahead.last, last.0 > first.0 {
+                let x0 = max(0, x(first.0)), x1 = min(w, x(last.0))
+                if x1 > x0 {
+                    let span = last.0.timeIntervalSince(first.0)
+                    let stops: [Gradient.Stop] = ahead.map { d, v in
+                        let a = 0.10 + 0.22 * (v ?? 0)
+                        return .init(color: ink.opacity(a), location: d.timeIntervalSince(first.0) / span)
+                    } + [.init(color: ink.opacity(0), location: 1)]
+                    let band = Path(roundedRect: CGRect(x: x(first.0), y: mid - 5.5, width: x(last.0) - x(first.0), height: 11), cornerRadius: 5.5)
+                    ctx.fill(band, with: .linearGradient(Gradient(stops: stops), startPoint: CGPoint(x: x(first.0), y: mid),
+                                                          endPoint: CGPoint(x: x(last.0), y: mid)))
+                }
             }
             // Baseline captures (owner, Nov 13, for now): a small dot every day at 9 am and 6 pm, the ordinary
             // moments the patterns compare against. Ahead of now they're faint, still to come. Under the pills.
             // Behind now, the real ones (owner, Nov 19): each baseline moment at its own time, an empty ring, never
             // filled, so it can't be mistaken for inhaler use. The 9 and 6 rings stay only for what's still to come.
             for b in baselines where b.loggedAt >= window.start.addingTimeInterval(-3600) && b.loggedAt <= window.end.addingTimeInterval(3600) {
-                let d: CGFloat = 6
+                let d: CGFloat = 8
                 ctx.stroke(Path(ellipseIn: CGRect(x: x(b.loggedAt) - d / 2, y: mid - d / 2, width: d, height: d)),
                            with: .color(ink.opacity(0.6)), lineWidth: 1)
             }
@@ -662,7 +673,7 @@ struct MenusStrip: View {
             let shown = moments.filter { $0.loggedAt >= window.start.addingTimeInterval(-3600) && $0.loggedAt <= window.end.addingTimeInterval(3600) }
             for m in shown where m.moment == .rescue || m.moment == .maintenance {
                 let noted = !(m.voiceTranscript ?? "").isEmpty || shown.contains { $0.moment == .note && abs($0.loggedAt.timeIntervalSince(m.loggedAt)) < 3600 }
-                let cx = x(m.loggedAt), pw = min(r, 7) * 1.1, ph = min(r, 7) * 2.8
+                let cx = x(m.loggedAt), pw = min(r, 7) * 1.5, ph = min(r, 7) * 3.8
                 let pill = Path(roundedRect: CGRect(x: cx - pw / 2, y: mid - ph / 2, width: pw, height: ph), cornerRadius: pw / 2)
                 // Inside or exercise (April, Nov 20): not about the outdoor air. C greys the pill; B keeps it and
                 // puts a small house or runner over it.
@@ -687,16 +698,16 @@ struct MenusStrip: View {
             // A manual moment on its own (the +, the Lock Screen): a small solid dot on the line, not a pill.
             for m in shown where m.moment == .note {
                 let near = shown.contains { ($0.moment == .rescue || $0.moment == .maintenance) && abs($0.loggedAt.timeIntervalSince(m.loggedAt)) < 3600 }
-                if !near { ctx.fill(Path(ellipseIn: CGRect(x: x(m.loggedAt) - 3, y: mid - 3, width: 6, height: 6)), with: .color(ink)) }
+                if !near { ctx.fill(Path(ellipseIn: CGRect(x: x(m.loggedAt) - 4, y: mid - 4, width: 8, height: 8)), with: .color(ink)) }
             }
             // Now, and the playhead in the middle.
-            if now >= window.start, now <= window.end {
-                var n = Path(); n.move(to: CGPoint(x: x(now), y: mid - 16)); n.addLine(to: CGPoint(x: x(now), y: mid + 16))
+            // The Now line only when the pointer is elsewhere: on Now, the pointer says it.
+            if now >= window.start, now <= window.end, abs(x(now) - w / 2) > 8 {
+                var n = Path(); n.move(to: CGPoint(x: x(now), y: mid - 21)); n.addLine(to: CGPoint(x: x(now), y: mid + 21))
                 ctx.stroke(n, with: .color(ink.opacity(0.7)), lineWidth: 1.5)
             }
             let head = window.ink(moments)
-            var ph = Path(); ph.move(to: CGPoint(x: w / 2, y: mid - 18)); ph.addLine(to: CGPoint(x: w / 2, y: mid + 18))
-            ctx.stroke(ph, with: .color(head), lineWidth: 2)
+            // Just the pointer (April, Nov 20): no line under it.
             // The playhead's time, just above its pointer (owner, Nov 13): the time on one line, the day small beneath.
             let atNow = abs(window.center.timeIntervalSince(now)) < 60
             let time = atNow ? "Now" : window.center.formatted(.dateTime.hour().minute())
@@ -704,16 +715,16 @@ struct MenusStrip: View {
                 : cal.isDateInYesterday(window.center) ? "Yesterday"
                 : window.center.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
             // 16 pt time, 13 pt day (owner, Nov 13).
-            ctx.draw(Text(time).font(Theme.Figtree.font(size: 16, weight: .medium).monospacedDigit()).foregroundStyle(head),
-                     at: CGPoint(x: w / 2, y: day.isEmpty ? mid - 44 : mid - 64))
-            ctx.draw(Text(day).font(Theme.Figtree.font(size: 13)).foregroundStyle(head.opacity(0.5)), at: CGPoint(x: w / 2, y: mid - 44))
+            ctx.draw(Text(time).font(Theme.Figtree.font(size: 18, weight: .medium).monospacedDigit()).foregroundStyle(head),
+                     at: CGPoint(x: w / 2, y: day.isEmpty ? mid - 50 : mid - 72))
+            ctx.draw(Text(day).font(Theme.Figtree.font(size: 14)).foregroundStyle(head.opacity(0.5)), at: CGPoint(x: w / 2, y: mid - 50))
             // Health's pointer, on the playhead.
             var tri = Path()
-            tri.move(to: CGPoint(x: w / 2 - 5, y: mid - 26)); tri.addLine(to: CGPoint(x: w / 2 + 5, y: mid - 26))
-            tri.addLine(to: CGPoint(x: w / 2, y: mid - 20)); tri.closeSubpath()
+            tri.move(to: CGPoint(x: w / 2 - 6, y: mid - 33)); tri.addLine(to: CGPoint(x: w / 2 + 6, y: mid - 33))
+            tri.addLine(to: CGPoint(x: w / 2, y: mid - 26)); tri.closeSubpath()
             ctx.fill(tri, with: .color(head))
         }
-        .frame(height: 104)
+        .frame(height: 116)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .contentShape(Rectangle())
         .onTapGesture { p in

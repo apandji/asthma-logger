@@ -47,7 +47,9 @@ struct HourlyHistory: Sendable {
             return .success(forecast.map {
                 WeatherProvider.Hour(date: $0.date, temperatureF: $0.temperature.converted(to: .fahrenheit).value,
                                      humidityPct: $0.humidity * 100,
-                                     windMph: $0.wind.speed.converted(to: .milesPerHour).value)
+                                     windMph: $0.wind.speed.converted(to: .milesPerHour).value,
+                                     pressureHpa: $0.pressure.converted(to: .hectopascals).value,
+                                     condition: $0.condition.description)
             })
         } catch { return .failure(error) }
     }

@@ -25,8 +25,10 @@ nonisolated struct AmbeeClient: AmbeeSource {
     func latest(latitude: Double, longitude: Double, at date: Date) async throws -> AmbeeHour {
         async let air: Ambee.AirQualityResponse = get("/latest/by-lat-lng", latitude, longitude)
         async let pollen: Ambee.PollenResponse = get("/v3/pollen/latest", latitude, longitude, ["speciesRisk": "true"])
+        // Ambee's weather too (owner, Nov 19): a second reading behind Apple Weather's, and its pressure.
+        async let weather: Ambee.WeatherResponse = get("/weather/latest/by-lat-lng", latitude, longitude)
         let hours = Ambee.hours(airQuality: (try? await air) ?? .init(), pollen: try? await pollen,
-                                weather: [], isForecast: false)
+                                weather: [(try? await weather)?.data].compactMap { $0 }, isForecast: false)
         guard var h = Ambee.newest(hours) else { throw URLError(.zeroByteResource) }
         h.date = date
         return h
@@ -52,6 +54,17 @@ nonisolated struct AmbeeClient: AmbeeSource {
     func fires(latitude: Double, longitude: Double) async -> [Ambee.FireResponse.Fire] {
         let r: Ambee.FireResponse? = try? await get("/fire/latest/by-lat-lng", latitude, longitude)
         return r?.data ?? []
+    }
+
+    /// The same list, or nil when the call failed (so a failure isn't read as "no fires").
+    func firesOrNil(latitude: Double, longitude: Double) async -> [Ambee.FireResponse.Fire]? {
+        let r: Ambee.FireResponse? = try? await get("/fire/latest/by-lat-lng", latitude, longitude)
+        return r.map { $0.data ?? [] }
+    }
+
+    /// Flu-like illness for the metro area, by week (`/ili/forecast/by-lat-lng`).
+    func illness(latitude: Double, longitude: Double) async -> Ambee.ILIResponse? {
+        try? await get("/ili/forecast/by-lat-lng", latitude, longitude)
     }
 
     /// Wildfires near a place: live Ambee when there's a key, the demo's otherwise.

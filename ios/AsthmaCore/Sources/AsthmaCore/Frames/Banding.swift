@@ -126,6 +126,12 @@ public struct ConditionsInput: Sendable, Equatable {
     public var tempFallF: Double?
     /// Wind speed, mph. Nil = no wind reading.
     public var windMph: Double?
+    public var pollenTreeRisk: String?
+    public var pollenGrassRisk: String?
+    /// hPa change over the 3 hours before; negative = falling.
+    public var pressureChangeHpa: Double?
+    public var storm: Bool?
+    public var fireNearby: Bool?
 
     public init(
         pm25: Double? = nil,
@@ -137,9 +143,19 @@ public struct ConditionsInput: Sendable, Equatable {
         isExtremeTemp: Bool? = nil,
         alertNames: [String] = [],
         tempFallF: Double? = nil,
-        windMph: Double? = nil
+        windMph: Double? = nil,
+        pollenTreeRisk: String? = nil,
+        pollenGrassRisk: String? = nil,
+        pressureChangeHpa: Double? = nil,
+        storm: Bool? = nil,
+        fireNearby: Bool? = nil
     ) {
         self.windMph = windMph
+        self.pollenTreeRisk = pollenTreeRisk
+        self.pollenGrassRisk = pollenGrassRisk
+        self.pressureChangeHpa = pressureChangeHpa
+        self.storm = storm
+        self.fireNearby = fireNearby
         self.pm25 = pm25
         self.ozonePpb = ozonePpb
         self.temperatureF = temperatureF
@@ -186,6 +202,11 @@ public enum FrameBuilder {
             heatAlert: Banding.heatAlert(isExtremeTemp: c.isExtremeTemp, alertNames: c.alertNames),
             tempDrop: TempDrop.band(c.tempFallF),
             windBand: Banding.wind(mph: c.windMph),
+            pollenTree: Banding.pollen(risk: c.pollenTreeRisk),
+            pollenGrass: Banding.pollen(risk: c.pollenGrassRisk),
+            pressureChange: PressureChange.band(c.pressureChangeHpa),
+            storm: c.storm,
+            fireNearby: c.fireNearby,
             place: place,
             indoorOutdoor: indoorOutdoor == .unknown ? nil : indoorOutdoor,
             tags: tags,
@@ -230,10 +251,16 @@ public struct ForecastConditions: Sendable, Equatable {
     public var tempFallF: Double?
     /// Forecast wind speed, mph.
     public var windMph: Double?
+    public var pressureChangeHpa: Double?
+    /// A thunderstorm in the forecast hour.
+    public var storm: Bool?
 
     public init(temperatureF: Double? = nil, humidityPct: Double? = nil, pm25Category: Int? = nil,
-                ozoneCategory: Int? = nil, alertNames: [String] = [], tempFallF: Double? = nil, windMph: Double? = nil) {
+                ozoneCategory: Int? = nil, alertNames: [String] = [], tempFallF: Double? = nil, windMph: Double? = nil,
+                pressureChangeHpa: Double? = nil, storm: Bool? = nil) {
         self.windMph = windMph
+        self.pressureChangeHpa = pressureChangeHpa
+        self.storm = storm
         self.temperatureF = temperatureF
         self.humidityPct = humidityPct
         self.pm25Category = pm25Category
@@ -267,6 +294,8 @@ extension FrameBuilder {
             heatAlert: Banding.heatAlert(isExtremeTemp: extreme, alertNames: c.alertNames),
             tempDrop: TempDrop.band(c.tempFallF),
             windBand: Banding.wind(mph: c.windMph),
+            pressureChange: PressureChange.band(c.pressureChangeHpa),
+            storm: c.storm,
             place: place
         )
     }

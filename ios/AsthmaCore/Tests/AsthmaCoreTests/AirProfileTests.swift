@@ -5,7 +5,8 @@ import Testing
     @Test func everyBinHasAFamilyOrIsKnowinglyLeftOut() {
         // Stress, laughing and crying are tags only, never sampled on baselines: off the radar until they have a signal.
         let outside: Set<String> = ["hour", "season", "place", "indoor_outdoor", "tag_stress", "tag_laughingOrCrying"]
-        for def in Bins.all where !outside.contains(def.bin) {
+        // Combinations span families, so they sit beside the radar, not on it.
+        for def in Bins.all where !outside.contains(def.bin) && Combination.of(bin: def.bin) == nil {
             #expect(AirProfile.Category.of(bin: def.bin) != nil, "\(def.bin) has no family")
         }
     }

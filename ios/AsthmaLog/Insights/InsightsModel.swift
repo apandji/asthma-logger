@@ -57,6 +57,7 @@ final class InsightsModel {
             let all = try await WeatherProvider().hourly(latitude: latitude, longitude: longitude, hours: 72,
                                                          pastHours: Int(TempDrop.windowHours))
             let temps = all.map(\.tempPoint)
+            let pressures = all.compactMap(\.pressurePoint)
             let hours = all.filter { $0.date > Date().addingTimeInterval(-3600) }
             var aq: [String: (pm25: Int?, ozone: Int?)] = [:]
             var notes = ["Forecast for \(placeLabel)."]
@@ -73,7 +74,9 @@ final class InsightsModel {
                 let day = aq[AirNowProvider.dayString(h.date)]
                 let conditions = ForecastConditions(temperatureF: h.temperatureF, humidityPct: h.humidityPct,
                                                     pm25Category: day?.pm25, ozoneCategory: day?.ozone,
-                                                    tempFallF: TempDrop.degreesFallen(at: h.date, in: temps), windMph: h.windMph)
+                                                    tempFallF: TempDrop.degreesFallen(at: h.date, in: temps), windMph: h.windMph,
+                                                    pressureChangeHpa: PressureChange.change(at: h.date, in: pressures),
+                                                    storm: h.condition.map(Combination.isStorm))
                 let parts = cal.dateComponents([.hour, .month], from: h.date)
                 let frame = FrameBuilder.forecastFrame(id: h.date.ISO8601Format(), hourOfDay: parts.hour ?? 0,
                                                        month: parts.month ?? 1, conditions)

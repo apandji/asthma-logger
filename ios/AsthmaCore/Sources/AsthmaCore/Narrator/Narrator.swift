@@ -126,6 +126,9 @@ public enum Narrator {
         case "heat_alert": return level == "yes" ? "there was a heat alert" : "there was no heat alert"
         case "temp_drop": return level == "yes" ? "the temperature had dropped sharply" : "the temperature was steady"
         case "wind": return level == "calm" ? "the air was still" : "it was \(level)"
+        case "pollen_tree", "pollen_grass": return level == "none" ? "there was no \(Bins.label(bin).lowercased())" : "\(Bins.label(bin).lowercased()) was \(level)"
+        case "pressure_change": return "the pressure was \(level)"
+        case "storm": return level == "yes" ? "there were thunderstorms" : "there were no thunderstorms"
         case "hour": return "it was \(level)"
         case "place":
             switch level {
@@ -136,6 +139,9 @@ public enum Narrator {
             }
         case "indoor_outdoor": return "you were likely \(level)s"  // often a guess, never stated as fact
         default:
+            if let combo = Combination.of(bin: bin) {
+                return level == "yes" ? "it was \(combo.title.lowercased())" : "it wasn't \(combo.title.lowercased())"
+            }
             if bin.hasPrefix("tag_") {
                 let tag = Bins.label(bin).lowercased()
                 return level == "yes" ? "you noted \(tag)" : "you didn't note \(tag)"

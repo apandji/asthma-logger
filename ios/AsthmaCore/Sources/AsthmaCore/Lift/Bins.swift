@@ -67,7 +67,21 @@ public enum Bins {
         BinDef(bin: "wind", isBoolean: false, sampled: { $0.windBand != .unknown }) { f in
             f.windBand == .unknown ? nil : f.windBand.rawValue
         },
-    ] + JournalTag.triggers.map { tag in
+        // v8: tree and grass pollen, pressure swings, storms. Each only where the frame can say.
+        BinDef(bin: "pollen_tree", isBoolean: false, sampled: { $0.pollenTree != .unknown }) { f in
+            f.pollenTree == .unknown ? nil : f.pollenTree.rawValue
+        },
+        BinDef(bin: "pollen_grass", isBoolean: false, sampled: { $0.pollenGrass != .unknown }) { f in
+            f.pollenGrass == .unknown ? nil : f.pollenGrass.rawValue
+        },
+        BinDef(bin: "pressure_change", isBoolean: false, sampled: { $0.pressureChange != .unknown }) { f in
+            f.pressureChange == .unknown ? nil : f.pressureChange.rawValue
+        },
+        BinDef(bin: "storm", isBoolean: true, sampled: { $0.storm != nil }) { f in f.storm.map(yesNo) },
+    ] + Combination.allCases.map { combo in
+        // v8: several conditions at once. Missing when any part is missing.
+        BinDef(bin: combo.bin, isBoolean: true, sampled: { combo.present(in: $0) != nil }) { f in combo.present(in: f).map(yesNo) }
+    } + JournalTag.triggers.map { tag in
         // Triggers only (symptoms and outcomes are recorded, never bins). Only frames with a reviewed note:
         // an unreviewed moment is missing, not "no".
         BinDef(bin: "tag_\(tag.rawValue)", isBoolean: true, sampled: { $0.tagsSampled }) { f in
@@ -91,7 +105,12 @@ public enum Bins {
         case "exertion": return "Being active"
         case "ili": return "Flu-like illness around"
         case "wind": return "Wind"
+        case "pollen_tree": return "Tree pollen"
+        case "pollen_grass": return "Grass pollen"
+        case "pressure_change": return "Air pressure"
+        case "storm": return "Thunderstorms"
         default:
+            if let combo = Combination.of(bin: bin) { return combo.title }
             if bin.hasPrefix("tag_"), let tag = JournalTag(rawValue: String(bin.dropFirst(4))) {
                 return tag.label
             }

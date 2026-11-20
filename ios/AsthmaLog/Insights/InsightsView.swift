@@ -44,6 +44,7 @@ struct InsightsView: View {
                             .opacity(shownName ? 1 : 0).offset(y: shownName ? 0 : 6)
                         AirRadar(profile: p, selected: $picked, size: 216).frame(maxWidth: .infinity)
                         categories(p)
+                        combinations
                     } else {
                         LearningRing(progress: model.progress, forcedLearned: forced == .learned, size: 184)
                             .frame(maxWidth: .infinity)
@@ -173,6 +174,39 @@ struct InsightsView: View {
             return LiftReport(nAttacks: 14, nBaselines: 40, seasonHint: nil, rows: rows, gatedRows: rows.filter(\.gated))
         }
         return model.report
+    }
+
+    // MARK: Kinds of day
+
+    /// Combinations (`Combination`) that came up a lot on your flare days: several conditions at once, like a
+    /// thunderstorm with pollen up. Shown only once one has passed the same gate as everything else. Words,
+    /// no counts.
+    @ViewBuilder private var combinations: some View {
+        let found = report?.combinations ?? []
+        if !found.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Kinds of day that show up").font(Theme.ui(.subheadline, weight: .medium)).foregroundStyle(Theme.secondaryText)
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(found, id: \.combination) { c in
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(c.combination.title).font(Theme.ui(.body, weight: .medium))
+                                Text(c.combination.parts).font(Theme.ui(.footnote)).foregroundStyle(Theme.secondaryText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 8)
+                            Text(AirProfile.Strength.of(c.row).word).font(Theme.ui(.caption, weight: .semibold))
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .padding(.horizontal, 16).padding(.vertical, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassEffect(.regular, in: .rect(cornerRadius: 22))
+                Text("Several things in the air at once. Everyone gets these days. These are the ones that came up more on yours.")
+                    .font(Theme.ui(.footnote)).foregroundStyle(Theme.secondaryText)
+            }
+        }
     }
 
     // MARK: What shows up

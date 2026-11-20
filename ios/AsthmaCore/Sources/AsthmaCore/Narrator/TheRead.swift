@@ -38,6 +38,15 @@ public enum TheRead {
         case ("temp", "mild"): "Mild weather"
         case ("humidity", "humid"): "Humid air"
         case ("humidity", "dry"): "Dry air"
+        case ("pollen_tree", "high"): "High tree pollen"
+        case ("pollen_tree", "moderate"): "Raised tree pollen"
+        case ("pollen_grass", "high"): "High grass pollen"
+        case ("pollen_grass", "moderate"): "Raised grass pollen"
+        case ("pressure_change", "falling"): "Falling pressure"
+        case ("pressure_change", "rising"): "Rising pressure"
+        case ("pressure_change", "steady"): "Steady pressure"
+        case ("storm", "yes"): "Thunderstorms"
+        case (let b, "yes") where Combination.of(bin: b) != nil: Combination.of(bin: b)!.title
         case ("wind", "windy"): "Windy weather"
         case ("wind", "breezy"): "A breeze"
         case ("wind", "calm"): "Still air"
@@ -112,6 +121,12 @@ public enum TheRead {
         case ("temp", let t) where ["hot", "cold", "mild"].contains(t): return ("It was \(t).", "It's \(t).", "it looks \(t)")
         case ("humidity", "humid"): return ("It was humid.", "It's humid.", "it looks humid")
         case ("humidity", "dry"): return ("The air was dry.", "The air is dry.", "the air looks dry")
+        case ("pressure_change", "falling"): return ("The pressure was falling.", "The pressure is falling.", "the pressure looks set to fall")
+        case ("pressure_change", "rising"): return ("The pressure was rising.", "The pressure is rising.", "the pressure looks set to rise")
+        case ("storm", "yes"): return ("There were thunderstorms.", "There are thunderstorms.", "thunderstorms are on the way")
+        case (let b, "yes") where Combination.of(bin: b) != nil:
+            let t = Combination.of(bin: b)!.title.lowercased()
+            return ("It was \(t).", "It's \(t).", "it looks like \(t)")
         case ("wind", "windy"): return ("It was windy.", "It's windy.", "it looks windy")
         case ("wind", "breezy"): return ("It was breezy.", "It's breezy.", "it looks breezy")
         case ("wind", "calm"): return ("The air was still.", "The air is still.", "the air looks still")

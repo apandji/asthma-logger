@@ -223,8 +223,8 @@ public extension AirProfile {
     /// only what has data: pollen kinds and mould spores until Ambee, pressure until it's a bin,
     /// PM10 and NO₂ (read on the rail, not yet in the table).
     public static let notYet: [Category: [String]] = [
-        .weather: ["Pressure swings", "Thunderstorms"],
-        .biologics: ["Tree pollen", "Grass pollen", "Mould spores"],
+        .weather: [],
+        .biologics: ["Mould spores"],
         .particulates: ["Coarse dust (PM10)", "Traffic fumes (NO₂)"],
         .exertion: [],
         .infections: ["Coming down with something"],

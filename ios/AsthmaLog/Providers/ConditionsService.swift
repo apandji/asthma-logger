@@ -13,6 +13,7 @@ struct ConditionsService {
 
         async let w = Self.attempt { try await weather.current(latitude: latitude, longitude: longitude) }
         async let fall = weather.tempFall(latitude: latitude, longitude: longitude)
+        async let swing = weather.pressureChange(latitude: latitude, longitude: longitude)
         async let back = LookBackService.load(latitude: latitude, longitude: longitude, at: .now)
         async let aq = Self.attempt { () -> [EnvObservation] in
             guard let openAQKey else { return [] }
@@ -51,11 +52,28 @@ struct ConditionsService {
         case .failure(let e): result.errors.append("Ambee: \(e.localizedDescription)")
         }
         result.tempFallF = await fall
+        result.pressureChangeHpa = await swing
+        await Self.stampFires(&result, latitude: latitude, longitude: longitude, around: nil)
         result.lookBack = await back
         // A demo scenario's air, on every log while it's on (never in patterns).
         DemoScenario.current.apply(to: &result)
 
         return result
+    }
+
+    /// Detected fires nearby, looked up only when fine particles are raised and there's an Ambee key (the
+    /// wildfire-smoke combination). Low particles need no lookup; a failed lookup stays missing.
+    static func stampFires(_ c: inout Conditions, latitude: Double, longitude: Double, around: Date?,
+                           fires known: [Ambee.FireResponse.Fire]? = nil) async {
+        guard let key = Secrets.ambee, Banding.pm25(c.bestReal(.pm25)?.value) != .low,
+              Banding.pm25(c.bestReal(.pm25)?.value) != .unknown else { return }
+        let fires: [Ambee.FireResponse.Fire]
+        if let known { fires = known } else {
+            guard let found = await AmbeeClient(key: key).firesOrNil(latitude: latitude, longitude: longitude) else { return }
+            fires = found
+        }
+        c.firesChecked = true
+        c.nearestFireKm = WildfiresNearby.nearestKm(fires: fires, latitude: latitude, longitude: longitude, around: around)
     }
 
     private nonisolated static func attempt<T: Sendable>(_ work: @Sendable () async throws -> T) async -> Result<T, Error> {
